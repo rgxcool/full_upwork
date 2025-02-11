@@ -1,6 +1,6 @@
 <template>
   <nav class="navbar">
-    <div class="container">
+    <div class="nav-container">
       <div class="build-counter">v. {{ buildVersion }}</div>
 
       <!-- Logotyp -->
@@ -10,7 +10,7 @@
 
       <!-- Hamburgermeny för mobil -->
       <button class="menu-toggle" @click="toggleMenu">
-        <font-awesome-icon :icon="isMenuOpen ? 'times' : 'bars'" />
+        <i :class="isMenuOpen ? 'fas fa-times' : 'fas fa-bars'"></i>
       </button>
 
       <!-- Navigationsmeny -->
@@ -92,6 +92,16 @@
     justify-content: space-between;
     align-items: center;
     font-family: 'Roboto', sans-serif;
+  }
+
+  .nav-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    text-align: center;
   }
 
   /* 🖼️ Logotyp */

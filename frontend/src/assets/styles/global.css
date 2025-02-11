@@ -8,11 +8,13 @@ body {
 }
 
 #app {
-  width: 100vw; /* Ensure it spans full width */
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  display: block; /* Change from flex to block */
 }
+
+/* debug
 * {
-  outline: 1px solid red; /* Helps visualize elements */
+   outline: 1px solid red; 
 }
+*/

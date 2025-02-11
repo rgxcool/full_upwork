@@ -10,7 +10,15 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // Middleware
-app.use(cors());
+const cors = require("cors");
+
+app.use(
+    cors({
+        origin: "https://your-frontend.com",
+        credentials: true, // Allow cookies
+    })
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

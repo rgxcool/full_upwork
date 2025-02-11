@@ -9,6 +9,7 @@ const router = express.Router();
 
 // Register routes
 router.use("/api/students", studentRoutes);
+
 router.use("/api/auth", authRoutes);
 router.use("/api/teachers", teacherRoutes);
 router.use("/api/users", userRoutes);

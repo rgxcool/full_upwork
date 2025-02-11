@@ -4,8 +4,7 @@
       <FullCalendar class="demo-app-calendar" :options="calendarOptions" />
     </div>
 
-    <div v-if="eventDetails" class="modal fade show d-block" tabindex="-1" role="dialog"
-      style="background: rgba(0, 0, 0, 0.5);">
+    <div v-if="eventDetails" class="modal fade show d-block" tabindex="-1" role="dialog" style="background: rgba(0, 0, 0, 0.5)">
       <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
           <div class="modal-header">
@@ -44,57 +43,57 @@
 </template>
 
 <script>
-import { defineComponent } from 'vue';
-import FullCalendar from '@fullcalendar/vue3';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import interactionPlugin from '@fullcalendar/interaction';
-import axios from 'axios';
+  import { defineComponent } from 'vue'
+  import FullCalendar from '@fullcalendar/vue3'
+  import dayGridPlugin from '@fullcalendar/daygrid'
+  import interactionPlugin from '@fullcalendar/interaction'
+  import axios from 'axios'
 
-export default defineComponent({
-  components: { FullCalendar },
-  data() {
-    return {
-      calendarOptions: {
-        plugins: [dayGridPlugin, interactionPlugin],
-        initialView: 'dayGridMonth',
-        locale: 'sv',
-        events: [],
-        eventClick: this.handleEventClick,
-        weekNumbers: true, // Aktiverar veckonummer
-        weekNumberCalculation: 'ISO', // Använder ISO-standard för veckonummer
-        weekNumberContent: (args) => `V. ${args.num}`, // Anpassa prefix för veckonummer
-      },
-      eventDetails: null,
-    };
-  },
-  methods: {
-    async fetchEvents() {
-      try {
-        const response = await axios.get('`${process.env.VUE_APP_API_URL}/api/calender-color');
-        this.calendarOptions.events = response.data;
-      } catch (error) {
-        console.error('Error fetching events:', error);
+  export default defineComponent({
+    components: { FullCalendar },
+    data() {
+      return {
+        calendarOptions: {
+          plugins: [dayGridPlugin, interactionPlugin],
+          initialView: 'dayGridMonth',
+          locale: 'sv',
+          events: [],
+          eventClick: this.handleEventClick,
+          weekNumbers: true, // Aktiverar veckonummer
+          weekNumberCalculation: 'ISO', // Använder ISO-standard för veckonummer
+          weekNumberContent: (args) => `V. ${args.num}`, // Anpassa prefix för veckonummer
+        },
+        eventDetails: null,
       }
     },
-    handleEventClick(info) {
-      this.eventDetails = info.event.extendedProps;
+    methods: {
+      async fetchEvents() {
+        try {
+          const response = await axios.get('`${process.env.VUE_APP_API_URL}/api/calender-color')
+          this.calendarOptions.events = response.data
+        } catch (error) {
+          console.error('Error fetching events:', error)
+        }
+      },
+      handleEventClick(info) {
+        this.eventDetails = info.event.extendedProps
+      },
+      closeModal() {
+        this.eventDetails = null
+      },
     },
-    closeModal() {
-      this.eventDetails = null;
+    mounted() {
+      this.fetchEvents()
     },
-  },
-  mounted() {
-    this.fetchEvents();
-  },
-});
+  })
 </script>
 
 <style scoped>
-.modal {
-  z-index: 1050;
-}
+  .modal {
+    z-index: 1050;
+  }
 
-.modal-backdrop {
-  background-color: rgba(0, 0, 0, 0.5);
-}
+  .modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.5);
+  }
 </style>
