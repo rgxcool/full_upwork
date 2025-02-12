@@ -83,11 +83,15 @@ export default createStore({
         return
       }
 
+      const apiUrl = `${import.meta.env.VITE_API_URL}/api/tasks`
+      console.log('🔍 Fetching tasks from:', apiUrl) // ✅ Debug API URL
+
       try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/tasks`, {
+        const response = await axios.get(apiUrl, {
           headers: { Authorization: `Bearer ${state.token}` },
         })
 
+        console.log('✅ Vuex: Fetched tasks:', response.data)
         commit('SET_TASKS', response.data)
       } catch (error) {
         console.error('❌ Vuex: Failed to fetch tasks:', error.response?.data || error)

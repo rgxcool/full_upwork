@@ -2,16 +2,15 @@ import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import { verifyAuth } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // Register User
 router.post("/register", async (req, res) => {
     try {
-        const { email, password, name } = req.body;
+        const { email, password, username } = req.body;
 
-        if (!email || !password || !name) {
+        if (!email || !password || !username) {
             return res
                 .status(400)
                 .json({ message: "Alla fält är obligatoriska!" });
@@ -24,7 +23,7 @@ router.post("/register", async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({ name, email, password: hashedPassword });
+        const newUser = new User({ username, email, password: hashedPassword });
         await newUser.save();
 
         return res.status(201).json({ message: "Användare registrerad!" });

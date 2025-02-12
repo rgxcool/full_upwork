@@ -1,18 +1,30 @@
 import { Router } from "express";
-import studentRoutes from "./studentRoutes.js";
+import taskRoutes from "./taskRoutes.js"; // ✅ Ensure all imports are correct
 import authRoutes from "./authRoutes.js";
-import teacherRoutes from "./teacherRoutes.js";
+import studentRoutes from "./studentRoutes.js";
 import userRoutes from "./userRoutes.js";
-import educationRoutes from "./educationRoutes.js";
-import adminRoutes from "./adminRoutes.js";
+import teacherRoutes from "./teacherRoutes.js";
 
 const router = Router();
 
-router.use("/api/students", studentRoutes);
+console.log("✅ Registering API routes...");
+
+// ✅ Log before mounting each route
+console.log("✅ Mounting `/api/tasks`...");
+router.use("/api/tasks", taskRoutes);
+
+console.log("✅ Mounting `/api/auth`...");
 router.use("/api/auth", authRoutes);
-router.use("/api/teachers", teacherRoutes);
+
+console.log("✅ Mounting `/api/students`...");
+router.use("/api/students", studentRoutes);
+
+console.log("✅ Mounting `/api/users`...");
 router.use("/api/users", userRoutes);
-router.use("/api/education", educationRoutes);
-router.use("/api/admin", adminRoutes);
+
+console.log("✅ Mounting `/api/teachers`...");
+router.use("/api/teachers", teacherRoutes);
+
+console.log("✅ All routes should now be registered!");
 
 export default router;

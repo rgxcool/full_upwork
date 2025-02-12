@@ -1,99 +1,136 @@
-import express from "express";
-const router = express.Router();
+import { Router } from "express";
+import Task from "../models/Task.js";
+import authenticate from "../middleware/authMiddleware.js"; // ✅ Import middleware
 
-import Task from "../models/taskSchema";
-import jwt from "jsonwebtoken"; // Fix: Importera JWT
+const router = Router();
 
-const authenticate = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-
-    console.log("🔍 Received Authorization Header:", authHeader); // ✅ Debugging
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        console.error("❌ No token provided or invalid format");
-        return res.status(401).json({ message: "Ingen giltig token angiven." });
-    }
-
-    const token = authHeader.split(" ")[1]; // Extract token after "Bearer "
-
+/**
+ * Route: GET /
+ * Get all tasks for the authenticated user.
+ */
+router.get("/", authenticate, async (req, res) => {
+    // ✅ Fix: Use "/" instead of "/"
+    console.log("✅ GET /api/ hit!"); // ✅ Debugging
     try {
-        const decoded = jwt.verify(token, import.meta.env.JWT_SECRET);
-
-        console.log("🔍 Decoded JWT:", decoded); // ✅ DEBUG: See what the token contains
-
-        req.user = decoded;
-        req.userId = decoded.userId || decoded.id; // ✅ Fix: Support `id` as well
-
-        if (!req.userId) {
-            console.error("❌ No `userId` found in token payload:", decoded);
-            return res
-                .status(400)
-                .json({ error: "Autentisering saknas (No userId in token)." });
-        }
-
-        console.log("✅ Token verified, userId:", req.userId); // ✅ Debugging
-        next();
+        const tasks = await Task.find({ userId: req.userId }).lean();
+        res.json(tasks);
     } catch (error) {
-        console.error("❌ JWT-verifieringsfel:", error.message);
-        return res.status(401).json({ message: "Ogiltig token." });
+        console.error("❌ Error fetching tasks:", error);
+        res.status(500).json({ error: "Serverfel vid hämtning av uppgifter." });
     }
-};
-
-router.get("/tasks", authenticate, async (req, res) => {
-    const tasks = await Task.find({ userId: req.userId });
-    res.json(tasks);
 });
 
-router.post("/tasks", authenticate, async (req, res) => {
+/**
+ * Route: POST /
+ * Create a new task for the authenticated user.
+ */
+router.post("/", authenticate, async (req, res) => {
     try {
         const { description } = req.body;
 
-        console.log("🟢 Creating task for userId:", req.userId); // ✅ Debugging
-
-        if (!req.userId) {
-            console.error("❌ No userId in request!");
-            return res
-                .status(400)
-                .json({ error: "Autentisering saknas (Missing userId)" });
-        }
-
-        if (!description) {
-            console.error("❌ No task description!");
+        if (
+            !description ||
+            typeof description !== "string" ||
+            description.trim() === ""
+        ) {
             return res.status(400).json({ error: "Beskrivning krävs" });
         }
 
         const newTask = await Task.create({
-            description,
+            description: description.trim(),
             isDone: false,
-            userId: req.userId, // ✅ Ensure this is set correctly
+            userId: req.userId,
         });
 
         console.log("✅ New task created:", newTask);
         res.status(201).json(newTask);
     } catch (error) {
         console.error("❌ Error creating task:", error);
-        res.status(500).json({ error: "Serverfel vid skapande av uppgift" });
+        res.status(500).json({ error: "Serverfel vid skapande av uppgift." });
     }
 });
 
-router.put("/tasks/:id", authenticate, async (req, res) => {
-    const { isDone } = req.body;
-    const updatedTask = await Task.findByIdAndUpdate(
-        req.params.id,
-        { isDone },
-        { new: true }
-    );
-    res.json(updatedTask);
+/**
+ * Route: PUT //:id
+ * Update task status (only if the task belongs to the authenticated user).
+ */
+router.put("/:id", authenticate, async (req, res) => {
+    try {
+        const { isDone } = req.body;
+
+        if (typeof isDone !== "boolean") {
+            return res
+                .status(400)
+                .json({ error: "Ogiltigt värde för isDone." });
+        }
+
+        const updatedTask = await Task.findOneAndUpdate(
+            { _id: req.params.id, userId: req.userId }, // Ensuring the task belongs to the user
+            { isDone },
+            { new: true }
+        );
+
+        if (!updatedTask) {
+            return res.status(404).json({
+                error: "Uppgift hittades inte eller du har inte behörighet.",
+            });
+        }
+
+        res.json(updatedTask);
+    } catch (error) {
+        console.error("❌ Error updating task:", error);
+        res.status(500).json({
+            error: "Serverfel vid uppdatering av uppgift.",
+        });
+    }
 });
 
-router.delete("/tasks/:id", authenticate, async (req, res) => {
-    await Task.findByIdAndDelete(req.params.id);
-    res.json({ message: "Uppgift borttagen" });
+/**
+ * Route: DELETE //:id
+ * Delete a single task (only if the task belongs to the authenticated user).
+ */
+router.delete("/:id", authenticate, async (req, res) => {
+    try {
+        console.log(`🛠 Attempting to delete task with ID: ${req.params.id}`); // ✅ Debugging
+
+        const deletedTask = await Task.findOneAndDelete({
+            _id: req.params.id,
+            userId: req.userId, // Ensure the user owns the task
+        });
+
+        if (!deletedTask) {
+            return res.status(404).json({
+                error: "Uppgift hittades inte eller du har inte behörighet att radera den.",
+            });
+        }
+
+        console.log(`✅ Task deleted: ${deletedTask._id}`);
+        res.json({ message: "Uppgift borttagen", taskId: req.params.id });
+    } catch (error) {
+        console.error("❌ Error deleting task:", error);
+        res.status(500).json({
+            error: "Serverfel vid borttagning av uppgift.",
+        });
+    }
 });
 
-router.delete("/tasks", authenticate, async (req, res) => {
-    await Task.deleteMany({ userId: req.userId });
-    res.json({ message: "Alla uppgifter borttagna" });
+/**
+ * Route: DELETE /
+ * Delete all tasks for the authenticated user.
+ */
+router.delete("/", authenticate, async (req, res) => {
+    try {
+        const result = await Task.deleteMany({ userId: req.userId });
+        res.json({
+            message: "Alla uppgifter borttagna",
+            deletedCount: result.deletedCount,
+        });
+    } catch (error) {
+        console.error("❌ Error deleting all tasks:", error);
+        res.status(500).json({
+            error: "Serverfel vid borttagning av uppgifter.",
+        });
+    }
 });
 
 export default router;
