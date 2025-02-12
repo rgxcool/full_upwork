@@ -276,7 +276,7 @@
           await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, this.kursForm)
           alert('Eleven blev tillagd!')
 
-          // ✅ Reset form fields after successful submission
+          //  Reset form fields after successful submission
           this.kursForm = {
             namn: '',
             personnummer: '',
@@ -294,7 +294,7 @@
             teacher: '',
           }
 
-          this.formattedFinalTestDate = null // ✅ Reset the final test date
+          this.formattedFinalTestDate = null //  Reset the final test date
         } catch (error) {
           alert('Kunde inte lägga till Elev. Något gick fel. Försök igen.')
         }

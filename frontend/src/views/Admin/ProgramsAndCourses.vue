@@ -27,11 +27,13 @@
     methods: {
       async fetchPrograms() {
         try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`) // Replace with your actual API endpoint
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/program`) // Replace with your actual API endpoint
           this.programs = await Promise.all(
             response.data.map(async (program) => {
               // Fetch the courses for each program
-              const coursesResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs/${program._id}/courses`)
+              const coursesResponse = await axios.get(
+                `${import.meta.env.VITE_API_URL}/api/program/${program._id}/courses`
+              )
               return {
                 ...program,
                 courses: coursesResponse.data,

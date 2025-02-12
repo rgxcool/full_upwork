@@ -34,7 +34,7 @@ const routes = [
 
   { path: '/addstudent', name: 'AddStudent', component: AddStudent },
   //   { path: '/addteacher', name: 'AddTeacher', component: AddTeacher },
-  { path: '/elever', name: 'Elever', component: ExcelUpload },
+  { path: '/student', name: 'Elever', component: ExcelUpload },
   { path: '/kalender', component: FullCalendar },
   { path: '/student/:id', name: 'StudentDetails', component: StudentDetails, props: true },
   { path: '/education', name: 'EducationEditor', component: EducationEditor },

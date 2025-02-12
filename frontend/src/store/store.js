@@ -9,7 +9,7 @@ export default createStore({
   },
   mutations: {
     SET_USER(state, { token, role }) {
-      console.log('✅ Vuex: Saving user token & role:', token, role)
+      console.log(' Vuex: Saving user token & role:', token, role)
       state.token = token
       state.userRole = role
       localStorage.setItem('token', token)
@@ -48,15 +48,15 @@ export default createStore({
 
       try {
         const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, credentials)
-        console.log('✅ Vuex: Backend response:', response.data)
+        console.log(' Vuex: Backend response:', response.data)
 
-        const { token } = response.data // ✅ Fix: Extract correct token key
+        const { token } = response.data //  Fix: Extract correct token key
         if (!token) {
           console.error('❌ Vuex: Missing `token` in backend response:', response.data)
           return { success: false, message: 'Login failed: No token received.' }
         }
 
-        // ✅ Commit token & role
+        //  Commit token & role
         commit('SET_USER', { token: token, role: response.data.user?.role || 'user' })
 
         return {
@@ -80,15 +80,15 @@ export default createStore({
         return
       }
 
-      const apiUrl = `${import.meta.env.VITE_API_URL}/api/tasks`
-      console.log('🔍 Fetching tasks from:', apiUrl) // ✅ Debug API URL
+      const apiUrl = `${import.meta.env.VITE_API_URL}/api/task`
+      console.log('🔍 Fetching tasks from:', apiUrl) //  Debug API URL
 
       try {
         const response = await axios.get(apiUrl, {
           headers: { Authorization: `Bearer ${state.token}` },
         })
 
-        console.log('✅ Vuex: Fetched tasks:', response.data)
+        console.log(' Vuex: Fetched tasks:', response.data)
         commit('SET_TASKS', response.data)
       } catch (error) {
         console.error('❌ Vuex: Failed to fetch tasks:', error.response?.data || error)
@@ -103,12 +103,12 @@ export default createStore({
 
       try {
         const response = await axios.post(
-          `${import.meta.env.VITE_API_URL}/api/tasks`,
+          `${import.meta.env.VITE_API_URL}/api/task`,
           { description },
           { headers: { Authorization: `Bearer ${state.token}` } }
         )
 
-        console.log('✅ Vuex: Task added:', response.data)
+        console.log(' Vuex: Task added:', response.data)
         commit('ADD_TASK', response.data)
       } catch (error) {
         console.error('❌ Vuex: Failed to add task:', error.response?.data || error)
@@ -122,7 +122,7 @@ export default createStore({
       }
 
       try {
-        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`, task, {
+        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/task/${task._id}`, task, {
           headers: { Authorization: `Bearer ${state.token}` },
         })
 
@@ -139,7 +139,7 @@ export default createStore({
       }
 
       try {
-        await axios.delete(`${import.meta.env.VITE_API_URL}/api/tasks/${taskId}`, {
+        await axios.delete(`${import.meta.env.VITE_API_URL}/api/task/${taskId}`, {
           headers: { Authorization: `Bearer ${state.token}` },
         })
 
@@ -156,7 +156,7 @@ export default createStore({
       }
 
       try {
-        await axios.delete(`${import.meta.env.VITE_API_URL}/api/tasks`, {
+        await axios.delete(`${import.meta.env.VITE_API_URL}/api/task`, {
           headers: { Authorization: `Bearer ${state.token}` },
         })
 
@@ -168,7 +168,7 @@ export default createStore({
   },
   getters: {
     isLoggedIn: (state) => !!state.token,
-    userRole: (state) => state.userRole, // ✅ Getter for user role
-    tasks: (state) => state.tasks, // ✅ Getter for tasks
+    userRole: (state) => state.userRole, //  Getter for user role
+    tasks: (state) => state.tasks, //  Getter for tasks
   },
 })

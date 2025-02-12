@@ -5,13 +5,27 @@
     <!-- Fliknavigation -->
     <ul class="nav nav-tabs">
       <li class="nav-item">
-        <button class="nav-link" :class="{ active: activeTab === 'betygsattning' }" @click="activeTab = 'betygsattning'">Betygsättning</button>
+        <button
+          class="nav-link"
+          :class="{ active: activeTab === 'betygsattning' }"
+          @click="activeTab = 'betygsattning'"
+        >
+          Betygsättning
+        </button>
       </li>
       <li class="nav-item">
-        <button class="nav-link" :class="{ active: activeTab === 'eleverMedBetyg' }" @click="activeTab = 'eleverMedBetyg'">Elever med betyg</button>
+        <button
+          class="nav-link"
+          :class="{ active: activeTab === 'eleverMedBetyg' }"
+          @click="activeTab = 'eleverMedBetyg'"
+        >
+          Elever med betyg
+        </button>
       </li>
       <li class="nav-item">
-        <button class="nav-link" :class="{ active: activeTab === 'lastaBetyg' }" @click="activeTab = 'lastaBetyg'">Låsta betyg</button>
+        <button class="nav-link" :class="{ active: activeTab === 'lastaBetyg' }" @click="activeTab = 'lastaBetyg'">
+          Låsta betyg
+        </button>
       </li>
     </ul>
 
@@ -130,7 +144,7 @@
           this.eleverAttBetygsatta = betygsattningResponse.data
 
           // Hämta elever med betyg
-          const eleverMedBetygResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/eleverMedBetyg`)
+          const eleverMedBetygResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/studentMedBetyg`)
           this.eleverMedBetyg = eleverMedBetygResponse.data
 
           // Hämta låsta betyg

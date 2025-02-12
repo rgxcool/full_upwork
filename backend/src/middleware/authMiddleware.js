@@ -41,7 +41,7 @@ const authenticate = (req, res, next) => {
                 .json({ error: "Autentisering saknas (No userId in token)." });
         }
 
-        console.log("✅ Token verified, userId:", req.userId);
+        console.log(" Token verified, userId:", req.userId);
         next();
     } catch (error) {
         console.error("❌ JWT verification error:", error.message);

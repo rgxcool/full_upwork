@@ -92,7 +92,7 @@
       },
       async fetchPrograms() {
         try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`)
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/program`)
           this.programs = response.data
         } catch (error) {
           console.error('Error fetching programs:', error)
@@ -106,7 +106,7 @@
           try {
             console.log('Fetching courses for program ID:', this.selectedProgram) // Debug
             const response = await axios.get(
-              `${import.meta.env.VITE_API_URL}/api/programs/${this.selectedProgram}/courses`
+              `${import.meta.env.VITE_API_URL}/api/program/${this.selectedProgram}/courses`
             )
 
             // Ensure each course has a display text that combines name and code

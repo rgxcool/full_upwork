@@ -8,7 +8,7 @@
       role="alert"
       style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050"
     >
-      Eleverna har laddats upp! ✅
+      Eleverna har laddats upp!
     </div>
 
     <!-- File input and button on the same line -->
@@ -78,15 +78,6 @@
             </td>
             <td>
               {{ student.slutprovDatum ? student.slutprovDatum.split('T')[0] : '' }}
-              <!-- {{
-                student.slutprovDatum && student.slutprovDatum.includes("T")
-                  ? student.slutprovDatum.split("T")[1].split(":")[0]
-                  : ""
-              }}{{
-                student.slutprovDatum && student.slutprovDatum.includes("T")
-                  ? student.slutprovDatum.split("T")[1].split(":")[1]
-                  : ""
-              }} -->
             </td>
             <td>{{ student.kommun }}</td>
             <td>{{ student.telefon }}</td>
@@ -111,7 +102,6 @@
 
 <script>
   import axios from 'axios'
-  // import { now } from "core-js/core/date";
 
   export default {
     data() {
@@ -161,13 +151,13 @@
         const formData = new FormData()
         formData.append('file', this.file)
 
-        // ✅ Send the raw file to the backend
+        //  Send the raw file to the backend
         try {
-          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/xlsxupload`, formData, {
+          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/upload/xlsxupload`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
           })
 
-          console.log('✅ Response:', response.data)
+          console.log(' Response:', response.data)
           this.uploadSuccess = true
 
           setTimeout(() => {

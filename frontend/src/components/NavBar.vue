@@ -31,7 +31,9 @@
         </div>
 
         <!-- Login / Logout Button -->
-        <router-link v-if="!isLoggedIn" to="/login" class="px-4 py-2 text-blue-600 hover:underline"> Login </router-link>
+        <router-link v-if="!isLoggedIn" to="/login" class="px-4 py-2 text-blue-600 hover:underline">
+          Login
+        </router-link>
 
         <button v-else @click="logout" class="px-4 py-2 text-red-600 hover:underline">Logout</button>
       </div>
@@ -49,7 +51,7 @@
       const store = useStore()
       const router = useRouter()
 
-      // ✅ Corrected reference to isLoggedIn
+      //  Corrected reference to isLoggedIn
       const isLoggedIn = computed(() => store.getters.isLoggedIn)
 
       const logout = () => {
@@ -70,7 +72,7 @@
           { name: 'Betyg', link: '/betyg' },
           { name: 'Kurser', link: '/programsandcourses' },
           { name: 'Elev+', link: '/addstudent' },
-          { name: 'Elever', link: '/elever' },
+          { name: 'Elever', link: '/student' },
           { name: 'PDF', link: '/pdf' },
         ],
       }

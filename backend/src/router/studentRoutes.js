@@ -4,14 +4,14 @@ import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
 
-const router = Router(); // ✅ Create router instance
+const router = Router(); //  Create router instance
 
 // Get all students
 router.get("/student/", async (req, res) => {
     try {
         const students = await Student.find().populate(
             "courses.courseId",
-            "courseName courseCode" // ✅ Explicitly fetch courseCode
+            "courseName courseCode" //  Explicitly fetch courseCode
         );
 
         res.status(200).json(students);
@@ -67,7 +67,7 @@ router.put("/student/:id", async (req, res) => {
     }
 });
 
-// ✅ Add a course to an existing student by name
+//  Add a course to an existing student by name
 router.post("/student/addcourse", async (req, res) => {
     try {
         const { studentName, courseId } = req.body;
@@ -98,7 +98,7 @@ router.post("/student/addcourse", async (req, res) => {
     }
 });
 
-// ✅ Add a course to an existing student by ID
+//  Add a course to an existing student by ID
 router.post("/:studentId/courses", async (req, res) => {
     const { studentId } = req.params;
     const { courseId } = req.body;

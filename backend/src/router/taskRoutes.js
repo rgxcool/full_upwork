@@ -1,17 +1,17 @@
 import { Router } from "express";
 import Task from "../models/Task.js";
-import authenticate from "../middleware/authMiddleware.js"; // ✅ Import middleware
+import authenticate from "../middleware/authMiddleware.js"; //  Import middleware
 
 const router = Router();
 
 router.get("/task/", authenticate, async (req, res) => {
-    // ✅ Fix: Use "/" instead of "/"
-    console.log("✅ GET /api/ hit!"); // ✅ Debugging
+    //  Fix: Use "/" instead of "/"
+    console.log(" GET /api/ hit!"); //  Debugging
     try {
         const tasks = await Task.find({ userId: req.userId }).lean();
         res.json(tasks);
     } catch (error) {
-        console.error("❌ Error fetching tasks:", error);
+        console.error("Error fetching tasks:", error);
         res.status(500).json({ error: "Serverfel vid hämtning av uppgifter." });
     }
 });
@@ -34,7 +34,7 @@ router.post("/task/", authenticate, async (req, res) => {
             userId: req.userId,
         });
 
-        console.log("✅ New task created:", newTask);
+        console.log(" New task created:", newTask);
         res.status(201).json(newTask);
     } catch (error) {
         console.error("❌ Error creating task:", error);
@@ -75,7 +75,7 @@ router.put("/task/:id", authenticate, async (req, res) => {
 
 router.delete("/task/:id", authenticate, async (req, res) => {
     try {
-        console.log(`🛠 Attempting to delete task with ID: ${req.params.id}`); // ✅ Debugging
+        console.log(`🛠 Attempting to delete task with ID: ${req.params.id}`); //  Debugging
 
         const deletedTask = await Task.findOneAndDelete({
             _id: req.params.id,
@@ -88,7 +88,7 @@ router.delete("/task/:id", authenticate, async (req, res) => {
             });
         }
 
-        console.log(`✅ Task deleted: ${deletedTask._id}`);
+        console.log(` Task deleted: ${deletedTask._id}`);
         res.json({ message: "Uppgift borttagen", taskId: req.params.id });
     } catch (error) {
         console.error("❌ Error deleting task:", error);

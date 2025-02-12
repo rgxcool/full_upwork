@@ -40,11 +40,11 @@ const vuetify = createVuetify({
   },
 })
 
-console.log('🚀 Initializing Vue App...') // ✅ Debug Message
+console.log('🚀 Initializing Vue App...') //  Debug Message
 console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
 console.log('All env variables:', import.meta.env)
 
-// ✅ Check if token exists before setting the default header
+//  Check if token exists before setting the default header
 const token = store.state.auth?.token
 if (token) {
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
@@ -57,4 +57,4 @@ app.use(router)
 app.use(store)
 app.mount('#app')
 
-console.log('✅ Vue App Mounted!') // ✅ Debug Message
+console.log(' Vue App Mounted!') //  Debug Message

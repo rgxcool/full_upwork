@@ -1,10 +1,8 @@
-import express from "express";
+import { Router } from "express";
+const router = Router();
+import Student from "../models/Student.js";
 
-import express from "express";
-const router = express.Router();
-import Student from "../models/elevSchema";
-
-router.get("/betyg/betygsattning", async (req, res) => {
+router.get("/betygsattning", async (req, res) => {
     try {
         const idag = new Date();
         idag.setHours(0, 0, 0, 0); // Nollställ tid för dagens datum
@@ -27,7 +25,7 @@ router.get("/betyg/betygsattning", async (req, res) => {
     }
 });
 
-router.post("/betyg/betygsattning", async (req, res) => {
+router.post("/betygsattning", async (req, res) => {
     try {
         console.log("Mottagen data:", req.body); // Logga inkommande data
 
@@ -52,7 +50,7 @@ router.post("/betyg/betygsattning", async (req, res) => {
     }
 });
 
-router.get("/betyg/eleverMedBetyg", async (req, res) => {
+router.get("/eleverMedBetyg", async (req, res) => {
     try {
         const elever = await Student.find({
             "betyg.grade": { $ne: null },
@@ -65,7 +63,7 @@ router.get("/betyg/eleverMedBetyg", async (req, res) => {
     }
 });
 
-router.post("/betyg/lasaBetyg", async (req, res) => {
+router.post("/lasaBetyg", async (req, res) => {
     try {
         const { _id } = req.body;
         await Student.updateOne({ _id }, { $set: { "betyg.locked": true } });
@@ -76,7 +74,7 @@ router.post("/betyg/lasaBetyg", async (req, res) => {
     }
 });
 
-router.get("/betyg/lastaBetyg", async (req, res) => {
+router.get("/lastaBetyg", async (req, res) => {
     try {
         const elever = await Student.find({ "betyg.locked": true });
         res.json(elever);

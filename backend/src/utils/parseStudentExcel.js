@@ -7,7 +7,7 @@ async function parseStudentExcel(fileBuffer, teacherName) {
     const worksheet = workbook.worksheets[0];
 
     console.log("🔹 Extracting data...");
-    const headers = worksheet.getRow(1).values.slice(1);
+    const headers = worksheet.getRow(1).values.slice(1); // Ensure headers are extracted correctly
     const requiredFields = [
         "NAMN",
         "PERSONNUMMER",
@@ -24,12 +24,14 @@ async function parseStudentExcel(fileBuffer, teacherName) {
         let rowObject = {};
         row.eachCell((cell, colNumber) => {
             const columnName = headers[colNumber - 1];
-            rowObject[columnName] = cell.value;
+            if (columnName) {
+                rowObject[columnName] = cell.value;
+            }
         });
 
         rowObject["teacher"] = teacherName;
 
-        // ✅ Validate required fields
+        // Validate required fields
         for (const field of requiredFields) {
             if (!rowObject[field]) {
                 console.warn(`⚠️ Missing field: ${field} in row ${rowNumber}`);
@@ -45,10 +47,7 @@ async function parseStudentExcel(fileBuffer, teacherName) {
             slutDatum: parseExcelDate(rowObject["SLUT"]),
             kommun: rowObject["KOMMUN/PRIVAT"],
             telefon: rowObject["TELEFON"] || "",
-            mail:
-                typeof rowObject["MAIL"] === "object" && rowObject["MAIL"].text
-                    ? rowObject["MAIL"].text
-                    : rowObject["MAIL"],
+            mail: extractMail(rowObject["MAIL"]),
             prov: rowObject["PROV"] || "",
             ovrigt: rowObject["ÖVRIGT"] || "",
             slutprovDatum: parseExcelDate(rowObject["PREL. DATUM SLUTPROV"]),
@@ -60,11 +59,26 @@ async function parseStudentExcel(fileBuffer, teacherName) {
     return studentsToSave;
 }
 
-// ✅ Convert Excel Date to JavaScript Date
+// Convert Excel Date to JavaScript Date
 function parseExcelDate(value) {
     if (!value) return null;
+
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+
     if (typeof value === "number") {
         return new Date((value - 25569) * 86400 * 1000).toISOString();
+    }
+
+    return value;
+}
+
+// Extract email from different Excel cell formats
+function extractMail(value) {
+    if (!value) return "";
+    if (typeof value === "object" && value.text) {
+        return value.text;
     }
     return value;
 }

@@ -15,9 +15,19 @@
           <div class="card-body">
             <h2 class="card-title mb-4">Att göra</h2>
             <ul class="list-group">
-              <li class="list-group-item d-flex justify-content-between align-items-center" v-for="task in tasks" :key="task._id" :class="{ 'list-group-item-success': task.isDone }">
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center"
+                v-for="task in tasks"
+                :key="task._id"
+                :class="{ 'list-group-item-success': task.isDone }"
+              >
                 <div class="d-flex align-items-center">
-                  <input type="checkbox" class="form-check-input me-3" :checked="task.isDone" @change="toggleTaskCompletion(task)" />
+                  <input
+                    type="checkbox"
+                    class="form-check-input me-3"
+                    :checked="task.isDone"
+                    @change="toggleTaskCompletion(task)"
+                  />
                   <p :class="{ 'text-decoration-line-through': task.isDone }" class="mb-0">
                     {{ task.description }}
                   </p>
@@ -27,7 +37,13 @@
             </ul>
             <div class="mt-3">
               <div class="input-group">
-                <input type="text" class="form-control" placeholder="Lägg till en uppgift..." v-model="newTask" @keyup.enter="addTask" />
+                <input
+                  type="text"
+                  class="form-control"
+                  placeholder="Lägg till en uppgift..."
+                  v-model="newTask"
+                  @keyup.enter="addTask"
+                />
                 <button class="btn btn-primary" @click="addTask">Lägg till</button>
               </div>
             </div>
@@ -52,7 +68,7 @@
       const store = useStore()
       const router = useRouter()
 
-      // ✅ Check if user is logged in, redirect if not
+      //  Check if user is logged in, redirect if not
       const isLoggedIn = computed(() => store.getters.isLoggedIn)
       onMounted(() => {
         if (!isLoggedIn.value) {
@@ -60,14 +76,14 @@
         }
       })
 
-      // ✅ Fetch tasks from Vuex store
+      //  Fetch tasks from Vuex store
       onMounted(() => {
         store.dispatch('fetchTasks')
       })
 
       const newTask = ref('')
 
-      // ✅ Use Vuex tasks state
+      //  Use Vuex tasks state
       const tasks = computed(() => store.getters.tasks)
 
       const addTask = () => {
