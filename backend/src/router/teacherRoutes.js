@@ -1,6 +1,6 @@
 import express from "express";
 const router = express.Router();
-import Teacher from "../models/Teacher.js";
+import Teacher from "../src/models/Teacher.js";
 
 //Generate Random Color for the colorCode in TeacherProfile
 function generateRandomColor() {

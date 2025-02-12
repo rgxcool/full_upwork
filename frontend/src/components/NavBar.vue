@@ -84,6 +84,13 @@
 </script>
 
 <style scoped>
+  :deep(body) {
+    display: block !important;
+    justify-content: unset;
+    align-items: unset;
+    height: 100vh;
+    overflow: hidden;
+  }
   /* 🎨 Allmän stil för navbar */
   .navbar {
     background-color: #f2f2f2;

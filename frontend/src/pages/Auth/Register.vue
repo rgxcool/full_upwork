@@ -27,7 +27,7 @@
     methods: {
       async register() {
         try {
-          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/register`, {
+          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
             name: this.name,
             email: this.email,
             password: this.password,

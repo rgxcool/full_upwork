@@ -89,6 +89,11 @@
 </script>
 
 <style scoped>
+  :deep(body) {
+    display: block !important;
+    justify-content: unset;
+    align-items: unset;
+  }
   .modal {
     z-index: 1050;
   }

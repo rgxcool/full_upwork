@@ -35,15 +35,15 @@ const routes = [
   { path: '/addstudent', name: 'AddStudent', component: AddStudent },
   //   { path: '/addteacher', name: 'AddTeacher', component: AddTeacher },
   { path: '/elever', name: 'Elever', component: ExcelUpload },
-  //   { path: '/kalender', component: FullCalendar },
-  //   { path: '/students/:id', name: 'StudentDetails', component: StudentDetails, props: true },
-  //   { path: '/education', name: 'EducationEditor', component: EducationEditor },
-  //   { path: '/programsandcourses', name: 'ProgramsAndCourses', component: ProgramsAndCourses },
-  //   { path: '/editstudent', name: 'EditStudent', component: EditStudent },
+  { path: '/kalender', component: FullCalendar },
+  { path: '/students/:id', name: 'StudentDetails', component: StudentDetails, props: true },
+  { path: '/education', name: 'EducationEditor', component: EducationEditor },
+  { path: '/programsandcourses', name: 'ProgramsAndCourses', component: ProgramsAndCourses },
+  // { path: '/editstudent', name: 'EditStudent', component: EditStudent },
 
-  //   { path: '/betyg', component: BetygSattning },
-  //   { path: '/profile', name: 'profile', component: ProfilePage, meta: { requiresAuth: true } },
-  //   { path: '/pdf', name: 'PDFParser', component: PdfParser },
+  { path: '/betyg', component: BetygSattning },
+  { path: '/profile', name: 'profile', component: ProfilePage, meta: { requiresAuth: true } },
+  { path: '/pdf', name: 'PDFParser', component: PdfParser },
 ]
 
 const router = createRouter({

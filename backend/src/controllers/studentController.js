@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import Student from "../models/Student.js"; // ✅ Ensure .js extension
-import parseExcelDate from "../utils/parseExcel.js";
+import parseExcelDate from "../../utils/parseExcel.js";
 
 // ✅ Upload and Process Excel Data
 async function uploadXlsx(req, res) {

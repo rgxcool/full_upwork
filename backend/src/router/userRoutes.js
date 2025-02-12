@@ -1,5 +1,5 @@
 import express from "express";
-import Teacher from "../models/Teacher.js";
+import Teacher from "../src/models/Teacher.js";
 import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import jtw from "jsonwebtoken";
