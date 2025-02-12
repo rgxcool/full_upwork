@@ -1,9 +1,9 @@
 // Import dependencies using ESM
 import { Router } from "express";
-import Student from "../src/models/Student.js"; // ✅ Ensure .js extension
-import Education from "../src/models/Education.js";
-import { uploadXlsx } from "../src/controllers/studentController.js";
-import upload from "../src/middleware/uploadMiddleware.js"; // ✅ Ensure .js extension
+import Student from "../models/Student.js";
+import Education from "../models/Education.js";
+import { uploadXlsx } from "../controllers/studentController.js";
+import upload from "../middleware/uploadMiddleware.js"; // ✅ Ensure .js extension
 
 const router = Router(); // ✅ Create router instance
 

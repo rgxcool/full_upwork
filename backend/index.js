@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import router from "./router/router.js"; // ✅ Include .js extension
+import router from "./src/router/router.js"; // ✅ Include .js extension
 
 dotenv.config(); // ✅ Load environment variables
 
