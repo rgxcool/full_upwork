@@ -75,6 +75,4 @@
   }
 </script>
 
-<style scoped>
-  /* Custom styling if needed */
-</style>
+<style scoped></style>

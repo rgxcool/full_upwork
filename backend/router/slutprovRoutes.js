@@ -1,6 +1,6 @@
 import express from "express";
 const router = express.Router();
-const Student = require("../models/elevSchema");
+import Student from "../models/elevSchema";
 import Teacher from "../models/Teacher.js";
 
 router.get("/calender-color", async (req, res) => {

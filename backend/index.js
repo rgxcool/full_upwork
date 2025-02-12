@@ -2,19 +2,16 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import router from "./router/index.js"; // ✅ Include .js extension
+import router from "./router/router.js"; // ✅ Include .js extension
 
 dotenv.config(); // ✅ Load environment variables
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Middleware
-const cors = require("cors");
-
 app.use(
     cors({
-        origin: "https://your-frontend.com",
+        origin: "http://localhost:5173",
         credentials: true, // Allow cookies
     })
 );

@@ -5,21 +5,13 @@
     <!-- Fliknavigation -->
     <ul class="nav nav-tabs">
       <li class="nav-item">
-        <button class="nav-link" :class="{ active: activeTab === 'betygsattning' }"
-          @click="activeTab = 'betygsattning'">
-          Betygsättning
-        </button>
+        <button class="nav-link" :class="{ active: activeTab === 'betygsattning' }" @click="activeTab = 'betygsattning'">Betygsättning</button>
       </li>
       <li class="nav-item">
-        <button class="nav-link" :class="{ active: activeTab === 'eleverMedBetyg' }"
-          @click="activeTab = 'eleverMedBetyg'">
-          Elever med betyg
-        </button>
+        <button class="nav-link" :class="{ active: activeTab === 'eleverMedBetyg' }" @click="activeTab = 'eleverMedBetyg'">Elever med betyg</button>
       </li>
       <li class="nav-item">
-        <button class="nav-link" :class="{ active: activeTab === 'lastaBetyg' }" @click="activeTab = 'lastaBetyg'">
-          Låsta betyg
-        </button>
+        <button class="nav-link" :class="{ active: activeTab === 'lastaBetyg' }" @click="activeTab = 'lastaBetyg'">Låsta betyg</button>
       </li>
     </ul>
 
@@ -84,9 +76,7 @@
             <td>{{ elev.kurspaket }}</td>
             <td>{{ elev.betyg.grade }}</td>
             <td>
-              <button class="btn btn-warning btn-sm" @click="lasaBetyg(elev)">
-                Lås
-              </button>
+              <button class="btn btn-warning btn-sm" @click="lasaBetyg(elev)">Lås</button>
             </td>
           </tr>
         </tbody>
@@ -118,82 +108,76 @@
 </template>
 
 <script>
-import axios from "axios";
+  import axios from 'axios'
 
-export default {
-  data() {
-    return {
-      activeTab: "betygsattning", // Aktuell flik
-      eleverAttBetygsatta: [],
-      eleverMedBetyg: [],
-      lastaBetyg: [],
-    };
-  },
-  async mounted() {
-    await this.hämtaData();
-  },
-  methods: {
-    async hämtaData() {
-      try {
-        // Hämta elever att betygsätta
-        const betygsattningResponse = await axios.get(
-          `${process.env.VUE_APP_API_URL}/api/betygsattning`
-        );
-        this.eleverAttBetygsatta = betygsattningResponse.data;
-
-        // Hämta elever med betyg
-        const eleverMedBetygResponse = await axios.get(
-          `${process.env.VUE_APP_API_URL}/api/eleverMedBetyg`
-        );
-        this.eleverMedBetyg = eleverMedBetygResponse.data;
-
-        // Hämta låsta betyg
-        const lastaBetygResponse = await axios.get(
-          `${process.env.VUE_APP_API_URL}/api/lastaBetyg`
-        );
-        this.lastaBetyg = lastaBetygResponse.data;
-      } catch (error) {
-        console.error("Error fetching data:", error);
+  export default {
+    data() {
+      return {
+        activeTab: 'betygsattning', // Aktuell flik
+        eleverAttBetygsatta: [],
+        eleverMedBetyg: [],
+        lastaBetyg: [],
       }
     },
-    async sparaBetyg() {
-      try {
-        await axios.post(`${process.env.VUE_APP_API_URL}/api/betygsattning`, {
-          elever: this.eleverAttBetygsatta,
-        });
-        alert("Betyg sparade!");
-        await this.hämtaData(); // Uppdatera data efter sparande
-      } catch (error) {
-        console.error("Error saving grades:", error);
-      }
+    async mounted() {
+      await this.hämtaData()
     },
-    async lasaBetyg(elev) {
-      try {
-        await axios.post(`${process.env.VUE_APP_API_URL}/api/lasaBetyg`, {
-          _id: elev._id,
-        });
-        alert("Betyg låst!");
-        await this.hämtaData(); // Uppdatera data efter låsning
-      } catch (error) {
-        console.error("Error locking grade:", error);
-      }
+    methods: {
+      async hämtaData() {
+        try {
+          // Hämta elever att betygsätta
+          const betygsattningResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/betygsattning`)
+          this.eleverAttBetygsatta = betygsattningResponse.data
+
+          // Hämta elever med betyg
+          const eleverMedBetygResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/eleverMedBetyg`)
+          this.eleverMedBetyg = eleverMedBetygResponse.data
+
+          // Hämta låsta betyg
+          const lastaBetygResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/lastaBetyg`)
+          this.lastaBetyg = lastaBetygResponse.data
+        } catch (error) {
+          console.error('Error fetching data:', error)
+        }
+      },
+      async sparaBetyg() {
+        try {
+          await axios.post(`${import.meta.env.VITE_API_URL}/api/betygsattning`, {
+            elever: this.eleverAttBetygsatta,
+          })
+          alert('Betyg sparade!')
+          await this.hämtaData() // Uppdatera data efter sparande
+        } catch (error) {
+          console.error('Error saving grades:', error)
+        }
+      },
+      async lasaBetyg(elev) {
+        try {
+          await axios.post(`${import.meta.env.VITE_API_URL}/api/lasaBetyg`, {
+            _id: elev._id,
+          })
+          alert('Betyg låst!')
+          await this.hämtaData() // Uppdatera data efter låsning
+        } catch (error) {
+          console.error('Error locking grade:', error)
+        }
+      },
     },
-  },
-};
+  }
 </script>
 
 <style scoped>
-.nav-tabs .nav-link.active {
-  background-color: #d9d9d9;
-  color: white;
-}
+  .nav-tabs .nav-link.active {
+    background-color: #d9d9d9;
+    color: white;
+  }
 
-.nav-tabs .nav-link {
-  cursor: pointer;
-}
+  .nav-tabs .nav-link {
+    cursor: pointer;
+  }
 
-.table {
-  text-align: center;
-  vertical-align: middle;
-}
+  .table {
+    text-align: center;
+    vertical-align: middle;
+  }
 </style>

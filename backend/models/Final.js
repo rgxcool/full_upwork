@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const slutprovSchema = new mongoose.Schema({
     _id: ObjectId,

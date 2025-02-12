@@ -2,12 +2,7 @@
   <div>
     <br />
     <h1 class="title">Lägg till elever</h1>
-    <div
-      v-if="uploadSuccess"
-      class="alert alert-success alert-dismissible fade show"
-      role="alert"
-      style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050"
-    >
+    <div v-if="uploadSuccess" class="alert alert-success alert-dismissible fade show" role="alert" style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050">
       Eleverna har laddats upp! ✅
     </div>
 
@@ -115,8 +110,8 @@
         students: [],
         searchQuery: '',
         teacherName: '',
-        selectedFileName: '', // Holds the selected file name
-        uploadSuccess: false, // New state for success message
+        selectedFileName: '',
+        uploadSuccess: false,
       }
     },
 
@@ -158,7 +153,7 @@
 
         // ✅ Send the raw file to the backend
         try {
-          const response = await axios.post(`${process.env.VUE_APP_API_URL}/api/xlsxupload`, formData, {
+          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/xlsxupload`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
           })
 
@@ -182,7 +177,7 @@
             dropout: !student.dropout, // Toggle the dropout status
           }
 
-          const response = await axios.put(`${process.env.VUE_APP_API_URL}/api/students/${student._id}`, updatedStudent)
+          const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/students/${student._id}`, updatedStudent)
 
           console.log('Updated student dropout status:', response.data)
 
@@ -196,9 +191,9 @@
 
       async fetchStudents() {
         try {
-          console.log('📡 Fetching from API:', process.env.VUE_APP_API_URL)
-          console.log('📡 Fetching from URL:', `${process.env.VUE_APP_API_URL}/api/students`)
-          const response = await axios.get(`${process.env.VUE_APP_API_URL}/api/students`)
+          console.log('📡 Fetching from API:', import.meta.env.VITE_API_URL)
+          console.log('📡 Fetching from URL:', `${import.meta.env.VITE_API_URL}/api/students`)
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
           console.log('API Response for students:', response.data) // Debug
           this.students = response.data
         } catch (error) {

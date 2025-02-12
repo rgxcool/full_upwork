@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 const { Schema } = mongoose;
 
-const Eductaion = require("./educationSchema");
+import Eductaion from "./Education.js";
 
 const elevSchema = new Schema({
     namn: String,

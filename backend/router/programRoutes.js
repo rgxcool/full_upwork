@@ -1,7 +1,7 @@
 import express from "express";
 const router = express.Router();
-const Education = require("../models/educationSchema");
-const Student = require("../models/elevSchema");
+import Education from "../models/educationSchema";
+import Student from "../models/elevSchema";
 
 router.get("/programs", async (req, res) => {
     const programs = await Education.Program.find(); // Fetch all programs

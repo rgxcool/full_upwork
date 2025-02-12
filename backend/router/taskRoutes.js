@@ -1,8 +1,8 @@
 import express from "express";
 const router = express.Router();
 
-const Task = require("../models/taskSchema");
-const jwt = require("jsonwebtoken"); // Fix: Importera JWT
+import Task from "../models/taskSchema";
+import jwt from "jsonwebtoken"; // Fix: Importera JWT
 
 const authenticate = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -17,7 +17,7 @@ const authenticate = (req, res, next) => {
     const token = authHeader.split(" ")[1]; // Extract token after "Bearer "
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, import.meta.env.JWT_SECRET);
 
         console.log("🔍 Decoded JWT:", decoded); // ✅ DEBUG: See what the token contains
 

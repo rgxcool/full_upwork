@@ -66,7 +66,7 @@ router.post("/auth/login", async (req, res) => {
         // ✅ Generate JWT Token
         const sessionToken = jwt.sign(
             { userId: user._id },
-            process.env.JWT_SECRET,
+            import.meta.env.JWT_SECRET,
             { expiresIn: "1h" }
         );
 
@@ -94,7 +94,7 @@ router.post("/reset-password", async (req, res) => {
                 .send({ message: "Token och nytt lösenord krävs" });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, import.meta.env.JWT_SECRET);
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
         await Teacher.findByIdAndUpdate(decoded.id, {

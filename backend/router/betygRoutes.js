@@ -2,7 +2,7 @@ import express from "express";
 
 import express from "express";
 const router = express.Router();
-const Student = require("../models/elevSchema");
+import Student from "../models/elevSchema";
 
 router.get("/betygsattning", async (req, res) => {
     try {

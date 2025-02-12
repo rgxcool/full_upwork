@@ -1,5 +1,5 @@
-const xlsx = require('xlsx');
-const ExcelJS = require('exceljs');
+import xlsx from "xlsx";
+import ExcelJS from "exceljs";
 
 async function extractCoursePackages(filePath) {
     const workbook = new ExcelJS.Workbook();
@@ -19,7 +19,11 @@ async function extractCoursePackages(filePath) {
         const courseName = courseNameCell.value;
 
         // Check if the cell is bold and course code starts with 'FSX'
-        if (courseCodeCell.font && courseCodeCell.font.bold && courseCode.startsWith('FSX')) {
+        if (
+            courseCodeCell.font &&
+            courseCodeCell.font.bold &&
+            courseCode.startsWith("FSX")
+        ) {
             currentPackage = courseCode;
             coursePackages[currentPackage] = [];
         } else if (currentPackage) {
@@ -31,12 +35,14 @@ async function extractCoursePackages(filePath) {
 }
 
 // Example usage
-const filePath = './Kurser och kurspaket.xlsx';
-extractCoursePackages(filePath).then(coursePackages => {
+const filePath = "./Kurser och kurspaket.xlsx";
+extractCoursePackages(filePath).then((coursePackages) => {
     for (const [package, courses] of Object.entries(coursePackages)) {
         console.log(`Course Package: ${package}`);
-        courses.forEach(course => {
-            console.log(`  Course: ${course.courseCode} - ${course.courseName}`);
+        courses.forEach((course) => {
+            console.log(
+                `  Course: ${course.courseCode} - ${course.courseName}`
+            );
         });
     }
 });

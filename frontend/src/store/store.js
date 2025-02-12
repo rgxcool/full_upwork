@@ -5,7 +5,7 @@ export default createStore({
   state: {
     userToken: localStorage.getItem('userToken') || null,
     userRole: localStorage.getItem('userRole') || null,
-    tasks: [], 
+    tasks: [],
   },
   mutations: {
     SET_USER(state, { token, role }) {
@@ -49,7 +49,7 @@ export default createStore({
       console.log('🛠 Vuex: Attempting login with credentials:', credentials)
 
       try {
-        const response = await axios.post(`${process.env.VUE_APP_API_URL}/api/auth/login`, credentials)
+        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, credentials)
         console.log('✅ Vuex: Backend response:', response.data)
 
         const { userToken } = response.data // ✅ Fix: Extract correct token key
@@ -84,7 +84,7 @@ export default createStore({
       }
 
       try {
-        const response = await axios.get(`${process.env.VUE_APP_API_URL}/api/tasks`, {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/tasks`, {
           headers: { Authorization: `Bearer ${state.userToken}` },
         })
 
@@ -101,7 +101,7 @@ export default createStore({
       }
 
       try {
-        const response = await axios.post(`${process.env.VUE_APP_API_URL}/api/tasks`, { description }, { headers: { Authorization: `Bearer ${state.userToken}` } })
+        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/tasks`, { description }, { headers: { Authorization: `Bearer ${state.userToken}` } })
 
         console.log('✅ Vuex: Task added:', response.data)
         commit('ADD_TASK', response.data)
@@ -117,7 +117,7 @@ export default createStore({
       }
 
       try {
-        const response = await axios.put(`${process.env.VUE_APP_API_URL}/api/tasks/${task._id}`, task, { headers: { Authorization: `Bearer ${state.userToken}` } })
+        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`, task, { headers: { Authorization: `Bearer ${state.userToken}` } })
 
         commit('UPDATE_TASK', response.data)
       } catch (error) {
@@ -132,7 +132,7 @@ export default createStore({
       }
 
       try {
-        await axios.delete(`${process.env.VUE_APP_API_URL}/api/tasks/${taskId}`, {
+        await axios.delete(`${import.meta.env.VITE_API_URL}/api/tasks/${taskId}`, {
           headers: { Authorization: `Bearer ${state.userToken}` },
         })
 
@@ -149,7 +149,7 @@ export default createStore({
       }
 
       try {
-        await axios.delete(`${process.env.VUE_APP_API_URL}/api/tasks`, {
+        await axios.delete(`${import.meta.env.VITE_API_URL}/api/tasks`, {
           headers: { Authorization: `Bearer ${state.userToken}` },
         })
 

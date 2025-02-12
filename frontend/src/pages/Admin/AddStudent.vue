@@ -250,7 +250,7 @@
         }
 
         try {
-          await axios.post(`${process.env.VUE_APP_API_URL}/api/students`, this.kursForm)
+          await axios.post(`${import.meta.env.VITE_API_URL}/api/students`, this.kursForm)
           alert('Eleven blev tillagd!')
 
           // ✅ Reset form fields after successful submission
