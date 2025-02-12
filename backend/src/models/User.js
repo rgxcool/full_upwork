@@ -8,7 +8,7 @@ const UserSchema = new mongoose.Schema({
         type: String,
         enum: ["admin", "user", "moderator"],
         default: "user",
-    }, // 🔥 Add role
+    },
 });
 
 export default mongoose.model("User", UserSchema);

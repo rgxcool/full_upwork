@@ -1,10 +1,12 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import Teacher from "../models/Teacher.js";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import { verifyAuth } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Register
+// Register User
 router.post("/register", async (req, res) => {
     try {
         const { email, password, name } = req.body;
@@ -12,26 +14,77 @@ router.post("/register", async (req, res) => {
         if (!email || !password || !name) {
             return res
                 .status(400)
-                .send({ message: "Alla fält är obligatoriska!" });
+                .json({ message: "Alla fält är obligatoriska!" });
         }
 
-        const existingUser = await Teacher.findOne({ email });
-        if (existingUser) {
-            return res.status(409).send({
+        if (await User.findOne({ email })) {
+            return res.status(409).json({
                 message: "Emailadressen finns redan, var vänlig att logga in!",
             });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new Teacher({ name, email, password: hashedPassword });
+        const newUser = new User({ name, email, password: hashedPassword });
         await newUser.save();
 
-        return res.status(201).send({ message: "Användare registrerad!" });
+        return res.status(201).json({ message: "Användare registrerad!" });
     } catch (error) {
-        console.error("Error during registration:", error);
+        console.error("Registration error:", error);
         return res
             .status(500)
-            .send({ message: "Ett fel uppstod vid registrering." });
+            .json({ message: "Ett fel uppstod vid registreringen." });
+    }
+});
+
+// Login User
+router.post("/login", async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await User.findOne({ email });
+
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res
+                .status(401)
+                .json({ message: "Fel email eller lösenord!" });
+        }
+
+        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+            expiresIn: "1h",
+        });
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "Strict",
+            maxAge: 3600000,
+        });
+
+        return res.json({ message: "Login lyckades!", token });
+    } catch (error) {
+        console.error("Login error:", error);
+        return res.status(500).json({ message: "Server error." });
+    }
+});
+
+// Logout User
+router.post("/logout", (req, res) => {
+    res.clearCookie("token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "Strict",
+    });
+    return res.json({ message: "Logged out successfully!" });
+});
+
+// Check Authentication
+router.get("/me", (req, res) => {
+    const token = req.cookies?.token;
+    if (!token) return res.status(401).json({ message: "Not authenticated" });
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        res.json({ userId: decoded.userId });
+    } catch (error) {
+        res.status(401).json({ message: "Invalid token" });
     }
 });
 

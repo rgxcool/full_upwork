@@ -1,20 +1,20 @@
-import { createRouter, createWebHistory } from "vue-router";
-import Home from "@/pages/Home.vue";
+import { createRouter, createWebHistory } from 'vue-router'
+import Home from '@/views/Home.vue'
 
-console.log("🔍 Vue Router is being initialized..."); 
+console.log('🔍 Vue Router is being initialized...')
 
 const routes = [
-    {
-        path: "/",
-        name: "Home",
-        component: Home,
-        meta: { title: "Home - Mindful Learning" },
-    },
-];
+  {
+    path: '/',
+    name: 'Home',
+    component: Home,
+    meta: { title: 'Home - Mindful Learning' },
+  },
+]
 
 const router = createRouter({
-    history: createWebHistory(),
-    routes,
-});
+  history: createWebHistory(),
+  routes,
+})
 
-export default router;
+export default router

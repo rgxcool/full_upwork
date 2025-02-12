@@ -1,26 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import store from '@/store'
 
-import Home from '@/pages/Home.vue'
+import Home from '@/views/Home.vue'
 
-import LoginPage from '@/pages/Auth/Login.vue'
-import ResetPassword from '@/pages/Auth/ResetPassword.vue'
-import Register from '@/pages/Auth/Register.vue'
+import LoginPage from '@/views/Auth/Login.vue'
+import ResetPassword from '@/views/Auth/ResetPassword.vue'
+import Register from '@/views/Auth/Register.vue'
 
-import ExcelUpload from '@/pages/Admin/ExcelUpload.vue'
-import AddStudent from '@/pages/Admin/AddStudent.vue'
-import EducationEditor from '@/pages/Admin/EducationEditor.vue'
-import ProgramsAndCourses from '@/pages/Admin/ProgramsAndCourses.vue'
-import AddUser from '@/pages/Admin/AddUser.vue'
-import EditStudent from '@/pages/Admin/EditStudent.vue'
+import ExcelUpload from '@/views/Admin/ExcelUpload.vue'
+import AddStudent from '@/views/Admin/AddStudent.vue'
+import EducationEditor from '@/views/Admin/EducationEditor.vue'
+import ProgramsAndCourses from '@/views/Admin/ProgramsAndCourses.vue'
+import AddUser from '@/views/Admin/AddUser.vue'
+import EditStudent from '@/views/Admin/EditStudent.vue'
 
-import FullCalendar from '@/pages/Teacher/ExamCalendar.vue'
-import BetygSattning from '@/pages/Teacher/BetygSattning.vue'
-import ProfilePage from '@/pages/Teacher/ProfilePage.vue'
-import StudentDetails from '@/pages/Student/StudentDetails.vue'
+import FullCalendar from '@/views/Teacher/ExamCalendar.vue'
+import BetygSattning from '@/views/Teacher/BetygSattning.vue'
+import ProfilePage from '@/views/Teacher/ProfilePage.vue'
+import StudentDetails from '@/views/Student/StudentDetails.vue'
 
-import PdfParser from '@/pages/Utils/PdfParser.vue'
-import SearchUser from '@/pages/Utils/SearchUser.vue'
+import PdfParser from '@/views/Utils/PdfParser.vue'
+import SearchUser from '@/views/Utils/SearchUser.vue'
 
 const routes = [
   { path: '/', name: 'home', component: Home, meta: { title: 'Home - Mindful Learning' } },

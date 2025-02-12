@@ -2,9 +2,13 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import router from "./src/router/router.js"; // ✅ Include .js extension
+import router from "./src/router/router.js";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+import User from "./src/models/User.js";
+import cookieParser from "cookie-parser";
 
-dotenv.config(); // ✅ Load environment variables
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -25,8 +29,8 @@ app.use(router);
 // Connect to MongoDB
 mongoose
     .connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ Connected to MongoDB"))
-    .catch((err) => console.error("❌ MongoDB connection error:", err));
+    .then(() => console.log("Connected to MongoDB"))
+    .catch((err) => console.error("MongoDB connection error:", err));
 
 app.listen(PORT, () =>
     console.log(`🚀 Server running on http://localhost:${PORT}`)

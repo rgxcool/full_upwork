@@ -1,5 +1,5 @@
 import express from "express";
-import Teacher from "../src/models/Teacher.js";
+import User from "../models/User.js";
 import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import jtw from "jsonwebtoken";
@@ -14,7 +14,6 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-// Register
 router.post("/register", async (req, res) => {
     try {
         const { email, password, name } = req.body;
@@ -25,7 +24,7 @@ router.post("/register", async (req, res) => {
                 .send({ message: "Alla fält är obligatoriska!" });
         }
 
-        const existingUser = await Teacher.findOne({ email });
+        const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(409).send({
                 message: "Emailadressen finns redan, var vänlig att logga in!",
@@ -33,7 +32,7 @@ router.post("/register", async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new Teacher({ name, email, password: hashedPassword });
+        const newUser = new User({ name, email, password: hashedPassword });
         await newUser.save();
 
         return res.status(201).send({ message: "Användare registrerad!" });
@@ -42,45 +41,6 @@ router.post("/register", async (req, res) => {
         return res
             .status(500)
             .send({ message: "Ett fel uppstod vid registrering." });
-    }
-});
-
-router.post("/auth/login", async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const user = await Teacher.findOne({ email });
-
-        if (!user) {
-            return res.status(404).json({
-                message: "Användare finns inte, var vänlig försök igen!",
-            });
-        }
-
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            return res.status(401).json({
-                message: "Lösenordet är fel, var vänlig försök igen!",
-            });
-        }
-
-        // ✅ Generate JWT Token
-        const sessionToken = jwt.sign(
-            { userId: user._id },
-            import.meta.env.JWT_SECRET,
-            { expiresIn: "1h" }
-        );
-
-        console.log("🔑 Generated JWT Token:", sessionToken); // ✅ Debug Token
-
-        return res.json({
-            message: "Login successful!",
-            userToken: sessionToken, // ✅ Send token
-        });
-    } catch (error) {
-        console.error("❌ Error during login:", error);
-        return res
-            .status(500)
-            .json({ message: "Ett fel uppstod vid inloggning." });
     }
 });
 
@@ -97,7 +57,7 @@ router.post("/reset-password", async (req, res) => {
         const decoded = jwt.verify(token, import.meta.env.JWT_SECRET);
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        await Teacher.findByIdAndUpdate(decoded.id, {
+        await User.findByIdAndUpdate(decoded.id, {
             password: hashedPassword,
         });
 

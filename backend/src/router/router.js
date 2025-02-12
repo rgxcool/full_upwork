@@ -1,5 +1,5 @@
 import { Router } from "express";
-import studentRoutes from "./studentRoutes.js"; // ✅ Ensure .js extension
+import studentRoutes from "./studentRoutes.js";
 import authRoutes from "./authRoutes.js";
 import teacherRoutes from "./teacherRoutes.js";
 import userRoutes from "./userRoutes.js";
@@ -8,7 +8,6 @@ import adminRoutes from "./adminRoutes.js";
 
 const router = Router();
 
-// Register routes
 router.use("/api/students", studentRoutes);
 router.use("/api/auth", authRoutes);
 router.use("/api/teachers", teacherRoutes);

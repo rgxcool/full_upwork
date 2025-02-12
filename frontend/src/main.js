@@ -10,7 +10,13 @@ console.log('🚀 Initializing Vue App...') // ✅ Debug Message
 console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
 console.log('All env variables:', import.meta.env)
 
-axios.defaults.headers.common['Authorization'] = `Bearer ${store.state.auth.token}`
+// ✅ Check if token exists before setting the default header
+const token = store.state.auth?.token
+if (token) {
+  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+} else {
+  console.warn('⚠️ No token found in Vuex state.')
+}
 
 const app = createApp(App)
 app.use(router)
