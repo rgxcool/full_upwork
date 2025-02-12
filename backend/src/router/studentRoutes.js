@@ -1,14 +1,13 @@
 // Import dependencies using ESM
 import { Router } from "express";
 import Student from "../models/Student.js";
-import Education from "../models/Education.js";
-import { uploadXlsx } from "../controllers/studentController.js";
-import upload from "../middleware/uploadMiddleware.js"; // ✅ Ensure .js extension
+import Program from "../models/Program.js";
+import Course from "../models/Course.js";
 
 const router = Router(); // ✅ Create router instance
 
 // Get all students
-router.get("/", async (req, res) => {
+router.get("/student/", async (req, res) => {
     try {
         const students = await Student.find().populate(
             "courses.courseId",
@@ -23,7 +22,7 @@ router.get("/", async (req, res) => {
 });
 
 // Add a single student
-router.post("/", async (req, res) => {
+router.post("/student/", async (req, res) => {
     try {
         const student = new Student(req.body); // Create a new student document
         const savedStudent = await student.save(); // Save it to the database
@@ -35,7 +34,7 @@ router.post("/", async (req, res) => {
 });
 
 // Route to fetch a student ID by name
-router.get("/id", async (req, res) => {
+router.get("/student/id", async (req, res) => {
     const { name } = req.query;
 
     try {
@@ -55,7 +54,7 @@ router.get("/id", async (req, res) => {
 });
 
 //Update Student
-router.put("/:id", async (req, res) => {
+router.put("/student/:id", async (req, res) => {
     try {
         const updatedStudent = await Student.findByIdAndUpdate(
             req.params.id,
@@ -68,20 +67,8 @@ router.put("/:id", async (req, res) => {
     }
 });
 
-// ✅ Define the route for Excel file upload
-router.post("/xlsxupload", upload.single("file"), uploadXlsx);
-
-// ✅ Function to Convert Excel Date to JavaScript Date
-function parseExcelDate(value) {
-    if (!value) return null;
-    if (typeof value === "number") {
-        return new Date((value - 25569) * 86400 * 1000).toISOString();
-    }
-    return value;
-}
-
 // ✅ Add a course to an existing student by name
-router.post("/addcoursetostudent", async (req, res) => {
+router.post("/student/addcourse", async (req, res) => {
     try {
         const { studentName, courseId } = req.body;
 
@@ -96,7 +83,7 @@ router.post("/addcoursetostudent", async (req, res) => {
             return res.status(404).send("Student not found");
         }
 
-        const course = await Education.Course.findById(courseId);
+        const course = await Course.findById(courseId);
         if (!course) {
             return res.status(404).send("Course not found");
         }
@@ -122,7 +109,7 @@ router.post("/:studentId/courses", async (req, res) => {
             return res.status(404).json({ error: "Student not found" });
         }
 
-        const course = await Education.Course.findById(courseId);
+        const course = await Course.findById(courseId);
         if (!course) {
             return res.status(404).json({ error: "Course not found" });
         }
@@ -142,7 +129,7 @@ router.post("/:studentId/courses", async (req, res) => {
 });
 
 // Route to get student ID by name
-router.get("students/id", async (req, res) => {
+router.get("/student/id", async (req, res) => {
     try {
         const { name } = req.query;
 
@@ -162,7 +149,7 @@ router.get("students/id", async (req, res) => {
 });
 
 // Fetch student details by ID
-router.get("/:id", async (req, res) => {
+router.get("/student/:id", async (req, res) => {
     try {
         const student = await Student.findById(req.params.id).populate(
             "courses.courseId"
@@ -178,7 +165,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // Update student details
-router.put("/:id", async (req, res) => {
+router.put("/student/:id", async (req, res) => {
     try {
         const updatedStudent = await Student.findByIdAndUpdate(
             req.params.id,
@@ -199,7 +186,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // Remove a course from a student
-router.delete("/:id/courses/:courseId", async (req, res) => {
+router.delete("/student/:id/courses/:courseId", async (req, res) => {
     try {
         const student = await Student.findById(req.params.id);
         if (!student) {
@@ -219,7 +206,7 @@ router.delete("/:id/courses/:courseId", async (req, res) => {
 });
 
 // Route to search for students by name
-router.get("/search", async (req, res) => {
+router.get("/student/search", async (req, res) => {
     const { name } = req.query;
 
     if (!name || name.trim() === "") {
@@ -234,6 +221,37 @@ router.get("/search", async (req, res) => {
     } catch (error) {
         console.error("Error searching students:", error);
         res.status(500).send("Error searching students.");
+    }
+});
+
+// Add a program to student
+router.post("/student/:id/programs", async (req, res) => {
+    const { programId } = req.body;
+
+    try {
+        const program = await Program.findById(programId).populate("courses");
+        if (!program) {
+            return res.status(404).json({ error: "Program not found" });
+        }
+
+        const student = await Student.findById(req.params.id);
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        student.program = program.programName;
+        student.courses.push(
+            ...program.courses.map((course) => ({
+                courseId: course._id,
+                courseName: course.courseName,
+            }))
+        );
+
+        await student.save();
+        res.json("Program and courses added successfully");
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Failed to add program to student" });
     }
 });
 

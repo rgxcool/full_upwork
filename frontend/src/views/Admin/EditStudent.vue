@@ -30,30 +30,30 @@
 </template>
 
 <script>
-import { ref, onMounted } from "vue";
+  import { ref, onMounted } from 'vue'
 
-export default {
-  name: "EditStudent",
-  setup() {
-    const students = ref([]);
-    const selectedStudent = ref(null);
+  export default {
+    name: 'EditStudent',
+    setup() {
+      const students = ref([])
+      const selectedStudent = ref(null)
 
-    // Fetch students data (use your actual API here)
-    onMounted(async () => {
-      try {
-        const response = await fetch("http://localhost:5001/api/students");
-        const data = await response.json();
-        students.value = data; // Assuming the response has a list of students
-      } catch (error) {
-        console.error("Error fetching students:", error);
-      }
-    });
+      // Fetch students data (use your actual API here)
+      onMounted(async () => {
+        try {
+          const response = await fetch('http://localhost:5001/api/student')
+          const data = await response.json()
+          students.value = data // Assuming the response has a list of students
+        } catch (error) {
+          console.error('Error fetching students:', error)
+        }
+      })
 
-    return { students, selectedStudent };
-  },
-};
+      return { students, selectedStudent }
+    },
+  }
 </script>
 
 <style scoped>
-/* Custom styles (if necessary) */
+  /* Custom styles (if necessary) */
 </style>

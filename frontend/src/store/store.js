@@ -23,7 +23,6 @@ export default createStore({
       localStorage.removeItem('userRole')
     },
 
-    // ✅ Task Mutations
     SET_TASKS(state, tasks) {
       state.tasks = tasks
     },
@@ -44,7 +43,6 @@ export default createStore({
     },
   },
   actions: {
-    // ✅ AUTH ACTIONS
     async login({ commit }, credentials) {
       console.log('🛠 Vuex: Attempting login with credentials:', credentials)
 
@@ -76,7 +74,6 @@ export default createStore({
       commit('LOGOUT')
     },
 
-    // ✅ TASK ACTIONS
     async fetchTasks({ commit, state }) {
       if (!state.token) {
         console.error('❌ Vuex: No token found, cannot fetch tasks.')

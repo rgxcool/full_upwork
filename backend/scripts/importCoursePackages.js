@@ -1,4 +1,3 @@
-import xlsx from "xlsx";
 import ExcelJS from "exceljs";
 
 async function extractCoursePackages(filePath) {

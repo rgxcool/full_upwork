@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import store from '@/store'
+import store from '@/store/store.js'
 
 import Home from '@/views/Home.vue'
 
@@ -36,7 +36,7 @@ const routes = [
   //   { path: '/addteacher', name: 'AddTeacher', component: AddTeacher },
   { path: '/elever', name: 'Elever', component: ExcelUpload },
   { path: '/kalender', component: FullCalendar },
-  { path: '/students/:id', name: 'StudentDetails', component: StudentDetails, props: true },
+  { path: '/student/:id', name: 'StudentDetails', component: StudentDetails, props: true },
   { path: '/education', name: 'EducationEditor', component: EducationEditor },
   { path: '/programsandcourses', name: 'ProgramsAndCourses', component: ProgramsAndCourses },
   // { path: '/editstudent', name: 'EditStudent', component: EditStudent },

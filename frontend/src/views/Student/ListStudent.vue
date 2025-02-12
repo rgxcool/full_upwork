@@ -2,7 +2,14 @@
   <v-container>
     <v-form>
       <!-- Dropdown for selecting a student -->
-      <v-select v-model="selectedStudent" :items="students" item-title="namn" label="Select a student" return-object outlined />
+      <v-select
+        v-model="selectedStudent"
+        :items="students"
+        item-title="namn"
+        label="Select a student"
+        return-object
+        outlined
+      />
 
       <v-row v-if="selectedStudent">
         <v-col cols="12" md="6">
@@ -28,7 +35,7 @@
       // Fetch students data (use your actual API here)
       onMounted(async () => {
         try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/students`)
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/student`)
           const data = await response.json()
           students.value = data // Assuming the response has a list of students
         } catch (error) {

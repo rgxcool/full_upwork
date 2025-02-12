@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 
-// Course Schema
-const kursSchema = new mongoose.Schema({
+const courseSchema = new mongoose.Schema({
     courseName: String,
     courseCode: String,
     omfattning: {
@@ -16,4 +15,4 @@ const kursSchema = new mongoose.Schema({
     },
 });
 
-export default mongoose.model("Kurs", kursSchema, "kurser");
+export default mongoose.model("Course", courseSchema, "course");

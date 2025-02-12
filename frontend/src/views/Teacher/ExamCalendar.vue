@@ -4,7 +4,13 @@
       <FullCalendar class="demo-app-calendar" :options="calendarOptions" />
     </div>
 
-    <div v-if="eventDetails" class="modal fade show d-block" tabindex="-1" role="dialog" style="background: rgba(0, 0, 0, 0.5)">
+    <div
+      v-if="eventDetails"
+      class="modal fade show d-block"
+      tabindex="-1"
+      role="dialog"
+      style="background: rgba(0, 0, 0, 0.5)"
+    >
       <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
           <div class="modal-header">
@@ -27,7 +33,7 @@
                   <td>{{ student.id }}</td>
                   <td>{{ student.course }}</td>
                   <td>
-                    <router-link :to="`/students/${student.id}`" class="btn btn-primary btn-sm">Visa mer</router-link>
+                    <router-link :to="`/student/${student.id}`" class="btn btn-primary btn-sm">Visa mer</router-link>
                   </td>
                 </tr>
               </tbody>

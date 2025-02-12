@@ -6,7 +6,7 @@ import User from "../models/User.js";
 const router = express.Router();
 
 // Register User
-router.post("/register", async (req, res) => {
+router.post("/auth/register", async (req, res) => {
     try {
         const { email, password, username } = req.body;
 
@@ -36,7 +36,7 @@ router.post("/register", async (req, res) => {
 });
 
 // Login User
-router.post("/login", async (req, res) => {
+router.post("/auth/login", async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
@@ -65,7 +65,7 @@ router.post("/login", async (req, res) => {
 });
 
 // Logout User
-router.post("/logout", (req, res) => {
+router.post("/auth/logout", (req, res) => {
     res.clearCookie("token", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -75,7 +75,7 @@ router.post("/logout", (req, res) => {
 });
 
 // Check Authentication
-router.get("/me", (req, res) => {
+router.get("/auth/me", (req, res) => {
     const token = req.cookies?.token;
     if (!token) return res.status(401).json({ message: "Not authenticated" });
 

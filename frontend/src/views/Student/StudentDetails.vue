@@ -39,48 +39,48 @@
 </template>
 
 <script>
-import { ref, onMounted } from "vue";
-import { useRoute } from "vue-router";
-import axios from "axios";
+  import { ref, onMounted } from 'vue'
+  import { useRoute } from 'vue-router'
+  import axios from 'axios'
 
-export default {
-  setup() {
-    const route = useRoute();
-    const student = ref({});
-    const isCoordinator = true; // Här kan du lägga till en check för användarroll
+  export default {
+    setup() {
+      const route = useRoute()
+      const student = ref({})
+      const isCoordinator = true // Här kan du lägga till en check för användarroll
 
-    const fetchStudent = async () => {
-      try {
-        const response = await axios.get(`http://localhost:5001/api/students/${route.params.id}`);
-        student.value = response.data;
-      } catch (error) {
-        console.error("Misslyckades att hämta elev:", error);
+      const fetchStudent = async () => {
+        try {
+          const response = await axios.get(`http://localhost:5001/api/student/${route.params.id}`)
+          student.value = response.data
+        } catch (error) {
+          console.error('Misslyckades att hämta elev:', error)
+        }
       }
-    };
 
-    const updateStudent = async () => {
-      try {
-        await axios.put(`/api/students/${student.value._id}`, student.value);
-        alert("Elevens information uppdaterades!");
-      } catch (error) {
-        console.error("Misslyckades att uppdatera elev:", error);
+      const updateStudent = async () => {
+        try {
+          await axios.put(`/api/student/${student.value._id}`, student.value)
+          alert('Elevens information uppdaterades!')
+        } catch (error) {
+          console.error('Misslyckades att uppdatera elev:', error)
+        }
       }
-    };
 
-    onMounted(fetchStudent);
+      onMounted(fetchStudent)
 
-    return {
-      student,
-      isCoordinator,
-      updateStudent,
-    };
-  },
-};
+      return {
+        student,
+        isCoordinator,
+        updateStudent,
+      }
+    },
+  }
 </script>
 
 <style scoped>
-.container {
-  max-width: 800px;
-  margin: auto;
-}
+  .container {
+    max-width: 800px;
+    margin: auto;
+  }
 </style>

@@ -1,20 +1,16 @@
 require("dotenv").config();
-const mongoose = require("mongoose");
-const xlsx = require("xlsx");
-const {
-    Program,
-    CoursePackage,
-    Course,
-} = require("../src/models/educationSchema"); // Adjust path
-const MONGO_URI =
-    "mongodb://mindful_admin:newmindful1337@localhost:27017/mindful"; // Adjust URI
+import mongoose from "mongoose";
 
-console.log("MONGO_URI:", MONGO_URI);
+import Program from "../models/Program.js"; // Adjust path
 
-mongoose.connect(MONGO_URI);
+dotenv.config();
+
+console.log("process.env.MONG_URI:", process.env.MONG_URI);
+
+mongoose.connect(process.env.MONG_URI);
 
 // Read Excel File
-const workbook = xlsx.readFile("./Kurser och kurspaket.xlsx");
+const workbook = xlsx.readFile("./EducationData.xlsx");
 const data = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]); // Adjust sheet if needed
 
 const importData = async () => {
@@ -48,16 +44,6 @@ const importData = async () => {
                           .filter((num) => num !== null) // Remove invalid entries
                     : [], // Default to an empty array if 'Omfattning' is missing
             });
-
-            /* Adding only courses for now and coursepackages later.
-      // Add to course package
-      let coursePackage = await CoursePackage.findOne({ packageName: row["Kurspaket"] });
-      if (!coursePackage) {
-        coursePackage = await CoursePackage.create({ packageName: row["Kurspaket"], courses: [] });
-      }
-      coursePackage.courses.push(course._id);
-      await coursePackage.save();
-      */
 
             // Add to program
             let program = await Program.findOne({

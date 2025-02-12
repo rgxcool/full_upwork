@@ -4,11 +4,7 @@ import authenticate from "../middleware/authMiddleware.js"; // ✅ Import middle
 
 const router = Router();
 
-/**
- * Route: GET /
- * Get all tasks for the authenticated user.
- */
-router.get("/", authenticate, async (req, res) => {
+router.get("/task/", authenticate, async (req, res) => {
     // ✅ Fix: Use "/" instead of "/"
     console.log("✅ GET /api/ hit!"); // ✅ Debugging
     try {
@@ -20,11 +16,7 @@ router.get("/", authenticate, async (req, res) => {
     }
 });
 
-/**
- * Route: POST /
- * Create a new task for the authenticated user.
- */
-router.post("/", authenticate, async (req, res) => {
+router.post("/task/", authenticate, async (req, res) => {
     try {
         const { description } = req.body;
 
@@ -50,11 +42,7 @@ router.post("/", authenticate, async (req, res) => {
     }
 });
 
-/**
- * Route: PUT //:id
- * Update task status (only if the task belongs to the authenticated user).
- */
-router.put("/:id", authenticate, async (req, res) => {
+router.put("/task/:id", authenticate, async (req, res) => {
     try {
         const { isDone } = req.body;
 
@@ -85,11 +73,7 @@ router.put("/:id", authenticate, async (req, res) => {
     }
 });
 
-/**
- * Route: DELETE //:id
- * Delete a single task (only if the task belongs to the authenticated user).
- */
-router.delete("/:id", authenticate, async (req, res) => {
+router.delete("/task/:id", authenticate, async (req, res) => {
     try {
         console.log(`🛠 Attempting to delete task with ID: ${req.params.id}`); // ✅ Debugging
 
@@ -114,11 +98,7 @@ router.delete("/:id", authenticate, async (req, res) => {
     }
 });
 
-/**
- * Route: DELETE /
- * Delete all tasks for the authenticated user.
- */
-router.delete("/", authenticate, async (req, res) => {
+router.delete("/task/", authenticate, async (req, res) => {
     try {
         const result = await Task.deleteMany({ userId: req.userId });
         res.json({

@@ -11,9 +11,25 @@
 
     <ul class="nav nav-tabs container">
       <li class="nav-item">
-        <a href="#" @click="toggleForm('student')" :class="formType === 'student' ? 'active-link' : ''" class="nav-link" style="color: black !important; border: none !important"> Elev </a>
+        <a
+          href="#"
+          @click="toggleForm('student')"
+          :class="formType === 'student' ? 'active-link' : ''"
+          class="nav-link"
+          style="color: black !important; border: none !important"
+        >
+          Elev
+        </a>
       </li>
-      <a href="#" @click="toggleForm('teacher')" :class="formType === 'teacher' ? 'active-link' : ''" class="nav-link" style="color: black !important"> Lärare </a>
+      <a
+        href="#"
+        @click="toggleForm('teacher')"
+        :class="formType === 'teacher' ? 'active-link' : ''"
+        class="nav-link"
+        style="color: black !important"
+      >
+        Lärare
+      </a>
     </ul>
     <div class="container bg-white p-4 rounded shadow-sm">
       <!-- Toggle mellan Elev och Lärare -->
@@ -29,19 +45,38 @@
         <div class="row g-3">
           <div class="col-md-6 text-start">
             <label for="personnummer" class="form-label">Personnummer</label>
-            <input type="text" id="personnummer" class="form-control" v-model="studentForm.personnummer" placeholdeR="Ex. ååååmmdd" />
+            <input
+              type="text"
+              id="personnummer"
+              class="form-control"
+              v-model="studentForm.personnummer"
+              placeholdeR="Ex. ååååmmdd"
+            />
           </div>
         </div>
         <div class="row g-3 text-start">
           <div class="col-md-6">
             <label for="kurspaket" class="form-label">Kurspaket:</label>
-            <input type="text" id="kurspaket" class="form-control" v-model="studentForm.kurspaket" placeholder="Ex. Svenska 1" />
+            <input
+              type="text"
+              id="kurspaket"
+              class="form-control"
+              v-model="studentForm.kurspaket"
+              placeholder="Ex. Svenska 1"
+            />
           </div>
         </div>
         <div class="row g-3 text-start">
           <div class="col-md-6">
             <label class="form-label" for="startDatum">Start datum:</label>
-            <input type="text" id="startDatum" class="form-control" v-model="studentForm.startDatum" placeholder="yyyy-mm-dd" @input="calculateEndDate" />
+            <input
+              type="text"
+              id="startDatum"
+              class="form-control"
+              v-model="studentForm.startDatum"
+              placeholder="yyyy-mm-dd"
+              @input="calculateEndDate"
+            />
           </div>
         </div>
         <div class="row g-3 mt-3">
@@ -49,21 +84,36 @@
             <label>Studietakt: </label>
             <div class="checkbox-wrapper-27">
               <label class="checkbox">
-                <input type="checkbox" value="5" :checked="studentForm.duration === '5'" @change="updateDuration('5')" />
+                <input
+                  type="checkbox"
+                  value="5"
+                  :checked="studentForm.duration === '5'"
+                  @change="updateDuration('5')"
+                />
                 <span class="checkbox__icon"></span>
                 5 veckor
               </label>
             </div>
             <div class="checkbox-wrapper-27">
               <label class="checkbox">
-                <input type="checkbox" value="10" :checked="studentForm.duration === '10'" @change="updateDuration('10')" />
+                <input
+                  type="checkbox"
+                  value="10"
+                  :checked="studentForm.duration === '10'"
+                  @change="updateDuration('10')"
+                />
                 <span class="checkbox__icon"></span>
                 10 veckor
               </label>
             </div>
             <div class="checkbox-wrapper-27">
               <label class="checkbox">
-                <input type="checkbox" value="20" :checked="studentForm.duration === '20'" @change="updateDuration('20')" />
+                <input
+                  type="checkbox"
+                  value="20"
+                  :checked="studentForm.duration === '20'"
+                  @change="updateDuration('20')"
+                />
                 <span class="checkbox__icon"></span>
                 20 veckor
               </label>
@@ -108,7 +158,13 @@
         <div class="row g-3 mt-3">
           <div class="col-md-6">
             <div class="mt-3">
-              <input type="text" id="endDate" class="form-control" :value="studentForm.slutDatum || 'Auto-beräknat slutdatum'" readonly />
+              <input
+                type="text"
+                id="endDate"
+                class="form-control"
+                :value="studentForm.slutDatum || 'Auto-beräknat slutdatum'"
+                readonly
+              />
             </div>
           </div>
         </div>
@@ -122,13 +178,25 @@
         <div class="row g-3 text-start">
           <div class="col-md-6">
             <label for="teacherName" class="form-label">Namn</label>
-            <input type="text" id="teacherName" class="form-control" v-model="teacherForm.name" placeholder="Ex. Doe, Jane" />
+            <input
+              type="text"
+              id="teacherName"
+              class="form-control"
+              v-model="teacherForm.name"
+              placeholder="Ex. Doe, Jane"
+            />
           </div>
         </div>
         <div class="row g-3 text-start">
           <div class="col-md-6">
             <label for="email" class="form-label">E-post</label>
-            <input type="email" id="email" class="form-control" v-model="teacherForm.email" placeholder="example@gmail.com" />
+            <input
+              type="email"
+              id="email"
+              class="form-control"
+              v-model="teacherForm.email"
+              placeholder="example@gmail.com"
+            />
           </div>
         </div>
 
@@ -192,7 +260,7 @@
       },
       async submitStudentForm() {
         try {
-          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/students`, this.studentForm)
+          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, this.studentForm)
           alert('Student added successfully!')
           console.log('Added student:', response.data)
 

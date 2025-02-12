@@ -7,7 +7,9 @@
     <!-- Form Selection -->
     <div class="btn-group" role="group" aria-label="Form Selection">
       <button class="btn btn-primary" @click="formType = 'Kurs'" :disabled="formType === 'Kurs'">Kurs</button>
-      <button class="btn btn-primary" @click="formType = 'Kurspaket'" :disabled="formType === 'Kurspaket'">Kurspaket</button>
+      <button class="btn btn-primary" @click="formType = 'Kurspaket'" :disabled="formType === 'Kurspaket'">
+        Kurspaket
+      </button>
     </div>
 
     <br />
@@ -74,17 +76,38 @@
       <label class="form-label">Studietakt:</label>
       <div class="mb-3">
         <label>
-          <input type="radio" value="5" v-model="kursForm.duration" class="form-check-input" @change="calculateEndDate" required />
+          <input
+            type="radio"
+            value="5"
+            v-model="kursForm.duration"
+            class="form-check-input"
+            @change="calculateEndDate"
+            required
+          />
           5 v (100%)
         </label>
         <br />
         <label>
-          <input type="radio" value="10" v-model="kursForm.duration" class="form-check-input" @change="calculateEndDate" required />
+          <input
+            type="radio"
+            value="10"
+            v-model="kursForm.duration"
+            class="form-check-input"
+            @change="calculateEndDate"
+            required
+          />
           10 v (50%)
         </label>
         <br />
         <label>
-          <input type="radio" value="20" v-model="kursForm.duration" class="form-check-input" @change="calculateEndDate" required />
+          <input
+            type="radio"
+            value="20"
+            v-model="kursForm.duration"
+            class="form-check-input"
+            @change="calculateEndDate"
+            required
+          />
           20 v (25%)
         </label>
       </div>
@@ -250,7 +273,7 @@
         }
 
         try {
-          await axios.post(`${import.meta.env.VITE_API_URL}/api/students`, this.kursForm)
+          await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, this.kursForm)
           alert('Eleven blev tillagd!')
 
           // ✅ Reset form fields after successful submission

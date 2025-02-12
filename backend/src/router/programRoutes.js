@@ -1,34 +1,34 @@
 import express from "express";
+import Program from "../models/Program.js";
+import Student from "../models/Student.js";
+import Course from "../models/Course.js";
+
 const router = express.Router();
-import Education from "../models/educationSchema";
-import Student from "../models/elevSchema";
 
 router.get("/programs", async (req, res) => {
-    const programs = await Education.Program.find(); // Fetch all programs
+    const programs = await Program.find(); // Fetch all programs
     res.json(programs);
 });
 
 router.get("/programs/:programId/courses", async (req, res) => {
-    const program = await Education.Program.findById(
-        req.params.programId
-    ).populate("courses"); // Fetch courses for a specific program
+    const program = await Program.findById(req.params.programId).populate(
+        "courses"
+    ); // Fetch courses for a specific program
     if (!program) return res.status(404).json({ error: "Program not found" });
     res.json(program.courses);
 });
 
 router.get("/courses", async (req, res) => {
-    const courses = await Education.Course.find(); // Fetch all courses
+    const courses = await Course.find(); // Fetch all courses
     res.json(courses);
 });
 
 // Add a program to student
-router.post("/students/:id/programs", async (req, res) => {
+router.post("/student/:id/programs", async (req, res) => {
     const { programId } = req.body;
 
     try {
-        const program = await Education.Program.findById(programId).populate(
-            "courses"
-        );
+        const program = await Program.findById(programId).populate("courses");
         if (!program) {
             return res.status(404).json({ error: "Program not found" });
         }

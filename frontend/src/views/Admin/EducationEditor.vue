@@ -5,19 +5,42 @@
     <br />
     <!-- Program Selection -->
     <div>
-      <v-select v-model="selectedProgram" :items="programs" item-title="programName" item-value="_id" placeholder="Select program" @update:modelValue="fetchAllCourses" class="styled-select" />
+      <v-select
+        v-model="selectedProgram"
+        :items="programs"
+        item-title="programName"
+        item-value="_id"
+        placeholder="Select program"
+        @update:modelValue="fetchAllCourses"
+        class="styled-select"
+      />
     </div>
     <br />
     <br />
     <!-- Add Individual Course to Student -->
     <div>
-      <v-select v-model="selectedIndividualCourse" :items="allCourses" item-title="displayText" item-value="_id" placeholder="Select course" class="styled-select" />
+      <v-select
+        v-model="selectedIndividualCourse"
+        :items="allCourses"
+        item-title="displayText"
+        item-value="_id"
+        placeholder="Select course"
+        class="styled-select"
+      />
       <br />
       <!-- <input id="student-name" v-model="studentName" placeholder="Student Name" class="styled-input"/> -->
       <v-container>
         <v-form>
           <!-- Dropdown for selecting a student -->
-          <v-select v-model="selectedStudent" :items="students" item-title="namn" item-value="_id" label="Select a student" return-object outlined />
+          <v-select
+            v-model="selectedStudent"
+            :items="students"
+            item-title="namn"
+            item-value="_id"
+            label="Select a student"
+            return-object
+            outlined
+          />
         </v-form>
       </v-container>
       <br />
@@ -39,7 +62,7 @@
       // Fetch students data (use your actual API here)
       onMounted(async () => {
         try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/students`)
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/student`)
           const data = await response.json()
           students.value = data // Assuming the response has a list of students
         } catch (error) {
@@ -82,7 +105,9 @@
         if (this.selectedProgram) {
           try {
             console.log('Fetching courses for program ID:', this.selectedProgram) // Debug
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs/${this.selectedProgram}/courses`)
+            const response = await axios.get(
+              `${import.meta.env.VITE_API_URL}/api/programs/${this.selectedProgram}/courses`
+            )
 
             // Ensure each course has a display text that combines name and code
             this.allCourses = response.data.map((course) => ({
@@ -118,7 +143,9 @@
             return
           }
 
-          await axios.post(`${import.meta.env.VITE_API_URL}/api/students/${this.studentId}/courses`, { courseId: this.selectedIndividualCourse })
+          await axios.post(`${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/courses`, {
+            courseId: this.selectedIndividualCourse,
+          })
           alert(`Course added successfully.`)
         } catch (error) {
           console.error('Error adding course:', error)
@@ -155,7 +182,9 @@
             return
           }
 
-          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/students/${this.studentId}/programs`, { programId: this.selectedProgram })
+          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/programs`, {
+            programId: this.selectedProgram,
+          })
           alert(`${response.data} - Program and courses added successfully.`)
         } catch (error) {
           console.error('Error adding program:', error)
