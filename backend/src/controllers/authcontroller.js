@@ -4,7 +4,7 @@ import User from "../models/userSchema";
 
 exports.register = async (req, res) => {
     try {
-        const { username, email, password, role } = req.body;
+        const { name, email, password, role } = req.body;
 
         // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -17,7 +17,7 @@ exports.register = async (req, res) => {
 
         // Create the user
         const newUser = await User.create({
-            username,
+            name,
             email,
             password: hashedPassword,
             role: userRole, // 🔥 Store user role
@@ -53,7 +53,7 @@ exports.login = async (req, res) => {
 
         res.json({
             token,
-            user: { id: user._id, username: user.username, role: user.role },
+            user: { id: user._id, name: user.name, role: user.role },
         });
     } catch (error) {
         console.error("Error logging in:", error);

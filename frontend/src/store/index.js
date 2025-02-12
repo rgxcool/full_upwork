@@ -3,23 +3,23 @@ import axios from 'axios'
 
 export default createStore({
   state: {
-    userToken: localStorage.getItem('userToken') || null,
+    token: localStorage.getItem('token') || null,
     userRole: localStorage.getItem('userRole') || null,
     tasks: [],
   },
   mutations: {
     SET_USER(state, { token, role }) {
       console.log('✅ Vuex: Saving user token & role:', token, role)
-      state.userToken = token
+      state.token = token
       state.userRole = role
-      localStorage.setItem('userToken', token)
+      localStorage.setItem('token', token)
       localStorage.setItem('userRole', role)
     },
     LOGOUT(state) {
       console.log('🔴 Vuex: Logging out user.')
-      state.userToken = null
+      state.token = null
       state.userRole = null
-      localStorage.removeItem('userToken')
+      localStorage.removeItem('token')
       localStorage.removeItem('userRole')
     },
 
@@ -52,19 +52,19 @@ export default createStore({
         const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, credentials)
         console.log('✅ Vuex: Backend response:', response.data)
 
-        const { userToken } = response.data // ✅ Fix: Extract correct token key
-        if (!userToken) {
-          console.error('❌ Vuex: Missing `userToken` in backend response:', response.data)
+        const { token } = response.data // ✅ Fix: Extract correct token key
+        if (!token) {
+          console.error('❌ Vuex: Missing `token` in backend response:', response.data)
           return { success: false, message: 'Login failed: No token received.' }
         }
 
         // ✅ Commit token & role
-        commit('SET_USER', { token: userToken, role: response.data.user?.role || 'user' })
+        commit('SET_USER', { token: token, role: response.data.user?.role || 'user' })
 
         return {
           success: true,
           message: response.data.message,
-          token: userToken,
+          token: token,
         }
       } catch (error) {
         console.error('❌ Vuex: Login request failed:', error.response?.data || error)
@@ -78,14 +78,14 @@ export default createStore({
 
     // ✅ TASK ACTIONS
     async fetchTasks({ commit, state }) {
-      if (!state.userToken) {
+      if (!state.token) {
         console.error('❌ Vuex: No token found, cannot fetch tasks.')
         return
       }
 
       try {
         const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/tasks`, {
-          headers: { Authorization: `Bearer ${state.userToken}` },
+          headers: { Authorization: `Bearer ${state.token}` },
         })
 
         commit('SET_TASKS', response.data)
@@ -95,13 +95,17 @@ export default createStore({
     },
 
     async addTask({ commit, state }, description) {
-      if (!state.userToken) {
+      if (!state.token) {
         console.error('❌ Vuex: No token found, cannot add task.')
         return
       }
 
       try {
-        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/tasks`, { description }, { headers: { Authorization: `Bearer ${state.userToken}` } })
+        const response = await axios.post(
+          `${import.meta.env.VITE_API_URL}/api/tasks`,
+          { description },
+          { headers: { Authorization: `Bearer ${state.token}` } }
+        )
 
         console.log('✅ Vuex: Task added:', response.data)
         commit('ADD_TASK', response.data)
@@ -111,13 +115,15 @@ export default createStore({
     },
 
     async updateTask({ commit, state }, task) {
-      if (!state.userToken) {
+      if (!state.token) {
         console.error('❌ Vuex: No token found, cannot update task.')
         return
       }
 
       try {
-        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`, task, { headers: { Authorization: `Bearer ${state.userToken}` } })
+        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`, task, {
+          headers: { Authorization: `Bearer ${state.token}` },
+        })
 
         commit('UPDATE_TASK', response.data)
       } catch (error) {
@@ -126,14 +132,14 @@ export default createStore({
     },
 
     async deleteTask({ commit, state }, taskId) {
-      if (!state.userToken) {
+      if (!state.token) {
         console.error('❌ Vuex: No token found, cannot delete task.')
         return
       }
 
       try {
         await axios.delete(`${import.meta.env.VITE_API_URL}/api/tasks/${taskId}`, {
-          headers: { Authorization: `Bearer ${state.userToken}` },
+          headers: { Authorization: `Bearer ${state.token}` },
         })
 
         commit('DELETE_TASK', taskId)
@@ -143,14 +149,14 @@ export default createStore({
     },
 
     async deleteAllTasks({ commit, state }) {
-      if (!state.userToken) {
+      if (!state.token) {
         console.error('❌ Vuex: No token found, cannot delete all tasks.')
         return
       }
 
       try {
         await axios.delete(`${import.meta.env.VITE_API_URL}/api/tasks`, {
-          headers: { Authorization: `Bearer ${state.userToken}` },
+          headers: { Authorization: `Bearer ${state.token}` },
         })
 
         commit('DELETE_ALL_TASKS')
@@ -160,7 +166,7 @@ export default createStore({
     },
   },
   getters: {
-    isLoggedIn: (state) => !!state.userToken,
+    isLoggedIn: (state) => !!state.token,
     userRole: (state) => state.userRole, // ✅ Getter for user role
     tasks: (state) => state.tasks, // ✅ Getter for tasks
   },

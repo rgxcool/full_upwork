@@ -6,6 +6,40 @@ import router from './router/index.js'
 import store from './store/index.js'
 import './assets/styles/global.css'
 
+import { createVuetify } from 'vuetify' // Import Vuetify
+import 'vuetify/styles' // Import Vuetify styles
+
+// Vuetify 3 component imports
+import {
+  VApp,
+  VContainer,
+  VRow,
+  VCol,
+  VSelect,
+  VTextField,
+  VForm,
+  VBtn,
+  VAutocomplete,
+  VListItemTitle,
+  VListItem,
+} from 'vuetify/components'
+
+const vuetify = createVuetify({
+  components: {
+    VApp,
+    VContainer,
+    VRow,
+    VCol,
+    VSelect,
+    VTextField,
+    VForm,
+    VBtn,
+    VAutocomplete,
+    VListItemTitle,
+    VListItem,
+  },
+})
+
 console.log('🚀 Initializing Vue App...') // ✅ Debug Message
 console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
 console.log('All env variables:', import.meta.env)

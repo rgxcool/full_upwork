@@ -2,9 +2,9 @@
   <section>
     <div class="register-container">
       <form class="register-form" @submit.prevent="register">
-        <input v-model="name" type="name" placeholder="Name" class="input-field" required />
+        <input v-model="name" type="name" placeholder="Namn" class="input-field" required />
         <input v-model="email" type="email" placeholder="Email" class="input-field" required />
-        <input v-model="password" type="password" placeholder="Password" class="input-field" required />
+        <input v-model="password" type="password" placeholder="Lösenord" class="input-field" required />
         <button type="submit" class="register-button">Register</button>
       </form>
       <p v-if="message" class="message">{{ message }}</p>
