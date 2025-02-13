@@ -1,100 +1,204 @@
 <script setup>
   import { ref } from 'vue'
-  import { extractPdfText } from '../../utils/pdfParser.js'
+  import { extractPdfText, parseCourseStudentPdf } from '../../utils/pdfParser.js'
 
-  const selectedFile = ref(null)
-  const extractedData = ref([])
-  const uploadStatus = ref('')
+  const selectedFiles = ref([])
+  const extractedDataList = ref([])
 
   const handleFileChange = (event) => {
-    if (event.target.files.length > 0) {
-      selectedFile.value = event.target.files[0]
-    }
+    selectedFiles.value = Array.from(event.target.files)
+
+    selectedFiles.value.forEach((file) => {
+      console.log('Filename:', file.name)
+    })
   }
 
   const handleExtractText = async () => {
-    if (!selectedFile.value) {
-      alert('Please select a PDF file first!')
+    if (!selectedFiles.value.length) {
+      alert('pdfView: Please select at least one PDF file!')
       return
     }
 
     try {
-      const text = await extractPdfText(selectedFile.value)
-      extractedData.value = text.split('\n').map((snippet, index) => ({
-        id: index + 1,
-        content: snippet,
-      }))
+      extractedDataList.value = await Promise.all(
+        selectedFiles.value.map(async (file) => {
+          const extractedText = await extractPdfText(file)
+          console.log('pdfView: Extracted text length:', extractedText.length)
+          console.log('pdfView: Extracted text:', extractedText)
+
+          // Parse the extracted text
+          const parsedData = parseCourseStudentPdf(extractedText)
+          console.log('pdfView: Parsed data:', parsedData)
+
+          return parsedData
+        })
+      )
+
+      console.log('pdfView: Extracted data:', extractedDataList.value)
     } catch (error) {
-      console.error('Error extracting PDF text:', error)
-      alert('Failed to extract text from PDF.')
+      console.error('pdfView: Error extracting PDF text:', error)
+      alert('pdfView: Failed to extract text from PDF.')
     }
   }
 
-  const updateText = (id, newText) => {
-    const textItem = extractedData.value.find((item) => item.id === id)
-    if (textItem) {
-      textItem.content = newText
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (!extractedData.value.length) {
-      alert('No text extracted!')
-      return
-    }
-
-    try {
-      const response = await fetch('http://localhost:5001/util/pdfupload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: selectedFile.value.name,
-          extractedData: extractedData.value.map((item) => item.content),
-        }),
-      })
-
-      if (response.ok) {
-        uploadStatus.value = 'Upload successful!'
-      } else {
-        uploadStatus.value = 'Upload failed.'
-      }
-    } catch (error) {
-      console.error('Error uploading extracted text:', error)
-      uploadStatus.value = 'Upload failed.'
-    }
+  const copyToClipboard = (text, event) => {
+    navigator.clipboard.writeText(text).then(() => {
+      event.target.classList.add('copied')
+      setTimeout(() => event.target.classList.remove('copied'), 200)
+    })
   }
 </script>
 
 <template>
   <div>
-    <h1>Upload and Edit PDF Text</h1>
+    <h1>Upload and Extract PDF Data</h1>
 
     <!-- File Upload -->
-    <input type="file" accept="application/pdf" @change="handleFileChange" />
+    <input type="file" accept="application/pdf" multiple @change="handleFileChange" />
     <button @click="handleExtractText">Extract Text</button>
 
-    <!-- Display editable fields -->
-    <div v-if="extractedData.length > 0" class="parsed-text-container">
-      <h2>Edit Extracted Text</h2>
-      <form @submit.prevent="handleSubmit">
-        <div v-for="textItem in extractedData" :key="textItem.id" class="text-box">
-          <label :for="'text-' + textItem.id">Snippet {{ textItem.id }}:</label>
-          <textarea
-            :id="'text-' + textItem.id"
-            v-model="textItem.content"
-            @input="updateText(textItem.id, $event.target.value)"
-          ></textarea>
-        </div>
-        <button type="submit">Submit Edited Text</button>
-      </form>
-    </div>
+    <!-- Display extracted data -->
+    <div class="content-wrapper" v-if="extractedDataList.length">
+      <div v-for="(data, fileIndex) in extractedDataList" :key="fileIndex" class="file-container">
+        <h3>PDF {{ fileIndex + 1 }}: {{ data.filename }}</h3>
+        <div class="row">
+          <!-- Contact Information -->
+          <div class="box">
+            <h3>Uppgifter</h3>
+            <label>Personnummer:</label>
+            <input
+              type="text"
+              :value="data.personnummer"
+              readonly
+              @click="copyToClipboard(data.personnummer, $event)"
+            />
 
-    <p v-if="uploadStatus">{{ uploadStatus }}</p>
+            <label>Namn:</label>
+            <input
+              type="text"
+              :value="data.name"
+              readonly
+              @click="copyToClipboard(data.name, $event)"
+            />
+
+            <label>Adress:</label>
+            <input
+              type="text"
+              :value="data.address"
+              readonly
+              @click="copyToClipboard(data.address, $event)"
+            />
+
+            <label>E-postadress:</label>
+            <input
+              type="email"
+              :value="data.email"
+              readonly
+              @click="copyToClipboard(data.email, $event)"
+            />
+
+            <label>Telefonnummer:</label>
+            <input
+              type="tel"
+              :value="data.phone"
+              readonly
+              @click="copyToClipboard(data.phone, $event)"
+            />
+
+            <label>Föredragna kontaktsätt:</label>
+            <div v-for="(contact, index) in data.contacts" :key="index">
+              <input
+                type="text"
+                :value="contact"
+                readonly
+                @click="copyToClipboard(contact, $event)"
+              />
+            </div>
+            <br />
+            <label>Totala poäng:</label>
+            <input
+              type="text"
+              :value="data.total"
+              readonly
+              @click="copyToClipboard(data.total, $event)"
+            />
+          </div>
+
+          <!-- Course Information -->
+          <div v-for="(course, index) in data.courses" :key="index" class="box">
+            <h3>Kurs {{ index + 1 }}</h3>
+            <label>Kursnamn:</label>
+            <input
+              type="text"
+              :value="course.courseName"
+              readonly
+              @click="copyToClipboard(course.courseName, $event)"
+            />
+
+            <label>Poäng:</label>
+            <input
+              type="text"
+              :value="course.coursePoints"
+              readonly
+              @click="copyToClipboard(course.coursePoints, $event)"
+            />
+
+            <label>Startdatum:</label>
+            <input
+              type="text"
+              :value="course.startDate"
+              readonly
+              @click="copyToClipboard(course.startDate, $event)"
+            />
+
+            <label>Slutdatum:</label>
+            <input
+              type="text"
+              :value="course.endDate"
+              readonly
+              @click="copyToClipboard(course.endDate, $event)"
+            />
+
+            <label>Antal veckor:</label>
+            <input
+              type="text"
+              :value="course.weeks"
+              readonly
+              @click="copyToClipboard(course.weeks, $event)"
+            />
+
+            <label>Skola:</label>
+            <input
+              type="text"
+              :value="course.school"
+              readonly
+              @click="copyToClipboard(course.school, $event)"
+            />
+
+            <label>Studieform:</label>
+            <input
+              type="text"
+              :value="course.courseType"
+              readonly
+              @click="copyToClipboard(course.courseType, $event)"
+            />
+
+            <label>Kod:</label>
+            <input
+              type="text"
+              :value="course.courseCode"
+              readonly
+              @click="copyToClipboard(course.courseCode, $event)"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-  .parsed-text-container {
+  .content-wrapper {
     margin-top: 20px;
     padding: 15px;
     border: 1px solid #ddd;
@@ -102,14 +206,43 @@
     background-color: #f9f9f9;
   }
 
-  .text-box {
-    margin-bottom: 15px;
+  .file-container {
+    margin-bottom: 20px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #ffffff;
   }
 
-  textarea {
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  .box {
+    flex: 1;
+    min-width: 300px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #f5f5f5;
+  }
+
+  .box input {
+    cursor: pointer;
+  }
+
+  label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+  }
+
+  input {
     width: 100%;
-    height: 80px;
     padding: 8px;
+    margin-top: 5px;
     border: 1px solid #ccc;
     border-radius: 5px;
     font-size: 14px;
@@ -127,5 +260,9 @@
 
   button:hover {
     background-color: #0056b3;
+  }
+
+  .copied {
+    background-color: lightgreen;
   }
 </style>

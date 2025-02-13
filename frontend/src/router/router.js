@@ -23,9 +23,19 @@ import PdfView from '@/views/Utils/PdfView.vue'
 import SearchUser from '@/views/Utils/SearchUser.vue'
 
 const routes = [
-  { path: '/', name: 'home', component: Home, meta: { title: 'Home - Mindful Learning' } },
+  {
+    path: '/',
+    name: 'home',
+    component: Home,
+    meta: { title: 'Home - Mindful Learning' },
+  },
 
-  { path: '/login', name: 'login', component: LoginPage, meta: { title: 'Login - Mindful Learning' } },
+  {
+    path: '/login',
+    name: 'login',
+    component: LoginPage,
+    meta: { title: 'Login - Mindful Learning' },
+  },
   { path: '/register', name: 'Register', component: Register },
   { path: '/reset-password', component: ResetPassword },
 
@@ -35,14 +45,29 @@ const routes = [
   { path: '/addstudent', name: 'AddStudent', component: AddStudent },
   //   { path: '/addteacher', name: 'AddTeacher', component: AddTeacher },
   { path: '/student', name: 'Elever', component: ExcelUpload },
+  {
+    path: '/student/:id',
+    name: 'StudentDetails',
+    component: StudentDetails,
+    props: true,
+  },
   { path: '/kalender', component: FullCalendar },
-  { path: '/student/:id', name: 'StudentDetails', component: StudentDetails, props: true },
+
   { path: '/education', name: 'EducationEditor', component: EducationEditor },
-  { path: '/programsandcourses', name: 'ProgramsAndCourses', component: ProgramsAndCourses },
+  {
+    path: '/programsandcourses',
+    name: 'ProgramsAndCourses',
+    component: ProgramsAndCourses,
+  },
   // { path: '/editstudent', name: 'EditStudent', component: EditStudent },
 
   { path: '/betyg', component: BetygSattning },
-  { path: '/profile', name: 'profile', component: ProfilePage, meta: { requiresAuth: true } },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: ProfilePage,
+    meta: { requiresAuth: true },
+  },
   { path: '/pdf', name: 'PdfView', component: PdfView },
 ]
 

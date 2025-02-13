@@ -3,14 +3,14 @@ import mongoose from "mongoose";
 const courseSchema = new mongoose.Schema({
     courseName: String,
     courseCode: String,
-    omfattning: {
+    extent: {
         type: [Number],
         default: [0],
         validate: {
             validator: function (values) {
                 return values.every((val) => Number.isInteger(val) && val >= 0);
             },
-            message: "Omfattning must be an array of positive integers.",
+            message: "Extent must be an array of positive integers.",
         },
     },
 });

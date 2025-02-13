@@ -10,17 +10,13 @@ router.get("/program", async (req, res) => {
     res.json(programs);
 });
 
+// Get all courses by programId
 router.get("/program/:programId/courses", async (req, res) => {
     const program = await Program.findById(req.params.programId).populate(
         "courses"
     ); // Fetch courses for a specific program
     if (!program) return res.status(404).json({ error: "Program not found" });
     res.json(program.courses);
-});
-
-router.get("/program/courses", async (req, res) => {
-    const courses = await Course.find(); // Fetch all courses
-    res.json(courses);
 });
 
 export default router;

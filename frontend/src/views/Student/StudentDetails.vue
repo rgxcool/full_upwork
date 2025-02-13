@@ -30,7 +30,11 @@
         <input type="text" id="prov" class="form-control mb-2" v-model="student.prov" />
 
         <label for="ovrigt" class="form-label">Övrigt:</label>
-        <textarea id="ovrigt" class="form-control mb-2" v-model="student.ovrigt"></textarea>
+        <textarea
+          id="ovrigt"
+          class="form-control mb-2"
+          v-model="student.ovrigt"
+        ></textarea>
 
         <button class="btn btn-primary" @click="updateStudent">Spara ändringar</button>
       </div>
@@ -51,7 +55,9 @@
 
       const fetchStudent = async () => {
         try {
-          const response = await axios.get(`http://localhost:5001/api/student/${route.params.id}`)
+          const response = await axios.get(
+            `http://localhost:5001/api/student/${route.params.id}`
+          )
           student.value = response.data
         } catch (error) {
           console.error('Misslyckades att hämta elev:', error)

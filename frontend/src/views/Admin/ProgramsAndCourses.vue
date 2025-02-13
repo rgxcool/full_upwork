@@ -5,7 +5,9 @@
       <div v-for="program in programs" :key="program._id" class="program">
         <h2>{{ program.programName }}</h2>
         <ul>
-          <li v-for="course in program.courses" :key="course._id">{{ course.courseName }} ({{ course.courseCode }})</li>
+          <li v-for="course in program.courses" :key="course._id">
+            {{ course.courseName }} ({{ course.courseCode }})
+          </li>
         </ul>
       </div>
     </div>
@@ -27,7 +29,10 @@
     methods: {
       async fetchPrograms() {
         try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/program`) // Replace with your actual API endpoint
+          const response = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/program`
+          ) // Replace with your actual API endpoint
+          console.log('ProgramsAndCourses.vue: ', response)
           this.programs = await Promise.all(
             response.data.map(async (program) => {
               // Fetch the courses for each program
