@@ -16,7 +16,12 @@
           <div class="box">
             <h3>Uppgifter</h3>
             <label>Personnummer:</label>
-            <input type="text" :value="data.personnummer" readonly @click="copyToClipboard(data.personnummer, $event)" />
+            <input
+              type="text"
+              :value="data.personnummer"
+              readonly
+              @click="copyToClipboard(data.personnummer, $event)"
+            />
 
             <label>Namn:</label>
             <input type="text" :value="data.namn" readonly @click="copyToClipboard(data.namn, $event)" />
@@ -37,7 +42,12 @@
             <br />
             <br />
             <label>Totala poäng:</label>
-            <input type="text" :value="data.totalt_poäng" readonly @click="copyToClipboard(data.totalt_poäng, $event)" />
+            <input
+              type="text"
+              :value="data.totalt_poäng"
+              readonly
+              @click="copyToClipboard(data.totalt_poäng, $event)"
+            />
           </div>
 
           <!-- Kurs boxes -->
@@ -87,7 +97,7 @@
       const handleFileUpload = (event) => {
         const files = Array.from(event.target.files)
         selectedFiles.value = files
-        uploadPdfs(files)
+        uploadPdf(files)
       }
 
       const handleDrop = (event) => {
@@ -97,11 +107,11 @@
 
         if (pdfFiles.length > 0) {
           selectedFiles.value.push(...pdfFiles)
-          uploadPdfs(pdfFiles)
+          uploadPdf(pdfFiles)
         }
       }
 
-      const uploadPdfs = async (files) => {
+      const uploadPdf = async (files) => {
         loading.value = true
         extractedDataList.value = []
 
@@ -111,7 +121,7 @@
             formData.append('pdf', file)
 
             try {
-              const response = await fetch(`${import.meta.env.VITE_API_URL}/api/pdfupload`, {
+              const response = await fetch(`${import.meta.env.VITE_API_URL}/api/util/pdfupload`, {
                 method: 'POST',
                 body: formData,
               })

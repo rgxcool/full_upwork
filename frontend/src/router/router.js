@@ -19,7 +19,7 @@ import BetygSattning from '@/views/Teacher/BetygSattning.vue'
 import ProfilePage from '@/views/Teacher/ProfilePage.vue'
 import StudentDetails from '@/views/Student/StudentDetails.vue'
 
-import PdfParser from '@/views/Utils/PdfParser.vue'
+import PdfView from '@/views/Utils/PdfView.vue'
 import SearchUser from '@/views/Utils/SearchUser.vue'
 
 const routes = [
@@ -43,7 +43,7 @@ const routes = [
 
   { path: '/betyg', component: BetygSattning },
   { path: '/profile', name: 'profile', component: ProfilePage, meta: { requiresAuth: true } },
-  { path: '/pdf', name: 'PDFParser', component: PdfParser },
+  { path: '/pdf', name: 'PdfView', component: PdfView },
 ]
 
 const router = createRouter({

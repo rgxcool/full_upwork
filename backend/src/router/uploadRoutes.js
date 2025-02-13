@@ -1,6 +1,9 @@
 import { Router } from "express";
-import upload from "../middleware/uploadMiddleware.js";
 import { uploadXlsx } from "../controllers/studentController.js";
+import multer from "multer";
+
+const storage = multer.memoryStorage(); // Store file in memory
+const upload = multer({ storage });
 
 const router = Router();
 

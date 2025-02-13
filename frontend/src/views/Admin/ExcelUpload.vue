@@ -168,6 +168,13 @@
         } catch (error) {
           console.error('❌ Error uploading file:', error)
         }
+
+        // Clear file input and label
+        this.file = null
+        this.selectedFileName = ''
+
+        // Reset the file input element to clear the selection
+        document.getElementById('fileUpload').value = ''
       },
 
       async updateDropOut(student) {
