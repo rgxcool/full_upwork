@@ -8,6 +8,7 @@ import uploadRoutes from "./uploadRoutes.js";
 import programRoutes from "./programRoutes.js";
 import gradeRoutes from "./gradeRoutes.js";
 import courseRoutes from "./courseRoutes.js";
+import coursePackageRoutes from "./coursePackageRoutes.js";
 
 const router = Router();
 
@@ -23,4 +24,6 @@ router.use("/api", uploadRoutes);
 router.use("/api", programRoutes);
 router.use("/api", gradeRoutes);
 router.use("/api", courseRoutes);
+router.use("/api", coursePackageRoutes);
+
 export default router;

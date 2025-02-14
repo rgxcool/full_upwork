@@ -5,10 +5,12 @@ const programSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    programCoursePackage: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "CoursePackage",
-    },
+    programCoursePackage: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "CoursePackage",
+        },
+    ],
     programCourses: [
         {
             type: mongoose.Schema.Types.ObjectId,
@@ -17,4 +19,4 @@ const programSchema = new mongoose.Schema({
     ],
 });
 
-export default mongoose.model("Program", programSchema, "program");
+export default mongoose.model("Program", programSchema, "programs");

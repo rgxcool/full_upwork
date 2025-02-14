@@ -5,7 +5,7 @@ import Course from "../models/Course.js";
 
 const router = express.Router();
 
-router.get("/course", async (req, res) => {
+router.get("/courses", async (req, res) => {
     const courses = await Course.find(); // Fetch all courses
     res.json(courses);
 });

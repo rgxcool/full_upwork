@@ -6,4 +6,4 @@ const courseSchema = new mongoose.Schema({
     courseExtent: String,
 });
 
-export default mongoose.model("Course", courseSchema, "course");
+export default mongoose.model("Course", courseSchema, "courses");

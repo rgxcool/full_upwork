@@ -17,5 +17,5 @@ const coursePackageSchema = new mongoose.Schema({
 export default mongoose.model(
     "CoursePackage",
     coursePackageSchema,
-    "coursePackage"
+    "coursepackages"
 );
