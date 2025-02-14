@@ -1,18 +1,9 @@
 import mongoose from "mongoose";
 
 const courseSchema = new mongoose.Schema({
-    courseName: String,
-    courseCode: String,
-    extent: {
-        type: [Number],
-        default: [0],
-        validate: {
-            validator: function (values) {
-                return values.every((val) => Number.isInteger(val) && val >= 0);
-            },
-            message: "Extent must be an array of positive integers.",
-        },
-    },
+    courseName: { type: String, required: true },
+    courseCode: { type: String, required: true },
+    courseExtent: String,
 });
 
 export default mongoose.model("Course", courseSchema, "course");

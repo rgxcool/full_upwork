@@ -1,6 +1,5 @@
 require("dotenv").config();
 import mongoose from "mongoose";
-
 import Program from "../models/Program.js"; // Adjust path
 
 dotenv.config();

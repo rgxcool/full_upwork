@@ -4,11 +4,17 @@
     <div v-if="programs.length">
       <div v-for="program in programs" :key="program._id" class="program">
         <h2>{{ program.programName }}</h2>
-        <ul>
-          <li v-for="course in program.courses" :key="course._id">
-            {{ course.courseName }} ({{ course.courseCode }})
-          </li>
-        </ul>
+        <div v-if="program.coursePackage">
+          <h3>{{ program.coursePackage.coursePackageName }}</h3>
+          <ul>
+            <li v-for="course in program.coursePackage.courses" :key="course._id">
+              {{ course.courseName }} ({{ course.courseCode }})
+            </li>
+          </ul>
+        </div>
+        <div v-else>
+          <p>No course package available for this program.</p>
+        </div>
       </div>
     </div>
     <div v-else>
@@ -23,25 +29,38 @@
   export default {
     data() {
       return {
-        programs: [], // Stores programs and their courses
+        programs: [], // Stores programs and their course packages and courses
       }
     },
     methods: {
       async fetchPrograms() {
         try {
-          const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/api/program`
-          ) // Replace with your actual API endpoint
-          console.log('ProgramsAndCourses.vue: ', response)
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/program`) // Replace with your actual API endpoint
+          console.log('ProgramsAndCourses.vue - Programs Response: ', response)
           this.programs = await Promise.all(
             response.data.map(async (program) => {
-              // Fetch the courses for each program
+              // Fetch the course package for each program
+              const coursePackageResponse = await axios.get(
+                `${import.meta.env.VITE_API_URL}/api/coursePackage/${program.coursePackage}`
+              )
+              console.log(
+                `ProgramsAndCourses.vue - Course Package Response for Program ${program._id}: `,
+                coursePackageResponse
+              )
+              // Fetch the courses for each course package
               const coursesResponse = await axios.get(
-                `${import.meta.env.VITE_API_URL}/api/program/${program._id}/courses`
+                `${import.meta.env.VITE_API_URL}/api/coursePackage/${program.coursePackage}/courses`
+              )
+              console.log(
+                `ProgramsAndCourses.vue - Courses Response for Course Package ${program.coursePackage}: `,
+                coursesResponse
               )
               return {
                 ...program,
-                courses: coursesResponse.data,
+                coursePackage: {
+                  ...coursePackageResponse.data,
+                  courses: coursesResponse.data,
+                },
               }
             })
           )
@@ -73,6 +92,10 @@
 
   h2 {
     color: #333;
+  }
+
+  h3 {
+    color: #555;
   }
 
   ul {

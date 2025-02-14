@@ -1,0 +1,81 @@
+So I need to import 2 worksheets from an xlsx file with ExcelJS for a backend script.
+
+Worksheet 1:
+
+Consists of column A "Program".
+Which second row is "Försäljning och Service".
+
+All the courses in column B until we hit the next entry in column A (which is "Barn och fritid")
+Are going to belong to be referenced by "Försäljning och Service"
+
+And then repeat the process until we hit end of file.
+
+
+-----
+Regarding worksheet 2:
+
+"Program" is the header of column A.
+"Kurspaket med tillhörande kurser" is the header of column B.
+
+Now I want you to take special notice of kolumn B, it's going to be tricky, because course packages are in BOLD text!
+
+And below them are COURSES, until we hit the next entry with BOLD TEXT in column B.
+
+Which in turn belong to the PROGRAM.
+
+The relationship is like this.
+
+For instance in our case.
+"Omfattning i veckor (100%)" which is the header of column E.
+And "Poäng" and "Kurskod"
+Belong to the course package "Administration Bas"
+Which in turn belongs to "Försäljning och Service"
+
+
+Below "Administration Bas" there are 5 courses before we hit the next course package, which is "Administration, påbyggnad ekonomi och redovisning" which in our case will also belong to the program "Försäljning och Service".
+
+The relationship is according to the following Schemas:
+
+const programSchema = new mongoose.Schema({
+    programName: {
+        type: String,
+        required: true,
+    },
+    programCoursePackage: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "CoursePackage",
+        required: true,
+    },
+    programCourses: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Course",
+        },
+    ],
+});
+
+const coursePackageSchema = new mongoose.Schema({
+    coursePackageName: { type: String, required: true },
+    coursePackageCode: { type: String, required: true },
+    coursePackagePoints: { type: String, required: true },
+    coursePackageExtent: { type: String, required: true },
+    coursePackageCourses: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Course",
+            required: true,
+        },
+    ],
+});
+
+const courseSchema = new mongoose.Schema({
+    courseName: { type: String, required: true },
+    courseCode: { type: String, required: true },
+    courseExtent: String,
+});
+
+(Import the schemas from backend/src/models)
+
+Can you write a parser for the xslx document "EducationData"?
+
+

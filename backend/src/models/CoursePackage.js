@@ -1,10 +1,21 @@
 import mongoose from "mongoose";
 
-const kursPaketSchema = new mongoose.Schema({
-    kursnamn: { type: String, required: true },
-    kurskod: { type: String, required: true },
-    poang: { type: String, required: true },
-    omfattning: { type: String, required: true },
+const coursePackageSchema = new mongoose.Schema({
+    coursePackageName: { type: String, required: true },
+    coursePackageCode: { type: String, required: true },
+    coursePackagePoints: { type: String, required: true },
+    coursePackageExtent: { type: String, required: true },
+    coursePackageCourses: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Course",
+            required: true,
+        },
+    ],
 });
 
-export default mongoose.model("KursPaket", kursPaketSchema, "kurspaket");
+export default mongoose.model(
+    "CoursePackage",
+    coursePackageSchema,
+    "coursePackage"
+);

@@ -260,6 +260,6 @@ export function parseCourseStudentPdf(text) {
     }
   }
 
-  console.log('Parsed JSON:', JSON.stringify(result, null, 2))
+  //console.log('Parsed JSON:', JSON.stringify(result, null, 2))
   return result
 }
