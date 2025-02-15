@@ -8,7 +8,7 @@ export async function parseCourses(filePath) {
     await workbook.xlsx.readFile(filePath);
 
     const worksheet = workbook.worksheets[0]; // First sheet: "Kurser"
-    if (!worksheet || worksheet.name.toUpperCase() !== "kurser") {
+    if (!worksheet || worksheet.name.toUpperCase() !== "KURSER") {
         console.error("❌ Error: 'Kurser' worksheet not found.");
         return;
     }
@@ -23,9 +23,9 @@ export async function parseCourses(filePath) {
         const courseName =
             row.getCell(2).value?.toString().trim().toUpperCase() || null; // Column B
         const courseCode =
-            row.getCell(3).value?.toString().trim().toUpperCase() || "N/A"; // Column C (Ensure codes are uppercase)
-        const coursePoints = row.getCell(4).value?.toString().trim() || "N/A"; // Column D
-        const courseExtent = row.getCell(5).value?.toString().trim() || "N/A"; // Column E
+            row.getCell(3).value?.toString().trim().toUpperCase() || ""; // Column C (Ensure codes are uppercase)
+        const coursePoints = row.getCell(4).value?.toString().trim() || ""; // Column D
+        const courseExtent = row.getCell(5).value?.toString().trim() || ""; // Column E
 
         if (programName) {
             console.log(`🆕 Found new program: ${programName}`);

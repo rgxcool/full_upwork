@@ -11,7 +11,7 @@ export async function parseCoursePackages(filePath) {
     await workbook.xlsx.readFile(filePath);
     const worksheet = workbook.worksheets[1]; // ✅ Second sheet: "Kurspaket"
 
-    if (!worksheet || worksheet.name.toUpperCase() !== "kurspaket") {
+    if (!worksheet || worksheet.name.toUpperCase() !== "KURSPAKET") {
         console.error("❌ Error: 'Kurspaket' worksheet not found.");
         return;
     }
@@ -33,11 +33,11 @@ export async function parseCoursePackages(filePath) {
             const packageOrCourseName =
                 cellB.value?.toString().trim().toUpperCase() || null; // Column B
             const packageOrCourseCode =
-                row.getCell(3).value?.toString().trim().toUpperCase() || "N/A"; // Column C
+                row.getCell(3).value?.toString().trim().toUpperCase() || ""; // Column C
             const packageOrCoursePoints =
-                row.getCell(4).value?.toString().trim() || "N/A"; // Column D
+                row.getCell(4).value?.toString().trim() || ""; // Column D
             const packageOrCourseExtent =
-                row.getCell(5).value?.toString().trim() || "N/A"; // Column E
+                row.getCell(5).value?.toString().trim() || ""; // Column E
 
             if (!packageOrCourseName) continue; // ✅ Skip empty rows
 
@@ -118,9 +118,9 @@ export async function parseCoursePackages(filePath) {
             const packageOrCourseName =
                 cellB.value?.toString().trim().toUpperCase() || null; // Column B
             const packageOrCourseCode =
-                row.getCell(3).value?.toString().trim().toUpperCase() || "N/A"; // Column C
+                row.getCell(3).value?.toString().trim().toUpperCase() || ""; // Column C
             const packageOrCourseExtent =
-                row.getCell(5).value?.toString().trim() || "N/A"; // Column E
+                row.getCell(5).value?.toString().trim() || ""; // Column E
 
             if (!packageOrCourseName) continue; // ✅ Skip empty rows
 
