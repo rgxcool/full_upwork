@@ -35,7 +35,9 @@
           Login
         </router-link>
 
-        <button v-else @click="logout" class="px-4 py-2 text-red-600 hover:underline">Logout</button>
+        <button v-else @click="logout" class="px-4 py-2 text-red-600 hover:underline">
+          Logout
+        </button>
       </div>
     </div>
   </nav>
@@ -51,7 +53,6 @@
       const store = useStore()
       const router = useRouter()
 
-      //  Corrected reference to isLoggedIn
       const isLoggedIn = computed(() => store.getters.isLoggedIn)
 
       const logout = () => {
@@ -71,6 +72,7 @@
           { name: 'Utbildning', link: '/education' },
           { name: 'Betyg', link: '/betyg' },
           { name: 'Kurser', link: '/programsandcourses' },
+          { name: 'Kurspaket', link: '/programsandpackages' },
           { name: 'Elev+', link: '/addstudent' },
           { name: 'Elever', link: '/student' },
           { name: 'PDF', link: '/pdf' },
@@ -86,14 +88,16 @@
 </script>
 
 <style scoped>
-  :deep(body) {
-    display: block !important;
-    justify-content: unset;
-    align-items: unset;
-    height: 100vh;
-    overflow: hidden;
+  /* ✅ Completely Remove Horizontal Scrolling */
+  html,
+  body {
+    overflow-x: hidden !important;
+    width: 100vw;
+    max-width: 100vw;
+    height: 60px;
   }
-  /* 🎨 Allmän stil för navbar */
+
+  /* ✅ Ensure Navbar Does Not Cause Overflow */
   .navbar {
     background-color: #f2f2f2;
     padding: 15px 20px;
@@ -101,16 +105,21 @@
     justify-content: space-between;
     align-items: center;
     font-family: 'Roboto', sans-serif;
+    width: 100%;
+    max-width: 100vw !important;
+    overflow-x: hidden;
+    height: 80px;
   }
 
+  /* ✅ Fix: Prevent `.nav-container` from Causing Overflow */
   .nav-container {
     display: flex;
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
+    max-width: 100vw !important;
     text-align: center;
+    overflow-x: hidden;
   }
 
   /* 🖼️ Logotyp */
@@ -127,11 +136,13 @@
     display: none;
   }
 
-  /* 🖥️ Meny för större skärmar */
+  /* ✅ Fix: Ensure `.menu` Does Not Cause Overflow */
   .menu {
     display: flex;
     align-items: center;
     gap: 20px;
+    max-width: 100vw !important;
+    overflow-x: hidden;
   }
 
   /* 📄 Lista av länkar */
@@ -164,18 +175,21 @@
     margin-left: 20px;
   }
 
-  .icon {
-    font-size: 1.4rem;
-    color: #000;
-    cursor: pointer;
-    transition: color 0.3s;
+  /* ✅ Fix: Ensure `.build-counter` Doesn't Overflow */
+  .build-counter {
+    position: absolute;
+    top: 44px;
+    left: 5px;
+    font-size: 12px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    max-width: 100vw !important;
+    overflow-x: hidden;
   }
 
-  .icon:hover {
-    color: #007dc3;
-  }
-
-  /* 📱 Mobilanpassning */
+  /* ✅ Mobile Fix: Ensure Menu Does Not Extend Past Viewport */
   @media (max-width: 992px) {
     .menu {
       display: none;
@@ -184,9 +198,10 @@
       top: 60px;
       right: 0;
       background-color: white;
-      width: 100%;
+      width: 100vw !important;
       padding: 15px;
       box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+      overflow-x: hidden;
     }
 
     .menu.open {
@@ -196,7 +211,7 @@
     .menu-list {
       flex-direction: column;
       text-align: center;
-      width: 100%;
+      width: 100vw !important;
     }
 
     .menu-icons {
@@ -208,16 +223,5 @@
     .menu-toggle {
       display: block;
     }
-  }
-
-  .build-counter {
-    position: absolute;
-    top: 44px;
-    left: 5px;
-    font-size: 12px;
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 5px 10px;
-    border-radius: 5px;
   }
 </style>

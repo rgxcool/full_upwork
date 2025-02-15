@@ -5,7 +5,7 @@ const programSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    programCoursePackage: [
+    programCoursePackages: [
         {
             type: mongoose.Schema.Types.ObjectId,
             ref: "CoursePackage",

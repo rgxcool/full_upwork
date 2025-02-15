@@ -4,12 +4,15 @@ import Course from "../models/Course.js";
 
 const router = express.Router();
 
-// Get all course packages
-router.get("/coursePackages", async (req, res) => {
+/**
+ * ✅ GET all course packages with courses populated
+ * Route: GET /api/coursepackages
+ */
+router.get("/coursepackages", async (req, res) => {
     try {
-        const coursePackages = await CoursePackage.find().populate(
-            "coursePackageCourses"
-        );
+        const coursePackages = await CoursePackage.find()
+            .populate("coursePackageCourses")
+            .lean();
         res.json(coursePackages);
     } catch (error) {
         console.error("Error fetching course packages:", error);
@@ -17,14 +20,36 @@ router.get("/coursePackages", async (req, res) => {
     }
 });
 
-// Get all courses by course package
-router.get("/coursePackage/:coursePackageId/courses", async (req, res) => {
+/**
+ * ✅ GET a single course package by ID (includes courses)
+ * Route: GET /api/coursepackages/:id
+ */
+router.get("/coursepackages/:id", async (req, res) => {
     try {
-        const coursePackage = await CoursePackage.findById(
-            req.params.coursePackageId
-        ).populate("coursePackageCourses");
+        const coursePackage = await CoursePackage.findById(req.params.id)
+            .populate("coursePackageCourses")
+            .lean();
         if (!coursePackage) {
-            return res.status(404).json({ error: "CoursePackage not found" });
+            return res.status(404).json({ error: "Course Package not found" });
+        }
+        res.json(coursePackage);
+    } catch (error) {
+        console.error("Error fetching course package:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+/**
+ * ✅ GET all courses belonging to a specific course package
+ * Route: GET /api/coursepackages/:id/courses
+ */
+router.get("/coursepackages/:id/courses", async (req, res) => {
+    try {
+        const coursePackage = await CoursePackage.findById(req.params.id)
+            .populate("coursePackageCourses")
+            .lean();
+        if (!coursePackage) {
+            return res.status(404).json({ error: "Course Package not found" });
         }
         res.json(coursePackage.coursePackageCourses);
     } catch (error) {

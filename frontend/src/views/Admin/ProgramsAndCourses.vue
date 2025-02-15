@@ -1,141 +1,174 @@
-<template>
-  <div class="programs-container">
-    <h1>Programs and Courses</h1>
-    <div v-if="programs.length">
-      <div v-for="program in programs" :key="program._id" class="program">
-        <h2>{{ program.programName }}</h2>
-        <div
-          v-if="program.programCoursePackages && program.programCoursePackages.length"
-        >
-          <div
-            v-for="coursePackage in program.programCoursePackages"
-            :key="coursePackage._id"
-          >
-            <h3>- {{ coursePackage.coursePackageName }}</h3>
-            <ul>
-              <li
-                v-for="course in coursePackage.coursePackageCourses"
-                :key="course._id"
-              >
-                * {{ course.courseName }} ({{ course.courseCode }})
-              </li>
-            </ul>
-          </div>
-        </div>
-        <p v-else>No course package available for this program.</p>
-      </div>
-    </div>
-    <div v-else>
-      <p>Loading programs...</p>
-    </div>
-
-    <h1>All Courses</h1>
-    <div v-if="courses.length">
-      <ul>
-        <li v-for="course in courses" :key="course._id">
-          {{ course.courseName }} ({{ course.courseCode }})
-        </li>
-      </ul>
-    </div>
-    <div v-else>
-      <p>Loading courses...</p>
-    </div>
-  </div>
-</template>
-
-<script>
+<script setup>
+  import { ref, onMounted } from 'vue'
   import axios from 'axios'
 
-  export default {
-    data() {
-      return {
-        programs: [], // Stores programs and their course packages and courses
-        courses: [], // Stores all courses separately
-      }
-    },
-    methods: {
-      async fetchPrograms() {
-        try {
-          const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/api/programs`
-          )
-          this.programs = await Promise.all(
-            response.data.map(async (program) => {
-              const coursePackages = await this.fetchCoursePackagesForProgram(
-                program._id
-              )
-              return { ...program, programCoursePackages: coursePackages }
-            })
-          )
-        } catch (error) {
-          console.error('Error fetching programs:', error)
-        }
-      },
-      async fetchCoursePackagesForProgram(programId) {
-        try {
-          const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/api/coursePackages?programId=${programId}`
-          )
-          return response.data
-        } catch (error) {
-          console.error(
-            `Error fetching course packages for program ${programId}:`,
-            error
-          )
-          return []
-        }
-      },
-      async fetchAllCourses() {
-        try {
-          const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/api/courses`
-          )
-          this.courses = response.data
-        } catch (error) {
-          console.error('Error fetching all courses:', error)
-        }
-      },
-    },
-    mounted() {
-      this.fetchPrograms()
-      this.fetchAllCourses()
-    },
+  const programs = ref([])
+  const isLoading = ref(true)
+  const error = ref(null)
+
+  // API Base URL - Change this if necessary
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+
+  const fetchPrograms = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/programs`)
+      programs.value = response.data
+    } catch (err) {
+      console.error('Error fetching programs:', err)
+      error.value = 'Failed to load programs. Please try again.'
+    } finally {
+      isLoading.value = false
+    }
   }
+
+  onMounted(fetchPrograms)
 </script>
 
+<template>
+  <v-container class="no-scroll">
+    <v-card class="elevation-2 card-centered">
+      <!-- Title Centered -->
+      <v-card-title class="text-h5 title-center">Programs and Courses</v-card-title>
+
+      <v-card-text class="table-container">
+        <!-- Loading Indicator -->
+        <v-progress-linear v-if="isLoading" indeterminate color="blue"></v-progress-linear>
+
+        <!-- Error Alert -->
+        <v-alert v-if="error" type="error" class="my-3">
+          {{ error }}
+        </v-alert>
+
+        <!-- Table Wrapper to Ensure Full Width Without Scrolling -->
+        <div class="table-wrapper">
+          <v-table class="fixed-table">
+            <thead>
+              <tr>
+                <th class="program-name-column">Program Name</th>
+                <th class="course-name-column">Course Name</th>
+                <th class="fixed-width">Code</th>
+                <th class="fixed-width">Points</th>
+                <th class="fixed-width">Extent</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="program in programs" :key="program._id">
+                <template v-if="program.programCourses.length">
+                  <tr v-for="(course, index) in program.programCourses" :key="course._id">
+                    <!-- Display Program Name only once per program using rowspan -->
+                    <td
+                      v-if="index === 0"
+                      :rowspan="program.programCourses.length"
+                      class="program-name-column align-top"
+                    >
+                      <strong>{{ program.programName }}</strong>
+                    </td>
+                    <td class="course-name-column">{{ course.courseName }}</td>
+                    <td class="fixed-width">{{ course.courseCode || 'N/A' }}</td>
+                    <td class="fixed-width">{{ course.coursePoints || 'N/A' }}</td>
+                    <td class="fixed-width">{{ course.courseExtent || 'N/A' }}</td>
+                  </tr>
+                </template>
+              </template>
+            </tbody>
+          </v-table>
+        </div>
+      </v-card-text>
+    </v-card>
+  </v-container>
+</template>
+
 <style scoped>
-  .programs-container {
-    padding: 20px;
-    font-family: Arial, sans-serif;
-  }
-
-  .program {
-    margin-bottom: 20px;
-  }
-
-  h1 {
-    text-align: center;
-    margin-bottom: 20px;
-  }
-
-  h2 {
-    color: #333;
-  }
-
-  h3 {
-    color: #555;
-  }
-
-  ul {
-    list-style-type: none;
+  /* 1️⃣ Completely Remove Horizontal Scrolling */
+  html,
+  body {
+    overflow-x: hidden !important; /* 🔥 Enforce no horizontal scroll */
+    margin: 0;
     padding: 0;
+    width: 100vw;
   }
 
-  li {
-    margin: 5px 0;
+  /* 2️⃣ Prevent Any Element from Extending Past Viewport */
+  .no-scroll {
+    overflow-x: hidden !important;
+    max-width: 100vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
-  p {
+  /* 3️⃣ Center Card & Table */
+  .card-centered {
+    max-width: 80%;
+    margin: 20px auto;
     text-align: center;
+  }
+
+  /* 4️⃣ Center Title */
+  .title-center {
+    text-align: center;
+    padding: 16px;
+  }
+
+  /* 5️⃣ Table Container Ensuring No Overflow */
+  .table-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+
+  /* 6️⃣ Ensure Table Doesn't Cause Scrolling */
+  .table-wrapper {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden !important; /* 🔥 Force No Scroll */
+    display: flex;
+    justify-content: center;
+  }
+
+  /* 7️⃣ Fixed Table Layout */
+  .fixed-table {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  /* 8️⃣ Program Name Column - Align to Top */
+  .program-name-column {
+    width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: bold;
+    vertical-align: top !important; /* 🔥 Align Top */
+  }
+
+  /* 9️⃣ Course Name Column */
+  .course-name-column {
+    width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 🔟 Fixed-Width Columns */
+  .fixed-width {
+    width: 100px;
+    text-align: left;
+  }
+
+  /* 🔥 Ensure Programs Stack Vertically */
+  .program-container {
+    display: block;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+
+  /* 🔥 Alternating Row Colors */
+  tbody tr:nth-child(even) {
+    background: #f9f9f9;
   }
 </style>

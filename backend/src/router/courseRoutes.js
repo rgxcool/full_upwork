@@ -1,38 +1,45 @@
 import express from "express";
-import Program from "../models/Program.js";
-import Student from "../models/Student.js";
 import Course from "../models/Course.js";
 
 const router = express.Router();
 
+// 🔹 Fetch all courses
 router.get("/courses", async (req, res) => {
-    const courses = await Course.find(); // Fetch all courses
-    res.json(courses);
-});
-
-router.get("/course/:courseId", async (req, res) => {
-    const course = await Course.findById(req.params.courseId).populate(
-        "courses"
-    ); // Fetch courses for a specific program
-    if (!program) return res.status(404).json({ error: "Program not found" });
-    res.json(program.courses);
-});
-
-// Route to fetch a student ID by name
-router.get("/course/id", async (req, res) => {
-    const { name } = req.query;
-
     try {
-        const course = await Course.findOne({ courseName: name }); // Check Model
+        const courses = await Course.find();
+        res.json(courses);
+    } catch (error) {
+        console.error("Error fetching courses:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+// 🔹 Fetch a single course by ID
+router.get("/courses/:courseId", async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.courseId);
+        if (!course) return res.status(404).json({ error: "Course not found" });
+        res.json(course);
+    } catch (error) {
+        console.error("Error fetching course:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+// 🔹 Fetch a course ID by name
+router.get("/courses/id", async (req, res) => {
+    const { name } = req.query;
+    try {
+        const course = await Course.findOne({ courseName: name });
 
         if (!course) {
-            return res.status(404).json({ error: "Kursen hittades inte." });
+            return res.status(404).json({ error: "Course not found." });
         }
 
         res.json({ courseId: course._id });
     } catch (error) {
-        console.error("Error fetching course:", error);
-        res.status(500).json({ error: "Ett serverfel inträffade." });
+        console.error("Error fetching course ID:", error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
 });
 

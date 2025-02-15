@@ -6,45 +6,23 @@ import router from './router/router.js'
 import store from './store/store.js'
 import './assets/styles/global.css'
 
-import { createVuetify } from 'vuetify' // Import Vuetify
-import 'vuetify/styles' // Import Vuetify styles
+// ✅ Import Vuetify and all components
+import { createVuetify } from 'vuetify'
+import 'vuetify/styles'
+import * as components from 'vuetify/components'
+import * as directives from 'vuetify/directives'
 
-// Vuetify 3 component imports
-import {
-  VApp,
-  VContainer,
-  VRow,
-  VCol,
-  VSelect,
-  VTextField,
-  VForm,
-  VBtn,
-  VAutocomplete,
-  VListItemTitle,
-  VListItem,
-} from 'vuetify/components'
-
+// ✅ Ensure all components & directives are included
 const vuetify = createVuetify({
-  components: {
-    VApp,
-    VContainer,
-    VRow,
-    VCol,
-    VSelect,
-    VTextField,
-    VForm,
-    VBtn,
-    VAutocomplete,
-    VListItemTitle,
-    VListItem,
-  },
+  components,
+  directives,
 })
 
-console.log('🚀 Initializing Vue App...') //  Debug Message
+console.log('🚀 Initializing Vue App...')
 console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
 console.log('All env variables:', import.meta.env)
 
-//  Check if token exists before setting the default header
+// ✅ Set Axios Authorization Token from Vuex
 const token = store.state.auth?.token
 if (token) {
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
@@ -55,6 +33,7 @@ if (token) {
 const app = createApp(App)
 app.use(router)
 app.use(store)
+app.use(vuetify) // ✅ Attach Vuetify to the app
 app.mount('#app')
 
-console.log(' Vue App Mounted!') //  Debug Message
+console.log('✅ Vue App Mounted!')

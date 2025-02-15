@@ -59,6 +59,10 @@ const routes = [
     name: 'ProgramsAndCourses',
     component: ProgramsAndCourses,
   },
+  {
+    path: '/programsandpackages',
+    component: () => import('@/views/Admin/ProgramsAndPackages.vue'),
+  },
   // { path: '/editstudent', name: 'EditStudent', component: EditStudent },
 
   { path: '/betyg', component: BetygSattning },

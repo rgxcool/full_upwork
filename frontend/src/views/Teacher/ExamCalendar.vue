@@ -1,49 +1,7 @@
 <template>
-  <div class="container mt-4">
-    <div class="card p-3 shadow-sm">
+  <div class="calendar-wrapper">
+    <div class="calendar-container">
       <FullCalendar class="demo-app-calendar" :options="calendarOptions" />
-    </div>
-
-    <div
-      v-if="eventDetails"
-      class="modal fade show d-block"
-      tabindex="-1"
-      role="dialog"
-      style="background: rgba(0, 0, 0, 0.5)"
-    >
-      <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">{{ eventDetails.course }} - {{ eventDetails.teacher }}</h5>
-            <button type="button" class="btn-close" @click="closeModal"></button>
-          </div>
-          <div class="modal-body">
-            <table class="table table-striped">
-              <thead>
-                <tr>
-                  <th>Namn</th>
-                  <th>Personnummer</th>
-                  <th>Kurs</th>
-                  <th>Redigera</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(student, index) in eventDetails.students" :key="index">
-                  <td>{{ student.name }}</td>
-                  <td>{{ student.id }}</td>
-                  <td>{{ student.course }}</td>
-                  <td>
-                    <router-link :to="`/student/${student.id}`" class="btn btn-primary btn-sm">Visa mer</router-link>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeModal">Stäng</button>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -65,27 +23,20 @@
           locale: 'sv',
           events: [],
           eventClick: this.handleEventClick,
-          weekNumbers: true, // Aktiverar veckonummer
-          weekNumberCalculation: 'ISO', // Använder ISO-standard för veckonummer
-          weekNumberContent: (args) => `V. ${args.num}`, // Anpassa prefix för veckonummer
+          weekNumbers: true,
+          weekNumberCalculation: 'ISO',
+          weekNumberContent: (args) => `V. ${args.num}`,
         },
-        eventDetails: null,
       }
     },
     methods: {
       async fetchEvents() {
         try {
-          const response = await axios.get('`${import.meta.env.VITE_API_URL}/api/calender-color')
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/calender-color`)
           this.calendarOptions.events = response.data
         } catch (error) {
           console.error('Error fetching events:', error)
         }
-      },
-      handleEventClick(info) {
-        this.eventDetails = info.event.extendedProps
-      },
-      closeModal() {
-        this.eventDetails = null
       },
     },
     mounted() {
@@ -95,16 +46,56 @@
 </script>
 
 <style scoped>
-  :deep(body) {
-    display: block !important;
-    justify-content: unset;
-    align-items: unset;
-  }
-  .modal {
-    z-index: 1050;
+  /* ✅ Completely reset margin, padding, and fix viewport behavior */
+  * {
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
   }
 
-  .modal-backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
+  /* ✅ Fix viewport and remove all scrolling */
+  html,
+  body {
+    width: 100vw !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+    position: fixed !important;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* ✅ Create a wrapper that centers the calendar */
+  .calendar-wrapper {
+    width: 100vw;
+    height: calc(100vh - 80px); /* 🔥 Adjust for navbar */
+    display: flex;
+    justify-content: center; /* ✅ Center horizontally */
+    align-items: center; /* ✅ Center vertically */
+  }
+
+  /* ✅ Ensure calendar takes up full height but remains centered */
+  .calendar-container {
+    width: 90vw; /* Adjust width to fit the screen */
+    max-width: 1200px; /* Prevent it from becoming too wide */
+    height: calc(100vh - 100px); /* Adjust for navbar */
+    max-height: calc(100vh - 100px); /* Ensure no overflow */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden !important;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow effect */
+  }
+
+  /* ✅ Ensure FullCalendar behaves properly */
+  .demo-app-calendar {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
   }
 </style>
