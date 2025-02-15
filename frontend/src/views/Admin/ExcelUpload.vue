@@ -48,7 +48,11 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="student in filteredStudents" :key="student._id" :class="{ 'dropout-row': student.dropout }">
+          <tr
+            v-for="student in filteredStudents"
+            :key="student._id"
+            :class="{ 'dropout-row': student.dropout }"
+          >
             <td>
               <ul>
                 <li>{{ student.namn }}</li>
@@ -120,7 +124,9 @@
         const query = this.searchQuery.toLowerCase()
 
         return this.students
-          .filter((student) => Object.values(student).some((value) => String(value).toLowerCase().includes(query)))
+          .filter((student) =>
+            Object.values(student).some((value) => String(value).toLowerCase().includes(query))
+          )
           .sort((a, b) => {
             const dateA = a.slutDatum ? new Date(a.slutDatum) : new Date(0)
             const dateB = b.slutDatum ? new Date(b.slutDatum) : new Date(0)
@@ -131,7 +137,8 @@
 
     methods: {
       handleFileUpload(event) {
-        this.selectedFileName = event.target.files.length > 0 ? event.target.files[0].name : 'Ingen fil vald'
+        this.selectedFileName =
+          event.target.files.length > 0 ? event.target.files[0].name : 'Ingen fil vald'
         this.file = event.target.files[0]
         if (this.file) {
           const filename = this.file.name
@@ -153,9 +160,13 @@
 
         //  Send the raw file to the backend
         try {
-          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/upload/xlsxupload`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          })
+          const response = await axios.post(
+            `${import.meta.env.VITE_API_URL}/api/upload/xlsxupload`,
+            formData,
+            {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            }
+          )
 
           console.log(' Response:', response.data)
           this.uploadSuccess = true
@@ -179,28 +190,33 @@
 
       async updateDropOut(student) {
         try {
-          const updatedStudent = {
-            ...student,
-            dropout: !student.dropout, // Toggle the dropout status
+          const response = await axios.put(
+            `${import.meta.env.VITE_API_URL}/api/student/${student._id}`,
+            { dropout: !student.dropout }
+          )
+
+          console.log('Updated student data:', response.data)
+
+          // Ensure courses are correctly structured
+          if (!response.data.courses || !Array.isArray(response.data.courses)) {
+            console.error('Invalid course structure:', response.data.courses)
+            alert('Error: Student course data is missing after update.')
+            return
           }
 
-          const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/student/${student._id}`, updatedStudent)
-
-          console.log('Updated student dropout status:', response.data)
-
-          // Update the local state to reflect the change
-          this.students = this.students.map((s) => (s._id === student._id ? response.data : s))
+          this.students = this.students.map((s) =>
+            s._id === student._id ? { ...response.data } : s
+          )
         } catch (error) {
           console.error('Error updating dropout status:', error)
           alert('Failed to update dropout status.')
         }
       },
-
       async fetchStudents() {
         try {
           console.log('📡 Fetching from API:', import.meta.env.VITE_API_URL)
-          console.log('📡 Fetching from URL:', `${import.meta.env.VITE_API_URL}/api/student`)
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/student`)
+          console.log('📡 Fetching from URL:', `${import.meta.env.VITE_API_URL}/api/students`)
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
           console.log('API Response for students:', response.data) // Debug
           this.students = response.data
         } catch (error) {
@@ -244,13 +260,6 @@
     overflow-x: hidden;
     margin: 0;
     padding: 0;
-  }
-
-  /* Debugging tool: Remove after checking */
-  * {
-    box-sizing: border-box;
-    /* outline: 1px solid red; */
-    /* Uncomment to debug */
   }
 
   /* Ensure table headers and cells do not stretch beyond the viewport */
@@ -468,23 +477,6 @@
     width: 23px;
     height: 23px;
     cursor: pointer;
-  }
-
-  /* Ensure consistent column width */
-  th.avhopp-column,
-  td.avhopp-column {
-    width: 80px;
-    /* Adjust width as needed */
-    min-width: 80px;
-    max-width: 80px;
-    text-align: center;
-  }
-
-  /* Center the checkbox within the cell */
-  td.avhopp-column {
-    display: flex;
-    justify-content: center;
-    align-items: center;
   }
 
   .course-cell {

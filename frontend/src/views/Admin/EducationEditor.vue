@@ -62,7 +62,7 @@
       // Fetch students data (use your actual API here)
       onMounted(async () => {
         try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/student`)
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/students`)
           const data = await response.json()
           students.value = data // Assuming the response has a list of students
         } catch (error) {
@@ -92,7 +92,7 @@
       },
       async fetchPrograms() {
         try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/program`)
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`)
           this.programs = response.data
         } catch (error) {
           console.error('Error fetching programs:', error)
@@ -101,28 +101,38 @@
       },
 
       async fetchAllCourses() {
-        console.log('Selected Program:', this.selectedProgram) // Debug
-        if (this.selectedProgram) {
-          try {
-            console.log('Fetching courses for program ID:', this.selectedProgram) // Debug
-            const response = await axios.get(
-              `${import.meta.env.VITE_API_URL}/api/program/${this.selectedProgram}/courses`
-            )
+        console.log('Selected Program:', this.selectedProgram) // Debugging
 
-            // Ensure each course has a display text that combines name and code
-            this.allCourses = response.data.map((course) => ({
-              ...course,
-              displayText: `${course.courseName}(${course.courseCode || 'No Code'})`,
-            }))
+        if (!this.selectedProgram) {
+          console.warn('No program selected.')
+          return
+        }
 
-            console.log('Fetched courses:', this.allCourses) // Debug
-          } catch (error) {
-            console.error('Error fetching courses:', error)
-            alert('Failed to fetch courses for the selected program.')
+        try {
+          console.log('Fetching courses for program ID:', this.selectedProgram)
+
+          const response = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/program/${this.selectedProgram}/courses`
+          )
+
+          if (!response.data || !Array.isArray(response.data)) {
+            console.error('Unexpected response structure:', response)
+            alert('Invalid course data received.')
+            return
           }
+
+          // Map the courses to a readable format
+          this.allCourses = response.data.map((course) => ({
+            ...course,
+            displayText: `${course.courseName} (${course.courseCode || 'No Code'})`,
+          }))
+
+          console.log('Fetched courses:', this.allCourses)
+        } catch (error) {
+          console.error('Error fetching courses:', error)
+          alert('Failed to fetch courses for the selected program.')
         }
       },
-
       async getStudentIdByName() {
         if (!this.selectedStudent || !this.selectedStudent._id) {
           alert('Please select a valid student.')
@@ -143,9 +153,12 @@
             return
           }
 
-          await axios.post(`${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/courses`, {
-            courseId: this.selectedIndividualCourse,
-          })
+          await axios.post(
+            `${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/courses`,
+            {
+              courseId: this.selectedIndividualCourse,
+            }
+          )
           alert(`Course added successfully.`)
         } catch (error) {
           console.error('Error adding course:', error)
@@ -182,9 +195,12 @@
             return
           }
 
-          const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/programs`, {
-            programId: this.selectedProgram,
-          })
+          const response = await axios.post(
+            `${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/programs`,
+            {
+              programId: this.selectedProgram,
+            }
+          )
           alert(`${response.data} - Program and courses added successfully.`)
         } catch (error) {
           console.error('Error adding program:', error)
