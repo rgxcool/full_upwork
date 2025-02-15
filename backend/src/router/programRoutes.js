@@ -30,7 +30,7 @@ router.get("/program/:programId/courses", async (req, res) => {
             return res.status(404).json({ error: "Program not found" });
         }
 
-        console.log("Fetched program data:", program);
+        //console.log("Fetched program data:", program);
 
         if (!program.programCourses || program.programCourses.length === 0) {
             console.warn(

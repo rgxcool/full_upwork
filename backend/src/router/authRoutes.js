@@ -16,19 +16,20 @@ router.post("/auth/register", async (req, res) => {
                 .json({ message: "Alla fält är obligatoriska!" });
         }
 
-        if (await User.findOne({ email })) {
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
             return res.status(409).json({
                 message: "Emailadressen finns redan, var vänlig att logga in!",
             });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 12);
         const newUser = new User({ username, email, password: hashedPassword });
         await newUser.save();
 
         return res.status(201).json({ message: "Användare registrerad!" });
     } catch (error) {
-        console.error("Registration error:", error);
+        console.error("❌ Registration error:", error);
         return res
             .status(500)
             .json({ message: "Ett fel uppstod vid registreringen." });
@@ -50,16 +51,17 @@ router.post("/auth/login", async (req, res) => {
         const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
             expiresIn: "1h",
         });
+
         res.cookie("token", token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "Strict",
-            maxAge: 3600000,
+            sameSite: "Lax", // Ensures cross-origin authentication works
+            maxAge: 3600000, // 1 hour
         });
 
         return res.json({ message: "Login lyckades!", token });
     } catch (error) {
-        console.error("Login error:", error);
+        console.error("❌ Login error:", error);
         return res.status(500).json({ message: "Server error." });
     }
 });
@@ -69,21 +71,23 @@ router.post("/auth/logout", (req, res) => {
     res.clearCookie("token", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "Strict",
+        sameSite: "Lax",
     });
-    return res.json({ message: "Logged out successfully!" });
+    return res.status(200).json({ message: "Logged out successfully!" });
 });
 
 // Check Authentication
 router.get("/auth/me", (req, res) => {
     const token = req.cookies?.token;
-    if (!token) return res.status(401).json({ message: "Not authenticated" });
+    if (!token) {
+        return res.status(401).json({ message: "Not authenticated" });
+    }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        res.json({ userId: decoded.userId });
+        return res.json({ userId: decoded.userId });
     } catch (error) {
-        res.status(401).json({ message: "Invalid token" });
+        return res.status(401).json({ message: "Invalid token" });
     }
 });
 

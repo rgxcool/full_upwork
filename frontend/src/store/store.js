@@ -47,7 +47,10 @@ export default createStore({
       console.log('🛠 Vuex: Attempting login with credentials:', credentials)
 
       try {
-        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, credentials)
+        const response = await axios.post(
+          `${import.meta.env.VITE_API_URL}/api/auth/login`,
+          credentials
+        )
         console.log(' Vuex: Backend response:', response.data)
 
         const { token } = response.data //  Fix: Extract correct token key
@@ -66,14 +69,29 @@ export default createStore({
         }
       } catch (error) {
         console.error('❌ Vuex: Login request failed:', error.response?.data || error)
-        return { success: false, message: error.response?.data?.message || 'Login failed due to server error.' }
+        return {
+          success: false,
+          message: error.response?.data?.message || 'Login failed due to server error.',
+        }
       }
     },
 
-    logout({ commit }) {
+    async logout({ commit }) {
+      console.log('🔴 Vuex: Logging out...')
+
+      try {
+        await axios.post(
+          `${import.meta.env.VITE_API_URL}/api/auth/logout`,
+          {},
+          { withCredentials: true }
+        )
+      } catch (error) {
+        console.error('❌ Vuex: Logout request failed:', error.response?.data || error)
+      }
+
+      // Clear Vuex state and localStorage
       commit('LOGOUT')
     },
-
     async fetchTasks({ commit, state }) {
       if (!state.token) {
         console.error('❌ Vuex: No token found, cannot fetch tasks.')
@@ -122,9 +140,13 @@ export default createStore({
       }
 
       try {
-        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/task/${task._id}`, task, {
-          headers: { Authorization: `Bearer ${state.token}` },
-        })
+        const response = await axios.put(
+          `${import.meta.env.VITE_API_URL}/api/task/${task._id}`,
+          task,
+          {
+            headers: { Authorization: `Bearer ${state.token}` },
+          }
+        )
 
         commit('UPDATE_TASK', response.data)
       } catch (error) {

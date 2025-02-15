@@ -3,8 +3,22 @@
     <div class="register-container">
       <form class="register-form" @submit.prevent="register">
         <input v-model="name" type="name" placeholder="Namn" class="input-field" required />
-        <input v-model="email" type="email" placeholder="Email" class="input-field" required />
-        <input v-model="password" type="password" placeholder="Lösenord" class="input-field" required />
+        <input
+          v-model="email"
+          type="email"
+          placeholder="Email"
+          class="input-field"
+          required
+          autocomplete="username"
+        />
+        <input
+          v-model="password"
+          type="password"
+          placeholder="Lösenord"
+          class="input-field"
+          required
+          autocomplete="new-password"
+        />
         <button type="submit" class="register-button">Register</button>
       </form>
       <p v-if="message" class="message">{{ message }}</p>
@@ -28,7 +42,7 @@
       async register() {
         try {
           const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
-            name: this.name,
+            username: this.name,
             email: this.email,
             password: this.password,
           })

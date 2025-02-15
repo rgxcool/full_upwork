@@ -69,25 +69,25 @@
     </div>
 
     <div class="logo-container">
-      <a class="navbar-brand" href="/">
+      <router-link class="navbar-brand" to="/">
         <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
-      </a>
+      </router-link>
     </div>
     <ul class="nav-links">
       <li v-for="item in menuItems" :key="item.link">
-        <a :href="item.link" class="nav-link">{{ item.name }}</a>
+        <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
       </li>
     </ul>
 
     <div class="icon-container">
-      <a href="#" class="icon">
+      <router-link to="/profile" class="icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
           <path
             fill="currentColor"
             d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4"
           />
         </svg>
-      </a>
+      </router-link>
       <a href="#" class="icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
           <path
@@ -117,7 +117,7 @@
 
 <script>
   import axios from 'axios'
-  import { ref } from 'vue'
+  import { ref, computed } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
 
@@ -125,22 +125,20 @@
     setup() {
       const store = useStore()
       const router = useRouter()
+
       const isMenuOpen = ref(false)
       const showFilters = ref(false)
       const showResults = ref(false)
 
-      const isLoggedIn = store.getters.isLoggedIn
+      // ✅ Use computed to track changes in Vuex state
+      const isLoggedIn = computed(() => store.getters.isLoggedIn)
 
       const logout = () => {
         store.dispatch('logout')
         router.push('/')
       }
 
-      const toggleMenu = () => {
-        isMenuOpen.value = !isMenuOpen.value
-      }
-
-      return { isLoggedIn, logout, isMenuOpen, toggleMenu, showFilters, showResults }
+      return { isLoggedIn, logout, isMenuOpen, showFilters, showResults }
     },
     data() {
       return {
@@ -157,7 +155,7 @@
           { name: 'Kurspaket', link: '/programsandpackages' },
           { name: 'Kurser', link: '/programsandcourses' },
           { name: 'Elev+', link: '/addstudent' },
-          { name: 'Elever', link: '/elever' },
+          { name: 'Elever', link: '/students' },
           { name: 'PDF', link: '/pdf' },
         ],
       }

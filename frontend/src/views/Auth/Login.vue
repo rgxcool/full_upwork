@@ -6,8 +6,20 @@
 
     <div class="login-box">
       <form @submit.prevent="handleLogin">
-        <input type="text" placeholder="Ex. mail@gmail.com" v-model="email" required />
-        <input type="password" placeholder="Lösenord" v-model="password" required />
+        <input
+          type="text"
+          placeholder="Ex. mail@gmail.com"
+          v-model="email"
+          required
+          autocomplete="username"
+        />
+        <input
+          type="password"
+          placeholder="Lösenord"
+          v-model="password"
+          required
+          autocomplete="current-password"
+        />
         <button type="submit" class="login-btn">LOGGA IN</button>
       </form>
       <p v-if="message" class="error-message">{{ message }}</p>

@@ -44,7 +44,7 @@ const routes = [
 
   { path: '/addstudent', name: 'AddStudent', component: AddStudent },
   //   { path: '/addteacher', name: 'AddTeacher', component: AddTeacher },
-  { path: '/student', name: 'Elever', component: ExcelUpload },
+  { path: '/students', name: 'Elever', component: ExcelUpload },
   {
     path: '/student/:id',
     name: 'StudentDetails',
