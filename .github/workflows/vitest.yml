@@ -18,12 +18,15 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
+            - name: Debug repository structure
+              run: ls -R # ✅ List all files to confirm package-lock.json exists
+
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 22 # ✅ Removed `cache: npm`
+                  node-version: 22
 
-            - name: Cache npm dependencies
+            - name: Manually Cache npm Dependencies
               uses: actions/cache@v4
               with:
                   path: frontend/node_modules
@@ -34,7 +37,7 @@ jobs:
             - name: Install dependencies
               run: |
                   cd frontend  # ✅ Move into frontend before installing
-                  npm ci  # ✅ Use clean install for consistency
+                  npm install || npm ci  # ✅ Use npm install if npm ci fails
 
             - name: Run tests
               run: |
