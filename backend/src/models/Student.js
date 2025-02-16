@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const StudentSchema = new mongoose.Schema({
     name: { type: String, required: true },
-    personalNumber: { type: String, required: true, unique: true },
+    personalNumber: { type: String, required: true },
     program: { type: mongoose.Schema.Types.ObjectId, ref: "Program" },
     coursePackages: [
         {
@@ -23,7 +23,7 @@ const StudentSchema = new mongoose.Schema({
     finalExamDate: Date,
     municipality: String,
     phone: String,
-    email: String,
+    email: { type: String, required: true, unique: true },
     exam: String,
     additionalInfo: String,
     teacher: String,

@@ -24,8 +24,8 @@
     <br />
 
     <div class="controls">
-      <h2>Students</h2>
-      <input type="text" v-model="searchQuery" placeholder="Search" class="mb-3 search-input" />
+      <h2>Elever</h2>
+      <input type="text" v-model="searchQuery" placeholder="Sök" class="mb-3 search-input" />
 
       <!-- Delete All Students Button -->
       <button class="btn btn-danger delete-all-btn" @click="deleteAllStudents">
@@ -84,9 +84,9 @@
                   <li v-for="(course, index) in student.courses" :key="'course-' + index">
                     <!-- ✅ Check if course.courseId exists -->
                     {{ course.courseId?.courseName || 'No course name' }}
-                    <span v-if="course.courseId?.courseCode">
+                    <!-- <span v-if="course.courseId?.courseCode">
                       - {{ course.courseId.courseCode }}
-                    </span>
+                    </span> Add if coursecode is needed. -->
                   </li>
                 </ul>
               </div>
@@ -197,7 +197,7 @@
             }
           )
 
-          console.log('Response:', response.data)
+          console.log('✅ Response:', response.data)
           this.uploadSuccess = true
 
           setTimeout(() => {
@@ -206,16 +206,21 @@
 
           this.fetchStudents()
         } catch (error) {
-          console.error('❌ Error uploading file:', error)
+          console.error('❌ Error uploading file:', error.response?.data?.error || error)
+
+          if (error.response?.status === 409) {
+            alert('⚠️ Some students were already in the system and were not added.')
+          } else {
+            alert('❌ Failed to upload students.')
+          }
         }
 
         this.file = null
         this.selectedFileName = ''
         if (this.$refs.fileInput) {
-          this.$refs.fileInput.value = '' // ✅ Reset input safely
+          this.$refs.fileInput.value = ''
         }
       },
-
       async updateDropOut(student) {
         try {
           const response = await axios.put(
@@ -339,7 +344,18 @@
 
   .table-container {
     width: 100%;
-    overflow-x: auto; /* Enables horizontal scrolling if needed */
+    max-height: 59vh; /* ✅ Adjust height as needed */
+    overflow-x: auto; /* ✅ Keeps horizontal scrolling */
+    overflow-y: auto; /* ✅ Enables vertical scrolling */
+    border: 1px solid #ddd; /* ✅ Adds a border for clarity */
+  }
+
+  /* Ensures table header stays visible while scrolling */
+  .dynamic-table thead {
+    position: sticky;
+    top: 0;
+    background-color: white; /* ✅ Ensures header is readable */
+    z-index: 2;
   }
 
   .dynamic-table {
