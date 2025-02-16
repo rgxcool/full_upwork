@@ -111,7 +111,10 @@
 
             <td>
               <!-- Delete Single Student Button -->
-              <button class="btn btn-danger btn-xs" @click="deleteStudent(student._id)">
+              <button
+                class="btn btn-danger btn-xs delete-single-button"
+                @click="deleteStudent(student._id)"
+              >
                 Delete
               </button>
             </td>
@@ -244,7 +247,7 @@
 
         try {
           await axios.delete(`${import.meta.env.VITE_API_URL}/api/student/${studentId}`)
-          console.log(`Deleted student with ID: ${studentId}`)
+          console.log(`🚨 Student deleted!: ${studentId}`)
           this.students = this.students.filter((s) => s._id !== studentId)
         } catch (error) {
           console.error('Error deleting student:', error)

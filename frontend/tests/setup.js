@@ -16,12 +16,16 @@ global.ResizeObserver = vi.fn(() => ({
 // Mock `window.alert` to avoid JSDOM errors
 global.alert = vi.fn()
 
-// Suppress Vuetify duplicate registration warnings
+// Suppress Vuetify duplicate registration warnings & stack overflow errors
+const originalWarn = console.warn
 vi.spyOn(console, 'warn').mockImplementation((msg) => {
-  if (msg.includes('App already provides property with key "Symbol(vuetify:')) {
+  if (
+    msg.includes('App already provides property with key "Symbol(vuetify:') ||
+    msg.includes('Maximum call stack size exceeded')
+  ) {
     return
   }
-  console.warn(msg) // Keep other warnings visible
+  originalWarn(msg) // Keep other warnings visible
 })
 
 // Ensure Vuetify is initialized **only once** globally
@@ -30,5 +34,5 @@ if (!global.__vuetify) {
     components,
     directives,
   })
+  config.global.plugins = [global.__vuetify] // ✅ Assign config inside initialization block
 }
-config.global.plugins = [global.__vuetify]

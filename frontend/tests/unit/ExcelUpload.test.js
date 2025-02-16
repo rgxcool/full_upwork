@@ -4,8 +4,85 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createVuetify } from 'vuetify'
 import axios from 'axios'
 
-// Mock API calls
-vi.mock('axios')
+// ✅ Corrected mock to remove `default`
+// ✅ Correct way to mock axios with a `default` export
+vi.mock('axios', () => {
+  return {
+    default: {
+      get: vi.fn((url) => {
+        if (url.includes('/api/students')) {
+          return Promise.resolve({
+            data: [
+              {
+                _id: '1',
+                name: 'John Doe',
+                personalNumber: '123456789',
+                email: 'john@example.com',
+                coursePackages: [{ coursePackageId: { coursePackageName: 'Test Package' } }],
+                courses: [{ courseId: { courseName: 'Math 101', courseCode: 'M101' } }],
+                startDate: '2024-01-01',
+                endDate: '2024-06-01',
+                finalExamDate: '2024-06-10',
+                municipality: 'Test City',
+                phone: '1234567890',
+                exam: 'Passed',
+                additionalInfo: 'None',
+                teacher: 'Mr. Smith',
+                dropout: false,
+              },
+            ],
+          })
+        }
+        if (url.includes('/api/programs')) {
+          return Promise.resolve({
+            data: [
+              {
+                _id: '1',
+                programName: 'Test Program',
+              },
+            ],
+          })
+        }
+        if (url.includes('/api/courses')) {
+          return Promise.resolve({
+            data: [
+              {
+                _id: '101',
+                courseName: 'Test Course',
+                courseCode: 'TC101',
+              },
+            ],
+          })
+        }
+        return Promise.resolve({ data: [] })
+      }),
+
+      post: vi.fn((url) => {
+        if (url.includes('/api/upload/xlsxupload')) {
+          return Promise.resolve({ data: 'Upload successful' })
+        }
+        return Promise.resolve({ data: { success: true } })
+      }),
+
+      put: vi.fn((url, body) => {
+        if (url.includes('/api/student/') && body.dropout !== undefined) {
+          return Promise.resolve({ data: { _id: '1', dropout: body.dropout } })
+        }
+        return Promise.resolve({ data: { success: true } })
+      }),
+
+      delete: vi.fn((url) => {
+        if (url.includes('/api/student/')) {
+          return Promise.resolve({})
+        }
+        if (url.includes('/api/students')) {
+          return Promise.resolve({})
+        }
+        return Promise.resolve({})
+      }),
+    },
+  }
+})
 
 describe('ExcelUpload.vue', () => {
   let wrapper
@@ -19,29 +96,6 @@ describe('ExcelUpload.vue', () => {
       },
     })
 
-    // Mock API response
-    axios.get.mockResolvedValue({
-      data: [
-        {
-          _id: '1',
-          name: 'John Doe',
-          personalNumber: '123456789',
-          coursePackages: [{ coursePackageId: { coursePackageName: 'Test Package' } }],
-          courses: [{ courseId: { courseName: 'Math 101', courseCode: 'M101' } }],
-          startDate: '2024-01-01',
-          endDate: '2024-06-01',
-          finalExamDate: '2024-06-10',
-          municipality: 'Test City',
-          phone: '1234567890',
-          email: 'john@example.com',
-          exam: 'Passed',
-          additionalInfo: 'None',
-          teacher: 'Mr. Smith',
-          dropout: false,
-        },
-      ],
-    })
-
     await wrapper.vm.fetchStudents()
   })
 
@@ -49,7 +103,6 @@ describe('ExcelUpload.vue', () => {
     const file = new File(['test content'], 'test.xlsx', { type: 'application/vnd.ms-excel' })
     const input = wrapper.find('input[type="file"]')
 
-    // Simulate file selection event
     await input.element.dispatchEvent(new Event('change', { bubbles: true }))
     await wrapper.vm.handleFileUpload({ target: { files: [file] } })
 
@@ -57,24 +110,18 @@ describe('ExcelUpload.vue', () => {
   })
 
   it('uploads file and fetches students after success', async () => {
-    // Mock file
     const file = new File(['test content'], 'test.xlsx', { type: 'application/vnd.ms-excel' })
     wrapper.setData({ file })
 
-    // Mock API Response
-    axios.post.mockResolvedValue({ data: 'Upload successful' })
-
-    // Trigger file upload
     await wrapper.vm.uploadFile()
 
-    // Expect API call to be made
+    // ✅ No `.default`, just `axios.post`
     expect(axios.post).toHaveBeenCalledWith(
       `${import.meta.env.VITE_API_URL}/api/upload/xlsxupload`,
       expect.any(FormData),
       { headers: { 'Content-Type': 'multipart/form-data' } }
     )
 
-    // Ensure fetchStudents is called
     expect(axios.get).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/students`)
   })
 
@@ -87,38 +134,38 @@ describe('ExcelUpload.vue', () => {
   })
 
   it('deletes a student when delete button is clicked', async () => {
-    axios.delete.mockResolvedValue({})
-
-    // Find delete button and trigger click
-    const deleteButton = wrapper.find('button.btn-danger')
+    const deleteButton = wrapper.find('button.delete-single-button')
     await deleteButton.trigger('click')
 
-    // Ensure delete API was called
     expect(axios.delete).toHaveBeenCalledWith(
       expect.stringMatching(/\/api\/students|\/api\/student\/1/)
     )
   })
 
   it('deletes all students when delete all button is clicked', async () => {
-    axios.delete.mockResolvedValue({})
-
-    // Find delete all button and trigger click
     const deleteAllButton = wrapper.find('.delete-all-btn')
     await deleteAllButton.trigger('click')
 
-    // Ensure delete all API was called
     expect(axios.delete).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/students`)
   })
 
-  it('updates student dropout status when checkbox is clicked', async () => {
-    axios.put.mockResolvedValue({ data: { _id: '1', dropout: true } })
+  it('updates student dropout status when dropout button is clicked', async () => {
+    const buttons = wrapper.findAll('.dropout-btn')
+    expect(buttons.length).toBeGreaterThan(0)
 
-    const checkbox = wrapper.find('input[type="checkbox"]')
-    await checkbox.setChecked()
+    await buttons[0].trigger('click')
+    await wrapper.vm.$nextTick()
 
-    // Ensure API was called
     expect(axios.put).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/student/1`, {
       dropout: true,
+    })
+
+    axios.put.mockResolvedValueOnce({ data: { _id: '1', dropout: false } })
+    await buttons[0].trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(axios.put).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/student/1`, {
+      dropout: false,
     })
   })
 })
