@@ -18,17 +18,30 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
+            - name: Debug repository structure
+              run: ls -R # ✅ List all files to confirm package-lock.json exists
+
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 22 # Adjust based on your project
-                  cache: npm
-                  cache-dependency-path: frontend/package-lock.json # ✅ Tell GitHub to cache dependencies from frontend/
+                  node-version: 22 # ✅ Removed `cache: npm`
+
+            - name: Manually Cache npm Dependencies
+              uses: actions/cache@v4
+              with:
+                  path: frontend/node_modules
+                  key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+                  restore-keys: |
+                      npm-${{ runner.os }}-
 
             - name: Install dependencies
               run: |
                   cd frontend  # ✅ Move into frontend before installing
-                  npm install
+                  if [ -f package-lock.json ]; then
+                    npm ci  # ✅ Use clean install for consistency
+                  else
+                    npm install
+                  fi
 
             - name: Run tests
               run: |
