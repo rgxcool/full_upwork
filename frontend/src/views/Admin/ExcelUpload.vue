@@ -37,20 +37,19 @@
       <table v-if="filteredStudents.length > 0" class="dynamic-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Personal Number</th>
-            <th>Course Packages</th>
-            <th>Courses</th>
-            <th>Start Date</th>
-            <th>End Date</th>
-            <th>Final Exam</th>
-            <th>Municipality</th>
-            <th>Phone</th>
+            <th>Namn</th>
+            <th>Personnummer</th>
+            <!-- <th>Course Packages</th> -->
+            <th>Utbildning</th>
+            <th>Startdatum</th>
+            <th>Slutdatum</th>
+            <th>Slutprovsdatum</th>
+            <th>Kommun</th>
+            <th>Tel</th>
             <th>Email</th>
-            <th>Exam</th>
-            <th>Additional Info</th>
-            <th>Teacher</th>
-            <th class="dropout-column">Dropout</th>
+            <th>Övrigt</th>
+            <th>Lärare</th>
+            <th class="dropout-column">Avhopp</th>
             <th></th>
           </tr>
         </thead>
@@ -63,7 +62,7 @@
             <td>{{ student.name }}</td>
             <td>{{ student.personalNumber }}</td>
 
-            <td class="coursepackage-cell">
+            <!-- <td class="coursepackage-cell">
               <div class="coursepackage-list">
                 <ul>
                   <li
@@ -76,7 +75,7 @@
                   </li>
                 </ul>
               </div>
-            </td>
+            </td> -->
 
             <td class="course-cell">
               <div class="course-list">
@@ -99,17 +98,17 @@
             <td>{{ student.municipality }}</td>
             <td>{{ student.phone }}</td>
             <td>{{ student.email }}</td>
-            <td>{{ student.exam }}</td>
             <td>{{ student.additionalInfo }}</td>
             <td>{{ student.teacher }}</td>
             <td class="dropout-column">
-              <input
-                type="checkbox"
-                class="custom-checkbox"
-                :checked="student.dropout"
-                @change="updateDropOut(student)"
-              />
+              <button
+                :class="['dropout-btn', student.dropout ? 'dropout-active' : 'dropout-inactive']"
+                @click="updateDropOut(student)"
+              >
+                {{ student.dropout ? 'Avhopp' : 'Aktiv' }}
+              </button>
             </td>
+
             <td>
               <!-- Delete Single Student Button -->
               <button class="btn btn-danger btn-xs" @click="deleteStudent(student._id)">
@@ -294,6 +293,36 @@
 <style scoped>
   .dropout-row {
     background-color: rgba(255, 0, 0, 0.2);
+  }
+  /* Dropout Button Styling */
+  .dropout-btn {
+    display: inline-block;
+    width: 70px;
+    padding: 0px;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  /* Dropout is Active */
+  .dropout-active {
+    background-color: #dc3545;
+    color: white;
+  }
+
+  /* Dropout is Inactive */
+  .dropout-inactive {
+    background-color: #28a745;
+    color: white;
+  }
+
+  /* Hover Effects */
+  .dropout-btn:hover {
+    opacity: 0.8;
   }
 
   .custom-checkbox:checked {
