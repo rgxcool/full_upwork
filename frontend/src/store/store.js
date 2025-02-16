@@ -1,28 +1,58 @@
 import { createStore } from 'vuex'
 import axios from 'axios'
 
+// Role hierarchy list (higher index = higher authority)
+const ROLE_HIERARCHY = [
+  'guest',
+  'user',
+  'student',
+  'coordinator',
+  'specped',
+  'syv',
+  'teacher',
+  'admin',
+  'systemadmin',
+]
+
 export default createStore({
   state: {
     token: localStorage.getItem('token') || null,
-    userRole: localStorage.getItem('userRole') || null,
+    userRole: localStorage.getItem('userRole') || 'guest', // Default to guest
     tasks: [],
   },
+
+  getters: {
+    isLoggedIn: (state) => !!state.token,
+    userRole: (state) => state.userRole,
+    isAdmin: (state) => state.userRole === 'admin' || state.userRole === 'systemadmin',
+    isSystemAdmin: (state) => state.userRole === 'systemadmin',
+    tasks: (state) => state.tasks,
+
+    /**
+     * Check if the user has the required role (or higher)
+     * Example usage: store.getters.hasPermission("teacher")
+     */
+    hasPermission: (state) => (requiredRole) => {
+      const userIndex = ROLE_HIERARCHY.indexOf(state.userRole)
+      const requiredIndex = ROLE_HIERARCHY.indexOf(requiredRole)
+      return userIndex >= requiredIndex
+    },
+  },
+
   mutations: {
     SET_USER(state, { token, role }) {
-      console.log(' Vuex: Saving user token & role:', token, role)
+      if (!token) return
       state.token = token
-      state.userRole = role
+      state.userRole = role || 'guest'
       localStorage.setItem('token', token)
-      localStorage.setItem('userRole', role)
+      localStorage.setItem('userRole', role || 'guest')
     },
     LOGOUT(state) {
-      console.log('🔴 Vuex: Logging out user.')
       state.token = null
-      state.userRole = null
+      state.userRole = 'guest'
       localStorage.removeItem('token')
       localStorage.removeItem('userRole')
     },
-
     SET_TASKS(state, tasks) {
       state.tasks = tasks
     },
@@ -31,9 +61,7 @@ export default createStore({
     },
     UPDATE_TASK(state, updatedTask) {
       const index = state.tasks.findIndex((task) => task._id === updatedTask._id)
-      if (index !== -1) {
-        state.tasks[index] = updatedTask
-      }
+      if (index !== -1) state.tasks[index] = updatedTask
     },
     DELETE_TASK(state, taskId) {
       state.tasks = state.tasks.filter((task) => task._id !== taskId)
@@ -42,33 +70,23 @@ export default createStore({
       state.tasks = []
     },
   },
+
   actions: {
     async login({ commit }, credentials) {
-      console.log('🛠 Vuex: Attempting login with credentials:', credentials)
-
       try {
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/auth/login`,
-          credentials
+          credentials,
+          { withCredentials: true }
         )
-        console.log(' Vuex: Backend response:', response.data)
 
-        const { token } = response.data //  Fix: Extract correct token key
-        if (!token) {
-          console.error('❌ Vuex: Missing `token` in backend response:', response.data)
-          return { success: false, message: 'Login failed: No token received.' }
-        }
+        const { token, user } = response.data
+        if (!token) return { success: false, message: 'Login failed: No token received.' }
 
-        //  Commit token & role
-        commit('SET_USER', { token: token, role: response.data.user?.role || 'user' })
+        commit('SET_USER', { token, role: user?.role || 'guest' })
 
-        return {
-          success: true,
-          message: response.data.message,
-          token: token,
-        }
+        return { success: true, message: response.data.message, token }
       } catch (error) {
-        console.error('❌ Vuex: Login request failed:', error.response?.data || error)
         return {
           success: false,
           message: error.response?.data?.message || 'Login failed due to server error.',
@@ -77,36 +95,28 @@ export default createStore({
     },
 
     async logout({ commit }) {
-      console.log('🔴 Vuex: Logging out...')
-
       try {
         await axios.post(
           `${import.meta.env.VITE_API_URL}/api/auth/logout`,
           {},
           { withCredentials: true }
         )
-      } catch (error) {
-        console.error('❌ Vuex: Logout request failed:', error.response?.data || error)
-      }
-
-      // Clear Vuex state and localStorage
+      } catch (error) {}
       commit('LOGOUT')
     },
+
     async fetchTasks({ commit, state }) {
       if (!state.token) {
         console.error('❌ Vuex: No token found, cannot fetch tasks.')
         return
       }
 
-      const apiUrl = `${import.meta.env.VITE_API_URL}/api/task`
-      console.log('🔍 Fetching tasks from:', apiUrl) //  Debug API URL
-
       try {
-        const response = await axios.get(apiUrl, {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/task`, {
           headers: { Authorization: `Bearer ${state.token}` },
         })
 
-        console.log(' Vuex: Fetched tasks:', response.data)
+        console.log('✅ Vuex: Fetched tasks:', response.data)
         commit('SET_TASKS', response.data)
       } catch (error) {
         console.error('❌ Vuex: Failed to fetch tasks:', error.response?.data || error)
@@ -126,7 +136,7 @@ export default createStore({
           { headers: { Authorization: `Bearer ${state.token}` } }
         )
 
-        console.log(' Vuex: Task added:', response.data)
+        console.log('✅ Vuex: Task added:', response.data)
         commit('ADD_TASK', response.data)
       } catch (error) {
         console.error('❌ Vuex: Failed to add task:', error.response?.data || error)
@@ -143,9 +153,7 @@ export default createStore({
         const response = await axios.put(
           `${import.meta.env.VITE_API_URL}/api/task/${task._id}`,
           task,
-          {
-            headers: { Authorization: `Bearer ${state.token}` },
-          }
+          { headers: { Authorization: `Bearer ${state.token}` } }
         )
 
         commit('UPDATE_TASK', response.data)
@@ -187,10 +195,5 @@ export default createStore({
         console.error('❌ Vuex: Failed to delete all tasks:', error.response?.data || error)
       }
     },
-  },
-  getters: {
-    isLoggedIn: (state) => !!state.token,
-    userRole: (state) => state.userRole, //  Getter for user role
-    tasks: (state) => state.tasks, //  Getter for tasks
   },
 })

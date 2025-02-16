@@ -1,78 +1,117 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import store from '@/store/store.js'
 
+// Public Views
 import Home from '@/views/Home.vue'
-
 import LoginPage from '@/views/Auth/Login.vue'
 import ResetPassword from '@/views/Auth/ResetPassword.vue'
 import Register from '@/views/Auth/Register.vue'
 
-import ExcelUpload from '@/views/Admin/ExcelUpload.vue'
-import AddStudent from '@/views/Admin/AddStudent.vue'
-import EducationEditor from '@/views/Admin/EducationEditor.vue'
-import ProgramsAndCourses from '@/views/Admin/ProgramsAndCourses.vue'
-import AddUser from '@/views/Admin/AddUser.vue'
-import EditStudent from '@/views/Admin/EditStudent.vue'
+// Lazy-loaded Admin Views
+const ExcelUpload = () => import('@/views/Admin/ExcelUpload.vue')
+const AddStudent = () => import('@/views/Admin/AddStudent.vue')
+const EducationEditor = () => import('@/views/Admin/EducationEditor.vue')
+const ProgramsAndCourses = () => import('@/views/Admin/ProgramsAndCourses.vue')
+const ProgramsAndPackages = () => import('@/views/Admin/ProgramsAndPackages.vue')
+const AddUser = () => import('@/views/Admin/AddUser.vue')
+const EditStudent = () => import('@/views/Admin/EditStudent.vue')
+const PdfView = () => import('@/views/Admin/PdfView.vue')
+const SearchUser = () => import('@/views/Admin/SearchUser.vue')
 
-import FullCalendar from '@/views/Teacher/ExamCalendar.vue'
-import BetygSattning from '@/views/Teacher/BetygSattning.vue'
-import ProfilePage from '@/views/Teacher/ProfilePage.vue'
+// Lazy-loaded Teacher Views
+const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
+const BetygSattning = () => import('@/views/Teacher/BetygSattning.vue')
+const ProfilePage = () => import('@/views/Teacher/ProfilePage.vue')
+
+// Student Views
 import StudentDetails from '@/views/Student/StudentDetails.vue'
 
-import PdfView from '@/views/Utils/PdfView.vue'
-import SearchUser from '@/views/Utils/SearchUser.vue'
-
 const routes = [
-  {
-    path: '/',
-    name: 'home',
-    component: Home,
-    meta: { title: 'Home - Mindful Learning' },
-  },
-
+  // Public Routes
+  { path: '/', name: 'home', component: Home, meta: { title: 'Home - Mindful Learning' } },
   {
     path: '/login',
     name: 'login',
     component: LoginPage,
     meta: { title: 'Login - Mindful Learning' },
   },
-  { path: '/register', name: 'Register', component: Register },
-  { path: '/reset-password', component: ResetPassword },
+  {
+    path: '/register',
+    name: 'Register',
+    component: Register,
+    meta: { title: 'Register - Mindful Learning' },
+  },
+  {
+    path: '/reset-password',
+    component: ResetPassword,
+    meta: { title: 'Reset Password - Mindful Learning' },
+  },
 
-  { path: '/lagg-till-anvandare', component: AddUser },
-  { path: '/anvandare', component: SearchUser },
+  // Admin Routes (Requires "admin" or higher)
+  { path: '/lagg-till-anvandare', component: AddUser, meta: { title: 'Add User', role: 'admin' } },
+  { path: '/anvandare', component: SearchUser, meta: { title: 'Search Users', role: 'admin' } },
+  {
+    path: '/addstudent',
+    name: 'AddStudent',
+    component: AddStudent,
+    meta: { title: 'Add Student', role: 'admin' },
+  },
+  {
+    path: '/students',
+    name: 'Students',
+    component: ExcelUpload,
+    meta: { title: 'Student List', role: 'admin' },
+  },
+  {
+    path: '/education',
+    name: 'EducationEditor',
+    component: EducationEditor,
+    meta: { title: 'Education Editor', role: 'admin' },
+  },
+  {
+    path: '/programsandcourses',
+    name: 'ProgramsAndCourses',
+    component: ProgramsAndCourses,
+    meta: { title: 'Programs & Courses', role: 'admin' },
+  },
+  {
+    path: '/programsandpackages',
+    component: ProgramsAndPackages,
+    meta: { title: 'Programs & Packages', role: 'admin' },
+  },
+  {
+    path: '/editstudent',
+    name: 'EditStudent',
+    component: EditStudent,
+    meta: { title: 'Edit Student', role: 'admin' },
+  },
 
-  { path: '/addstudent', name: 'AddStudent', component: AddStudent },
-  //   { path: '/addteacher', name: 'AddTeacher', component: AddTeacher },
-  { path: '/students', name: 'Elever', component: ExcelUpload },
+  // Teacher Routes (Requires "teacher" or higher)
+  { path: '/kalender', component: FullCalendar, meta: { title: 'Exam Calendar', role: 'teacher' } },
+  { path: '/betyg', component: BetygSattning, meta: { title: 'Grade Setting', role: 'teacher' } },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: ProfilePage,
+    meta: { title: 'My Profile', requiresAuth: true },
+  },
+
+  // Student Routes
   {
     path: '/student/:id',
     name: 'StudentDetails',
     component: StudentDetails,
     props: true,
+    meta: { title: 'Student Details', role: 'student' },
   },
-  { path: '/kalender', component: FullCalendar },
 
-  { path: '/education', name: 'EducationEditor', component: EducationEditor },
+  // Utility Routes (General Access)
   {
-    path: '/programsandcourses',
-    name: 'ProgramsAndCourses',
-    component: ProgramsAndCourses,
+    path: '/pdf',
+    name: 'PdfView',
+    component: PdfView,
+    meta: { title: 'PDF Viewer', role: 'admin' },
   },
-  {
-    path: '/programsandpackages',
-    component: () => import('@/views/Admin/ProgramsAndPackages.vue'),
-  },
-  // { path: '/editstudent', name: 'EditStudent', component: EditStudent },
-
-  { path: '/betyg', component: BetygSattning },
-  {
-    path: '/profile',
-    name: 'profile',
-    component: ProfilePage,
-    meta: { requiresAuth: true },
-  },
-  { path: '/pdf', name: 'PdfView', component: PdfView },
 ]
 
 const router = createRouter({
@@ -80,19 +119,19 @@ const router = createRouter({
   routes,
 })
 
-// Global navigation guards
+// Global Navigation Guards
 router.beforeEach((to, from, next) => {
-  document.title = to.meta.title || 'Mindful Learning'
+  document.title = to.meta.title || 'Mindful Learning' // Dynamically set page titles
 
   const isAuthenticated = store.getters.isLoggedIn
-  const userRole = store.getters.userRole
+  const hasPermission = store.getters.hasPermission
 
   if (to.meta.requiresAuth && !isAuthenticated) {
-    next('/login')
-  } else if (to.meta.role && to.meta.role !== userRole) {
-    next('/unauthorized')
+    next('/login') // Redirect unauthenticated users
+  } else if (to.meta.role && !hasPermission(to.meta.role)) {
+    next('/unauthorized') // Redirect if role is insufficient
   } else {
-    next()
+    next() // Allow access
   }
 })
 
