@@ -139,7 +139,7 @@
 
     computed: {
       filteredStudents() {
-        console.log('🔎 Debugging student courses in computed property:', this.students)
+        //console.log('🔎 Debugging student courses in computed property:', this.students)
         return this.students
           .map((student) => ({
             ...student,
@@ -156,7 +156,7 @@
 
     methods: {
       getCourseName(course) {
-        console.log('🔍 Debugging Course:', course) // See what's happening
+        //console.log('🔍 Debugging Course:', course) // See what's happening
         if (!course) return 'No course data'
 
         // Check for populated course object
@@ -212,7 +212,9 @@
 
         this.file = null
         this.selectedFileName = ''
-        document.getElementById('fileUpload').value = ''
+        if (this.$refs.fileInput) {
+          this.$refs.fileInput.value = '' // ✅ Reset input safely
+        }
       },
 
       async updateDropOut(student) {
@@ -262,10 +264,10 @@
 
       async fetchStudents() {
         try {
-          console.log('📡 Fetching from API:', `${import.meta.env.VITE_API_URL}/api/students`)
+          //console.log('📡 Fetching from API:', `${import.meta.env.VITE_API_URL}/api/students`)
           const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
 
-          console.log('API Response for students:', response.data)
+          //console.log('API Response for students:', response.data)
 
           // ✅ Force Vue reactivity by mapping courses properly
           this.students = response.data.map((student) => ({

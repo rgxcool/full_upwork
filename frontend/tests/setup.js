@@ -4,6 +4,8 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import { config } from '@vue/test-utils'
 
+global.confirm = vi.fn(() => true) // Always return "true" for confirm dialogs
+
 // Mock `ResizeObserver` to prevent crashes
 global.ResizeObserver = vi.fn(() => ({
   observe: vi.fn(),
