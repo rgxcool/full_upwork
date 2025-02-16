@@ -21,7 +21,7 @@ jobs:
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 22 # ✅ No caching in setup-node to avoid lock file issue
+                  node-version: 22
 
             - name: Cache npm dependencies
               uses: actions/cache@v4
@@ -32,9 +32,13 @@ jobs:
                       npm-${{ runner.os }}-
 
             - name: Install dependencies
-              working-directory: frontend # ✅ Ensures npm runs inside frontend/
-              run: npm install
+              working-directory: frontend
+              run: |
+                  if [ ! -f package-lock.json ]; then
+                    npm install
+                  fi
+                  npm ci
 
             - name: Run tests
-              working-directory: frontend # ✅ Ensures Vitest runs inside frontend/
+              working-directory: frontend
               run: npx vitest --run
