@@ -19,14 +19,14 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Debug: List files in repo
-              run: ls -R  # ✅ This will confirm where package-lock.json is located
+              run: ls -R frontend  # ✅ This will confirm where package-lock.json is located
 
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 22  # ✅ Removed `cache: npm`
+                  node-version: 22
 
-            - name: Cache npm dependencies
+            - name: Manually Cache npm Dependencies
               uses: actions/cache@v4
               with:
                   path: frontend/node_modules
@@ -35,15 +35,14 @@ jobs:
                       npm-${{ runner.os }}-
 
             - name: Install dependencies
+              working-directory: frontend  # ✅ Ensures npm runs inside frontend/
               run: |
-                cd frontend  # ✅ Move into frontend before installing
                 if [ -f package-lock.json ]; then
-                  npm ci  # ✅ Use clean install for consistency
+                  npm ci  # ✅ Use npm ci for consistency
                 else
                   npm install
                 fi
 
             - name: Run tests
-              run: |
-                cd frontend  # ✅ Move into frontend before running tests
-                npx vitest --run
+              working-directory: frontend  # ✅ Ensures Vitest runs inside frontend/
+              run: npx vitest --run
