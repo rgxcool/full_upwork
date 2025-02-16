@@ -1,50 +1,57 @@
 <template>
-  <div>
-    <br />
-    <h1 class="title">Lägg till elever</h1>
+  <div class="container">
     <div
       v-if="uploadSuccess"
       class="alert alert-success alert-dismissible fade show"
       role="alert"
       style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050"
     >
-      Eleverna har laddats upp!
+      Students have been uploaded successfully!
     </div>
 
     <!-- File input and button on the same line -->
     <div class="form-container">
       <form @submit.prevent="uploadFile">
         <div class="file-input-wrapper">
-          <label for="fileUpload" class="custom-file-label">Välj fil</label>
-          <span class="file-name">{{ selectedFileName || 'Ingen fil vald' }}</span>
+          <label for="fileUpload" class="custom-file-label">Choose File</label>
+          <span class="file-name">{{ selectedFileName || 'No file selected' }}</span>
           <input type="file" id="fileUpload" @change="handleFileUpload" hidden />
-          <button class="btn btn-primary" type="submit">Lägg till</button>
+          <button class="btn btn-primary" type="submit">Upload</button>
         </div>
       </form>
     </div>
-    <br />
-    <h2>Elever</h2>
 
-    <input type="text" v-model="searchQuery" placeholder="Sök" class="mb-3 search-input" />
+    <br />
+
+    <div class="controls">
+      <h2>Students</h2>
+      <input type="text" v-model="searchQuery" placeholder="Search" class="mb-3 search-input" />
+
+      <!-- Delete All Students Button -->
+      <button class="btn btn-danger delete-all-btn" @click="deleteAllStudents">
+        Delete All Students
+      </button>
+    </div>
 
     <div class="table-container">
       <table v-if="filteredStudents.length > 0" class="dynamic-table">
         <thead>
           <tr>
-            <th>Namn</th>
-            <th>Personnummer</th>
-            <!-- <th>Program</th> -->
-            <th>Kurser</th>
-            <th>Startdatum</th>
-            <th>Slutdatum</th>
-            <th>Slutprov</th>
-            <th>Kommun</th>
-            <th>Tel</th>
+            <th>Name</th>
+            <th>Personal Number</th>
+            <th>Course Packages</th>
+            <th>Courses</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Final Exam</th>
+            <th>Municipality</th>
+            <th>Phone</th>
             <th>Email</th>
-            <th>Prov</th>
-            <th>Övrigt</th>
-            <th>Lärare</th>
-            <th class="avhopp-column">Avhopp</th>
+            <th>Exam</th>
+            <th>Additional Info</th>
+            <th>Teacher</th>
+            <th class="dropout-column">Dropout</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -53,49 +60,59 @@
             :key="student._id"
             :class="{ 'dropout-row': student.dropout }"
           >
-            <td>
-              <ul>
-                <li>{{ student.namn }}</li>
-              </ul>
-            </td>
-            <td>{{ student.personnummer }}</td>
-            <!-- <td>{{ student.program }}</td> -->
-            <td class="course-cell">
-              <div class="course-list">
+            <td>{{ student.name }}</td>
+            <td>{{ student.personalNumber }}</td>
+
+            <td class="coursepackage-cell">
+              <div class="coursepackage-list">
                 <ul>
-                  <li v-for="(kurs, index) in student.kurspaket" :key="index">
-                    {{ kurs || 'No course name' }}
-                  </li>
-                  <li v-for="(kurs, index) in student.courses" :key="index">
-                    {{ kurs.courseId.courseName || 'No course name' }}
-                    <span v-if="kurs.courseId.courseCode"> - {{ kurs.courseId.courseCode }}</span>
+                  <li
+                    v-for="(coursePackage, index) in student.coursePackages"
+                    :key="'package-' + index"
+                  >
+                    {{
+                      coursePackage.coursePackageId?.coursePackageName || 'No course package name'
+                    }}
                   </li>
                 </ul>
               </div>
             </td>
 
-            <td>
-              {{ student.startDatum ? student.startDatum.split('T')[0] : '' }}
+            <td class="course-cell">
+              <div class="course-list">
+                <ul>
+                  <li v-for="(course, index) in student.courses" :key="'course-' + index">
+                    {{ course.courseId?.courseName || 'No course name' }}
+                    <span v-if="course.courseId?.courseCode">
+                      - {{ course.courseId.courseCode }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
             </td>
-            <td>
-              {{ student.slutDatum ? student.slutDatum.split('T')[0] : '' }}
-            </td>
-            <td>
-              {{ student.slutprovDatum ? student.slutprovDatum.split('T')[0] : '' }}
-            </td>
-            <td>{{ student.kommun }}</td>
-            <td>{{ student.telefon }}</td>
-            <td>{{ student.mail }}</td>
-            <td>{{ student.prov }}</td>
-            <td>{{ student.ovrigt }}</td>
+
+            <td>{{ formatDate(student.startDate) }}</td>
+            <td>{{ formatDate(student.endDate) }}</td>
+            <td>{{ formatDate(student.finalExamDate) }}</td>
+            <td>{{ student.municipality }}</td>
+            <td>{{ student.phone }}</td>
+            <td>{{ student.email }}</td>
+            <td>{{ student.exam }}</td>
+            <td>{{ student.additionalInfo }}</td>
             <td>{{ student.teacher }}</td>
-            <td class="avhopp-column">
+            <td class="dropout-column">
               <input
                 type="checkbox"
                 class="custom-checkbox"
                 :checked="student.dropout"
                 @change="updateDropOut(student)"
               />
+            </td>
+            <td>
+              <!-- Delete Single Student Button -->
+              <button class="btn btn-danger btn-xs" @click="deleteStudent(student._id)">
+                Delete
+              </button>
             </td>
           </tr>
         </tbody>
@@ -113,7 +130,6 @@
         file: null,
         students: [],
         searchQuery: '',
-        teacherName: '',
         selectedFileName: '',
         uploadSuccess: false,
       }
@@ -128,9 +144,9 @@
             Object.values(student).some((value) => String(value).toLowerCase().includes(query))
           )
           .sort((a, b) => {
-            const dateA = a.slutDatum ? new Date(a.slutDatum) : new Date(0)
-            const dateB = b.slutDatum ? new Date(b.slutDatum) : new Date(0)
-            return dateA - dateB // Sort descending (latest dates first)
+            const dateA = a.endDate ? new Date(a.endDate) : new Date(0)
+            const dateB = b.endDate ? new Date(b.endDate) : new Date(0)
+            return dateA - dateB
           })
       },
     },
@@ -138,13 +154,8 @@
     methods: {
       handleFileUpload(event) {
         this.selectedFileName =
-          event.target.files.length > 0 ? event.target.files[0].name : 'Ingen fil vald'
+          event.target.files.length > 0 ? event.target.files[0].name : 'No file selected'
         this.file = event.target.files[0]
-        if (this.file) {
-          const filename = this.file.name
-          const parts = filename.split(' ')
-          this.teacherName = parts[parts.length - 1].split('.')[0]
-        }
       },
 
       async uploadFile() {
@@ -158,7 +169,6 @@
         const formData = new FormData()
         formData.append('file', this.file)
 
-        //  Send the raw file to the backend
         try {
           const response = await axios.post(
             `${import.meta.env.VITE_API_URL}/api/upload/xlsxupload`,
@@ -168,7 +178,7 @@
             }
           )
 
-          console.log(' Response:', response.data)
+          console.log('Response:', response.data)
           this.uploadSuccess = true
 
           setTimeout(() => {
@@ -180,11 +190,8 @@
           console.error('❌ Error uploading file:', error)
         }
 
-        // Clear file input and label
         this.file = null
         this.selectedFileName = ''
-
-        // Reset the file input element to clear the selection
         document.getElementById('fileUpload').value = ''
       },
 
@@ -197,13 +204,6 @@
 
           console.log('Updated student data:', response.data)
 
-          // Ensure courses are correctly structured
-          if (!response.data.courses || !Array.isArray(response.data.courses)) {
-            console.error('Invalid course structure:', response.data.courses)
-            alert('Error: Student course data is missing after update.')
-            return
-          }
-
           this.students = this.students.map((s) =>
             s._id === student._id ? { ...response.data } : s
           )
@@ -212,22 +212,49 @@
           alert('Failed to update dropout status.')
         }
       },
+
+      async deleteStudent(studentId) {
+        if (!confirm('Are you sure you want to delete this student?')) return
+
+        try {
+          await axios.delete(`${import.meta.env.VITE_API_URL}/api/student/${studentId}`)
+          console.log(`Deleted student with ID: ${studentId}`)
+          this.students = this.students.filter((s) => s._id !== studentId)
+        } catch (error) {
+          console.error('Error deleting student:', error)
+          alert('Failed to delete student.')
+        }
+      },
+
+      async deleteAllStudents() {
+        if (!confirm('⚠️ Are you sure you want to delete ALL students? This cannot be undone.'))
+          return
+
+        try {
+          await axios.delete(`${import.meta.env.VITE_API_URL}/api/students`)
+          console.log('🚨 All students deleted!')
+          this.students = []
+        } catch (error) {
+          console.error('Error deleting all students:', error)
+          alert('Failed to delete all students.')
+        }
+      },
+
       async fetchStudents() {
         try {
-          console.log('📡 Fetching from API:', import.meta.env.VITE_API_URL)
-          console.log('📡 Fetching from URL:', `${import.meta.env.VITE_API_URL}/api/students`)
+          console.log('📡 Fetching from API:', `${import.meta.env.VITE_API_URL}/api/students`)
           const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
-          console.log('API Response for students:', response.data) // Debug
+          console.log('API Response for students:', response.data)
           this.students = response.data
         } catch (error) {
           alert('Failed to fetch students.')
         }
       },
 
-      formatExcelDate(value) {
-        if (!value) return null
-        if (value === 'Se studieplan') return value
-        return new Date(Math.round((value - 25569) * 86400 * 1000)).toISOString() // Convert Excel serial date to YYYY-MM-DD
+      formatDate(value) {
+        if (!value) return ''
+        if (typeof value === 'string' && value.includes('T')) return value.split('T')[0]
+        return value
       },
     },
 
@@ -244,167 +271,56 @@
 
   .custom-checkbox:checked {
     accent-color: red;
-    /* Modern browsers support this for changing checkbox color */
   }
 
-  /* Optional: Styling the label when the checkbox is checked */
-  .custom-checkbox:checked + label {
-    color: red;
-  }
-
-  /* Ensure the page does not expand beyond the viewport */
-  html,
-  body {
+  .container {
     width: 100%;
-    max-width: 100vw;
-    overflow-x: hidden;
-    margin: 0;
-    padding: 0;
-  }
-
-  /* Ensure table headers and cells do not stretch beyond the viewport */
-  table.dynamic-table th,
-  table.dynamic-table td {
-    padding-left: 6px;
-    padding-right: 6px;
-    text-align: left;
-    border: 3px solid #ddd;
-    white-space: nowrap;
-    max-width: 500px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* Fix table layout issues */
-  table.dynamic-table th {
-    background-color: #f4f4f4;
-  }
-
-  /* Prevent unnecessary padding/margin from affecting layout */
-  .search-input {
-    margin: 10px 0;
-    padding: 8px;
-    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 20px;
     box-sizing: border-box;
-    font-size: 1rem;
   }
 
-  /* Default td styling */
-  td {
-    position: relative;
-    max-width: 500px;
-    /* Set an initial width */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  /* Ensure the table container allows overflow */
   .table-container {
-    overflow: visible !important;
+    width: 100%;
+    overflow-x: auto; /* Enables horizontal scrolling if needed */
   }
 
-  /* Ensure table doesn't restrict visibility */
-  table.dynamic-table {
-    table-layout: auto;
+  .dynamic-table {
     width: 100%;
+    table-layout: auto;
     border-collapse: collapse;
   }
-
-  /* When hovering over a td, allow it to expand */
-  td:hover {
-    max-width: 500px !important;
-    white-space: normal !important;
-    overflow: visible !important;
-    z-index: 10;
-    background: rgba(0, 0, 0, 0.05);
-    /* Optional highlight effect */
+  th,
+  td {
+    padding: 4px 6px; /* Reduce padding */
+    line-height: 1.2; /* Slightly tighter spacing */
+    text-align: left; /* Ensure left alignment */
+    vertical-align: middle; /* Center content vertically */
+    white-space: nowrap; /* Prevents unwanted wrapping */
+    border: 1px solid #ddd; /* Add border */
   }
 
-  ul {
-    list-style-type: none;
+  .course-list ul,
+  .coursepackage-list ul {
+    display: flex;
+    flex-wrap: wrap; /* Allows multiple courses to fit */
+    align-items: center;
+    justify-content: flex-start; /* Align items to the left */
+    max-height: 20px; /* Prevents excessive row height */
+    overflow: hidden;
+    list-style: none;
     padding: 0;
     margin: 0;
-  }
-
-  li {
     text-align: left;
-    padding: 0;
-    margin: 0;
   }
-
-  .form-container {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 4vh;
-    /* Full height */
-  }
-
-  /* File input wrapper */
-  .file-input-wrapper {
-    display: flex;
-    align-items: center;
-  }
-
-  /* Display selected file name */
-  .file-name {
-    font-size: 1rem;
-    color: #333;
-  }
-
-  .search-input {
-    margin: 10px 0;
-    padding: 8px;
-    width: 50vh;
-    box-sizing: border-box;
-    font-size: 1rem;
-    border: 2px solid #007bff;
-    /* Blue border */
-    border-radius: 5px;
-    /* Rounded corners */
-    outline: none;
-    /* Removes default focus outline */
-  }
-
-  /* Highlight border when focused */
-  .search-input:focus {
-    border-color: #0056b3;
-    /* Darker blue on focus */
-    box-shadow: 0 0 5px rgba(0, 91, 187, 0.5);
-    /* Subtle glow effect */
-  }
-
-  /* Center title */
-  .title {
-    font-size: 2rem;
-    font-weight: bold;
-    text-align: center;
-    margin-bottom: 10px;
-  }
-
-  /* Style for both buttons */
-  .button {
+  .course-list li,
+  .coursepackage-list li {
     display: inline-block;
-    padding: 8px 12px;
-    background-color: #007bff;
-    color: white;
-    cursor: pointer;
-    border: none;
-    border-radius: 5px;
-    font-size: 1rem;
-    text-align: center;
-    transition: background-color 0.2s ease-in-out;
+    margin-right: 5px; /* Space between items */
+    padding: 0;
+    line-height: 1.2; /* Match table row height */
   }
-
-  /* Hover effect */
-  .button:hover {
-    background-color: #0056b3;
-  }
-
-  /* Style file label like a button */
   .custom-file-label {
     display: inline-block;
     padding: 8px 12px;
@@ -412,24 +328,13 @@
     color: white;
     cursor: pointer;
     border-radius: 5px;
-    font-size: 1rem;
-    text-align: center;
     transition: background-color 0.2s ease-in-out;
   }
 
-  /* Hover effect for file label */
   .custom-file-label:hover {
     background-color: #0056b3;
   }
 
-  /* Keep buttons aligned */
-  .file-input-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  /* Button styling */
   .btn-primary {
     padding: 8px 12px;
     background-color: #007bff;
@@ -437,63 +342,15 @@
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    font-size: 1rem;
-    margin-left: 10vh;
   }
 
   .btn-primary:hover {
     background-color: #0056b3;
   }
 
-  /* Success message styling */
-  .success-message {
-    margin-top: 10px;
-    padding: 10px 15px;
-    background-color: #28a745;
-    /* Green background */
-    color: white;
-    font-size: 1rem;
-    text-align: center;
-    border-radius: 5px;
-    font-weight: bold;
-    animation: fadeIn 0.5s ease-in-out;
-  }
-
-  /* Fade-in animation */
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  /* Increase the checkbox size */
-  .custom-checkbox {
-    width: 23px;
-    height: 23px;
-    cursor: pointer;
-  }
-
-  .course-cell {
-    max-width: 500px;
-    /* Adjust width as needed */
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    position: relative;
-  }
-
-  .course-list {
-    max-height: none;
-    /* Limit height to fit one line */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    transition: max-height 0.3s ease-in-out;
+  .btn-xs {
+    padding: 2px 6px; /* Smaller padding */
+    font-size: 10px; /* Smaller text */
+    line-height: 1;
   }
 </style>

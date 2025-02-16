@@ -9,6 +9,7 @@ import programRoutes from "./programRoutes.js";
 import gradeRoutes from "./gradeRoutes.js";
 import courseRoutes from "./courseRoutes.js";
 import coursePackageRoutes from "./coursePackageRoutes.js";
+import searchRoutes from "./searchRoutes.js";
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use("/api", programRoutes);
 router.use("/api", gradeRoutes);
 router.use("/api", courseRoutes);
 router.use("/api", coursePackageRoutes);
+router.use("/api", searchRoutes);
 
 export default router;

@@ -1,45 +1,65 @@
 import mongoose from "mongoose";
-const { Schema } = mongoose;
 
-import Eductaion from "./Program.js";
+const studentSchema = new mongoose.Schema({
+    name: { type: String, required: true }, // "namn" → "name"
+    personalNumber: { type: String }, // "personnummer" → "personalNumber"
+    program: { type: mongoose.Schema.Types.ObjectId, ref: "Program" }, // Reference Program model
 
-const elevSchema = new Schema({
-    namn: String,
-    personnummer: String,
-    program: String,
-    kurspaket: { type: [String], default: null },
-    startDatum: Schema.Types.Mixed,
-    slutDatum: Schema.Types.Mixed,
-    kommun: String,
-    telefon: String,
-    mail: String,
-    prov: String,
-    ovrigt: String,
-    slutprovDatum: Schema.Types.Mixed, // Kan vara både Date och String
-    teacher: String,
-    dropout: {
-        type: Boolean,
-        default: false,
-    },
-    betyg: {
-        grade: { type: String, default: null }, // A-F
-        comments: { type: String, default: "" },
-        locked: { type: Boolean, default: false }, // Låst status
-    },
-    courses: [
+    coursePackages: [
         {
-            courseId: {
+            coursePackageId: {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: "Course", // Reference to the Course model
-            },
-            courseName: String, // Store the course name for quick access
-            addedAt: {
-                type: Date,
-                default: Date.now, // Track when the course was added
-            },
+                ref: "CoursePackage",
+            }, // Reference CoursePackage model
+            coursePackageName: { type: String }, // Fixed syntax error
+            addedAt: { type: Date, default: Date.now }, // Track when the course package was added
         },
     ],
-    password: String, // Hashat lösenord
+
+    startDate: mongoose.Schema.Types.Mixed, // "startDatum" → "startDate"
+    endDate: mongoose.Schema.Types.Mixed, // "slutDatum" → "endDate"
+
+    municipality: { type: String }, // "kommun" → "municipality"
+    phone: { type: String }, // "telefon" → "phone"
+    email: { type: String }, // "mail" → "email"
+
+    exam: { type: String }, // "prov" → "exam"
+    additionalInfo: { type: String }, // "ovrigt" → "additionalInfo"
+    finalExamDate: mongoose.Schema.Types.Mixed, // "slutprovDatum" → "finalExamDate" (Can be Date or String)
+
+    teacher: { type: String }, // "teacher" kept as is
+    dropout: { type: Boolean, default: false }, // Kept as "dropout"
+
+    grades: {
+        grade: { type: String, default: null }, // A-F
+        comments: { type: String, default: "" },
+        locked: { type: Boolean, default: false }, // Locked status
+    },
+
+    courses: [
+        {
+            courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" }, // Reference Course model
+            courseName: { type: String }, // Store course name for quick access
+            addedAt: { type: Date, default: Date.now }, // Track when the course was added
+        },
+    ],
+
+    password: { type: String }, // "password" kept as is (for hashed passwords)
 });
 
-export default mongoose.model("Student", elevSchema, "elever");
+// ✅ Auto-populate `program`, `coursePackages.coursePackageId`, and `courses.courseId`
+studentSchema.pre("find", function (next) {
+    this.populate("program", "name") // Populate program name only
+        .populate("coursePackages.coursePackageId", "name") // Populate course package names
+        .populate("courses.courseId", "courseName"); // Populate course name
+    next();
+});
+
+studentSchema.pre("findOne", function (next) {
+    this.populate("program", "name")
+        .populate("coursePackages.coursePackageId", "name")
+        .populate("courses.courseId", "courseName");
+    next();
+});
+
+export default mongoose.model("Student", studentSchema, "students"); // Updated collection name to "students"

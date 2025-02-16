@@ -52,12 +52,7 @@
           </div>
 
           <ul class="result-list">
-            <li
-              v-for="result in filteredResults"
-              :key="result.id"
-              @click="navigateTo(result.link)"
-              class="result-item"
-            >
+            <li v-for="(result, index) in searchResults" :key="index" class="result-item">
               <div class="result-content">
                 <div class="result-title">{{ result.name }}</div>
                 <div class="result-subtitle">{{ result.extra }}</div>
@@ -169,11 +164,15 @@
     methods: {
       async handleSearch() {
         try {
-          const response = await axios.get(`http://localhost:5001/api/search?q=${this.searchQuery}`)
+          const response = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/search?q=${this.searchQuery}`
+          )
+          console.log('🔍 Search Results Received:', response.data)
+
           this.searchResults = response.data
           this.showResults = this.searchResults.length > 0
         } catch (error) {
-          console.error('Fel vid hämtning av sökresultat', error)
+          console.error('❌ Fel vid hämtning av sökresultat', error)
         }
       },
       setFilter(filterType) {
