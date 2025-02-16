@@ -23,7 +23,7 @@ jobs:
               with:
                   node-version: 22 # Adjust based on your project
                   cache: npm
-                  cache-dependency-path: frontend/package-lock.json # ✅ Tell GitHub to cache dependencies from frontend/
+                  cache-dependency-path: frontend/package-lock.json # ✅ Cache dependencies from frontend/
 
             - name: Install dependencies
               run: |
