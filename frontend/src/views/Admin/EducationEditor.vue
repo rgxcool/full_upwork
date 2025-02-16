@@ -32,14 +32,19 @@
       <v-container>
         <v-form>
           <!-- Dropdown for selecting a student -->
-          <v-select
+          <v-autocomplete
             v-model="selectedStudent"
-            :items="students"
-            item-title="namn"
+            :items="filteredStudents"
+            :search="searchQuery"
+            item-title="name"
             item-value="_id"
             label="Select a student"
             return-object
             outlined
+            :menu-props="{ closeOnContentClick: false }"
+            attach
+            :no-data-text="'Please write student name'"
+            @update:search="searchQuery = $event"
           />
         </v-form>
       </v-container>
@@ -74,14 +79,16 @@
     },
     data() {
       return {
-        programs: [], // List of programs
-        selectedProgram: null, // Selected program ID
-        allCourses: [], // List of all courses for the selected program
-        studentName: '', // Name of the student
-        studentId: '', // ID of the student (fetched from backend)
-        selectedIndividualCourse: null, // Selected course ID,
+        programs: [],
+        selectedProgram: null,
+        allCourses: [],
+        studentName: '',
+        studentId: '',
+        selectedIndividualCourse: null,
+        searchQuery: '', // ✅ Add this to make it reactive
       }
     },
+
     methods: {
       resetForm() {
         // Reset all relevant fields to their initial values
@@ -212,12 +219,27 @@
     mounted() {
       this.fetchPrograms() // Fetch programs when component is mounted
     },
+    computed: {
+      filteredStudents() {
+        if (!this.searchQuery || this.searchQuery.trim().length === 0) {
+          return [] // ✅ Show nothing when input is empty
+        }
+
+        if (!Array.isArray(this.students) || this.students.length === 0) {
+          return [] // ✅ Prevent errors if students data is empty
+        }
+
+        return this.students
+          .filter((student) => student.name.toLowerCase().includes(this.searchQuery.toLowerCase()))
+          .slice(0, 10) // ✅ Limit results to prevent lag
+      },
+    },
   }
 </script>
 
 <style scoped>
   .hierarchy-manager {
-    padding: 20px;
+    min-height: 500px; /* Ensures enough vertical space */
   }
 
   .styled-select {
