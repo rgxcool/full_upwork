@@ -16,16 +16,15 @@ const ROLE_HIERARCHY = [
 
 export default createStore({
   state: {
-    token: localStorage.getItem('token') || null,
-    userRole: localStorage.getItem('userRole') || 'guest', // Default to guest
+    user: null, // User object, no more token storage
     tasks: [],
   },
 
   getters: {
-    isLoggedIn: (state) => !!state.token,
-    userRole: (state) => state.userRole,
-    isAdmin: (state) => state.userRole === 'admin' || state.userRole === 'systemadmin',
-    isSystemAdmin: (state) => state.userRole === 'systemadmin',
+    isLoggedIn: (state) => !!state.user,
+    userRole: (state) => state.user?.role || 'guest',
+    isAdmin: (state) => ['admin', 'systemadmin'].includes(state.user?.role),
+    isSystemAdmin: (state) => state.user?.role === 'systemadmin',
     tasks: (state) => state.tasks,
 
     /**
@@ -33,25 +32,20 @@ export default createStore({
      * Example usage: store.getters.hasPermission("teacher")
      */
     hasPermission: (state) => (requiredRole) => {
-      const userIndex = ROLE_HIERARCHY.indexOf(state.userRole)
+      const userRole = state.user?.role || 'guest'
+      const userIndex = ROLE_HIERARCHY.indexOf(userRole)
       const requiredIndex = ROLE_HIERARCHY.indexOf(requiredRole)
       return userIndex >= requiredIndex
     },
   },
 
   mutations: {
-    SET_USER(state, { token, role }) {
-      if (!token) return
-      state.token = token
-      state.userRole = role || 'guest'
-      localStorage.setItem('token', token)
-      localStorage.setItem('userRole', role || 'guest')
+    SET_USER(state, user) {
+      console.log(`🔹 Vuex: Setting user -> ${user?.role || 'guest'}`)
+      state.user = user
     },
     LOGOUT(state) {
-      state.token = null
-      state.userRole = 'guest'
-      localStorage.removeItem('token')
-      localStorage.removeItem('userRole')
+      state.user = null
     },
     SET_TASKS(state, tasks) {
       state.tasks = tasks
@@ -72,25 +66,38 @@ export default createStore({
   },
 
   actions: {
-    async login({ commit }, credentials) {
+    async login({ dispatch }, credentials) {
+      console.log('🔹 Vuex: Attempting login with:', credentials)
+
       try {
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/auth/login`,
-          credentials,
-          { withCredentials: true }
+          { email: credentials.email.trim(), password: credentials.password.trim() },
+          { withCredentials: true } // ✅ Ensures cookies are sent
         )
 
-        const { token, user } = response.data
-        if (!token) return { success: false, message: 'Login failed: No token received.' }
+        console.log('✅ Vuex: Login successful, response:', response.data)
 
-        commit('SET_USER', { token, role: user?.role || 'guest' })
+        await dispatch('fetchUser') // ✅ Fetch user session after login
 
-        return { success: true, message: response.data.message, token }
+        return response.data // ✅ Ensures Vuex login action returns correct data
       } catch (error) {
-        return {
-          success: false,
-          message: error.response?.data?.message || 'Login failed due to server error.',
-        }
+        console.error('❌ Login failed:', error.response?.data?.message || error)
+        return { success: false, message: error.response?.data?.message || 'Login failed' }
+      }
+    },
+
+    async fetchUser({ commit }) {
+      try {
+        const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth/session`, {
+          withCredentials: true, // ✅ Ensures cookies are sent
+        })
+
+        console.log('✅ User session fetched:', data) // ✅ Debugging
+
+        commit('SET_USER', data.user)
+      } catch (error) {
+        console.error('❌ Failed to fetch user:', error.response?.data?.message || error)
       }
     },
 
@@ -101,95 +108,69 @@ export default createStore({
           {},
           { withCredentials: true }
         )
-      } catch (error) {}
+      } catch (error) {
+        console.error('❌ Logout request failed:', error)
+      }
       commit('LOGOUT')
     },
 
-    async fetchTasks({ commit, state }) {
-      if (!state.token) {
-        console.error('❌ Vuex: No token found, cannot fetch tasks.')
-        return
-      }
-
+    async fetchTasks({ commit }) {
       try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/task`, {
-          headers: { Authorization: `Bearer ${state.token}` },
+        const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/task`, {
+          withCredentials: true, // ✅ Ensures auth token is sent in cookies
         })
-
-        console.log('✅ Vuex: Fetched tasks:', response.data)
-        commit('SET_TASKS', response.data)
+        commit('SET_TASKS', data)
       } catch (error) {
         console.error('❌ Vuex: Failed to fetch tasks:', error.response?.data || error)
       }
     },
 
-    async addTask({ commit, state }, description) {
-      if (!state.token) {
-        console.error('❌ Vuex: No token found, cannot add task.')
-        return
-      }
-
+    async addTask({ commit }, description) {
       try {
-        const response = await axios.post(
+        const { data } = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/task`,
           { description },
-          { headers: { Authorization: `Bearer ${state.token}` } }
+          {
+            withCredentials: true,
+          }
         )
-
-        console.log('✅ Vuex: Task added:', response.data)
-        commit('ADD_TASK', response.data)
+        commit('ADD_TASK', data)
       } catch (error) {
         console.error('❌ Vuex: Failed to add task:', error.response?.data || error)
       }
     },
 
-    async updateTask({ commit, state }, task) {
-      if (!state.token) {
-        console.error('❌ Vuex: No token found, cannot update task.')
-        return
-      }
-
+    async updateTask({ commit }, task) {
       try {
-        const response = await axios.put(
+        const { data } = await axios.put(
           `${import.meta.env.VITE_API_URL}/api/task/${task._id}`,
           task,
-          { headers: { Authorization: `Bearer ${state.token}` } }
+          {
+            withCredentials: true,
+          }
         )
-
-        commit('UPDATE_TASK', response.data)
+        commit('UPDATE_TASK', data)
       } catch (error) {
         console.error('❌ Vuex: Failed to update task:', error.response?.data || error)
       }
     },
 
-    async deleteTask({ commit, state }, taskId) {
-      if (!state.token) {
-        console.error('❌ Vuex: No token found, cannot delete task.')
-        return
-      }
-
+    async deleteTask({ commit }, taskId) {
       try {
         await axios.delete(`${import.meta.env.VITE_API_URL}/api/task/${taskId}`, {
-          headers: { Authorization: `Bearer ${state.token}` },
+          withCredentials: true,
         })
-
         commit('DELETE_TASK', taskId)
       } catch (error) {
         console.error('❌ Vuex: Failed to delete task:', error.response?.data || error)
       }
     },
 
-    async deleteAllTasks({ commit, state }) {
-      if (!state.token) {
-        console.error('❌ Vuex: No token found, cannot delete all tasks.')
-        return
-      }
-
+    async deleteAllTasks({ commit }) {
       try {
         await axios.delete(`${import.meta.env.VITE_API_URL}/api/task`, {
-          headers: { Authorization: `Bearer ${state.token}` },
+          withCredentials: true,
         })
-
         commit('DELETE_ALL_TASKS')
       } catch (error) {
         console.error('❌ Vuex: Failed to delete all tasks:', error.response?.data || error)

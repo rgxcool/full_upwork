@@ -3,7 +3,6 @@
     <div class="top-nav">
       <div class="build-counter">v. {{ buildVersion }}</div>
 
-      <!-- Search Bar -->
       <div class="search-container" @click.stop>
         <div class="search-bar">
           <input
@@ -28,24 +27,43 @@
             </svg>
           </button>
         </div>
+
+        <div v-if="showResults || showFilters" class="search-results" @click.stop>
+          <div class="filter-buttons">
+            <button :class="{ active: filter === 'all' }" @click="setFilter('all')">Alla</button>
+            <button :class="{ active: filter === 'Elev' }" @click="setFilter('Elev')">
+              Elever
+            </button>
+            <button :class="{ active: filter === 'Lärare' }" @click="setFilter('Lärare')">
+              Lärare
+            </button>
+          </div>
+
+          <ul class="result-list">
+            <li v-for="(result, index) in searchResults" :key="index" class="result-item">
+              <div class="result-content">
+                <div class="result-title">{{ result.name }}</div>
+                <div class="result-subtitle">{{ result.extra }}</div>
+              </div>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
 
-    <!-- Logo -->
     <div class="logo-container">
       <router-link class="navbar-brand" to="/">
         <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
       </router-link>
     </div>
 
-    <!-- Role-Based Navigation -->
+    <!-- Dynamic Role-Based Navigation -->
     <ul class="nav-links">
       <li v-for="item in filteredMenuItems" :key="item.link">
         <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
       </li>
     </ul>
 
-    <!-- User Profile & Logout -->
     <div class="icon-container">
       <router-link v-if="isLoggedIn" to="/profile" class="icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
@@ -56,17 +74,21 @@
         </svg>
       </router-link>
 
+      <router-link v-if="!isLoggedIn" to="/register" class="px-4 py-2 text-blue-600 hover:underline"
+        >Register</router-link
+      >
+
       <!-- Login / Logout -->
       <router-link v-if="!isLoggedIn" to="/login" class="px-4 py-2 text-blue-600 hover:underline">
         Login
       </router-link>
-      <button v-else @click="logout" class="px-4 py-2 text-red-600 hover:underline">Logout</button>
+      <button v-else @click="logout" class="logout-btn">Logout</button>
     </div>
   </nav>
 </template>
 
 <script>
-  import { computed } from 'vue'
+  import { ref, computed } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
 
@@ -74,6 +96,16 @@
     setup() {
       const store = useStore()
       const router = useRouter()
+
+      const userRole = computed(() => store.getters.userRole)
+
+      console.log('🔹 Navbar: Current User Role ->', userRole.value)
+
+      // Fix missing properties
+      const buildVersion = ref(import.meta.env.VITE_APP_BUILD_VERSION || 'Dev')
+      const searchQuery = ref('')
+      const showResults = ref(false)
+      const showFilters = ref(false)
 
       const isLoggedIn = computed(() => store.getters.isLoggedIn)
       const hasPermission = (role) => store.getters.hasPermission(role)
@@ -84,36 +116,33 @@
       }
 
       const menuItems = [
-        { name: 'Register', link: '/register', guestOnly: true },
-
-        // Admin Routes
-        { name: 'Add User', link: '/lagg-till-anvandare', role: 'admin' },
-        { name: 'Search Users', link: '/anvandare', role: 'admin' },
-        { name: 'Add Student', link: '/addstudent', role: 'admin' },
-        { name: 'Student List', link: '/students', role: 'admin' },
-        { name: 'Education Editor', link: '/education', role: 'admin' },
-        { name: 'Programs & Courses', link: '/programsandcourses', role: 'admin' },
-        { name: 'Programs & Packages', link: '/programsandpackages', role: 'admin' },
-        { name: 'Edit Student', link: '/editstudent', role: 'admin' },
-        { name: 'PDF Viewer', link: '/pdf', role: 'admin' },
-
-        // Teacher Routes
-        { name: 'Exam Calendar', link: '/kalender', role: 'teacher' },
-        { name: 'Grade Setting', link: '/betyg', role: 'teacher' },
-
-        // Student Routes
-        { name: 'Student Details', link: '/student/:id', role: 'student' },
+        { name: 'Användare', link: '/anvandare', role: 'admin' },
+        { name: 'Kalender', link: '/kalender', role: 'teacher' },
+        { name: 'Utbildning', link: '/education', role: 'admin' },
+        { name: 'Betyg', link: '/betyg', role: 'teacher' },
+        { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
+        { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
+        { name: 'Elev+', link: '/addstudent', role: 'admin' },
+        { name: 'Elever', link: '/students', role: 'admin' },
+        { name: 'PDF', link: '/pdf', role: 'admin' },
       ]
 
       const filteredMenuItems = computed(() => {
         return menuItems.filter((item) => {
-          if (item.guestOnly && isLoggedIn.value) return false // Hide guest links for logged-in users
-          if (item.role && !hasPermission(item.role)) return false // Hide unauthorized links
-          return true
+          if (!item.role) return true // Publicly accessible links
+          return hasPermission(item.role) // Ensure systemadmin has full access
         })
       })
 
-      return { isLoggedIn, logout, filteredMenuItems }
+      return {
+        buildVersion,
+        searchQuery,
+        showResults,
+        showFilters,
+        isLoggedIn,
+        logout,
+        filteredMenuItems,
+      }
     },
   }
 </script>
@@ -295,6 +324,25 @@
 
   .nav-link:hover {
     text-decoration: underline;
+  }
+
+  /* Logout Button - Styled to Match Links */
+  .logout-btn {
+    appearance: none;
+    border: none;
+    background: none;
+    font-size: 1rem;
+    font-weight: bold;
+    color: blue;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.3s, background 0.3s;
+  }
+
+  .logout-btn:hover {
+    background: blue;
+    color: white;
   }
 
   @media (max-width: 768px) {

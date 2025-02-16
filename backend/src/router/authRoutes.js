@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { getSession } from "../controllers/authController.js";
 
 const router = express.Router();
 
@@ -90,5 +91,7 @@ router.get("/auth/me", (req, res) => {
         return res.status(401).json({ message: "Invalid token" });
     }
 });
+
+router.get("/auth/session", getSession); // ✅ Fetch user session from cookie
 
 export default router;
