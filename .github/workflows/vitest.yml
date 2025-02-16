@@ -21,7 +21,7 @@ jobs:
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 22
+                  node-version: 22 # ✅ No caching in setup-node to avoid lock file issue
 
             - name: Cache npm dependencies
               uses: actions/cache@v4
