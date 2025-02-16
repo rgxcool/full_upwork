@@ -19,14 +19,14 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Debug repository structure
-              run: ls -R # ✅ List all files to confirm package-lock.json exists
+              run: ls -R frontend # ✅ List all files inside frontend/ to confirm package-lock.json exists
 
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 22 # ✅ Removed `cache: npm`
+                  node-version: 22
 
-            - name: Manually Cache npm Dependencies
+            - name: Cache npm dependencies
               uses: actions/cache@v4
               with:
                   path: frontend/node_modules
@@ -35,15 +35,9 @@ jobs:
                       npm-${{ runner.os }}-
 
             - name: Install dependencies
-              run: |
-                  cd frontend  # ✅ Move into frontend before installing
-                  if [ -f package-lock.json ]; then
-                    npm ci  # ✅ Use clean install for consistency
-                  else
-                    npm install
-                  fi
+              working-directory: frontend # ✅ Ensure npm runs inside frontend/
+              run: npm ci # ✅ Use npm ci for faster installs
 
             - name: Run tests
-              run: |
-                  cd frontend  # ✅ Move into frontend before running tests
-                  npx vitest --run
+              working-directory: frontend # ✅ Ensure Vitest runs inside frontend/
+              run: npx vitest --run
