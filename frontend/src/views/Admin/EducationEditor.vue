@@ -161,7 +161,7 @@
           }
 
           await axios.post(
-            `${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/courses`,
+            `${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/addcourse`,
             {
               courseId: this.selectedIndividualCourse,
             }

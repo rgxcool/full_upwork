@@ -6,13 +6,12 @@ import CoursePackage from "../models/CoursePackage.js";
 
 const router = Router();
 
-// ✅ Get all students (Populates program, coursePackages, and courses)
+// ✅ Get all students (Populates coursePackages, and courses)
 router.get("/students", async (req, res) => {
     try {
         const students = await Student.find()
-            .populate("program", "name") // Fetch program name
-            .populate("coursePackages.coursePackageId", "name") // Fetch course package names
-            .populate("courses.courseId", "courseName courseCode"); // Fetch course details
+            .populate("courses.courseId", "courseName courseCode") // ✅ Only populate courseId
+            .populate("coursePackages.coursePackageId", "coursePackageName");
 
         res.status(200).json(students);
     } catch (error) {
@@ -41,8 +40,7 @@ router.put("/student/:id", async (req, res) => {
             { $set: { dropout: req.body.dropout } },
             { new: true }
         )
-            .populate("program", "name")
-            .populate("coursePackages.coursePackageId", "name")
+            .populate("coursePackages.coursePackageId", "coursePackageName")
             .populate("courses.courseId", "courseName courseCode");
 
         if (!updatedStudent) {
@@ -57,7 +55,7 @@ router.put("/student/:id", async (req, res) => {
 });
 
 // ✅ Add a course to a student by ID
-router.post("/student/:studentId/courses", async (req, res) => {
+router.post("/student/:studentId/addcourse", async (req, res) => {
     const { studentId } = req.params;
     const { courseId } = req.body;
 
@@ -72,13 +70,13 @@ router.post("/student/:studentId/courses", async (req, res) => {
             return res.status(404).json({ error: "Course not found" });
         }
 
+        // ✅ Add courseId only (no duplicate name)
         student.courses.push({ courseId: course._id });
         await student.save();
 
         const updatedStudent = await Student.findById(studentId)
-            .populate("program", "name")
-            .populate("coursePackages.coursePackageId", "name")
-            .populate("courses.courseId", "courseName courseCode");
+            .populate("courses.courseId", "courseName courseCode") // ✅ Populate correctly
+            .populate("coursePackages.coursePackageId", "coursePackageName");
 
         res.status(200).json(updatedStudent);
     } catch (error) {
@@ -111,8 +109,7 @@ router.delete("/student/:id/courses/:courseId", async (req, res) => {
 router.get("/student/:id", async (req, res) => {
     try {
         const student = await Student.findById(req.params.id)
-            .populate("program", "name")
-            .populate("coursePackages.coursePackageId", "name")
+            .populate("coursePackages.coursePackageId", "coursePackageName")
             .populate("courses.courseId", "courseName courseCode");
 
         if (!student) {
@@ -155,8 +152,8 @@ router.delete("/students", async (req, res) => {
 router.get("/test-students", async (req, res) => {
     try {
         const students = await Student.find()
-            .populate("program", "name")
-            .populate("coursePackages.coursePackageId", "name")
+            .populate("program", "programName")
+            .populate("coursePackages.coursePackageId", "coursePackageName")
             .populate("courses.courseId", "courseName courseCode");
 
         res.status(200).json(students);

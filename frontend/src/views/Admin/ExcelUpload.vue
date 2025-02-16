@@ -81,7 +81,9 @@
             <td class="course-cell">
               <div class="course-list">
                 <ul>
+                  <!-- ✅ Ensure Vue properly iterates over all courses -->
                   <li v-for="(course, index) in student.courses" :key="'course-' + index">
+                    <!-- ✅ Check if course.courseId exists -->
                     {{ course.courseId?.courseName || 'No course name' }}
                     <span v-if="course.courseId?.courseCode">
                       - {{ course.courseId.courseCode }}
@@ -137,21 +139,39 @@
 
     computed: {
       filteredStudents() {
-        const query = this.searchQuery.toLowerCase()
-
+        console.log('🔎 Debugging student courses in computed property:', this.students)
         return this.students
-          .filter((student) =>
-            Object.values(student).some((value) => String(value).toLowerCase().includes(query))
-          )
-          .sort((a, b) => {
-            const dateA = a.endDate ? new Date(a.endDate) : new Date(0)
-            const dateB = b.endDate ? new Date(b.endDate) : new Date(0)
-            return dateA - dateB
+          .map((student) => ({
+            ...student,
+            courses: student.courses || [], // Ensure courses array is always iterable
+          }))
+          .filter((student) => {
+            const query = this.searchQuery.toLowerCase()
+            return Object.values(student).some((value) =>
+              String(value).toLowerCase().includes(query)
+            )
           })
       },
     },
 
     methods: {
+      getCourseName(course) {
+        console.log('🔍 Debugging Course:', course) // See what's happening
+        if (!course) return 'No course data'
+
+        // Check for populated course object
+        if (course.courseId && typeof course.courseId === 'object') {
+          return course.courseId.courseName || 'Unnamed Course'
+        }
+
+        // Directly stored course name
+        if (course.courseName) {
+          return course.courseName
+        }
+
+        return 'Unknown Course'
+      },
+
       handleFileUpload(event) {
         this.selectedFileName =
           event.target.files.length > 0 ? event.target.files[0].name : 'No file selected'
@@ -244,13 +264,18 @@
         try {
           console.log('📡 Fetching from API:', `${import.meta.env.VITE_API_URL}/api/students`)
           const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
+
           console.log('API Response for students:', response.data)
-          this.students = response.data
+
+          // ✅ Force Vue reactivity by mapping courses properly
+          this.students = response.data.map((student) => ({
+            ...student,
+            courses: student.courses ? [...student.courses] : [],
+          }))
         } catch (error) {
           alert('Failed to fetch students.')
         }
       },
-
       formatDate(value) {
         if (!value) return ''
         if (typeof value === 'string' && value.includes('T')) return value.split('T')[0]
@@ -303,24 +328,24 @@
 
   .course-list ul,
   .coursepackage-list ul {
-    display: flex;
-    flex-wrap: wrap; /* Allows multiple courses to fit */
-    align-items: center;
-    justify-content: flex-start; /* Align items to the left */
-    max-height: 20px; /* Prevents excessive row height */
-    overflow: hidden;
+    display: block; /* Ensure list items stack properly */
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    max-height: none; /* ✅ Remove height restriction */
+    overflow: visible; /* ✅ Ensure all items are visible */
     list-style: none;
     padding: 0;
     margin: 0;
     text-align: left;
   }
+
   .course-list li,
-  .coursepackage-list li {
-    display: inline-block;
-    margin-right: 5px; /* Space between items */
-    padding: 0;
-    line-height: 1.2; /* Match table row height */
+  .coursepackage-list {
+    display: block; /* ✅ Ensure items stack */
+    margin-bottom: 4px; /* ✅ Space between course names */
   }
+
   .custom-file-label {
     display: inline-block;
     padding: 8px 12px;
