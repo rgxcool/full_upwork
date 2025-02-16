@@ -75,43 +75,37 @@
       const programs = ref([])
       const allCourses = ref([])
       const selectedStudent = ref(null)
-      const selectedProgram = ref(null) // ✅ Ensure selectedProgram is in setup()
+      const selectedProgram = ref(null)
       const selectedIndividualCourse = ref(null)
       const searchQuery = ref('')
       const isLoading = ref(false)
       const successMessage = ref('')
+      const fetchState = ref(false) // ✅ Prevent multiple fetches
 
-      // ✅ Fetch programs
-      const fetchPrograms = async () => {
+      const fetchInitialData = async () => {
+        if (fetchState.value) return
+        fetchState.value = true
+
         try {
-          console.log('🔍 Fetching programs...')
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`)
-          programs.value = response.data
+          console.log('🔍 Fetching students and programs...')
+          const [studentsResponse, programsResponse] = await Promise.all([
+            axios.get(`${import.meta.env.VITE_API_URL}/api/students`),
+            axios.get(`${import.meta.env.VITE_API_URL}/api/programs`),
+          ])
+
+          students.value = studentsResponse.data
+          programs.value = programsResponse.data
+
+          console.log('✅ Students loaded:', students.value)
           console.log('✅ Programs loaded:', programs.value)
         } catch (error) {
-          console.error('❌ Error fetching programs:', error)
-          alert('Failed to fetch programs.')
-        }
-      }
-
-      // ✅ Fetch students
-      const fetchStudents = async () => {
-        if (isLoading.value) return
-        isLoading.value = true
-
-        try {
-          console.log('🔍 Fetching students...')
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
-          students.value = response.data
-          console.log('✅ Students loaded:', students.value)
-        } catch (error) {
-          console.error('❌ Error fetching students:', error)
+          console.error('❌ Error fetching initial data:', error)
         } finally {
           isLoading.value = false
         }
       }
 
-      // ✅ Fetch courses when program is selected
+      // ✅ Fetch courses when a program is selected
       const fetchAllCourses = async () => {
         if (!selectedProgram.value) {
           console.warn('⚠️ No program selected.')
@@ -144,7 +138,7 @@
 
       // ✅ Handle adding a course to a student
       const handleAddCourse = async () => {
-        console.log('🟢 handleAddCourse() triggered') // ✅ Debugging
+        console.log('🟢 handleAddCourse() triggered')
         if (!selectedStudent.value || !selectedStudent.value._id) {
           console.error('❌ No student selected')
           return
@@ -162,18 +156,21 @@
             `${import.meta.env.VITE_API_URL}/api/student/${selectedStudent.value._id}/addcourse`,
             { courseId: selectedIndividualCourse.value }
           )
-          console.log('✅ Course added successfully') // ✅ Confirm request
+          console.log('✅ Course added successfully')
+
+          // ✅ Show success message
+          successMessage.value = `✅ ${selectedStudent.value.name} has been enrolled in "${
+            allCourses.value.find((c) => c._id === selectedIndividualCourse.value)?.displayText ||
+            'Unknown Course'
+          }".`
+
+          // ✅ Auto-hide the alert after 3 seconds
+          setTimeout(() => {
+            successMessage.value = ''
+          }, 3000)
         } catch (error) {
           console.error('❌ Error adding course:', error)
         }
-      }
-
-      // ✅ Reset form
-      const resetForm = () => {
-        selectedProgram.value = null
-        selectedIndividualCourse.value = null
-        selectedStudent.value = null
-        allCourses.value = []
       }
 
       // ✅ Computed property for filtering students
@@ -186,11 +183,8 @@
           .slice(0, 10)
       })
 
-      // ✅ Load data on mount
-      onMounted(() => {
-        fetchStudents()
-        fetchPrograms()
-      })
+      // ✅ Fetch data once on mount
+      onMounted(fetchInitialData)
 
       return {
         students,
@@ -200,11 +194,11 @@
         selectedProgram,
         selectedIndividualCourse,
         searchQuery,
-        fetchStudents,
         fetchAllCourses,
         handleAddCourse,
         successMessage,
         filteredStudents,
+        fetchInitialData, // ✅ Make fetchInitialData accessible for testing
       }
     },
   }

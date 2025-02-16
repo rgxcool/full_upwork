@@ -61,7 +61,29 @@ describe('EducationEditor.vue', () => {
   let vuetify
 
   beforeEach(async () => {
-    vi.clearAllMocks() // ✅ Reset axios calls before each test
+    vi.clearAllMocks()
+
+    // ✅ Declare mock data before assignment
+    let mockStudents = [
+      { _id: '1', name: 'John Doe', personalNumber: '123456789', email: 'john@example.com' },
+    ]
+    let mockPrograms = [{ _id: '1', programName: 'Test Program' }]
+    let mockCourses = [
+      {
+        _id: '101',
+        courseName: 'Test Course',
+        courseCode: 'TC101',
+        displayText: 'Test Course (TC101)',
+      },
+    ]
+
+    // ✅ Set axios mocks to return preloaded data
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/api/students')) return Promise.resolve({ data: mockStudents })
+      if (url.includes('/api/programs')) return Promise.resolve({ data: mockPrograms })
+      if (url.includes('/api/program/1/courses')) return Promise.resolve({ data: mockCourses })
+      return Promise.reject(new Error(`404 Not Found: ${url}`))
+    })
 
     vuetify = createVuetify()
     wrapper = mount(EducationEditor, {
@@ -70,13 +92,13 @@ describe('EducationEditor.vue', () => {
       },
     })
 
-    await wrapper.vm.$nextTick() // ✅ Ensure all async operations finish
+    await wrapper.vm.$nextTick()
   })
 
   it('fetches and loads students correctly', async () => {
     console.log('MOCKED AXIOS:', axios.get.mock.calls) // ✅ Debug what axios is being called with
 
-    await wrapper.vm.fetchStudents() // ✅ Manually call fetchStudents if needed
+    await wrapper.vm.fetchInitialData() // ✅ Manually call fetchInitialData() if needed
 
     console.log('STUDENT DATA:', wrapper.vm.students) // ✅ Debug fetched students
 
