@@ -14,10 +14,6 @@ jobs:
     test:
         runs-on: ubuntu-latest
 
-        defaults:
-            run:
-                working-directory: frontend # ✅ Set working directory globally
-
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
@@ -25,12 +21,14 @@ jobs:
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 18 # Adjust based on your project
+                  node-version: 22
                   cache: npm
-                  cache-dependency-path: frontend/package-lock.json # ✅ Ensure caching works inside frontend
+                  cache-dependency-path: frontend/package-lock.json # ✅ Correct dependency path
 
             - name: Install dependencies
-              run: npm install # ✅ No need to cd into frontend since it's globally set
+              working-directory: frontend # ✅ Ensures npm runs inside frontend/
+              run: npm install
 
             - name: Run tests
+              working-directory: frontend # ✅ Ensures Vitest runs inside frontend/
               run: npx vitest --run
