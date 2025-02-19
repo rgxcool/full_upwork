@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", // ✅ Latest JS features
+    "module": "ESNext", // ✅ Ensures ES module support
+    "moduleResolution": "Node",
+    "strict": true, // ✅ Enables strict TypeScript checks
+    "jsx": "preserve", // ✅ Needed for Vue's JSX support (if applicable)
+    "esModuleInterop": true, // ✅ Ensures compatibility with CommonJS modules
+    "allowJs": true, // ✅ Allows importing JavaScript modules like Vuex
+    "resolveJsonModule": true, // ✅ Ensures JSON imports work
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true, // ✅ Avoids unnecessary type checks in dependencies
+    "noImplicitAny": true, // ✅ Prevents implicit `any` types
+    "types": ["node"] // ✅ Ensures compatibility with Node.js
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.vue" // ✅ Includes Vue files
+  ],
+  "exclude": ["node_modules", "dist", "public"]
+}

@@ -1,122 +1,84 @@
 <template>
   <nav class="navbar" @click.self="closeSearch">
     <div class="top-nav">
-      <div class="build-counter">v. {{ buildVersion }}</div>
-
-      <div class="search-container" @click.stop>
-        <div class="search-bar">
-          <input
-            type="text"
-            v-model="searchQuery"
-            @input="handleSearch"
-            @focus="showFilterOptions"
-            placeholder="Sök efter lärare, elev, kurs eller datum..."
-          />
-          <button @click="toggleSearch">
-            <svg
-              v-if="!showResults"
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-            >
-              <path
-                fill="currentColor"
-                d="m19.6 21l-6.3-6.3q-.75.6-1.725.95T9.5 16q-2.725 0-4.612-1.888T3 9.5t1.888-4.612T9.5 3t4.613 1.888T16 9.5q0 1.1-.35 2.075T14.7 13.3l6.3 6.3zM9.5 14q1.875 0 3.188-1.312T14 9.5t-1.312-3.187T9.5 5T6.313 6.313T5 9.5t1.313 3.188T9.5 14"
-              />
-            </svg>
-            <svg
-              v-else
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-            >
-              <path
-                fill="currentColor"
-                d="M7.293 8L3.146 3.854a.5.5 0 1 1 .708-.708L8 7.293l4.146-4.147a.5.5 0 0 1 .708.708L8.707 8l4.147 4.146a.5.5 0 0 1-.708.708L8 8.707l-4.146 4.147a.5.5 0 0 1-.708-.708z"
-              />
-            </svg>
-          </button>
+      <!-- Left Section: Logo & Build Version -->
+      <div class="left-container">
+        <div class="logo-container">
+          <router-link class="navbar-brand" to="/">
+            <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
+          </router-link>
         </div>
+        <div class="build-counter">v. {{ buildVersion }}</div>
+      </div>
 
-        <div v-if="showResults || showFilters" class="search-results" @click.stop>
-          <div class="filter-buttons">
-            <button :class="{ active: filter === 'all' }" @click="setFilter('all')">Alla</button>
-            <button :class="{ active: filter === 'Elev' }" @click="setFilter('Elev')">
-              Elever
-            </button>
-            <button :class="{ active: filter === 'Lärare' }" @click="setFilter('Lärare')">
-              Lärare
+      <!-- Center Section: Navigation Links -->
+      <div class="center-nav">
+        <ul class="nav-links">
+          <li v-for="item in filteredMenuItems" :key="item.link">
+            <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Right Section: Search Bar, Icons, and Auth Links -->
+      <div class="right-container">
+        <!-- Show search bar only if user is logged in and has the required role -->
+        <div v-if="canSeeSearch" class="search-container" @click.stop>
+          <div class="search-bar">
+            <input
+              type="text"
+              v-model="searchQuery"
+              @input="handleSearch"
+              @focus="showFilterOptions"
+              placeholder="Sök efter lärare, elev, kurs eller datum..."
+            />
+            <button @click="toggleSearch">
+              <svg v-if="!showResults" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+                <path
+                  fill="currentColor"
+                  d="m19.6 21l-6.3-6.3q-.75.6-1.725.95T9.5 16q-2.725 0-4.612-1.888T3 9.5t1.888-4.612T9.5 3t4.613 1.888T16 9.5q0 1.1-.35 2.075T14.7 13.3l6.3 6.3zM9.5 14q1.875 0 3.188-1.312T14 9.5t-1.312-3.187T9.5 5T6.313 6.313T5 9.5t1.313 3.188T9.5 14"
+                />
+              </svg>
             </button>
           </div>
+        </div>
 
-          <ul class="result-list">
-            <li
-              v-for="result in filteredResults"
-              :key="result.id"
-              @click="navigateTo(result.link)"
-              class="result-item"
-            >
-              <div class="result-content">
-                <div class="result-title">{{ result.name }}</div>
-                <div class="result-subtitle">{{ result.extra }}</div>
-              </div>
-            </li>
-          </ul>
+        <!-- Icons -->
+        <div class="icon-container">
+          <router-link v-if="isLoggedIn" to="/profile" class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+              <path
+                fill="currentColor"
+                d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4"
+              />
+            </svg>
+          </router-link>
+        </div>
+
+        <!-- Auth Links -->
+        <div class="auth-links">
+          <router-link
+            v-if="!isLoggedIn"
+            to="/register"
+            class="px-4 py-2 text-blue-600 hover:underline"
+          >
+            Register
+          </router-link>
+          <router-link
+            v-if="!isLoggedIn"
+            to="/login"
+            class="px-4 py-2 text-blue-600 hover:underline"
+          >
+            Login
+          </router-link>
+          <button v-else @click="logout" class="logout-btn">Logout</button>
         </div>
       </div>
     </div>
-
-    <div class="logo-container">
-      <router-link class="navbar-brand" to="/">
-        <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
-      </router-link>
-    </div>
-    <ul class="nav-links">
-      <li v-for="item in menuItems" :key="item.link">
-        <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
-      </li>
-    </ul>
-
-    <div class="icon-container">
-      <router-link to="/profile" class="icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-          <path
-            fill="currentColor"
-            d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4"
-          />
-        </svg>
-      </router-link>
-      <a href="#" class="icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-          <path
-            fill="currentColor"
-            d="M2 22V4q0-.825.588-1.412T4 2h16q.825 0 1.413.588T22 4v12q0 .825-.587 1.413T20 18H6z"
-          />
-        </svg>
-      </a>
-      <a href="#" class="icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-          <path
-            fill="currentColor"
-            d="M21 19v1H3v-1l2-2v-6c0-3.1 2.03-5.83 5-6.71V4a2 2 0 0 1 2-2a2 2 0 0 1 2 2v.29c2.97.88 5 3.61 5 6.71v6zm-7 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2"
-          />
-        </svg>
-      </a>
-    </div>
-
-    <!-- Login / Logout Button -->
-    <router-link v-if="!isLoggedIn" to="/login" class="px-4 py-2 text-blue-600 hover:underline">
-      Login
-    </router-link>
-
-    <button v-else @click="logout" class="px-4 py-2 text-red-600 hover:underline">Logout</button>
   </nav>
 </template>
 
 <script>
-  import axios from 'axios'
   import { ref, computed } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
@@ -126,121 +88,141 @@
       const store = useStore()
       const router = useRouter()
 
-      const isMenuOpen = ref(false)
-      const showFilters = ref(false)
-      const showResults = ref(false)
+      const userRole = computed(() => store.getters.userRole || 'guest') // Default to 'guest' if undefined
 
-      // ✅ Use computed to track changes in Vuex state
+      // Fix missing properties
+      const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
+      const searchQuery = ref('')
+      const showResults = ref(false)
+      const showFilters = ref(false)
+
+      const hasPermission = (role) => store.getters.hasPermission(role)
+
       const isLoggedIn = computed(() => store.getters.isLoggedIn)
+
+      // Check if user role is "teacher" or higher
+      const canSeeSearch = computed(() => {
+        const allowedRoles = ['teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin']
+        return isLoggedIn.value && allowedRoles.includes(userRole.value)
+      })
+
+      console.log('🔹 Navbar: Current User Role ->', userRole.value)
+      console.log('🔹 Search Bar Visibility ->', canSeeSearch.value)
 
       const logout = () => {
         store.dispatch('logout')
         router.push('/')
       }
 
-      return { isLoggedIn, logout, isMenuOpen, showFilters, showResults }
-    },
-    data() {
-      return {
-        buildVersion: import.meta.VUE_APP_BUILD_VERSION || 'Dev',
+      const menuItems = [
+        { name: 'Användare', link: '/anvandare', role: 'admin' },
+        { name: 'Kalender', link: '/kalender', role: 'teacher' },
+        { name: 'Utbildning', link: '/education', role: 'admin' },
+        { name: 'Betyg', link: '/betyg', role: 'teacher' },
+        { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
+        { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
+        { name: 'Elev+', link: '/addstudent', role: 'admin' },
+        { name: 'Elever', link: '/students', role: 'admin' },
+        { name: 'PDF', link: '/pdf', role: 'admin' },
+      ]
 
-        searchQuery: '',
-        filter: 'all',
-        searchResults: [],
-        menuItems: [
-          { name: 'Användare', link: '/anvandare' },
-          { name: 'Kalender', link: '/kalender' },
-          { name: 'Utbildning', link: '/education' },
-          { name: 'Betyg', link: '/betyg' },
-          { name: 'Kurspaket', link: '/programsandpackages' },
-          { name: 'Kurser', link: '/programsandcourses' },
-          { name: 'Elev+', link: '/addstudent' },
-          { name: 'Elever', link: '/students' },
-          { name: 'PDF', link: '/pdf' },
-        ],
+      const filteredMenuItems = computed(() => {
+        return menuItems.filter((item) => {
+          if (!item.role) return true // Publicly accessible links
+          return hasPermission(item.role) // Ensure systemadmin has full access
+        })
+      })
+
+      return {
+        buildVersion,
+        searchQuery,
+        showResults,
+        showFilters,
+        isLoggedIn,
+        logout,
+        filteredMenuItems,
+        canSeeSearch,
       }
-    },
-    computed: {
-      filteredResults() {
-        if (this.filter === 'all') return this.searchResults
-        return this.searchResults.filter((res) => res.type === this.filter)
-      },
-    },
-    methods: {
-      async handleSearch() {
-        try {
-          const response = await axios.get(`http://localhost:5001/api/search?q=${this.searchQuery}`)
-          this.searchResults = response.data
-          this.showResults = this.searchResults.length > 0
-        } catch (error) {
-          console.error('Fel vid hämtning av sökresultat', error)
-        }
-      },
-      setFilter(filterType) {
-        this.filter = filterType
-      },
-      navigateTo(link) {
-        window.location.href = link
-      },
-      showFilterOptions() {
-        this.showFilters = true
-        this.showResults = true
-      },
-      closeSearch() {
-        this.showResults = false
-        this.showFilters = false
-        this.searchQuery = ''
-      },
-      toggleSearch() {
-        if (this.showResults) {
-          this.closeSearch()
-        } else {
-          this.showFilterOptions()
-        }
-      },
     },
   }
 </script>
 
 <style scoped>
   /* Navbar */
-
-  .logo-container {
-    display: flex;
-    justify-content: flex-start;
-    gap: 15px;
-  }
-  .navbar {
-    background-color: #f8f8f8;
-    font-family: 'Roboto', sans-serif;
-    padding: 20px;
-  }
-
-  /* Top navigation container */
   .top-nav {
     display: flex;
     align-items: center;
-    justify-content: space-between !important;
+    justify-content: space-between; /* Ensures spacing */
     max-width: 1800px;
     margin: 0 auto;
     width: 100%;
     padding: 15px 20px;
+    position: relative;
+  }
+  /* Right Section (Search, Icons, Auth Links) */
+  .right-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1; /* Takes up space while keeping items aligned right */
+    gap: 20px;
+  }
+  /* Left Section (Logo + Build Version) */
+  .left-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex: 1; /* Takes up available space but does not stretch */
   }
 
-  /* Sökruta exakt till vänster */
-  .search-container {
+  /* Center-aligned: Navigation Links */
+  .center-nav {
     display: flex;
     justify-content: center;
-    width: 100%;
+    flex: 2; /* Allows more space for nav links */
+    gap: 40px; /* Spacing between links */
   }
 
+  /* Logo styling */
+  .logo-container {
+    display: flex;
+    align-items: center;
+  }
+  .logo {
+    height: 50px;
+  }
+
+  /* Build Version */
+  .build-counter {
+    font-size: 14px;
+    color: #666;
+  }
+
+  /* Center Section (Navigation Links) */
+  .center-nav {
+    display: flex;
+    justify-content: center;
+    flex: 2; /* Allows more space for nav links */
+  }
+
+  .navbar {
+    background-color: #f8f8f8;
+    font-family: 'Roboto', sans-serif;
+    padding: 0px;
+  }
+  /* Search Bar */
+  .search-container {
+    display: flex;
+    flex: 0 1 auto; /* Prevents it from stretching */
+    max-width: 400px;
+  }
   .search-bar {
     display: flex;
     align-items: center;
     background: #ece6f0;
     padding: 10px 15px;
     border-radius: 30px;
-    width: 500px;
+    max-width: 400px;
   }
 
   .search-bar input {
@@ -324,16 +306,16 @@
     color: gray;
   }
 
-  .logo {
-    height: 50px;
+  /* Icons */
+  .icon-container {
+    display: flex;
+    gap: 10px;
   }
 
-  /* Ikoner exakt till höger */
-  .icon-container {
-    flex: 0 0 auto; /* Prevents it from growing */
+  /* Auth Links */
+  .auth-links {
     display: flex;
-    justify-content: flex-end;
-    gap: 15px;
+    gap: 10px;
   }
 
   .icon {
@@ -361,24 +343,43 @@
     margin-top: 10px;
   }
 
-  /* Navigationslänkar exakt justerade */
   .nav-links {
     display: flex;
-    justify-content: center; /* Centering the links */
-    margin: 0 auto;
-    gap: 40px;
     list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 20px;
+    gap: 30px; /* Adjust spacing between links */
   }
 
   .nav-link {
     text-decoration: none;
-    font-size: 20px;
+    font-size: 14px;
     color: #333;
     transition: color 0.3s;
   }
 
   .nav-link:hover {
     text-decoration: underline;
+  }
+
+  /* Logout Button - Styled to Match Links */
+  .logout-btn {
+    appearance: none;
+    border: none;
+    background: none;
+    font-size: 1rem;
+
+    color: blue;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color 0.3s, background 0.3s;
+  }
+
+  .logout-btn:hover {
+    background: blue;
+    color: white;
   }
 
   @media (max-width: 768px) {

@@ -1,45 +1,33 @@
 import mongoose from "mongoose";
-const { Schema } = mongoose;
 
-import Eductaion from "./Program.js";
-
-const elevSchema = new Schema({
-    namn: String,
-    personnummer: String,
-    program: String,
-    kurspaket: { type: [String], default: null },
-    startDatum: Schema.Types.Mixed,
-    slutDatum: Schema.Types.Mixed,
-    kommun: String,
-    telefon: String,
-    mail: String,
-    prov: String,
-    ovrigt: String,
-    slutprovDatum: Schema.Types.Mixed, // Kan vara både Date och String
-    teacher: String,
-    dropout: {
-        type: Boolean,
-        default: false,
-    },
-    betyg: {
-        grade: { type: String, default: null }, // A-F
-        comments: { type: String, default: "" },
-        locked: { type: Boolean, default: false }, // Låst status
-    },
-    courses: [
+const StudentSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    personalNumber: { type: String, required: true },
+    program: { type: mongoose.Schema.Types.ObjectId, ref: "Program" },
+    coursePackages: [
         {
-            courseId: {
+            coursePackageId: {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: "Course", // Reference to the Course model
-            },
-            courseName: String, // Store the course name for quick access
-            addedAt: {
-                type: Date,
-                default: Date.now, // Track when the course was added
+                ref: "CoursePackage",
             },
         },
     ],
-    password: String, // Hashat lösenord
+    courses: [
+        {
+            courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" }, // ✅ Only store reference
+            addedAt: { type: Date, default: Date.now },
+        },
+    ],
+    startDate: Date,
+    endDate: Date,
+    finalExamDate: Date,
+    municipality: String,
+    phone: String,
+    email: { type: String, required: true, unique: true },
+    exam: String,
+    additionalInfo: String,
+    teacher: String,
+    dropout: { type: Boolean, default: false },
 });
 
-export default mongoose.model("Student", elevSchema, "elever");
+export default mongoose.model("Student", StudentSchema);

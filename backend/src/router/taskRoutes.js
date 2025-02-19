@@ -1,22 +1,28 @@
 import { Router } from "express";
 import Task from "../models/Task.js";
-import authenticate from "../middleware/authMiddleware.js"; //  Import middleware
+import { authenticateUser } from "../controllers/authController.js"; // ✅ Fixed middleware import
 
 const router = Router();
 
-router.get("/task/", authenticate, async (req, res) => {
-    //  Fix: Use "/" instead of "/"
-    console.log(" GET /api/ hit!"); //  Debugging
+/**
+ * ✅ Fetch All Tasks (Only for the Authenticated User)
+ */
+router.get("/task/", authenticateUser, async (req, res) => {
+    console.log("GET /api/task hit!"); // Debugging
+
     try {
-        const tasks = await Task.find({ userId: req.userId }).lean();
+        const tasks = await Task.find({ userId: req.user.userId }).lean();
         res.json(tasks);
     } catch (error) {
-        console.error("Error fetching tasks:", error);
+        console.error("❌ Error fetching tasks:", error);
         res.status(500).json({ error: "Serverfel vid hämtning av uppgifter." });
     }
 });
 
-router.post("/task/", authenticate, async (req, res) => {
+/**
+ * ✅ Create a New Task
+ */
+router.post("/task/", authenticateUser, async (req, res) => {
     try {
         const { description } = req.body;
 
@@ -31,10 +37,10 @@ router.post("/task/", authenticate, async (req, res) => {
         const newTask = await Task.create({
             description: description.trim(),
             isDone: false,
-            userId: req.userId,
+            userId: req.user.userId, // ✅ Fixed userId reference
         });
 
-        console.log(" New task created:", newTask);
+        console.log("✅ New task created:", newTask);
         res.status(201).json(newTask);
     } catch (error) {
         console.error("❌ Error creating task:", error);
@@ -42,7 +48,10 @@ router.post("/task/", authenticate, async (req, res) => {
     }
 });
 
-router.put("/task/:id", authenticate, async (req, res) => {
+/**
+ * ✅ Update a Task by ID (Only if Task Belongs to User)
+ */
+router.put("/task/:id", authenticateUser, async (req, res) => {
     try {
         const { isDone } = req.body;
 
@@ -53,7 +62,7 @@ router.put("/task/:id", authenticate, async (req, res) => {
         }
 
         const updatedTask = await Task.findOneAndUpdate(
-            { _id: req.params.id, userId: req.userId }, // Ensuring the task belongs to the user
+            { _id: req.params.id, userId: req.user.userId }, // ✅ Ensuring the task belongs to the user
             { isDone },
             { new: true }
         );
@@ -73,13 +82,16 @@ router.put("/task/:id", authenticate, async (req, res) => {
     }
 });
 
-router.delete("/task/:id", authenticate, async (req, res) => {
+/**
+ * ✅ Delete a Single Task by ID (Only if Task Belongs to User)
+ */
+router.delete("/task/:id", authenticateUser, async (req, res) => {
     try {
-        console.log(`🛠 Attempting to delete task with ID: ${req.params.id}`); //  Debugging
+        console.log(`🛠 Attempting to delete task with ID: ${req.params.id}`); // Debugging
 
         const deletedTask = await Task.findOneAndDelete({
             _id: req.params.id,
-            userId: req.userId, // Ensure the user owns the task
+            userId: req.user.userId, // ✅ Ensure the user owns the task
         });
 
         if (!deletedTask) {
@@ -88,7 +100,7 @@ router.delete("/task/:id", authenticate, async (req, res) => {
             });
         }
 
-        console.log(` Task deleted: ${deletedTask._id}`);
+        console.log(`✅ Task deleted: ${deletedTask._id}`);
         res.json({ message: "Uppgift borttagen", taskId: req.params.id });
     } catch (error) {
         console.error("❌ Error deleting task:", error);
@@ -98,9 +110,12 @@ router.delete("/task/:id", authenticate, async (req, res) => {
     }
 });
 
-router.delete("/task/", authenticate, async (req, res) => {
+/**
+ * ✅ Delete All Tasks Belonging to the User
+ */
+router.delete("/task/all", authenticateUser, async (req, res) => {
     try {
-        const result = await Task.deleteMany({ userId: req.userId });
+        const result = await Task.deleteMany({ userId: req.user.userId });
         res.json({
             message: "Alla uppgifter borttagna",
             deletedCount: result.deletedCount,

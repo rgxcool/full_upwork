@@ -11,15 +11,15 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // Middleware setup
+app.use(cookieParser());
 app.use(
     cors({
-        origin: "http://localhost:5173", // Ensure this is the correct frontend URL
+        origin: process.env.CLIENT_URL, // ✅ Allows frontend requests
         credentials: true, // Allows sending cookies
     })
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
 
 console.log("Attempting to mount router...");
 app.use("/", router);

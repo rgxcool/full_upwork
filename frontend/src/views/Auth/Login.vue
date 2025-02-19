@@ -28,113 +28,92 @@
 </template>
 
 <script>
-  import { mapActions } from 'vuex'
+  import { ref, computed } from 'vue'
+  import { useStore } from 'vuex'
+  import { useRouter } from 'vue-router'
 
   export default {
-    data() {
-      return {
-        email: '',
-        password: '',
-        message: '',
-      }
-    },
-    computed: {
-      isVuexWorking() {
-        return typeof this.$store.dispatch === 'function'
-      },
-    },
-    methods: {
-      ...mapActions(['login']),
+    setup() {
+      const store = useStore()
+      const router = useRouter()
 
-      async handleLogin() {
-        console.log('🛠 Checking Vuex Store:', this.$store)
-        console.log('🛠 Is Vuex Working?', this.isVuexWorking)
+      const email = ref('')
+      const password = ref('')
+      const message = ref('')
 
-        if (!this.isVuexWorking) {
+      const isVuexWorking = computed(() => typeof store.dispatch === 'function')
+
+      const handleLogin = async () => {
+        console.log('🛠 Checking Vuex Store:', store)
+        console.log('🛠 Is Vuex Working?', isVuexWorking.value)
+
+        if (!isVuexWorking.value) {
           console.error('❌ Vuex is NOT properly registered! Check `main.js`.')
           return
         }
 
-        console.log('🛠 Attempting to login with:', this.email, this.password)
+        console.log('🛠 Attempting to login with:', email.value, password.value)
 
-        if (!this.email || !this.password) {
+        if (!email.value || !password.value) {
           console.error('❌ Missing email or password!')
-          this.message = 'Please enter both email and password.'
+          message.value = 'Please enter both email and password.'
           return
         }
 
         console.log('🛠 Calling Vuex login action...')
 
         try {
-          const response = await this.login({ email: this.email, password: this.password })
+          const response = await store.dispatch('login', {
+            email: email.value.trim(),
+            password: password.value.trim(),
+          })
 
-          console.log(' Vuex login response:', response)
+          console.log('✅ Vuex login response:', response)
 
-          if (!response || typeof response !== 'object') {
+          if (!response || typeof response !== 'object' || response.success === false) {
             console.error('❌ Invalid Vuex response:', response)
-            this.message = 'Unexpected error occurred. Please try again.'
+            message.value = response?.message || 'Unexpected error occurred. Please try again.'
             return
           }
 
-          this.message = response.message
+          message.value = response.message || 'Login successful.'
 
-          if (response.success) {
-            console.log('🔄 Redirecting to Profile...')
-            this.$router.push({ name: 'profile' })
-          }
+          console.log('🔄 Redirecting to Profile...')
+          router.push({ name: 'profile' }) // ✅ Redirect after successful login
         } catch (error) {
           console.error('❌ Error in `handleLogin()`:', error)
-          this.message = 'An unexpected error occurred.'
+          message.value = 'An unexpected error occurred.'
         }
-      },
+      }
+
+      return {
+        email,
+        password,
+        message,
+        handleLogin,
+      }
     },
   }
 </script>
 
 <style scoped>
+  /* Error Message */
   .error-message {
     color: red;
     margin-top: 10px;
   }
-</style>
 
-<style scoped>
-  /* 🌟 Huvudlayout */
+  /* Login Container */
   .login-container {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
-    height: 60vh;
-    background-color: #f0f2f5;
+    margin-top: 20px;
     padding: 20px;
+    background-color: #ffffff;
   }
 
-  /* 🏠 Vänster sektion */
-  .left-section {
-    flex: 1;
-    text-align: left;
-    padding: 20px;
-  }
-
-  .logo {
-    width: 250px;
-    margin-bottom: 10px;
-  }
-
-  .left-section h2 {
-    font-size: 1.5rem;
-    font-weight: 400;
-    color: #333;
-  }
-
-  /* 📦 Höger sektion */
-  .right-section {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-  }
-
-  /* 📋 Login-box */
+  /* Login Box */
   .login-box {
     background: white;
     padding: 20px;
@@ -144,7 +123,7 @@
     width: 350px;
   }
 
-  /* 🔲 Input-fält */
+  /* Input Fields */
   input {
     width: 100%;
     padding: 10px;
@@ -154,7 +133,7 @@
     font-size: 1rem;
   }
 
-  /* 🔵 Login-knapp */
+  /* Login Button */
   .login-btn {
     width: 100%;
     background-color: #007dc3;
@@ -171,106 +150,11 @@
     background-color: #005f9e;
   }
 
-  /* 🔗 Glömt lösenord */
-  .forgot-password {
-    display: block;
-    margin: 10px 0;
-    color: #007dc3;
-    text-decoration: none;
-    font-size: 0.9rem;
-  }
-
-  .forgot-password:hover {
-    text-decoration: underline;
-  }
-
-  /* 🔳 Divider */
-  .divider {
-    margin: 15px 0;
-    height: 1px;
-    background: #ddd;
-  }
-
-  /* 🟢 Skapa konto-knapp */
-  .create-account-btn {
-    width: 100%;
-    background-color: #42b72a;
-    color: white;
-    border: none;
-    padding: 10px;
-    border-radius: 5px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: 0.3s;
-  }
-
-  .create-account-btn:hover {
-    background-color: #36a420;
-  }
-
-  /* 📱 Mobilanpassning */
+  /* Mobile Optimization */
   @media (max-width: 768px) {
     .login-container {
       flex-direction: column;
       text-align: center;
     }
-
-    .left-section {
-      margin-bottom: 20px;
-    }
-  }
-
-  .login-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-top: 20px;
-    /* Space from the top */
-    padding: 20px;
-    background-color: #ffffff;
-  }
-
-  .login-form {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    max-width: 300px;
-  }
-
-  .input-field {
-    width: 100%;
-    padding: 10px;
-    margin: 10px 0;
-    font-size: 16px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-sizing: border-box;
-  }
-
-  .login-button {
-    width: 100%;
-    padding: 10px;
-    font-size: 16px;
-    color: #fff;
-    background-color: #007bff;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-
-  .login-button:hover {
-    background-color: #0056b3;
-  }
-
-  .message {
-    margin-top: 20px;
-    color: #d9534f;
-    /* Red for error messages */
-  }
-
-  body {
-    background-color: #f8f9fa;
   }
 </style>

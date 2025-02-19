@@ -1,8 +1,19 @@
 <template>
   <div class="hierarchy-manager">
     <h1>Add Individual Course to Student</h1>
-    <br />
-    <br />
+    <br /><br />
+
+    <!-- Bootstrap Flash Alert -->
+    <div
+      v-if="successMessage"
+      class="alert alert-success alert-dismissible fade show"
+      role="alert"
+      style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050"
+    >
+      {{ successMessage }}
+      <button type="button" class="btn-close" @click="successMessage = ''"></button>
+    </div>
+
     <!-- Program Selection -->
     <div>
       <v-select
@@ -15,8 +26,8 @@
         class="styled-select"
       />
     </div>
-    <br />
-    <br />
+    <br /><br />
+
     <!-- Add Individual Course to Student -->
     <div>
       <v-select
@@ -28,23 +39,27 @@
         class="styled-select"
       />
       <br />
-      <!-- <input id="student-name" v-model="studentName" placeholder="Student Name" class="styled-input"/> -->
+
       <v-container>
         <v-form>
-          <!-- Dropdown for selecting a student -->
-          <v-select
+          <v-autocomplete
             v-model="selectedStudent"
-            :items="students"
-            item-title="namn"
+            :items="filteredStudents"
+            :search="searchQuery"
+            item-title="name"
             item-value="_id"
             label="Select a student"
             return-object
             outlined
+            :menu-props="{ closeOnContentClick: false }"
+            attach
+            :no-data-text="'Please write student name'"
+            @update:search="searchQuery = $event"
           />
         </v-form>
       </v-container>
-      <br />
-      <br />
+      <br /><br />
+
       <button class="btn btn-primary" @click="handleAddCourse">Add Course to Student</button>
     </div>
   </div>
@@ -52,172 +67,146 @@
 
 <script>
   import axios from 'axios'
-  import { ref, onMounted } from 'vue'
+  import { ref, computed, onMounted } from 'vue'
 
   export default {
     setup() {
       const students = ref([])
+      const programs = ref([])
+      const allCourses = ref([])
       const selectedStudent = ref(null)
+      const selectedProgram = ref(null)
+      const selectedIndividualCourse = ref(null)
+      const searchQuery = ref('')
+      const isLoading = ref(false)
+      const successMessage = ref('')
+      const fetchState = ref(false) // ✅ Prevent multiple fetches
 
-      // Fetch students data (use your actual API here)
-      onMounted(async () => {
+      const fetchInitialData = async () => {
+        if (fetchState.value) return
+        fetchState.value = true
+
         try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/students`)
-          const data = await response.json()
-          students.value = data // Assuming the response has a list of students
-        } catch (error) {
-          console.error('Error fetching students:', error)
-        }
-      })
+          console.log('🔍 Fetching students and programs...')
+          const [studentsResponse, programsResponse] = await Promise.all([
+            axios.get(`${import.meta.env.VITE_API_URL}/api/students`),
+            axios.get(`${import.meta.env.VITE_API_URL}/api/programs`),
+          ])
 
-      return { students, selectedStudent }
-    },
-    data() {
-      return {
-        programs: [], // List of programs
-        selectedProgram: null, // Selected program ID
-        allCourses: [], // List of all courses for the selected program
-        studentName: '', // Name of the student
-        studentId: '', // ID of the student (fetched from backend)
-        selectedIndividualCourse: null, // Selected course ID,
+          students.value = studentsResponse.data
+          programs.value = programsResponse.data
+
+          console.log('✅ Students loaded:', students.value)
+          console.log('✅ Programs loaded:', programs.value)
+        } catch (error) {
+          console.error('❌ Error fetching initial data:', error)
+        } finally {
+          isLoading.value = false
+        }
       }
-    },
-    methods: {
-      resetForm() {
-        // Reset all relevant fields to their initial values
-        this.selectedProgram = null
-        this.selectedIndividualCourse = null
-        this.studentName = ''
-        this.allCourses = [] // Optionally clear the courses list if needed
-      },
-      async fetchPrograms() {
-        try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`)
-          this.programs = response.data
-        } catch (error) {
-          console.error('Error fetching programs:', error)
-          alert('Failed to fetch programs.')
-        }
-      },
 
-      async fetchAllCourses() {
-        console.log('Selected Program:', this.selectedProgram) // Debugging
-
-        if (!this.selectedProgram) {
-          console.warn('No program selected.')
+      // ✅ Fetch courses when a program is selected
+      const fetchAllCourses = async () => {
+        if (!selectedProgram.value) {
+          console.warn('⚠️ No program selected.')
           return
         }
 
         try {
-          console.log('Fetching courses for program ID:', this.selectedProgram)
-
+          console.log(`🔍 Fetching courses for Program ID: ${selectedProgram.value}`)
           const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/api/program/${this.selectedProgram}/courses`
+            `${import.meta.env.VITE_API_URL}/api/program/${selectedProgram.value}/courses`
           )
 
           if (!response.data || !Array.isArray(response.data)) {
-            console.error('Unexpected response structure:', response)
+            console.error('❌ Invalid response structure:', response)
             alert('Invalid course data received.')
             return
           }
 
-          // Map the courses to a readable format
-          this.allCourses = response.data.map((course) => ({
+          allCourses.value = response.data.map((course) => ({
             ...course,
             displayText: `${course.courseName} (${course.courseCode || 'No Code'})`,
           }))
 
-          console.log('Fetched courses:', this.allCourses)
+          console.log('✅ Courses loaded:', allCourses.value)
         } catch (error) {
-          console.error('Error fetching courses:', error)
+          console.error('❌ Error fetching courses:', error)
           alert('Failed to fetch courses for the selected program.')
         }
-      },
-      async getStudentIdByName() {
-        if (!this.selectedStudent || !this.selectedStudent._id) {
-          alert('Please select a valid student.')
+      }
+
+      // ✅ Handle adding a course to a student
+      const handleAddCourse = async () => {
+        console.log('🟢 handleAddCourse() triggered')
+        if (!selectedStudent.value || !selectedStudent.value._id) {
+          console.error('❌ No student selected')
           return
         }
-        this.studentId = this.selectedStudent._id
-      },
+        if (!selectedIndividualCourse.value) {
+          console.error('❌ No course selected')
+          return
+        }
 
-      async addCourseToStudent() {
         try {
-          if (!this.studentId) {
-            alert('Please select a valid student.')
-            return
-          }
-
-          if (!this.selectedIndividualCourse) {
-            alert('Please select a course.')
-            return
-          }
-
+          console.log(
+            `🔍 Adding course ${selectedIndividualCourse.value} to student ${selectedStudent.value._id}`
+          )
           await axios.post(
-            `${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/courses`,
-            {
-              courseId: this.selectedIndividualCourse,
-            }
+            `${import.meta.env.VITE_API_URL}/api/student/${selectedStudent.value._id}/addcourse`,
+            { courseId: selectedIndividualCourse.value }
           )
-          alert(`Course added successfully.`)
+          console.log('✅ Course added successfully')
+
+          // ✅ Show success message
+          successMessage.value = `✅ ${selectedStudent.value.name} has been enrolled in "${
+            allCourses.value.find((c) => c._id === selectedIndividualCourse.value)?.displayText ||
+            'Unknown Course'
+          }".`
+
+          // ✅ Auto-hide the alert after 3 seconds
+          setTimeout(() => {
+            successMessage.value = ''
+          }, 3000)
         } catch (error) {
-          console.error('Error adding course:', error)
-          alert('Failed to add course.')
+          console.error('❌ Error adding course:', error)
         }
-      },
+      }
 
-      async handleAddCourse() {
-        try {
-          if (!this.selectedStudent || !this.selectedStudent._id) {
-            alert('Please select a student.')
-            return
-          }
-
-          this.studentId = this.selectedStudent._id
-          await this.addCourseToStudent()
-          this.resetForm()
-        } catch (error) {
-          console.error('Error handling add course:', error)
+      // ✅ Computed property for filtering students
+      const filteredStudents = computed(() => {
+        if (!searchQuery.value.trim()) {
+          return []
         }
-      },
+        return students.value
+          .filter((student) => student.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
+          .slice(0, 10)
+      })
 
-      async addProgramToStudent() {
-        try {
-          if (!this.selectedProgram) {
-            alert('Please select a program.')
-            return
-          }
+      // ✅ Fetch data once on mount
+      onMounted(fetchInitialData)
 
-          await this.getStudentIdByName()
-
-          if (!this.studentId) {
-            alert('Invalid student. Please check the student name.')
-            return
-          }
-
-          const response = await axios.post(
-            `${import.meta.env.VITE_API_URL}/api/student/${this.studentId}/programs`,
-            {
-              programId: this.selectedProgram,
-            }
-          )
-          alert(`${response.data} - Program and courses added successfully.`)
-        } catch (error) {
-          console.error('Error adding program:', error)
-          alert('Failed to add program to the student.')
-        }
-      },
-    },
-
-    mounted() {
-      this.fetchPrograms() // Fetch programs when component is mounted
+      return {
+        students,
+        programs,
+        allCourses,
+        selectedStudent,
+        selectedProgram,
+        selectedIndividualCourse,
+        searchQuery,
+        fetchAllCourses,
+        handleAddCourse,
+        successMessage,
+        filteredStudents,
+        fetchInitialData, // ✅ Make fetchInitialData accessible for testing
+      }
     },
   }
 </script>
 
 <style scoped>
   .hierarchy-manager {
-    padding: 20px;
+    min-height: 500px;
   }
 
   .styled-select {
