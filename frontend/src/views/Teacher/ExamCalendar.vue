@@ -46,20 +46,21 @@
 
       <div class="week-view">
         <div class="days-container">
-          <div v-for="day in weekDays" :key="day.date" class="day-column" :data-date="day.date">
-            <draggable v-model="day.events" group="events" @end="updateEventDate" item-key="id">
-              <template #item="{ element }">
-                <div 
-                  class="event" 
-                  :style="{ backgroundColor: element.color || '#CCCCCC' }" 
-                  @click="openExamDetails(element)"
-                >
-                  <span>{{ element.teacher }} - Slutprov</span>
-                </div>
-              </template>
-            </draggable>
+          <div v-for="day in weekDays" :key="day.date" class="day-column"
+              :data-date="day.date"
+              @dragover.prevent
+              @drop="onDrop($event, day.date)">
+            
+            <div v-for="event in day.events" :key="event.id"
+                class="event"
+                :style="{ backgroundColor: event.color || '#CCCCCC' }"
+                draggable="true"
+                @dragstart="startDrag($event, event)">
+              <span>{{ event.teacher }} - Slutprov</span>
+            </div>
           </div>
         </div>
+
       </div> <!-- ✅ Stänger `.week-view` korrekt här -->
     </div> <!-- ✅ Stänger `.main-calendar` korrekt här -->
 
@@ -77,13 +78,12 @@
       </div>
     </div>
 
-  </div> <!-- ✅ Stänger `.calendar-container` korrekt här -->
+  </div> 
 </template>
 
 
 <script>
 import { ref, computed, onMounted } from 'vue';
-import draggable from 'vuedraggable';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
@@ -93,14 +93,13 @@ dayjs.extend(isoWeek);
 dayjs.extend(weekOfYear);
 
 export default {
-  components: { draggable },
   setup() {
     const selectedDate = ref(dayjs().toDate());
     const events = ref([]);
-    const showModal = ref(false); // 🟢 Definierar showForm som en reaktiv variabel
-    const selectedExam = ref({}); // 🟢 Definierar selectedExam som en reaktiv variabel
-    const teachers = ref([]); // 🟢 Se till att teachers existerar
-    const courses = ref([]); // 🟢 Se till att courses existerar
+    const showModal = ref(false); 
+    const selectedExam = ref({}); 
+    const teachers = ref([]); 
+    const courses = ref([]); 
     const newExam = ref({
       teacherId: "",
       courseId: "",
@@ -225,15 +224,78 @@ export default {
     const markAttendance = (student) => {
       console.log("Närvaro registrerad för:", student.name);
     };
+/*
+    const updateEventDate = async (event) => {
+      try {
+        console.log("📌 Droppat event:", event);
 
-    const updateEventDate = (event) => {
-      const newDate = event.to.closest('.day-column').getAttribute('data-date');
-      const eventId = event.item.id;
-      const updatedEvent = events.value.find(e => e.id === eventId);
-      if (updatedEvent) {
-        updatedEvent.date = newDate;
+        const eventId = event.item?.id || event.item?.dataset?.id;
+        const newDate = event.to?.closest('.day-column')?.getAttribute('data-date');
+
+        console.log("📌 Flyttat event:", eventId, "till", newDate);
+
+        if (!eventId || !newDate) {
+          console.error("❌ Kunde inte hitta nytt datum eller eventId");
+          return;
+        }
+
+        // 🟢 Uppdatera frontend reaktivt
+        const eventIndex = events.value.findIndex(e => e.id === eventId);
+        if (eventIndex !== -1) {
+          events.value[eventIndex] = { ...events.value[eventIndex], date: newDate };
+          events.value = [...events.value]; // 🟢 Vue reaktiverar arrayen
+        }
+
+        // 🟢 Skicka PUT-request till backend
+        const response = await axios.put(`http://localhost:5001/api/update-exam/${eventId}`, { date: newDate });
+        console.log("✅ Slutprov uppdaterat i backend");
+
+        // 🟢 Hämta alla events på nytt
+
+      } catch (error) {
+        console.error("❌ Error updating event date:", error.response?.data || error.message);
       }
     };
+*/
+
+    const startDrag = (event, item) => {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('itemID', item.id);
+      event.dataTransfer.setData('oldDate', item.date);
+      console.log("📌 Start drag:", item.id, "från", item.date);
+    };
+
+    const onDrop = async (event, newDate) => {
+      const eventId = event.dataTransfer.getData('itemID');
+      const oldDate = event.dataTransfer.getData('oldDate');
+
+      console.log("📌 Droppat event:", eventId, "från", oldDate, "till", newDate);
+
+      if (!eventId || !newDate) {
+        console.error("❌ Kunde inte hitta nytt datum eller eventId");
+        return;
+      }
+
+      // 🟢 Hitta eventet i listan och uppdatera datum
+      const eventIndex = events.value.findIndex(e => e.id === eventId);
+      if (eventIndex !== -1) {
+        events.value[eventIndex].date = newDate;
+        events.value = [...events.value]; // 🟢 Vue reaktiverar arrayen
+      }
+
+      // 🟢 Uppdatera i backend
+      try {
+        const response = await axios.put(`http://localhost:5001/api/update-exam/${eventId}`, { date: newDate });
+        console.log("✅ Slutprov uppdaterat i backend:", response.data);
+      } catch (error) {
+        console.error("❌ Error updating exam:", error.response?.data || error.message);
+      }
+    };
+
+
+
+
+
 
     const submitExam = async () => {
       try {
@@ -288,8 +350,10 @@ export default {
       prevWeek, 
       nextWeek, 
       addEvent, 
-      updateEventDate, 
-      hours };
+      //updateEventDate, 
+      hours,
+    onDrop,
+  startDrag };
   }
 };
 </script>

@@ -90,5 +90,34 @@ router.delete("/delete-exam/:studentId", async (req, res) => {
 });
 
 
+router.put("/update-exam/:studentId", async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const { date } = req.body;
+
+        console.log("📌 PUT-request mottagen:", { studentId, date });
+
+        if (!date) {
+            return res.status(400).json({ message: "Datum krävs" });
+        }
+
+        const student = await Student.findById(studentId);
+        if (!student) {
+            console.error("❌ Student ej hittad med ID:", studentId);
+            return res.status(404).json({ message: "Student ej hittad" });
+        }
+
+        student.finalExamDate = date;
+        await student.save();
+
+        console.log("✅ Slutprov uppdaterat i databasen:", student.finalExamDate);
+
+        res.json({ message: "Slutprov uppdaterat", finalExamDate: student.finalExamDate });
+    } catch (error) {
+        console.error("❌ Error updating exam:", error.message);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+});
+
 
 export default router;
