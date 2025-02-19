@@ -9,13 +9,15 @@ import programRoutes from "./programRoutes.js";
 import gradeRoutes from "./gradeRoutes.js";
 import courseRoutes from "./courseRoutes.js";
 import coursePackageRoutes from "./coursePackageRoutes.js";
-import searchRoutes from "./searchRoutes.js";
+import searchRoutes from "./searchRoutes.js"; 
+import examRoutes from "./examRoutes.js"
 
 const router = Router();
 
 console.log(" Registering API routes...");
 
 //  Log before mounting each route
+router.use("/api", examRoutes);
 router.use("/api", taskRoutes);
 router.use("/api", authRoutes);
 router.use("/api", studentRoutes);
