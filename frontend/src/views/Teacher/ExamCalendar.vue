@@ -4,11 +4,11 @@
       <div class="html-datepicker">
         <div class="mini-calendar">
           <div class="nav-buttons">
-            <button @click="prevYear">&#171;</button> <!-- Föregående år -->
-            <button @click="prevMonth">&#8249;</button> <!-- Föregående månad -->
+            <button @click="prevYear">&#171;</button>
+            <button @click="prevMonth">&#8249;</button>
             <h3>{{ selectedMonth }}</h3>
-            <button @click="nextMonth">&#8250;</button> <!-- Nästa månad -->
-            <button @click="nextYear">&#187;</button> <!-- Nästa år -->
+            <button @click="nextMonth">&#8250;</button>
+            <button @click="nextYear">&#187;</button>
           </div>
         </div>        
         <table>
@@ -55,26 +55,52 @@
                 class="event"
                 :style="{ backgroundColor: event.color || '#CCCCCC' }"
                 draggable="true"
-                @dragstart="startDrag($event, event)">
+                @dragstart="startDrag($event, event)"
+                @click="openExamDetails(event)">
               <span>{{ event.teacher }} - Slutprov</span>
             </div>
           </div>
         </div>
 
-      </div> <!-- ✅ Stänger `.week-view` korrekt här -->
-    </div> <!-- ✅ Stänger `.main-calendar` korrekt här -->
+      </div>
+    </div>
 
-    <!-- MODAL FÖR ATT LÄGGA TILL PROV -->
-    <div v-if="showModal" class="modal">
-      <div class="modal-content">
-        <span class="close" @click="showModal = false">&times;</span>
-        <h3>Slutprov - {{ selectedExam.teacher }}</h3>
-        <ul>
-          <li v-for="student in selectedExam.students" :key="student.id">
-            {{ student.name }} - {{ student.personalNumber }}
-            <button @click="markAttendance(student)">Registrera Närvaro</button>
-          </li>
-        </ul>
+    <!-- Modal för Exam Details -->
+    <div v-if="selectedExam" class="modal fade show d-block" tabindex="-1" role="dialog"
+      style="background: rgba(0, 0, 0, 0.5);">
+      <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">{{ selectedExam.teacher || 'Okänd lärare' }}</h5>
+            <button type="button" class="btn-close" @click="closeModal"></button>
+          </div>
+          <div class="modal-body">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Personalnumber</th>
+                  <th>Attendance</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(student, index) in selectedExam.students" :key="index">
+                  <td>{{ student.name }}</td>
+                  <td>{{ student.personalNumber }}</td>
+                  <td>
+                    <input type="checkbox" 
+                      v-model="student.attended" 
+                      @change="markAttendance(student.personalNumber, student.attended)" 
+                      :disabled="student.attended">                
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="closeModal">Stäng</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -83,7 +109,6 @@
 
 
 <script>
-import { ref, computed, onMounted } from 'vue';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
@@ -93,270 +118,145 @@ dayjs.extend(isoWeek);
 dayjs.extend(weekOfYear);
 
 export default {
-  setup() {
-    const selectedDate = ref(dayjs().toDate());
-    const events = ref([]);
-    const showModal = ref(false); 
-    const selectedExam = ref({}); 
-    const teachers = ref([]); 
-    const courses = ref([]); 
-    const newExam = ref({
-      teacherId: "",
-      courseId: "",
-      date: "",
-      hour: "",
-    });
-
-
-    const selectedMonth = computed(() => dayjs(selectedDate.value).format('MMMM YYYY'));
-    const selectedDateFormatted = computed(() => dayjs(selectedDate.value).format('YYYY-MM-DD'));
-    const weekDaysShort = ['M', 'T', 'O', 'T', 'F', 'L', 'S'];
-
-    const calendarGrid = computed(() => {
-      const startOfMonth = dayjs(selectedDate.value).startOf('month').startOf('week');
+  data() {
+    return {
+      selectedDate: dayjs().toDate(),
+      events: [],
+      selectedExam: null,
+      teachers: [],
+      courses: [],
+      weekDaysShort: ['M', 'T', 'O', 'T', 'F', 'L', 'S'],
+    };
+  },
+  computed: {
+    selectedMonth() {
+      return dayjs(this.selectedDate).format('MMMM YYYY');
+    },
+    selectedDateFormatted() {
+      return dayjs(this.selectedDate).format('YYYY-MM-DD');
+    },
+    currentWeekNumber() {
+      return dayjs(this.selectedDate).week();
+    },
+    calendarGrid() {
+      const startOfMonth = dayjs(this.selectedDate).startOf('month').startOf('week');
       return Array.from({ length: 6 }, (_, row) => {
         return Array.from({ length: 7 }, (_, col) => {
           const date = startOfMonth.add(row * 7 + col, 'day');
           return { date: date.format('YYYY-MM-DD'), day: date.date() };
         });
       });
-    });
-
-    const selectDate = (date) => {
-      selectedDate.value = dayjs(date).toDate();
-    };
-
-    const currentWeekNumber = computed(() => dayjs(selectedDate.value).week());
-    const hours = Array.from({ length: 24 }, (_, i) => i);
-
-    const weekDays = computed(() => {
-      const startOfWeek = dayjs(selectedDate.value).startOf('isoWeek');
+    },
+    weekDays() {
+      const startOfWeek = dayjs(this.selectedDate).startOf('isoWeek');
       return Array.from({ length: 7 }, (_, i) => {
         const date = startOfWeek.add(i, 'day').format('YYYY-MM-DD');
-
-        // Hitta events för denna dag
-        const dayEvents = events.value.filter(e => e.date === date).map(e => ({
-          ...e,
-          color: e.color || '#CCCCCC'
-        }));
-
-        return { date, 
-          label: dayjs(date).format('dddd'), 
-          events: dayEvents };
+        const dayEvents = this.events.filter(e => e.date === date);
+        return { date, label: dayjs(date).format('dddd'), events: dayEvents };
       });
-    });
-
-
-    const prevWeek = () => selectedDate.value = dayjs(selectedDate.value).subtract(1, 'week').toDate();
-    const nextWeek = () => selectedDate.value = dayjs(selectedDate.value).add(1, 'week').toDate();
-
-    const prevMonth = () => {
-      selectedDate.value = dayjs(selectedDate.value).subtract(1, 'month').toDate();
-    };
-
-    const nextMonth = () => {
-      selectedDate.value = dayjs(selectedDate.value).add(1, 'month').toDate();
-    };
-
-    const prevYear = () => {
-      selectedDate.value = dayjs(selectedDate.value).subtract(1, 'year').toDate();
-    };
-
-    const nextYear = () => {
-      selectedDate.value = dayjs(selectedDate.value).add(1, 'year').toDate();
-    };
-
-
-    const addEvent = () => {
-      events.value.push({ id: Date.now(), title: 'Nytt Event', date: dayjs(selectedDate.value).format('YYYY-MM-DD') });
-    };
-    
-    const openAddExamForm = (date, hour) => {
-      if (!newExam.value) {
-        newExam.value = {}; // 🟢 Se till att newExam har en giltig referens
-      }
-      newExam.value.date = date;
-      newExam.value.hour = hour;
-      showModal.value = true;
-    };
-
-    const fetchExams = async () => {
-        try {
-          const response = await axios.get("http://localhost:5001/api/calendar-color");
-
-          console.log("📌 API Response:", response.data); // Debug-logg
-
-          if (!response.data || !Array.isArray(response.data)) {
-            console.error("❌ API Response is not an array:", response.data);
-            return;
-          }
-
-          events.value = response.data.map(exam => {
-            const titleParts = exam.title ? exam.title.split(' - ') : [];
-            const teacherName = titleParts.length > 1 ? titleParts[0] : "Okänd lärare";
-
-            return {
-              id: exam.id,
-              teacher: teacherName, // 🟢 Tar ut lärarens namn
-              date: dayjs(exam.start).format('YYYY-MM-DD'),
-              color: exam.color || "#CCCCCC", // Om ingen färg finns, sätt standardgrå
-              room: exam.extendedProps?.room || "Ej angivet",
-              hour: exam.hour || "Hela dagen",
-              students: exam.extendedProps?.students || [],
-            };
-          });
-
-          console.log("✅ Events parsed:", events.value);
-
-        } catch (error) {
-          console.error("❌ Error fetching exams:", error);
-        }
-      };
-
-
-
-
-    const openExamDetails = (exam) => {
-          selectedExam.value = exam;
-          showModal.value = true;
-    };
-
-    const markAttendance = (student) => {
-      console.log("Närvaro registrerad för:", student.name);
-    };
-/*
-    const updateEventDate = async (event) => {
+    },
+  },
+  methods: {
+    selectDate(date) {
+      this.selectedDate = dayjs(date).toDate();
+    },
+    prevWeek() {
+      this.selectedDate = dayjs(this.selectedDate).subtract(1, 'week').toDate();
+    },
+    nextWeek() {
+      this.selectedDate = dayjs(this.selectedDate).add(1, 'week').toDate();
+    },
+    prevMonth() {
+      this.selectedDate = dayjs(this.selectedDate).subtract(1, 'month').toDate();
+    },
+    nextMonth() {
+      this.selectedDate = dayjs(this.selectedDate).add(1, 'month').toDate();
+    },
+    prevYear() {
+      this.selectedDate = dayjs(this.selectedDate).subtract(1, 'year').toDate();
+    },
+    nextYear() {
+      this.selectedDate = dayjs(this.selectedDate).add(1, 'year').toDate();
+    },
+    async fetchExams() {
       try {
-        console.log("📌 Droppat event:", event);
+        const response = await axios.get("http://localhost:5001/api/calendar-color");
+        console.log("📌 API Response:", response.data); // 🔍 Logga API-responsen
 
-        const eventId = event.item?.id || event.item?.dataset?.id;
-        const newDate = event.to?.closest('.day-column')?.getAttribute('data-date');
-
-        console.log("📌 Flyttat event:", eventId, "till", newDate);
-
-        if (!eventId || !newDate) {
-          console.error("❌ Kunde inte hitta nytt datum eller eventId");
+        if (!Array.isArray(response.data) || response.data.length === 0) {
+          console.warn("⚠️ API returnerade ingen data eller ett felaktigt format!");
           return;
         }
 
-        // 🟢 Uppdatera frontend reaktivt
-        const eventIndex = events.value.findIndex(e => e.id === eventId);
-        if (eventIndex !== -1) {
-          events.value[eventIndex] = { ...events.value[eventIndex], date: newDate };
-          events.value = [...events.value]; // 🟢 Vue reaktiverar arrayen
-        }
+        this.events = response.data.map(event => ({
+          id: event.id || Math.random().toString(36).substr(2, 9), // ✅ Se till att varje event har unikt ID
+          teacher: event.extendedProps?.teacher || "Okänd lärare",
+          date: dayjs(event.start).format('YYYY-MM-DD'),
+          color: event.color || "#CCCCCC",
+          students: event.extendedProps?.students.map(s => ({
+            _id: s._id, // ✅ Ensure we're using MongoDB's ObjectId
+            name: s.name,
+            personalNumber: s.personalNumber,
+            attended: s.attended || false,
+          })) || [],
+        }));
 
-        // 🟢 Skicka PUT-request till backend
-        const response = await axios.put(`http://localhost:5001/api/update-exam/${eventId}`, { date: newDate });
-        console.log("✅ Slutprov uppdaterat i backend");
-
-        // 🟢 Hämta alla events på nytt
-
+        console.log("✅ Events parsed:", this.events);
       } catch (error) {
-        console.error("❌ Error updating event date:", error.response?.data || error.message);
+        console.error("❌ Error fetching exams:", error);
       }
-    };
-*/
+    },
 
-    const startDrag = (event, item) => {
+    openExamDetails(exam) {
+      console.log("📌 Clicked Exam Data:", exam);
+      this.selectedExam = { ...exam };
+    },
+    closeModal() {
+      this.selectedExam = null;
+    },
+    async markAttendance(personalNumber, attended) {
+    try {
+      const response = await axios.put(`http://localhost:5001/api/mark-attendance/${personalNumber}`, { attended });
+
+      this.events = this.events.map(event => {
+      if (event.students) {
+        event.students = event.students.map(student => 
+          student.personalNumber === personalNumber ? { ...student, attended } : student
+        );
+      }
+      return event;
+    });
+
+      console.log("✅ Attendance updated:", response.data);
+    } catch (error) {
+      console.error("❌ Error marking attendance:", error.response?.data || error.message);
+    }
+    },
+
+    startDrag(event, item) {
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('itemID', item.id);
       event.dataTransfer.setData('oldDate', item.date);
-      console.log("📌 Start drag:", item.id, "från", item.date);
-    };
-
-    const onDrop = async (event, newDate) => {
+    },
+    async onDrop(event, newDate) {
       const eventId = event.dataTransfer.getData('itemID');
-      const oldDate = event.dataTransfer.getData('oldDate');
-
-      console.log("📌 Droppat event:", eventId, "från", oldDate, "till", newDate);
-
-      if (!eventId || !newDate) {
-        console.error("❌ Kunde inte hitta nytt datum eller eventId");
-        return;
-      }
-
-      // 🟢 Hitta eventet i listan och uppdatera datum
-      const eventIndex = events.value.findIndex(e => e.id === eventId);
+      const eventIndex = this.events.findIndex(e => e.id === eventId);
       if (eventIndex !== -1) {
-        events.value[eventIndex].date = newDate;
-        events.value = [...events.value]; // 🟢 Vue reaktiverar arrayen
-      }
-
-      // 🟢 Uppdatera i backend
-      try {
-        const response = await axios.put(`http://localhost:5001/api/update-exam/${eventId}`, { date: newDate });
-        console.log("✅ Slutprov uppdaterat i backend:", response.data);
-      } catch (error) {
-        console.error("❌ Error updating exam:", error.response?.data || error.message);
-      }
-    };
-
-
-
-
-
-
-    const submitExam = async () => {
-      try {
-        await axios.post("http://localhost:5001/api/add-exam", {
-          ...newExam.value,
-          date: `${newExam.value.date}T${newExam.value.hour}:00:00Z` // Formatera datum + tid
-        });
-        showModal.value = false;
-        fetchExams(); // Uppdatera kalendern
-      } catch (error) {
-        console.error("Error adding exam:", error);
-      }
-    };
-
-    const deleteExam = async (eventId) => {
-        if (!confirm("Vill du verkligen ta bort detta prov?")) return;
+        this.events[eventIndex].date = newDate;
         try {
-          await axios.delete(`http://localhost:5001/api/delete-exam/${eventId}`);
-          fetchExams();
+          await axios.put(`http://localhost:5001/api/update-exam/${eventId}`, { date: newDate });
         } catch (error) {
-          console.error("Error deleting exam:", error);
+          console.error("❌ Error updating exam:", error.response?.data || error.message);
         }
-      };
-
-    onMounted(() => {
-      fetchExams();
-    });
-
-    
-    return {
-      openExamDetails, 
-      markAttendance, 
-      teachers, 
-      courses, 
-      newExam, 
-      showModal, 
-      openAddExamForm, 
-      submitExam, 
-      deleteExam, 
-      prevMonth, 
-      prevYear, 
-      nextMonth, 
-      nextYear, 
-      selectedDate, 
-      selectedMonth, 
-      selectedDateFormatted, 
-      weekDaysShort, 
-      calendarGrid, 
-      selectDate, 
-      currentWeekNumber, 
-      weekDays, 
-      prevWeek, 
-      nextWeek, 
-      addEvent, 
-      //updateEventDate, 
-      hours,
-    onDrop,
-  startDrag };
-  }
+      }
+    }
+  },
+  mounted() {
+    this.fetchExams();
+  },
 };
 </script>
+
 
 <style>
 .calendar-cell {
@@ -536,13 +436,37 @@ td.selected {
   color: #fff;
   padding: 5px;
   margin: 5px 0;
-  cursor: grab;
+  cursor: pointer;
   border-radius: 4px;
   font-size: 12px;
   position: relative;
 }
 .event:hover {
   background: #0056b3;
+}
+
+
+
+.attendance-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  margin-left: 10px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.close {
+  font-size: 24px;
+  cursor: pointer;
 }
 
 @media (max-width: 768px) {

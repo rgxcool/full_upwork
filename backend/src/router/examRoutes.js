@@ -1,46 +1,56 @@
 import express from "express";
 const router = express.Router();
 import Student from "../models/Student.js";
-//import Teacher from "../models/Teacher.js";
+import Teacher from "../models/Teacher.js";
+import mongoose from "mongoose"
+
 //import Exam from "../models/Final.js";
-
-router.get("/calendar-color", async (req, res) => {
+router.get('/calendar-color', async (req, res) => {
     try {
-        console.log("🟡 Fetching final exam dates from students...");
+        const students = await Student.find().populate("coursePackages.coursePackageId");
+        const teachers = await Teacher.find();
+    
+        const groupedEvents = {};
+    
+        students
+            .filter(student => !student.dropout) // Exkludera elever med dropout = true
+            .forEach(student => {
+                const teacher = teachers.find(t => t.name === student.teacher);
+                const date = student.finalExamDate; // 🔥 Rätt fältnamn
+                const teacherName = teacher?.name || 'Ingen lärare';
+                const course = student.coursePackages.map(pkg => pkg.coursePackageId?.name || "Okänd kurs").join(", "); // 🔥 Rätt fält
 
-        // Hämta endast studenter som har ett slutprovsdatum
-        const students = await Student.find({ finalExamDate: { $exists: true, $ne: null } })
-            .populate("teacher", "name colorCode")
-            .populate("courses.courseId", "courseName");
+                const key = `${teacherName}-${date}`; // Gruppnyckel per lärare per datum
 
-        console.log("✅ Final exam dates fetched:", students);
+                if (!groupedEvents[key]) {
+                    groupedEvents[key] = {
+                        title: teacherName,
+                        start: date,
+                        color: teacher?.colorCode || '#cccccc',
+                        extendedProps: {
+                            teacher: teacherName,
+                            students: [],
+                        },
+                    };
+                }
 
-        let exams = [];
-
-        students.forEach(student => {
-            exams.push({
-                id: student._id,
-                title: `${student.teacher?.name || "Okänd lärare"} - Slutprov`,
-                start: student.finalExamDate,
-                color: student.teacher?.colorCode || "#CCCCCC",
-                extendedProps: {
-                    student: student.name,
-                    courses: student.courses.map(c => c.courseId?.courseName || "Okänd kurs"),
-                    exam: student.exam,
-                },
+                groupedEvents[key].extendedProps.students.push({
+                    name: student.name || "Okänd student",
+                    personalNumber: student.personalNumber || "Ingen ID",
+                    course,
+                });
             });
-        });
 
-        if (exams.length === 0) {
-            return res.status(404).json({ message: "Inga prov hittades." });
-        }
+        const events = Object.values(groupedEvents);
+        console.log("✅ Slutliga event:", JSON.stringify(events, null, 2)); // Debug-logg
 
-        res.json(exams);
+        res.json(events);
     } catch (error) {
         console.error("❌ Error in /calendar-color:", error.message);
-        res.status(500).json({ message: "Server error", error: error.message });
+        res.status(500).send("Server error");
     }
 });
+
 
 router.post("/add-exam", async (req, res) => {
     try {
@@ -67,57 +77,29 @@ router.post("/add-exam", async (req, res) => {
     }
 });
 
-
-
-router.delete("/delete-exam/:studentId", async (req, res) => {
+router.put("/mark-attendance/:personalNumber", async (req, res) => {
     try {
-        const { studentId } = req.params;
+        const { personalNumber } = req.params;
 
-        const student = await Student.findById(studentId);
+        // 🔍 Hitta studenten baserat på personnumret
+        const student = await Student.findOne({ personalNumber });
+
         if (!student) {
-            return res.status(404).json({ message: "Student ej hittad" });
+            return res.status(404).json({ message: "Student not found" });
         }
 
-        // Sätt `finalExamDate` till null
-        student.finalExamDate = null;
-
+        // ✅ Markera närvaro
+        student.attendedExam = true;
         await student.save();
-        res.json({ message: "Slutprov raderat" });
+
+        console.log("✅ Attendance marked for:", student);
+        res.json({ message: "Attendance marked", student });
     } catch (error) {
-        console.error("❌ Error deleting exam:", error.message);
+        console.error("❌ Error marking attendance:", error.message);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 });
 
-
-router.put("/update-exam/:studentId", async (req, res) => {
-    try {
-        const { studentId } = req.params;
-        const { date } = req.body;
-
-        console.log("📌 PUT-request mottagen:", { studentId, date });
-
-        if (!date) {
-            return res.status(400).json({ message: "Datum krävs" });
-        }
-
-        const student = await Student.findById(studentId);
-        if (!student) {
-            console.error("❌ Student ej hittad med ID:", studentId);
-            return res.status(404).json({ message: "Student ej hittad" });
-        }
-
-        student.finalExamDate = date;
-        await student.save();
-
-        console.log("✅ Slutprov uppdaterat i databasen:", student.finalExamDate);
-
-        res.json({ message: "Slutprov uppdaterat", finalExamDate: student.finalExamDate });
-    } catch (error) {
-        console.error("❌ Error updating exam:", error.message);
-        res.status(500).json({ message: "Server error", error: error.message });
-    }
-});
 
 
 export default router;
