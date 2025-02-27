@@ -33,10 +33,9 @@
 
           <!-- Resultatlista -->
           <ul class="result-list">
-            <li v-for="result in filteredResults" :key="result.id" @click="navigateTo(result.link)" class="result-item">
+            <li v-for="result in filteredResults" :key="result.id" @click="navigateToDetails(result)" class="result-item">
               <div class="result-content">
                 <div class="result-title">{{ result.name }}</div>
-                <div class="result-subtitle">{{ result.extra }}</div>
               </div>
             </li>
           </ul>
@@ -113,10 +112,22 @@
       const showFilters = ref(false)
       const filter = ref("all"); // Aktivt filter
 
+
+      const setFilter = (filterType) => {
+        filter.value = filterType;
+      }
+
       const filteredResults = computed(() => {
       if (filter.value === "all") return searchResults.value;
       return searchResults.value.filter((res) => res.type === filter.value);
     });
+
+
+    const navigateToDetails = (result) => {
+      showResults.value = false; // Stäng<er sökresultaten
+      searchQuery.value = ""; // Nollställer sökfältet
+      router.push(`/detaljer/${result.type}/${result.id}`);
+    };
 
       const hasPermission = (role) => store.getters.hasPermission(role)
 
@@ -142,6 +153,8 @@
 
         try {
           const response = await axios.get(`http://localhost:5001/api/search?q=${searchQuery.value}`);
+          console.log("Search results:", searchResults.value);
+
           searchResults.value = response.data;
           showResults.value = searchResults.value.length > 0;
         } catch (error) {
@@ -181,6 +194,8 @@
         logout,
         filteredMenuItems,
         canSeeSearch,
+        navigateToDetails,
+        setFilter
       }
     },
   }
