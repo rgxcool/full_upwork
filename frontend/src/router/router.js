@@ -17,6 +17,7 @@ const AddUser = () => import('@/views/Admin/AddUser.vue')
 const EditStudent = () => import('@/views/Admin/EditStudent.vue')
 const PdfView = () => import('@/views/Admin/PdfView.vue')
 const SearchUser = () => import('@/views/Admin/SearchUser.vue')
+const SearchResultDetails = () => import('@/views/Admin/SearchResultDetails.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
@@ -56,6 +57,12 @@ const routes = [
     component: AddStudent,
     meta: { title: 'Add Student', role: 'admin' },
   },
+  { 
+    path: "/detaljer/:type/:id", 
+    component: SearchResultDetails, 
+    props: true, 
+    meta: { title: 'Search Result Details', role: 'admin' }
+  }, 
   {
     path: '/students',
     name: 'Students',
