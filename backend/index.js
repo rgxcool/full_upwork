@@ -5,7 +5,14 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import router from "./src/router/router.js"; // Ensure this path is correct
 
-dotenv.config();
+// Determine which environment file to load
+const envFile =
+    process.env.NODE_ENV === "production"
+        ? ".env.production"
+        : ".env.development";
+dotenv.config({ path: envFile });
+
+console.log(`Loaded environment: ${envFile}`);
 
 const app = express();
 const PORT = process.env.PORT || 5001;
