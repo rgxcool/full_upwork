@@ -19,8 +19,8 @@ app.use(
     cors({
         origin: process.env.CLIENT_URL,
         methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-        //allowedHeaders:
-        //     "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+        allowedHeaders:
+            "Origin, X-Requested-With, Content-Type, Accept, Authorization",
         credentials: true, // If using cookies/auth headers
     })
 );

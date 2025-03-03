@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-
+import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.development" });
 
@@ -96,8 +96,8 @@ export const login = async (req, res) => {
         res.cookie("token", token, {
             // ✅ Rename cookie from `token` to `token`
             httpOnly: true,
-            secure: true, // ✅ Required for `SameSite=None`
-            sameSite: "None",
+            secure: process.env.NODE_ENV === "production", // ✅ Required for `SameSite=None`
+            sameSite: "lax", // ✅ Protects against CSRF
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
 
@@ -119,12 +119,13 @@ export const login = async (req, res) => {
  * - Attaches user data to `req.user`
  */
 export const authenticateUser = (req, res, next) => {
-    let token = req.cookies?.token; // Check cookie first
+    // Ensure cookieParser middleware is being used in your Express app
+    let token = req.cookies?.token; // Check for JWT in cookies
 
     if (!token) {
-        // If no cookie, check Authorization header
+        console.log("Didn't find cookie, checking Authorization header...");
+        // If no token in cookies, check the Authorization header
         const authHeader = req.headers.authorization;
-        console.log("🔍 Received Authorization Header:", authHeader);
 
         if (authHeader && authHeader.startsWith("Bearer ")) {
             token = authHeader.split(" ")[1]; // Extract token
@@ -136,9 +137,12 @@ export const authenticateUser = (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        // Verify the token
+        console.log("Verifying token");
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log("Handling structure");
         req.user = decoded;
-        req.userId = decoded.userId || decoded.id; // Support both `userId` and `id`
+        req.userId = decoded.userId || decoded.id; // Handle different token structures
 
         if (!req.userId) {
             return res
