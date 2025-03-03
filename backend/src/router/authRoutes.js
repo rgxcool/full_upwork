@@ -2,7 +2,7 @@ import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import { getSession } from "../controllers/authController.js";
+import { getSession, login } from "../controllers/authController.js";
 
 const router = express.Router();
 
@@ -37,35 +37,37 @@ router.post("/auth/register", async (req, res) => {
     }
 });
 
-// Login User
-router.post("/auth/login", async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const user = await User.findOne({ email });
+router.post("/auth/login", login); // ✅ Login user
 
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-            return res
-                .status(401)
-                .json({ message: "Fel email eller lösenord!" });
-        }
+// // Login User
+// router.post("/auth/login", async (req, res) => {
+//     try {
+//         const { email, password } = req.body;
+//         const user = await User.findOne({ email });
 
-        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-            expiresIn: "1h",
-        });
+//         if (!user || !(await bcrypt.compare(password, user.password))) {
+//             return res
+//                 .status(401)
+//                 .json({ message: "Fel email eller lösenord!" });
+//         }
 
-        res.cookie("token", token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "Lax", // Ensures cross-origin authentication works
-            maxAge: 3600000, // 1 hour
-        });
+//         const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+//             expiresIn: "1h",
+//         });
 
-        return res.json({ message: "Login lyckades!", token });
-    } catch (error) {
-        console.error("❌ Login error:", error);
-        return res.status(500).json({ message: "Server error." });
-    }
-});
+//         res.cookie("token", token, {
+//             httpOnly: true,
+//             secure: process.env.NODE_ENV === "production",
+//             sameSite: "Lax", // Ensures cross-origin authentication works
+//             maxAge: 3600000, // 1 hour
+//         });
+
+//         return res.json({ message: "Login lyckades!", token });
+//     } catch (error) {
+//         console.error("❌ Login error:", error);
+//         return res.status(500).json({ message: "Server error." });
+//     }
+// });
 
 // Logout User
 router.post("/auth/logout", (req, res) => {

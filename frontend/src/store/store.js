@@ -14,9 +14,15 @@ const ROLE_HIERARCHY = [
   'systemadmin',
 ]
 
+// Create an Axios instance with credentials enabled
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL + '/api',
+  withCredentials: true, // ✅ Ensures cookies are included in requests
+})
+
 export default createStore({
   state: {
-    user: null, // User object, no more token storage
+    user: null,
     tasks: [],
   },
 
@@ -29,7 +35,6 @@ export default createStore({
 
     /**
      * Check if the user has the required role (or higher)
-     * Example usage: store.getters.hasPermission("teacher")
      */
     hasPermission: (state) => (requiredRole) => {
       const userRole = state.user?.role || 'guest'
@@ -45,7 +50,9 @@ export default createStore({
       state.user = user
     },
     LOGOUT(state) {
+      console.log('🔹 Vuex: Logging out user')
       state.user = null
+      state.tasks = [] // Clear tasks on logout
     },
     SET_TASKS(state, tasks) {
       state.tasks = tasks
@@ -70,17 +77,17 @@ export default createStore({
       console.log('🔹 Vuex: Attempting login with:', credentials)
 
       try {
-        const response = await axios.post(
-          `${import.meta.env.VITE_API_URL}/api/auth/login`,
-          { email: credentials.email.trim(), password: credentials.password.trim() },
-          { withCredentials: true } // ✅ Ensures cookies are sent
-        )
+        const response = await api.post('/auth/login', {
+          email: credentials.email.trim(),
+          password: credentials.password.trim(),
+        })
 
         console.log('✅ Vuex: Login successful, response:', response.data)
 
-        await dispatch('fetchUser') // ✅ Fetch user session after login
+        // Ensure session is correctly established before proceeding
+        await dispatch('fetchUser')
 
-        return response.data // ✅ Ensures Vuex login action returns correct data
+        return { success: true, message: 'Login successful' }
       } catch (error) {
         console.error('❌ Login failed:', error.response?.data?.message || error)
         return { success: false, message: error.response?.data?.message || 'Login failed' }
@@ -89,25 +96,24 @@ export default createStore({
 
     async fetchUser({ commit }) {
       try {
-        const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth/session`, {
-          withCredentials: true, // ✅ Ensures cookies are sent
-        })
+        const { data } = await api.get('/auth/session')
 
-        console.log('✅ User session fetched:', data) // ✅ Debugging
+        console.log('✅ User session fetched:', data)
 
         commit('SET_USER', data.user)
       } catch (error) {
-        console.error('❌ Failed to fetch user:', error.response?.data?.message || error)
+        console.error('❌ Failed to fetch user session:', error.response?.data?.message || error)
+
+        // Handle session expiration (force logout)
+        if (error.response?.status === 401) {
+          commit('LOGOUT')
+        }
       }
     },
 
     async logout({ commit }) {
       try {
-        await axios.post(
-          `${import.meta.env.VITE_API_URL}/api/auth/logout`,
-          {},
-          { withCredentials: true }
-        )
+        await api.post('/auth/logout')
       } catch (error) {
         console.error('❌ Logout request failed:', error)
       }
@@ -116,24 +122,21 @@ export default createStore({
 
     async fetchTasks({ commit }) {
       try {
-        const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/task`, {
-          withCredentials: true, // ✅ Ensures auth token is sent in cookies
-        })
+        const { data } = await api.get('/task')
         commit('SET_TASKS', data)
       } catch (error) {
         console.error('❌ Vuex: Failed to fetch tasks:', error.response?.data || error)
+
+        // Handle session expiration (force logout)
+        if (error.response?.status === 401) {
+          commit('LOGOUT')
+        }
       }
     },
 
     async addTask({ commit }, description) {
       try {
-        const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL}/api/task`,
-          { description },
-          {
-            withCredentials: true,
-          }
-        )
+        const { data } = await api.post('/task', { description })
         commit('ADD_TASK', data)
       } catch (error) {
         console.error('❌ Vuex: Failed to add task:', error.response?.data || error)
@@ -142,13 +145,7 @@ export default createStore({
 
     async updateTask({ commit }, task) {
       try {
-        const { data } = await axios.put(
-          `${import.meta.env.VITE_API_URL}/api/task/${task._id}`,
-          task,
-          {
-            withCredentials: true,
-          }
-        )
+        const { data } = await api.put(`/task/${task._id}`, task)
         commit('UPDATE_TASK', data)
       } catch (error) {
         console.error('❌ Vuex: Failed to update task:', error.response?.data || error)
@@ -157,9 +154,7 @@ export default createStore({
 
     async deleteTask({ commit }, taskId) {
       try {
-        await axios.delete(`${import.meta.env.VITE_API_URL}/api/task/${taskId}`, {
-          withCredentials: true,
-        })
+        await api.delete(`/task/${taskId}`)
         commit('DELETE_TASK', taskId)
       } catch (error) {
         console.error('❌ Vuex: Failed to delete task:', error.response?.data || error)
@@ -168,9 +163,7 @@ export default createStore({
 
     async deleteAllTasks({ commit }) {
       try {
-        await axios.delete(`${import.meta.env.VITE_API_URL}/api/delalltasks`, {
-          withCredentials: true,
-        })
+        await api.delete('/delalltasks')
         commit('DELETE_ALL_TASKS')
       } catch (error) {
         console.error('❌ Vuex: Failed to delete all tasks:', error.response?.data || error)
