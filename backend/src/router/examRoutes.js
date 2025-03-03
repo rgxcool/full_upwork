@@ -32,6 +32,7 @@ router.get('/calendar-color', async (req, res) => {
 
                 if (!groupedEvents[key]) {
                     groupedEvents[key] = {
+                        _id: student._id.toString(), // ✅ Använd studentens `_id`
                         title: `${teacherName} - ${examMunicipality} (${examTime})`,
                         start: date,
                         color: teacher?.colorCode || '#cccccc',
@@ -47,7 +48,7 @@ router.get('/calendar-color', async (req, res) => {
 
                 // ✅ Lägg endast till elever kopplade till det specifika eventet
                 groupedEvents[key].extendedProps.students.push({
-                    _id: student._id,
+                    _id: student._id || new mongoose.Types.ObjectId(), // 🔥 Sätter en fallback `_id`,
                     name: student.name || "Unknown student",
                     personalNumber: student.personalNumber || "No personal number",
                     examLocation,
@@ -66,6 +67,43 @@ router.get('/calendar-color', async (req, res) => {
         res.status(500).send("Server error");
     }
 });
+
+router.put('/update-exam/:id', async (req, res) => {
+    const { id } = req.params;
+    const { date } = req.body;
+
+    if (!id || id.length !== 24) {
+        return res.status(400).json({ error: "Invalid exam ID" });
+    }
+
+    try {
+        // 🟢 Hämta studentens nuvarande finalExamDate
+        const student = await Student.findById(id);
+        if (!student || !student.finalExamDate) {
+            return res.status(404).json({ error: "Student or exam date not found" });
+        }
+
+        const oldDate = new Date(student.finalExamDate).toISOString().split("T")[0]; 
+        const newFormattedDate = new Date(date).toISOString().split("T")[0];
+
+        // 🟢 Uppdatera **alla** studenter som har samma finalExamDate
+        const updatedStudents = await Student.updateMany(
+            { finalExamDate: new Date(oldDate) }, 
+            { $set: { finalExamDate: new Date(newFormattedDate) } }
+        );
+
+        console.log(`✅ Uppdaterade ${updatedStudents.modifiedCount} studenter till nytt datum: ${date}`);
+        res.json({ message: "Exam date updated for all students", updatedStudents });
+
+    } catch (error) {
+        console.error("❌ Error updating exam:", error);
+        res.status(500).json({ error: "Server error", details: error.message });
+    }
+});
+
+
+
+
 
 
 router.post("/add-exam", async (req, res) => {

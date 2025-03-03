@@ -25,7 +25,6 @@
               @dragover.prevent
               @drop="onDrop($event, day.date)">
             
-            <div v-if="day.events.length === 0" class="no-events">Inga prov</div> <!-- 🔥 Debug info -->
             
             <div v-for="event in day.events" :key="event.id"
                 class="event"
@@ -205,7 +204,7 @@ export default {
           const formattedDate = eventDate.toISOString().split("T")[0]; // 🗓️ Format YYYY-MM-DD
 
       return {
-        id: event._id || Math.random().toString(36).substr(2, 9),
+        id: event._id,
         teacher: event.extendedProps?.teacher || "Unknown Teacher",
         date: formattedDate,
         color: event.color || "#CCCCCC",
@@ -268,36 +267,48 @@ export default {
     },
 
     startDrag(event, item) {
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('eventID', item.id)
-      event.dataTransfer.setData("oldDate", item.date); // 🗓️ Sparar datumet
+        if (!item.id || item.id.length !== 24) {  // 🔍 Kolla att ID är korrekt
+            console.error("❌ Ogiltigt eventID:", item);
+            return;
+        }
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('eventID', item.id); 
+        event.dataTransfer.setData("oldDate", item.date);
     },
+
     async onDrop(event, newDate) {
-      event.preventDefault(); // Förhindrar standardbeteende
+    event.preventDefault();
 
-      const eventID = event.dataTransfer.getData("eventID");
-      const oldDate = event.dataTransfer.getData("oldDate");
+    const eventID = event.dataTransfer.getData("eventID");
+    if (!eventID || eventID.length !== 24) {  
+        console.error("❌ Ogiltigt eventID:", eventID);
+        return;
+    }
 
-      // 🔍 Hitta eventet i `this.events`
-      const eventIndex = this.events.findIndex(e => e.id === eventID);
-      if (eventIndex !== -1) {
-        // 🚀 Flytta eventet
+    const oldDate = event.dataTransfer.getData("oldDate");
+
+    const eventIndex = this.events.findIndex(e => e.id === eventID);
+    if (eventIndex !== -1) {
+        // 🟢 Uppdatera det befintliga eventet istället för att skapa en kopia
         this.events[eventIndex].date = newDate;
-
-        // 🔄 Uppdatera Vue reaktivt
-        this.events = [...this.events];
-
-        // 🔄 Återskapa veckodagar
+        this.events = [...this.events]; // 🔥 Trigga Vue att uppdatera UI
         this.generateWeekDays(this.selectedDate);
 
         try {
-          await axios.put(`http://localhost:5001/api/update-exam/${eventID}`, { date: newDate });
-          console.log(`✅ Event ${eventID} moved from ${oldDate} to ${newDate}`);
+            console.log(`📡 PUT Request till servern: /api/update-exam/${eventID}`);
+            const response = await axios.put(`http://localhost:5001/api/update-exam/${eventID}`, { date: newDate });
+
+            console.log(`✅ Exam flyttat från ${oldDate} till ${newDate}:`, response.data);
+
+            // 🔄 Hämta uppdaterade event efter flytten
+            await this.fetchExams();
         } catch (error) {
-          console.error("❌ Error updating exam:", error.response?.data || error.message);
+            console.error("❌ Error updating exam:", error.response?.data || error.message);
         }
-      }
-    },
+    }
+},
+
+
 
     async submitExam() {
     console.log("📌 Submitting exam data...");
@@ -336,8 +347,8 @@ export default {
 
 
   },
-   mounted() {
-    this.fetchExams();
+   async mounted() {
+    await this.fetchExams();
 
     this.generateWeekDays(this.selectedDate);
   },
