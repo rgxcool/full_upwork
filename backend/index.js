@@ -19,8 +19,8 @@ app.use(
     cors({
         origin: process.env.CLIENT_URL,
         methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-        allowedHeaders:
-            "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+        //allowedHeaders:
+        //     "Origin, X-Requested-With, Content-Type, Accept, Authorization",
         credentials: true, // If using cookies/auth headers
     })
 );
@@ -54,6 +54,4 @@ mongoose
     .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 // Start the server
-app.listen(PORT, () =>
-    console.log(`🚀 Server running on ${process.env.NODE_ENV}:${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Server running on localhost:${PORT}`));
