@@ -1,12 +1,13 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+
 import dotenv from "dotenv";
+dotenv.config({ path: ".env.development" });
 
-dotenv.config(); // Load environment variables
+console.log("🔍 JWT_SECRET in authController:", process.env.JWT_SECRET);
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
+if (!process.env.JWT_SECRET) {
     throw new Error("🚨 Missing `JWT_SECRET` in environment variables!");
 }
 

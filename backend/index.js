@@ -1,3 +1,16 @@
+import dotenv from "dotenv";
+import path from "path";
+
+const envFile =
+    process.env.NODE_ENV === "production"
+        ? ".env.production"
+        : ".env.development";
+dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+
+console.log(`🚀 Running in ${process.env.NODE_ENV} mode`);
+console.log(`📌 Loaded environment file: ${envFile}`);
+console.log(`🔑 JWT_SECRET Loaded: ${process.env.JWT_SECRET ? "Yes" : "No"}`);
+
 import express from "express";
 const app = express();
 
@@ -11,19 +24,6 @@ app.use(
         credentials: true, // If using cookies/auth headers
     })
 );
-
-import dotenv from "dotenv";
-import "dotenv/config";
-
-// Determine the correct environment file
-const envFile =
-    process.env.NODE_ENV === "production"
-        ? ".env.production"
-        : ".env.development";
-dotenv.config({ path: envFile });
-
-console.log("Loaded environment:", envFile);
-console.log("JWT_SECRET:", process.env.JWT_SECRET);
 
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
