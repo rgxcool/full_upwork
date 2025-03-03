@@ -176,12 +176,14 @@ export default {
     // Går till föregående vecka
     prevWeek() {
       this.selectedDate.setDate(this.selectedDate.getDate() - 7);
+      this.selectedDate = new Date(this.selectedDate);
       this.generateWeekDays(this.selectedDate);
     },
 
     // Går till nästa vecka
     nextWeek() {
       this.selectedDate.setDate(this.selectedDate.getDate() + 7);
+      this.selectedDate = new Date(this.selectedDate);
       this.generateWeekDays(this.selectedDate);
     },
 
