@@ -1,10 +1,6 @@
-import * as pdfjsLib from 'pdfjs-dist/build/pdf'
+import * as pdfjsLib from 'pdfjs-dist'
 
-// Configure worker for performance (optional, but recommended)
-import workerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url'
-
-// Set the worker source dynamically
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/public/pdf.worker.js'
 
 /**
  * Extracts text from a PDF file using pdf.js
