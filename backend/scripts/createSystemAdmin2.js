@@ -23,20 +23,22 @@ async function createSystemAdmin() {
         console.log("✅ Connected to MongoDB");
 
         // Check if a systemadmin already exists
-        const existingAdmin = await User.findOne({ role: "systemadmin" });
+        const existingAdmin = await User.findOne({
+            email: "admin@mindful.com",
+        });
         if (existingAdmin) {
             console.log("⚠️ System Admin already exists:", existingAdmin.email);
             process.exit(1);
         }
 
         // Generate a secure password
-        const plainPassword = "mindful"; // Change this before running!
+        const plainPassword = "systemtest"; // Change this before running!
         const hashedPassword = await bcrypt.hash(plainPassword, 12);
 
         // Create System Admin User
         const systemAdmin = new User({
-            username: "Super Admin",
-            email: "admin@mindful.com", // Change this before running!
+            username: "Den andra adminen",
+            email: "admin2@mindful.com", // Change this before running!
             password: hashedPassword,
             role: "systemadmin",
             createdAt: new Date(),
