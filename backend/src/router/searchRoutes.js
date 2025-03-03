@@ -81,14 +81,11 @@ router.get("/details/:type/:id", async (req, res) => {
         let result;
 
         switch (type) {
-            case "Användare":
-                result = await User.findById(id).select("-password");
-                break;
-            case "Kurs":
-                result = await Course.findById(id);
-                break;
             case "Elev":
-                result = await Student.findById(id);
+                result = await Student.findById(id)
+                    .populate("program")
+                    .populate("teacher", "name email")
+                    .select("-__v"); // Exkludera metadata
                 break;
             case "Lärare":
                 result = await Teacher.findById(id).select("-password");
@@ -105,6 +102,25 @@ router.get("/details/:type/:id", async (req, res) => {
     } catch (error) {
         console.error("❌ Fetch details error:", error);
         res.status(500).json({ message: "Serverfel vid hämtning av detaljer" });
+    }
+});
+
+
+router.put("/student/:id", async (req, res) => {
+    const { id } = req.params;
+    const updatedData = req.body;
+
+    try {
+        const student = await Student.findByIdAndUpdate(id, updatedData, { new: true });
+
+        if (!student) {
+            return res.status(404).json({ message: "Studenten hittades inte" });
+        }
+
+        res.json(student);
+    } catch (error) {
+        console.error("❌ Fel vid uppdatering av student:", error);
+        res.status(500).json({ message: "Serverfel vid uppdatering av student" });
     }
 });
 
