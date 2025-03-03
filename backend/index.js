@@ -1,36 +1,48 @@
 import express from "express";
-import cors from "cors";
-import mongoose from "mongoose";
-import dotenv from "dotenv";
-import cookieParser from "cookie-parser";
-import router from "./src/router/router.js"; // Ensure this path is correct
+const app = express();
 
-// Determine which environment file to load
+import cors from "cors";
+app.use(
+    cors({
+        origin: "https://mindfullearning.se",
+        methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+        allowedHeaders:
+            "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+        credentials: true, // If using cookies/auth headers
+    })
+);
+
+import dotenv from "dotenv";
+import "dotenv/config";
+
+// Determine the correct environment file
 const envFile =
     process.env.NODE_ENV === "production"
         ? ".env.production"
         : ".env.development";
 dotenv.config({ path: envFile });
 
-console.log(`Loaded environment: ${envFile}`);
+console.log("Loaded environment:", envFile);
+console.log("JWT_SECRET:", process.env.JWT_SECRET);
 
-const app = express();
+import mongoose from "mongoose";
+import cookieParser from "cookie-parser";
+import router from "./src/router/router.js"; // Ensure this path is correct
+
 const PORT = process.env.PORT || 5001;
 
 // Middleware setup
 app.use(cookieParser());
-app.use(
-    cors({
-        origin: process.env.CLIENT_URL, // ✅ Allows frontend requests
-        credentials: true, // Allows sending cookies
-    })
-);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 console.log("Attempting to mount router...");
 app.use("/", router);
 console.log("Router successfully mounted!");
+
+// Ensure preflight (OPTIONS) requests are handled
+app.options("*", cors());
 
 // MongoDB Connection
 mongoose
@@ -43,5 +55,5 @@ mongoose
 
 // Start the server
 app.listen(PORT, () =>
-    console.log(`🚀 Server running on http://localhost:${PORT}`)
+    console.log(`🚀 Server running on ${process.env.NODE_ENV}:${PORT}`)
 );
