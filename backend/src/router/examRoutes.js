@@ -2,47 +2,63 @@ import express from "express";
 const router = express.Router();
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
-import mongoose from "mongoose"
 
 //import Exam from "../models/Final.js";
 router.get('/calendar-color', async (req, res) => {
     try {
         const students = await Student.find().populate("coursePackages.coursePackageId");
         const teachers = await Teacher.find();
-    
-        const groupedEvents = {};
-    
-        students
-            .filter(student => !student.dropout) // Exkludera elever med dropout = true
-            .forEach(student => {
-                const teacher = teachers.find(t => t.name === student.teacher);
-                const date = student.finalExamDate; // 🔥 Rätt fältnamn
-                const teacherName = teacher?.name || 'Ingen lärare';
-                const course = student.coursePackages.map(pkg => pkg.coursePackageId?.name || "Okänd kurs").join(", "); // 🔥 Rätt fält
 
-                const key = `${teacherName}-${date}`; // Gruppnyckel per lärare per datum
+        const groupedEvents = {};
+
+        students
+            .filter(student => !student.dropout && student.finalExamDate)
+            .forEach(student => {
+                console.log("📌 Student Exam Data:", student);
+
+                const teacher = teachers.find(t => t.name === student.teacher);
+                const date = student.finalExamDate.toISOString().split("T")[0]; // 🟢 Konvertera till YYYY-MM-DD format
+                const teacherName = teacher?.name || 'Unknown teacher';
+
+                const examTime = student.examTime || "No exam time";
+                const examMunicipality = student.examMunicipality || "Unknown exam municipality";
+                const examLocation = student.examLocation || "Unknown exam Location";
+                const course = student.coursePackages.map(pkg => pkg.coursePackageId?.name || "Okänd kurs").join(", ");
+
+                console.log("📌 Extracted exam data:", { date, examTime, examMunicipality, examLocation });
+
+                // ✅ Gruppnyckel per lärare och datum
+                const key = `${teacherName}-${date}`;
 
                 if (!groupedEvents[key]) {
                     groupedEvents[key] = {
-                        title: teacherName,
+                        title: `${teacherName} - ${examMunicipality} (${examTime})`,
                         start: date,
                         color: teacher?.colorCode || '#cccccc',
                         extendedProps: {
                             teacher: teacherName,
+                            examMunicipality,
+                            examLocation,
+                            examTime,
                             students: [],
                         },
                     };
                 }
 
+                // ✅ Lägg endast till elever kopplade till det specifika eventet
                 groupedEvents[key].extendedProps.students.push({
-                    name: student.name || "Okänd student",
-                    personalNumber: student.personalNumber || "Ingen ID",
+                    _id: student._id,
+                    name: student.name || "Unknown student",
+                    personalNumber: student.personalNumber || "No personal number",
+                    examLocation,
+                    examTime,
                     course,
+                    attended: student.attendedExam || false,
                 });
             });
 
         const events = Object.values(groupedEvents);
-        console.log("✅ Slutliga event:", JSON.stringify(events, null, 2)); // Debug-logg
+        console.log("✅ Slutliga event:", JSON.stringify(events, null, 2));
 
         res.json(events);
     } catch (error) {
@@ -54,28 +70,40 @@ router.get('/calendar-color', async (req, res) => {
 
 router.post("/add-exam", async (req, res) => {
     try {
-        const { studentId, date } = req.body;
+        console.log("📌 API /add-exam anropad! Data mottagen:", req.body);
 
-        if (!studentId || !date) {
-            return res.status(400).json({ message: "Student ID och datum krävs" });
+        const { studentIds, examTime, examMunicipality, examLocation } = req.body;
+
+        if (!studentIds || studentIds.length === 0 || !examTime || !examMunicipality || !examLocation) {
+            return res.status(400).json({ message: "Student IDs, exam time, municipality, and location are required" });
         }
 
-        // Hämta student
-        const student = await Student.findById(studentId);
-        if (!student) {
-            return res.status(404).json({ message: "Student ej hittad" });
-        }
+        // ✅ Lägg till $set för att säkerställa att vi uppdaterar rätt fält
+        const result = await Student.updateMany(
+            { _id: { $in: studentIds } },
+            { 
+                $set: {
+                    examTime,  
+                    examMunicipality,
+                    examLocation
+                }
+            }
+        );
 
-        // Uppdatera `finalExamDate`
-        student.finalExamDate = date;
+        console.log("📌 MongoDB Update Result:", result); // 🔥 Logga vad som faktiskt uppdateras
 
-        await student.save();
-        res.status(201).json({ message: "Slutprov tillagt" });
+        // ✅ Hämta uppdaterade studenter och logga
+        const updatedStudents = await Student.find({ _id: { $in: studentIds } });
+        console.log("📌 Studenter efter uppdatering:", updatedStudents);
+
+        res.status(201).json({ message: "Exam time and location added" });
     } catch (error) {
         console.error("❌ Error adding exam:", error.message);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 });
+
+
 
 router.put("/mark-attendance/:personalNumber", async (req, res) => {
     try {

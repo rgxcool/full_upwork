@@ -1,39 +1,7 @@
 <template>
   <div class="calendar-container">
     <aside class="sidebar">
-      <div class="html-datepicker">
-        <div class="mini-calendar">
-          <div class="nav-buttons">
-            <button @click="prevMonth">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="13" viewBox="0 0 16 9">
-                <path fill="currentColor" d="M12.5 5h-9c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h9c.28 0 .5.22.5.5s-.22.5-.5.5"/><path fill="currentColor" d="M6 8.5a.47.47 0 0 1-.35-.15l-3.5-3.5c-.2-.2-.2-.51 0-.71L5.65.65c.2-.2.51-.2.71 0s.2.51 0 .71L3.21 4.51l3.15 3.15c.2.2.2.51 0 .71c-.1.1-.23.15-.35.15Z"/>
-              </svg>
-            </button>
-            <h5 class="mt-2">{{ selectedMonth }}</h5>
-            <button @click="nextMonth">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="13" viewBox="0 0 16 9">
-                <path fill="currentColor" d="M12.5 5h-9c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h9c.28 0 .5.22.5.5s-.22.5-.5.5"/><path fill="currentColor" d="M10 8.5a.47.47 0 0 1-.35-.15c-.2-.2-.2-.51 0-.71l3.15-3.15l-3.15-3.15c-.2-.2-.2-.51 0-.71s.51-.2.71 0l3.5 3.5c.2.2.2.51 0 .71l-3.5 3.5c-.1.1-.23.15-.35.15Z"/>
-              </svg>
-            </button>
-          </div>
-        </div>        
-        <table>
-          <thead>
-            <tr>
-              <th v-for="day in weekDaysShort" :key="day">{{ day }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="week in calendarGrid" :key="week">
-              <td v-for="day in week" :key="day.date" 
-                  @click="selectDate(day.date)" 
-                  :class="{ 'selected': day.date === selectedDateFormatted }">
-                {{ day.day }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <DatePicker v-model="selectedDate" @update:modelValue="onDateChange" :auto-apply="true" inline :enable-time="false"/>
     </aside>
 
     <div class="main-calendar">
@@ -45,8 +13,8 @@
 
       <div class="week-header">
         <div v-for="day in weekDays" :key="day.date" class="week-day">
-          <span class="day-name">{{ day.label.substring(0, 3).toUpperCase() }}</span>
-          <span class="day-number">{{ day.date.split('-')[2] }}</span>
+          <span class="day-name">{{ day.name }}</span>
+          <span class="day-number">{{ day.number }}</span>
         </div>
       </div>
 
@@ -57,18 +25,20 @@
               @dragover.prevent
               @drop="onDrop($event, day.date)">
             
+            <div v-if="day.events.length === 0" class="no-events">Inga prov</div> <!-- 🔥 Debug info -->
+            
             <div v-for="event in day.events" :key="event.id"
                 class="event"
                 :style="{ backgroundColor: event.color || '#CCCCCC' }"
                 draggable="true"
                 @dragstart="startDrag($event, event)"
                 @click="openExamDetails(event)">
-              <span>{{ event.teacher }} - Slutprov</span>
+                <span>Exam with {{ event.teacher }} - {{ event.examMunicipality }} - {{ event.examTime }}</span>
             </div>
           </div>
         </div>
-
       </div>
+
     </div>
 
     <!-- Modal för Exam Details -->
@@ -77,7 +47,7 @@
       <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">{{ selectedExam.teacher || 'Okänd lärare' }}</h5>
+            <h5 class="modal-title">{{ selectedExam.teacher || 'Okänd lärare' }} </h5>
             <button type="button" class="btn-close" @click="closeModal"></button>
           </div>
           <div class="modal-body">
@@ -104,7 +74,31 @@
             </table>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeModal">Stäng</button>
+            <form @submit.prevent="submitExam" class="exam-form">
+              <label>Choose exam time:</label>
+              <input type="time" id="examTime" v-model="selectedExamTime" required />
+
+              <label>Choose exam municipality:</label>
+              <select v-model="selectedExamMunicipality">
+                <option v-for="(locations, municipality) in examMunicipalities" :key="municipality" :value="municipality">
+                  {{ municipality }}
+                </option>
+              </select>
+
+              <label>Choose exam location:</label>
+              <select v-model="selectedExamLocation">
+                <option v-for="location in examMunicipalities[selectedExamMunicipality]" :key="location" :value="location">
+                  {{ location }}
+                </option>
+
+              </select>
+
+              <button type="submit" class="btn btm-primary">
+                Save Exam
+              </button>
+
+
+            </form>
           </div>
         </div>
       </div>
@@ -115,97 +109,120 @@
 
 
 <script>
-import dayjs from 'dayjs';
-import isoWeek from 'dayjs/plugin/isoWeek';
-import weekOfYear from 'dayjs/plugin/weekOfYear';
+import DatePicker from "@vuepic/vue-datepicker";
+import "@vuepic/vue-datepicker/dist/main.css";
 import axios from 'axios';
 
-dayjs.extend(isoWeek);
-dayjs.extend(weekOfYear);
+
 
 export default {
+  components: {DatePicker},
   data() {
     return {
-      selectedDate: dayjs().toDate(),
+      selectedDate: new Date(),
+      weekDays: [],
       events: [],
       selectedExam: null,
       teachers: [],
       courses: [],
       weekDaysShort: ['M', 'T', 'O', 'T', 'F', 'L', 'S'],
+      examMunicipalities: {
+        Sollentuna: ["308", "310", "lilla rummet", "Aniara", "Kung Agnes"],
+        Akalla: ["Vision", "Hässja", "Arkarli", "316"],   
+      },
+      selectedExamMunicipality: "",
+      selectedExamLocation: "",
+      selectedExamTime: "",
     };
   },
   computed: {
-    selectedMonth() {
-      return dayjs(this.selectedDate).format('MMMM YYYY');
-    },
-    selectedDateFormatted() {
-      return dayjs(this.selectedDate).format('YYYY-MM-DD');
-    },
     currentWeekNumber() {
-      return dayjs(this.selectedDate).week();
-    },
-    calendarGrid() {
-      const startOfMonth = dayjs(this.selectedDate).startOf('month').startOf('week');
-      return Array.from({ length: 6 }, (_, row) => {
-        return Array.from({ length: 7 }, (_, col) => {
-          const date = startOfMonth.add(row * 7 + col, 'day');
-          return { date: date.format('YYYY-MM-DD'), day: date.date() };
-        });
-      });
-    },
-    weekDays() {
-      const startOfWeek = dayjs(this.selectedDate).startOf('isoWeek');
-      return Array.from({ length: 7 }, (_, i) => {
-        const date = startOfWeek.add(i, 'day').format('YYYY-MM-DD');
-        const dayEvents = this.events.filter(e => e.date === date);
-        return { date, label: dayjs(date).format('dddd'), events: dayEvents };
-      });
-    },
+      return this.getWeekNumber(this.selectedDate)
+    }
   },
   methods: {
-    selectDate(date) {
-      this.selectedDate = dayjs(date).toDate();
+    generateWeekDays(baseDate) {
+      const startOfWeek = new Date(baseDate);
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1);
+
+      const days = [];
+      const dayNames = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"];
+
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(startOfWeek);
+        date.setDate(startOfWeek.getDate() + i);
+        const formattedDate = date.toISOString().split("T")[0]; // 🗓️ Format YYYY-MM-DD
+
+        const dayEvents = this.events.filter(event => event.date === formattedDate);
+
+        days.push({
+          name: dayNames[i],
+          number: date.getDate(),
+          date: formattedDate,
+          events: dayEvents, // 🔥 Kopplar events till dagen
+        });
+      }
+
+      this.weekDays = days;
+      console.log("📌 Veckodagar genererade:", this.weekDays); // ✅ Loggar dagarna + events
     },
+
+
+       // Hanterar datumändring från datepicker
+       onDateChange(newDate) {
+      this.selectedDate = new Date(newDate);
+      this.generateWeekDays(this.selectedDate);
+    },
+
+    // Går till föregående vecka
     prevWeek() {
-      this.selectedDate = dayjs(this.selectedDate).subtract(1, 'week').toDate();
+      this.selectedDate.setDate(this.selectedDate.getDate() - 7);
+      this.generateWeekDays(this.selectedDate);
     },
+
+    // Går till nästa vecka
     nextWeek() {
-      this.selectedDate = dayjs(this.selectedDate).add(1, 'week').toDate();
+      this.selectedDate.setDate(this.selectedDate.getDate() + 7);
+      this.generateWeekDays(this.selectedDate);
     },
-    prevMonth() {
-      this.selectedDate = dayjs(this.selectedDate).subtract(1, 'month').toDate();
+
+    getWeekNumber(date) {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
     },
-    nextMonth() {
-      this.selectedDate = dayjs(this.selectedDate).add(1, 'month').toDate();
-    },
-    prevYear() {
-      this.selectedDate = dayjs(this.selectedDate).subtract(1, 'year').toDate();
-    },
-    nextYear() {
-      this.selectedDate = dayjs(this.selectedDate).add(1, 'year').toDate();
-    },
+
     async fetchExams() {
       try {
         const response = await axios.get("http://localhost:5001/api/calendar-color");
-        console.log("📌 API Response:", response.data); // 🔍 Logga API-responsen
 
-        if (!Array.isArray(response.data) || response.data.length === 0) {
-          console.warn("⚠️ API returnerade ingen data eller ett felaktigt format!");
-          return;
-        }
+        console.log("📌 Server response:", response.data); // 🔥 Logga hela serverns svar
 
-        this.events = response.data.map(event => ({
-          id: event.id || Math.random().toString(36).substr(2, 9), // ✅ Se till att varje event har unikt ID
-          teacher: event.extendedProps?.teacher || "Okänd lärare",
-          date: dayjs(event.start).format('YYYY-MM-DD'),
-          color: event.color || "#CCCCCC",
-          students: event.extendedProps?.students.map(s => ({
-            _id: s._id, // ✅ Ensure we're using MongoDB's ObjectId
-            name: s.name,
-            personalNumber: s.personalNumber,
-            attended: s.attended || false,
-          })) || [],
-        }));
+
+        this.events = response.data.map(event => {
+          const eventDate = new Date(event.start + "T00:00:00+01:00"); // CET (UTC+1)
+          const formattedDate = eventDate.toISOString().split("T")[0]; // 🗓️ Format YYYY-MM-DD
+
+      return {
+        id: event._id || Math.random().toString(36).substr(2, 9),
+        teacher: event.extendedProps?.teacher || "Unknown Teacher",
+        date: formattedDate,
+        color: event.color || "#CCCCCC",
+        examMunicipality: event.extendedProps?.examMunicipality || "Unknown municipality",
+        examLocation: event.extendedProps?.examLocation || "Unknown location",
+        examTime: event.extendedProps?.examTime || "No exam time",
+        students: event.extendedProps?.students.map(s => ({
+          _id: s._id,
+          name: s.name,
+          personalNumber: s.personalNumber,
+          examMunicipality: s.examMunicipality,
+          examLocation: s.examLocation,
+          examTime: s.examTime,
+          attended: s.attended || false,
+        })) || [],
+      };
+    });
 
         console.log("✅ Events parsed:", this.events);
       } catch (error) {
@@ -214,9 +231,20 @@ export default {
     },
 
     openExamDetails(exam) {
-      console.log("📌 Clicked Exam Data:", exam);
-      this.selectedExam = { ...exam };
-    },
+    console.log("📌 Clicked Exam Data:", exam);
+
+    // ✅ Endast elever kopplade till detta event
+    this.selectedExam = {
+        ...exam
+        
+    };
+
+    // ✅ Uppdatera modalens header
+    this.selectedExamTime = exam.examTime || "No exam time";
+    this.selectedExamMunicipality = exam.examMunicipality || "Unknown municipality";
+    this.selectedExamLocation = exam.examLocation || "Unknown location";
+}
+,
     closeModal() {
       this.selectedExam = null;
     },
@@ -241,24 +269,77 @@ export default {
 
     startDrag(event, item) {
       event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('itemID', item.id);
-      event.dataTransfer.setData('oldDate', item.date);
+      event.dataTransfer.setData('eventID', item.id)
+      event.dataTransfer.setData("oldDate", item.date); // 🗓️ Sparar datumet
     },
     async onDrop(event, newDate) {
-      const eventId = event.dataTransfer.getData('itemID');
-      const eventIndex = this.events.findIndex(e => e.id === eventId);
+      event.preventDefault(); // Förhindrar standardbeteende
+
+      const eventID = event.dataTransfer.getData("eventID");
+      const oldDate = event.dataTransfer.getData("oldDate");
+
+      // 🔍 Hitta eventet i `this.events`
+      const eventIndex = this.events.findIndex(e => e.id === eventID);
       if (eventIndex !== -1) {
+        // 🚀 Flytta eventet
         this.events[eventIndex].date = newDate;
+
+        // 🔄 Uppdatera Vue reaktivt
+        this.events = [...this.events];
+
+        // 🔄 Återskapa veckodagar
+        this.generateWeekDays(this.selectedDate);
+
         try {
-          await axios.put(`http://localhost:5001/api/update-exam/${eventId}`, { date: newDate });
+          await axios.put(`http://localhost:5001/api/update-exam/${eventID}`, { date: newDate });
+          console.log(`✅ Event ${eventID} moved from ${oldDate} to ${newDate}`);
         } catch (error) {
           console.error("❌ Error updating exam:", error.response?.data || error.message);
         }
       }
+    },
+
+    async submitExam() {
+    console.log("📌 Submitting exam data...");
+
+    try {
+        if (!this.selectedExamTime || !this.selectedExamMunicipality || !this.selectedExamLocation) {
+            alert("Välj tid, kommun och plats för provet.");
+            return;
+        }
+
+        if (!this.selectedExam.students || this.selectedExam.students.length === 0) {
+            alert("Det finns inga studenter att skapa slutprov för.");
+            return;
+        }
+
+        const studentIds = this.selectedExam.students.map(student => student._id);
+
+        const response = await axios.post("http://localhost:5001/api/add-exam", {
+            studentIds,
+            examTime: this.selectedExamTime,
+            examMunicipality: this.selectedExamMunicipality,
+            examLocation: this.selectedExamLocation,
+        });
+
+        console.log("✅ Exams saved:", response.data);
+
+        // 🔄 Ladda om kalendern för att visa den uppdaterade informationen
+        await this.fetchExams();
+        this.closeModal();
+    } catch (error) {
+        console.error("❌ Error adding exams:", error.response?.data || error.message);
     }
+}
+
+
+
+
   },
-  mounted() {
+   mounted() {
     this.fetchExams();
+
+    this.generateWeekDays(this.selectedDate);
   },
 };
 </script>
@@ -472,6 +553,51 @@ td.selected {
 .close {
   font-size: 24px;
   cursor: pointer;
+}
+
+.exam-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f9f9f9;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+  margin: 20px auto;
+}
+
+.exam-form h4 {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.exam-form label {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.exam-form input, 
+.exam-form select {
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+}
+
+.exam-form button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 10px;
+  font-size: 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.exam-form button:hover {
+  background: #0056b3;
 }
 
 @media (max-width: 768px) {
