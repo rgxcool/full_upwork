@@ -17,7 +17,7 @@ const app = express();
 import cors from "cors";
 app.use(
     cors({
-        origin: "https://mindfullearning.se",
+        origin: process.env.CLIENT_URL,
         methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
         allowedHeaders:
             "Origin, X-Requested-With, Content-Type, Accept, Authorization",
