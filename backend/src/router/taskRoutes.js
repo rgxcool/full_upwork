@@ -113,7 +113,7 @@ router.delete("/task/:id", authenticateUser, async (req, res) => {
 /**
  * ✅ Delete All Tasks Belonging to the User
  */
-router.delete("/task/all", authenticateUser, async (req, res) => {
+router.delete("/delalltasks", authenticateUser, async (req, res) => {
     try {
         const result = await Task.deleteMany({ userId: req.user.userId });
         res.json({

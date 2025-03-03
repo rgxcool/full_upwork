@@ -168,7 +168,7 @@ export default createStore({
 
     async deleteAllTasks({ commit }) {
       try {
-        await axios.delete(`${import.meta.env.VITE_API_URL}/api/task`, {
+        await axios.delete(`${import.meta.env.VITE_API_URL}/api/delalltasks`, {
           withCredentials: true,
         })
         commit('DELETE_ALL_TASKS')
