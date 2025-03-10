@@ -1,7 +1,13 @@
 <template>
   <div class="calendar-container">
     <aside class="sidebar">
-      <DatePicker v-model="selectedDate" @update:modelValue="onDateChange" :auto-apply="true" inline :enable-time="false"/>
+      <DatePicker 
+        v-model="selectedDate" 
+        @update:modelValue="onDateChange" 
+        :auto-apply="true" 
+        inline 
+        :enable-time="false"
+      />
     </aside>
 
     <div class="main-calendar">
@@ -32,8 +38,10 @@
                 draggable="true"
                 @dragstart="startDrag($event, event)"
                 @click="openExamDetails(event)">
-                <span>Exam with {{ event.teacher }} - {{ event.examMunicipality }} - {{ event.examTime }}</span>
-            </div>
+                <span>{{ event.teacher }}</span>
+                <span>{{ event.examMunicipality }} - {{ event.examLocation }}</span>
+                <span>{{ event.examTime }}</span>            
+              </div>
           </div>
         </div>
       </div>
@@ -150,7 +158,7 @@ export default {
       for (let i = 0; i < 7; i++) {
         const date = new Date(startOfWeek);
         date.setDate(startOfWeek.getDate() + i);
-        const formattedDate = date.toISOString().split("T")[0]; // 🗓️ Format YYYY-MM-DD
+        const formattedDate = date.toLocaleDateString("sv-SE") // 🗓️ Format YYYY-MM-DD
 
         const dayEvents = this.events.filter(event => event.date === formattedDate);
 
@@ -217,9 +225,6 @@ export default {
           _id: s._id,
           name: s.name,
           personalNumber: s.personalNumber,
-          examMunicipality: s.examMunicipality,
-          examLocation: s.examLocation,
-          examTime: s.examTime,
           attended: s.attended || false,
         })) || [],
       };
