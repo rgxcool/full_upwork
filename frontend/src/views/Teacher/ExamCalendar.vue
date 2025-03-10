@@ -175,11 +175,21 @@ export default {
     },
 
 
-       // Hanterar datumändring från datepicker
-       onDateChange(newDate) {
+    onDateChange(newDate) {
       this.selectedDate = new Date(newDate);
+
+      // Se till att vi alltid hamnar på rätt veckas måndag
+      let day = this.selectedDate.getDay(); // Hämtar veckodagen (0 = söndag, 1 = måndag, etc.)
+      
+      if (day === 0) { // Om det är söndag
+        this.selectedDate.setDate(this.selectedDate.getDate() - 6); // Hoppa tillbaka till måndag samma vecka
+      } else {
+        this.selectedDate.setDate(this.selectedDate.getDate() - day + 1); // Justera till måndag
+      }
+
       this.generateWeekDays(this.selectedDate);
-    },
+    }
+    ,
 
     // Går till föregående vecka
     prevWeek() {
