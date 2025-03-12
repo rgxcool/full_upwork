@@ -106,6 +106,17 @@ router.get("/details/:type/:id", async (req, res) => {
 });
 
 
+router.put("/update-student/:id", async (req, res) => {
+    try {
+        const updatedStudent = await Student.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(updatedStudent);
+    } catch (error) {
+        console.error("❌ Error updating student:", error);
+        res.status(500).json({ message: "Kunde inte uppdatera studenten" });
+    }
+});
+
+
 router.put("/student/:id", async (req, res) => {
     const { id } = req.params;
     const updatedData = req.body;
