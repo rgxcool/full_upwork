@@ -22,14 +22,15 @@
       </div>
     </section>
 
-    <section v-else>
-      <div class="info-item">
-        <strong>Namn:</strong> {{ userData?.name || "Ej tillgänglig" }}
-      </div>
-      <div class="info-item" v-if="userData?.email">
-        <strong>Email:</strong> {{ userData.email || "Ej tillgänglig"}}
-      </div>
-    </section>     
+      <!-- För Lärare och Övrig Personal -->
+      <section v-else>
+        <div class="info-item">
+          <strong>Namn:</strong> {{ userData?.username || "Ej tillgänglig" }}
+        </div>
+        <div class="info-item">
+          <strong>Email:</strong> {{ userData?.email || "Ej tillgänglig" }}
+        </div>
+      </section>   
     </div>
   </template>
   

@@ -13,7 +13,7 @@ router.get("/search", async (req, res) => {
     }
 
     try {
-        // Hämta användare, kurser, studenter och lärare som matchar söktermen
+        // Hämta användare (övrig personal + lärare)
         const users = await User.find({
             $or: [
                 { username: { $regex: query, $options: "i" } },
@@ -21,49 +21,35 @@ router.get("/search", async (req, res) => {
             ],
         }).select("_id username email role");
 
-        const courses = await Course.find({
-            name: { $regex: query, $options: "i" },
-        }).select("_id name description");
-
+        // Hämta elever
         const students = await Student.find({
-            $or: [
-                { name: { $regex: query, $options: "i" } },
-            ],
-        }).select("_id name studentId email");
+            name: { $regex: query, $options: "i" },
+        }).select("_id name email");
 
-        const teachers = await Teacher.find({
-            $or: [
-                { name: { $regex: query, $options: "i" } },
-                { email: { $regex: query, $options: "i" } },
-            ],
-        }).select("_id name email colorCode");
+        // Filtrera ut lärare och övrig personal baserat på roll
+        const teachers = users.filter(user => user.role === "teacher");
+        const staff = users.filter(user => ["admin", "systemadmin", "syv", "specped", "coordinator"].includes(user.role));
 
         // Formatera resultaten med en 'type' för att kunna särskilja
         const results = [
-            ...users.map((user) => ({
-                id: user._id,
-                name: user.username,
-                type: "Användare",
-                extra: user.email,
-            })),
-            ...courses.map((course) => ({
-                id: course._id,
-                name: course.name,
-                type: "Kurs",
-                extra: course.description,
-            })),
-            ...students.map((student) => ({
+            ...students.map(student => ({
                 id: student._id,
                 name: student.name,
-                type: "Elev"            
+                type: "Elev",
+                extra: student.email
             })),
-            ...teachers.map((teacher) => ({
+            ...teachers.map(teacher => ({
                 id: teacher._id,
-                name: teacher.name,
+                name: teacher.username,
                 type: "Lärare",
-                extra: teacher.email,
-                color: teacher.colorCode, // Kan användas för att visa lärarens färg
+                extra: teacher.email
             })),
+            ...staff.map(person => ({
+                id: person._id,
+                name: person.username,
+                type: "Personal",
+                extra: person.email
+            }))
         ];
 
         res.json(results);
@@ -88,7 +74,14 @@ router.get("/details/:type/:id", async (req, res) => {
                     .select("-__v"); // Exkludera metadata
                 break;
             case "Lärare":
-                result = await Teacher.findById(id).select("-password");
+                result = await User.findById(id)
+                    .select("username email role")
+                    .where("role").equals("teacher"); // Säkerställer att endast lärare hämtas
+                break;
+            case "Personal":
+                result = await User.findById(id)
+                    .select("username email role")
+                    .where("role").in(["admin", "systemadmin", "syv", "specped", "coordinator"]); // Hämtar personal
                 break;
             default:
                 return res.status(400).json({ message: "Ogiltig typ av objekt" });
@@ -104,6 +97,7 @@ router.get("/details/:type/:id", async (req, res) => {
         res.status(500).json({ message: "Serverfel vid hämtning av detaljer" });
     }
 });
+
 
 
 router.put("/update-student/:id", async (req, res) => {

@@ -1,22 +1,25 @@
 <template>
-  <section style="background: #F8F8F8;">
-  <div class="container">
-    <nav class="top-menu">
+  <section class="tab-container">
+    <div class="tab-menu">
       <ul>
-        <li v-for="tab in tabs" :key="tab" @click="activeTab = tab" :class="{ active: activeTab === tab }">
+        <li 
+          v-for="tab in tabs" 
+          :key="tab" 
+          @click="activeTab = tab" 
+          :class="{ active: activeTab === tab }"
+        >
           {{ tab }}
         </li>
       </ul>
-    </nav>
+    </div>
     <div class="content">
       <component :is="currentComponent" :userData="data" :userType="type"></component>
     </div>
-  </div>
-</section>
+  </section>
 </template>
 
 <script>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import axios from "axios";
 import AccountTab from "@/views/Admin/SearchTabs/AccountTab.vue";
@@ -29,11 +32,11 @@ export default {
     const route = useRoute();
     const router = useRouter();
     const data = ref(null);
-    const activeTab = ref("Account");
+    const activeTab = ref("Användare");
 
-    const tabs = ["Account", "StudyPlan", "APL"];
+    const tabs = ["Användare", "Studieplan", "APL"];
 
-    onMounted(async () => {
+    const fetchData = async () => {
       const { type, id } = route.params;
       console.log("🔍 Requesting details for:", type, id);
 
@@ -44,11 +47,18 @@ export default {
       } catch (error) {
         console.error("Error fetching data:", error);
       }
-    });
+    };
+
+    onMounted(fetchData);
+
+    // Watch för att uppdatera datan när route ändras
+    watch(() => route.params, fetchData, { deep: true });
+
+
 
     const currentComponent = computed(() => {
       switch (activeTab.value) {
-        case "StudyPlan": return StudyPlan;
+        case "Studieplan": return StudyPlan;
         case "APL": return APLSection;
         default: return AccountTab;
       }
@@ -60,47 +70,43 @@ export default {
 </script>
 
 <style scoped>
-.container {
+.tab-container {
   padding: 20px;
   height: 70vh;
 }
-.top-menu {
+
+.tab-menu {
   display: flex;
-  background-color: white;
-  padding: 15px 10px;
-  border-radius: 10px;
+  gap: 20px;
+  padding-bottom: 10px;
 }
-.top-menu ul {
+
+.tab-menu ul {
   display: flex;
   list-style: none;
   padding: 0;
   margin: 0;
 }
-.top-menu li {
-  padding: 10px 20px;
+
+.tab-menu li {
+  font-size: 18px;
+  padding: 8px 16px;
   cursor: pointer;
   font-weight: bold;
+  color: gray;
   transition: color 0.3s ease-in-out;
 }
-.top-menu li:hover {
-  color: #007bff;
+
+.tab-menu li.active {
+  color: black;
+  border-bottom: 3px solid black;
 }
-.top-menu li.active {
-  border-bottom: 3px solid #007bff;
-  color: #007bff;
-}
+
 .content {
   margin-top: 20px;
   background: white;
   padding: 25px;
   border-radius: 15px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-h2 {
-  font-size: 22px;
-  color: #333;
-  border-bottom: 2px solid #007bff;
-  padding-bottom: 10px;
-  margin-bottom: 20px;
 }
 </style>
