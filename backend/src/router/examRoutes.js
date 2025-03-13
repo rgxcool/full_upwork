@@ -14,94 +14,83 @@ router.get('/calendar-color', async (req, res) => {
         students
             .filter(student => !student.dropout && student.finalExamDate)
             .forEach(student => {
-                console.log("📌 Student Exam Data:", student);
-
                 const teacher = teachers.find(t => t.name === student.teacher);
-                const date = student.finalExamDate.toISOString().split("T")[0]; // 🟢 Konvertera till YYYY-MM-DD format
+
+                // 🟢 Konvertera till svensk tid (CET/CEST)
+                const date = new Date(student.finalExamDate);
+                date.setHours(date.getHours() + 1);  // 🕐 Justera +1 timme till CET
+                const formattedDate = date.toISOString().split("T")[0];
+
                 const teacherName = teacher?.name || 'Unknown teacher';
-
-                const examTime = student.examTime || "No exam time";
-                const examMunicipality = student.examMunicipality || "Unknown exam municipality";
-                const examLocation = student.examLocation || "Unknown exam Location";
-                const course = student.coursePackages.map(pkg => pkg.coursePackageId?.name || "Okänd kurs").join(", ");
-
-                console.log("📌 Extracted exam data:", { date, examTime, examMunicipality, examLocation });
-
-                // ✅ Gruppnyckel per lärare och datum
-                const key = `${teacherName}-${date}`;
+                const key = `${teacherName}-${formattedDate}`;
 
                 if (!groupedEvents[key]) {
                     groupedEvents[key] = {
-                        _id: student._id.toString(), // ✅ Använd studentens `_id`
-                        title: `${teacherName} - ${examMunicipality} (${examTime})`,
-                        start: date,
+                        _id: student._id.toString(),
+                        title: `${teacherName} - ${student.examMunicipality} (${student.examTime})`,
+                        start: formattedDate,
                         color: teacher?.colorCode || '#cccccc',
                         extendedProps: {
                             teacher: teacherName,
-                            examMunicipality,
-                            examLocation,
-                            examTime,
+                            examMunicipality: student.examMunicipality || "Unknown",
+                            examLocation: student.examLocation || "Unknown",
+                            examTime: student.examTime || "No exam time",
                             students: [],
                         },
                     };
                 }
 
-                // ✅ Lägg endast till elever kopplade till det specifika eventet
                 groupedEvents[key].extendedProps.students.push({
-                    _id: student._id || new mongoose.Types.ObjectId(), // 🔥 Sätter en fallback `_id`,
+                    _id: student._id.toString(),
                     name: student.name || "Unknown student",
                     personalNumber: student.personalNumber || "No personal number",
-                    examLocation,
-                    examTime,
-                    course,
                     attended: student.attendedExam || false,
                 });
             });
 
-        const events = Object.values(groupedEvents);
-        console.log("✅ Slutliga event:", JSON.stringify(events, null, 2));
+        res.json(Object.values(groupedEvents));
 
-        res.json(events);
     } catch (error) {
         console.error("❌ Error in /calendar-color:", error.message);
         res.status(500).send("Server error");
     }
 });
 
+
+
 router.put('/update-exam/:id', async (req, res) => {
     const { id } = req.params;
     const { date } = req.body;
 
     if (!id || id.length !== 24) {
-        return res.status(400).json({ error: "Invalid exam ID" });
+        return res.status(400).json({ error: "Invalid student ID" });
     }
 
     try {
-        // 🟢 Hämta studentens nuvarande finalExamDate
         const student = await Student.findById(id);
-        if (!student || !student.finalExamDate) {
-            return res.status(404).json({ error: "Student or exam date not found" });
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
         }
 
-        const oldDate = new Date(student.finalExamDate).toISOString().split("T")[0]; 
-        const newFormattedDate = new Date(date).toISOString().split("T")[0];
+        // 🔥 Se till att vi alltid sparar i **midnatt UTC**
+        const newDate = new Date(date);
+        newDate.setUTCHours(0, 0, 0, 0);  // 🕛 Sätter exakt midnatt i UTC
 
-        // 🟢 Uppdatera **alla** studenter som har samma finalExamDate
+        // 🟢 Uppdatera alla studenter som hade samma datum
         const updatedStudents = await Student.updateMany(
-            { finalExamDate: new Date(oldDate) }, 
-            { $set: { finalExamDate: new Date(newFormattedDate) } }
+            { finalExamDate: student.finalExamDate }, 
+            { $set: { finalExamDate: newDate } }
         );
 
-        console.log(`✅ Uppdaterade ${updatedStudents.modifiedCount} studenter till nytt datum: ${date}`);
-        res.json({ message: "Exam date updated for all students", updatedStudents });
+        console.log(`✅ Uppdaterade ${updatedStudents.modifiedCount} studenter från ${student.finalExamDate} till ${newDate.toISOString()}`);
+
+        res.json({ message: "Exam date updated", updatedStudents });
 
     } catch (error) {
         console.error("❌ Error updating exam:", error);
         res.status(500).json({ error: "Server error", details: error.message });
     }
 });
-
-
 
 
 

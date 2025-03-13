@@ -7,14 +7,37 @@
         :auto-apply="true" 
         inline 
         :enable-time="false"
+        :highlight="highlightedDates"
+        locale="sv"
+        :firstDayOfWeek="1"
+        
+
       />
     </aside>
 
     <div class="main-calendar">
       <div class="header">
         <button @click="prevWeek"><</button>
-        <h2>Vecka {{ currentWeekNumber }}</h2>
+        <h2>Vecka {{ currentWeekNumber }}
+          <span @click="toggleMiniCalendar" class="calendar-icon">
+            📅
+          </span>
+        </h2>
         <button @click="nextWeek">></button>
+      </div>
+
+      <!-- Minikalender dropdown -->
+      <div v-if="showMiniCalendar" class="mini-calendar-popup">
+        <DatePicker 
+          v-model="selectedDate" 
+          @update:modelValue="onDateChange"
+          :auto-apply="true" 
+          inline 
+          :enable-time="false"
+          :highlight="highlightedDates"
+          locale="sv" 
+          :firstDayOfWeek="1"
+      />
       </div>
 
       <div class="week-header">
@@ -48,7 +71,6 @@
 
     </div>
 
-    <!-- Modal för Exam Details -->
     <div v-if="selectedExam" class="modal fade show d-block" tabindex="-1" role="dialog"
       style="background: rgba(0, 0, 0, 0.5);">
       <div class="modal-dialog modal-lg" role="document">
@@ -127,6 +149,8 @@ export default {
   data() {
     return {
       selectedDate: new Date(),
+      showMiniCalendar: false, // Styr visningen av minikalendern
+
       weekDays: [],
       events: [],
       selectedExam: null,
@@ -145,12 +169,28 @@ export default {
   computed: {
     currentWeekNumber() {
       return this.getWeekNumber(this.selectedDate)
+    },
+    highlightedDates() {
+      return this.weekDays.map(day => day.date);
     }
   },
   methods: {
     generateWeekDays(baseDate) {
       const startOfWeek = new Date(baseDate);
       startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1);
+
+      this.weekDays = [...Array(7)].map((_, i) => {
+        const date = new Date(startOfWeek);
+        date.setDate(startOfWeek.getDate() + i);
+        const formattedDate = date.toISOString().split("T")[0];
+
+        return {
+          name: ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"][i],
+          number: date.getDate(),
+          date: formattedDate,
+          events: this.events.filter(event => event.date === formattedDate),
+        };
+      });
 
       const days = [];
       const dayNames = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"];
@@ -171,57 +211,52 @@ export default {
       }
 
       this.weekDays = days;
-      console.log("📌 Veckodagar genererade:", this.weekDays); // ✅ Loggar dagarna + events
     },
 
 
     onDateChange(newDate) {
       this.selectedDate = new Date(newDate);
 
-      // Se till att vi alltid hamnar på rätt veckas måndag
-      let day = this.selectedDate.getDay(); // Hämtar veckodagen (0 = söndag, 1 = måndag, etc.)
-      
-      if (day === 0) { // Om det är söndag
-        this.selectedDate.setDate(this.selectedDate.getDate() - 6); // Hoppa tillbaka till måndag samma vecka
-      } else {
-        this.selectedDate.setDate(this.selectedDate.getDate() - day + 1); // Justera till måndag
-      }
+        let dayOfWeek = this.selectedDate.getDay(); 
+        let startOfWeek = new Date(this.selectedDate);
+        startOfWeek.setDate(this.selectedDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); 
 
-      this.generateWeekDays(this.selectedDate);
-    }
-    ,
+        this.generateWeekDays(startOfWeek); 
+      },
 
-    // Går till föregående vecka
-    prevWeek() {
-      this.selectedDate.setDate(this.selectedDate.getDate() - 7);
-      this.selectedDate = new Date(this.selectedDate);
-      this.generateWeekDays(this.selectedDate);
-    },
 
-    // Går till nästa vecka
-    nextWeek() {
-      this.selectedDate.setDate(this.selectedDate.getDate() + 7);
-      this.selectedDate = new Date(this.selectedDate);
-      this.generateWeekDays(this.selectedDate);
-    },
+      toggleMiniCalendar() {
+        this.showMiniCalendar = !this.showMiniCalendar;
+      },
 
-    getWeekNumber(date) {
-      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-      d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-      return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-    },
+      prevWeek() {
+        this.selectedDate.setDate(this.selectedDate.getDate() - 7);
+        this.selectedDate = new Date(this.selectedDate);
+        this.generateWeekDays(this.selectedDate);
+      },
+
+      nextWeek() {
+        this.selectedDate.setDate(this.selectedDate.getDate() + 7);
+        this.selectedDate = new Date(this.selectedDate);
+        this.generateWeekDays(this.selectedDate);
+      },
+
+      getWeekNumber(date) {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+      },
 
     async fetchExams() {
       try {
         const response = await axios.get("http://localhost:5001/api/calendar-color");
 
-        console.log("📌 Server response:", response.data); // 🔥 Logga hela serverns svar
-
-
         this.events = response.data.map(event => {
-          const eventDate = new Date(event.start + "T00:00:00+01:00"); // CET (UTC+1)
-          const formattedDate = eventDate.toISOString().split("T")[0]; // 🗓️ Format YYYY-MM-DD
+          const eventDate = new Date(event.start);  
+          eventDate.setHours(0, 0, 0, 0); // 🔥 Sätter midnatt i lokal tid för att undvika tidzonsskillnader
+          const formattedDate = eventDate.toLocaleDateString("sv-SE", { year: 'numeric', month: '2-digit', day: '2-digit' }).split(" ")[0];
+
 
       return {
         id: event._id,
@@ -240,30 +275,25 @@ export default {
       };
     });
 
-        console.log("✅ Events parsed:", this.events);
       } catch (error) {
         console.error("❌ Error fetching exams:", error);
       }
     },
 
     openExamDetails(exam) {
-    console.log("📌 Clicked Exam Data:", exam);
-
-    // ✅ Endast elever kopplade till detta event
     this.selectedExam = {
         ...exam
         
-    };
+    }
 
-    // ✅ Uppdatera modalens header
     this.selectedExamTime = exam.examTime || "No exam time";
     this.selectedExamMunicipality = exam.examMunicipality || "Unknown municipality";
     this.selectedExamLocation = exam.examLocation || "Unknown location";
-}
-,
-    closeModal() {
-      this.selectedExam = null;
-    },
+  },
+  
+  closeModal() {
+    this.selectedExam = null;
+  },
     async markAttendance(personalNumber, attended) {
     try {
       const response = await axios.put(`http://localhost:5001/api/mark-attendance/${personalNumber}`, { attended });
@@ -530,11 +560,13 @@ td.selected {
   font-weight: bold;
   color: #666;
 }
+/*
 .mini-calendar td.selected {
   background: #007bff;
   color: white;
   border-radius: 50%;
 }
+  */
 .draggable-container {
   display: flex;
   flex-direction: column;
@@ -628,6 +660,24 @@ td.selected {
   background: #0056b3;
 }
 
+
+.calendar-icon {
+  cursor: pointer;
+  font-size: 20px;
+  margin-left: 10px;
+}
+
+.mini-calendar-popup {
+  position: absolute;
+  top: 50px; 
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
 @media (max-width: 768px) {
   .sidebar {
     display: none;
