@@ -3,693 +3,195 @@
     <aside class="sidebar">
       <DatePicker 
         v-model="selectedDate" 
-        @update:modelValue="onDateChange" 
+        @update:modelValue="onDateChange"
         :auto-apply="true" 
         inline 
         :enable-time="false"
-        :highlight="highlightedDates"
         locale="sv"
         :firstDayOfWeek="1"
-        
-
       />
     </aside>
 
+    <!-- Huvudkalender -->
     <div class="main-calendar">
       <div class="header">
-        <button @click="prevWeek"><</button>
-        <h2>Vecka {{ currentWeekNumber }}
-          <span @click="toggleMiniCalendar" class="calendar-icon">
-            📅
-          </span>
-        </h2>
-        <button @click="nextWeek">></button>
+        <button @click="changeView('dayGridMonth')">Månad</button>
+        <button @click="changeView('dayGridWeek')">Vecka</button>
+        <button @click="changeView('dayGridDay')">Dag</button>
       </div>
 
-      <!-- Minikalender dropdown -->
-      <div v-if="showMiniCalendar" class="mini-calendar-popup">
-        <DatePicker 
-          v-model="selectedDate" 
-          @update:modelValue="onDateChange"
-          :auto-apply="true" 
-          inline 
-          :enable-time="false"
-          :highlight="highlightedDates"
-          locale="sv" 
-          :firstDayOfWeek="1"
+      <FullCalendar ref="fullCalendar" :options="calendarOptions" />
+
+      <!-- 🟢 EventModal visas när ett event klickas -->
+      <EventModal 
+        v-if="selectedEvent" 
+        :event="selectedEvent" 
+        @close="selectedEvent = null" 
+        @update="updateEvent"
+        @delete="deleteEvent"
       />
-      </div>
-
-      <div class="week-header">
-        <div v-for="day in weekDays" :key="day.date" class="week-day">
-          <span class="day-name">{{ day.name }}</span>
-          <span class="day-number">{{ day.number }}</span>
-        </div>
-      </div>
-
-      <div class="week-view">
-        <div class="days-container">
-          <div v-for="day in weekDays" :key="day.date" class="day-column"
-              :data-date="day.date"
-              @dragover.prevent
-              @drop="onDrop($event, day.date)">
-            
-            
-            <div v-for="event in day.events" :key="event.id"
-                class="event"
-                :style="{ backgroundColor: event.color || '#CCCCCC' }"
-                draggable="true"
-                @dragstart="startDrag($event, event)"
-                @click="openExamDetails(event)">
-                <span>{{ event.teacher }}</span>
-                <span>{{ event.examMunicipality }} - {{ event.examLocation }}</span>
-                <span>{{ event.examTime }}</span>            
-              </div>
-          </div>
-        </div>
-      </div>
-
     </div>
-
-    <div v-if="selectedExam" class="modal fade show d-block" tabindex="-1" role="dialog"
-      style="background: rgba(0, 0, 0, 0.5);">
-      <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">{{ selectedExam.teacher || 'Okänd lärare' }} </h5>
-            <button type="button" class="btn-close" @click="closeModal"></button>
-          </div>
-          <div class="modal-body">
-            <table class="table table-striped">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Personalnumber</th>
-                  <th>Attendance</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(student, index) in selectedExam.students" :key="index">
-                  <td>{{ student.name }}</td>
-                  <td>{{ student.personalNumber }}</td>
-                  <td>
-                    <input type="checkbox" 
-                      v-model="student.attended" 
-                      @change="markAttendance(student.personalNumber, student.attended)" 
-                      :disabled="student.attended">                
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="modal-footer">
-            <form @submit.prevent="submitExam" class="exam-form">
-              <label>Choose exam time:</label>
-              <input type="time" id="examTime" v-model="selectedExamTime" required />
-
-              <label>Choose exam municipality:</label>
-              <select v-model="selectedExamMunicipality">
-                <option v-for="(locations, municipality) in examMunicipalities" :key="municipality" :value="municipality">
-                  {{ municipality }}
-                </option>
-              </select>
-
-              <label>Choose exam location:</label>
-              <select v-model="selectedExamLocation">
-                <option v-for="location in examMunicipalities[selectedExamMunicipality]" :key="location" :value="location">
-                  {{ location }}
-                </option>
-
-              </select>
-
-              <button type="submit" class="btn btm-primary">
-                Save Exam
-              </button>
-
-
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div> 
+  </div>
 </template>
 
-
 <script>
+import FullCalendar from '@fullcalendar/vue3';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import interactionPlugin from '@fullcalendar/interaction';
 import DatePicker from "@vuepic/vue-datepicker";
 import "@vuepic/vue-datepicker/dist/main.css";
 import axios from 'axios';
-
-
+import EventModal from './EventModal.vue'; 
 
 export default {
-  components: {DatePicker},
+  components: { FullCalendar, EventModal, DatePicker },
   data() {
     return {
-      selectedDate: new Date(),
-      showMiniCalendar: false, // Styr visningen av minikalendern
-
-      weekDays: [],
-      events: [],
-      selectedExam: null,
-      teachers: [],
-      courses: [],
-      weekDaysShort: ['M', 'T', 'O', 'T', 'F', 'L', 'S'],
-      examMunicipalities: {
-        Sollentuna: ["308", "310", "lilla rummet", "Aniara", "Kung Agnes"],
-        Akalla: ["Vision", "Hässja", "Arkarli", "316"],   
-      },
-      selectedExamMunicipality: "",
-      selectedExamLocation: "",
-      selectedExamTime: "",
+      selectedDate: new Date(), // 🗓️ Håller reda på valt datum
+      selectedEvent: null,
+      calendarOptions: {
+        plugins: [dayGridPlugin, interactionPlugin],
+        initialView: 'dayGridMonth', // Standardvy: Månad
+        editable: true, 
+        selectable: true,
+        events: [],
+        eventClick: this.openEventModal, 
+        eventDrop: this.handleEventDrop,
+        locale: "sv", // 🔥 Språk: Svenska
+        firstDay: 1, // 🔥 Veckan börjar på måndag
+        buttonText: {
+          today: "Idag",
+          month: "Månad",
+          week: "Vecka",
+          day: "Dag",
+          list: "Lista"
+        },
+        headerToolbar: {
+          left: "prev,next today",
+          center: "title",
+          right: "dayGridMonth,dayGridWeek,dayGridDay", // 🔥 Byt ut timeGrid mot dayGrid
+        },
+        displayEventTime: false, // 🔥 Döljer tider i eventen
+        allDaySlot: false, // 🔥 Tar bort "all-day" sektionen helt
+      }
     };
   },
-  computed: {
-    currentWeekNumber() {
-      return this.getWeekNumber(this.selectedDate)
-    },
-    highlightedDates() {
-      return this.weekDays.map(day => day.date);
-    }
-  },
   methods: {
-    generateWeekDays(baseDate) {
-      const startOfWeek = new Date(baseDate);
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1);
-
-      this.weekDays = [...Array(7)].map((_, i) => {
-        const date = new Date(startOfWeek);
-        date.setDate(startOfWeek.getDate() + i);
-        const formattedDate = date.toISOString().split("T")[0];
-
-        return {
-          name: ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"][i],
-          number: date.getDate(),
-          date: formattedDate,
-          events: this.events.filter(event => event.date === formattedDate),
-        };
-      });
-
-      const days = [];
-      const dayNames = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"];
-
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(startOfWeek);
-        date.setDate(startOfWeek.getDate() + i);
-        const formattedDate = date.toLocaleDateString("sv-SE") // 🗓️ Format YYYY-MM-DD
-
-        const dayEvents = this.events.filter(event => event.date === formattedDate);
-
-        days.push({
-          name: dayNames[i],
-          number: date.getDate(),
-          date: formattedDate,
-          events: dayEvents, // 🔥 Kopplar events till dagen
-        });
-      }
-
-      this.weekDays = days;
+    // 🔄 Ändra vy i FullCalendar
+    changeView(view) {
+      const calendarApi = this.$refs.fullCalendar.getApi();
+      calendarApi.changeView(view);
     },
 
-
+    // 🔄 När datum ändras i DatePicker, uppdatera FullCalendar
     onDateChange(newDate) {
       this.selectedDate = new Date(newDate);
+      const calendarApi = this.$refs.fullCalendar.getApi();
+      calendarApi.gotoDate(this.selectedDate); // 🔥 Flytta kalendern till valt datum
+    },
 
-        let dayOfWeek = this.selectedDate.getDay(); 
-        let startOfWeek = new Date(this.selectedDate);
-        startOfWeek.setDate(this.selectedDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); 
-
-        this.generateWeekDays(startOfWeek); 
-      },
-
-
-      toggleMiniCalendar() {
-        this.showMiniCalendar = !this.showMiniCalendar;
-      },
-
-      prevWeek() {
-        this.selectedDate.setDate(this.selectedDate.getDate() - 7);
-        this.selectedDate = new Date(this.selectedDate);
-        this.generateWeekDays(this.selectedDate);
-      },
-
-      nextWeek() {
-        this.selectedDate.setDate(this.selectedDate.getDate() + 7);
-        this.selectedDate = new Date(this.selectedDate);
-        this.generateWeekDays(this.selectedDate);
-      },
-
-      getWeekNumber(date) {
-        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-        return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-      },
-
-    async fetchExams() {
+    // 🔄 Hämta event från backend
+    async fetchEvents() {
       try {
-        const response = await axios.get("http://localhost:5001/api/calendar-color");
-
-        this.events = response.data.map(event => {
-          const eventDate = new Date(event.start);  
-          eventDate.setHours(0, 0, 0, 0); // 🔥 Sätter midnatt i lokal tid för att undvika tidzonsskillnader
-          const formattedDate = eventDate.toLocaleDateString("sv-SE", { year: 'numeric', month: '2-digit', day: '2-digit' }).split(" ")[0];
-
-
-      return {
-        id: event._id,
-        teacher: event.extendedProps?.teacher || "Unknown Teacher",
-        date: formattedDate,
-        color: event.color || "#CCCCCC",
-        examMunicipality: event.extendedProps?.examMunicipality || "Unknown municipality",
-        examLocation: event.extendedProps?.examLocation || "Unknown location",
-        examTime: event.extendedProps?.examTime || "No exam time",
-        students: event.extendedProps?.students.map(s => ({
-          _id: s._id,
-          name: s.name,
-          personalNumber: s.personalNumber,
-          attended: s.attended || false,
-        })) || [],
-      };
-    });
-
+        const response = await axios.get('http://localhost:5001/api/calendar-color');
+        this.calendarOptions.events = response.data.map(event => ({
+          id: event._id,
+          title: event.title,
+          start: event.start.split("T")[0], // 🔥 Tar bort tid från datumet
+          allDay: true, // 🔥 Markerar eventen som hela dagen
+          color: event.color || "#007bff",
+          extendedProps: { ...event.extendedProps }
+        }));
       } catch (error) {
-        console.error("❌ Error fetching exams:", error);
+        console.error("Fel vid hämtning av event:", error);
       }
     },
 
-    openExamDetails(exam) {
-    this.selectedExam = {
-        ...exam
-        
-    }
-
-    this.selectedExamTime = exam.examTime || "No exam time";
-    this.selectedExamMunicipality = exam.examMunicipality || "Unknown municipality";
-    this.selectedExamLocation = exam.examLocation || "Unknown location";
-  },
-  
-  closeModal() {
-    this.selectedExam = null;
-  },
-    async markAttendance(personalNumber, attended) {
-    try {
-      const response = await axios.put(`http://localhost:5001/api/mark-attendance/${personalNumber}`, { attended });
-
-      this.events = this.events.map(event => {
-      if (event.students) {
-        event.students = event.students.map(student => 
-          student.personalNumber === personalNumber ? { ...student, attended } : student
-        );
+    // 🔄 Uppdatera datum när man drar ett event
+    async handleEventDrop(info) {
+      try {
+        const updatedEvent = {
+          date: info.event.start.toISOString().split("T")[0],
+        };
+        await axios.put(`http://localhost:5001/api/update-exam/${info.event.id}`, updatedEvent);
+        console.log("Event flyttat:", info.event);
+      } catch (error) {
+        console.error("Kunde inte uppdatera event:", error);
       }
-      return event;
-    });
-
-      console.log("✅ Attendance updated:", response.data);
-    } catch (error) {
-      console.error("❌ Error marking attendance:", error.response?.data || error.message);
-    }
     },
 
-    startDrag(event, item) {
-        if (!item.id || item.id.length !== 24) {  // 🔍 Kolla att ID är korrekt
-            console.error("❌ Ogiltigt eventID:", item);
-            return;
-        }
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('eventID', item.id); 
-        event.dataTransfer.setData("oldDate", item.date);
+    // 🟢 Öppna modal med event-info
+    openEventModal(info) {
+      console.log("📌 Event Clicked:", info.event.extendedProps);
+
+      this.selectedEvent = {
+        id: info.event.id,
+        title: info.event.title,
+        start: info.event.start,
+        teacher: info.event.extendedProps.teacher,
+        examMunicipality: info.event.extendedProps.examMunicipality,
+        examLocation: info.event.extendedProps.examLocation,
+        students: info.event.extendedProps.students || [],
+      };
     },
 
-    async onDrop(event, newDate) {
-    event.preventDefault();
+    // 🟢 Uppdatera event efter modal ändring
+    async updateEvent(updatedData) {
+      try {
+        await axios.put(`http://localhost:5001/api/update-exam/${this.selectedEvent.id}`, updatedData);
+        this.fetchEvents();
+        this.selectedEvent = null; 
+      } catch (error) {
+        console.error("Kunde inte uppdatera event:", error);
+      }
+    },
 
-    const eventID = event.dataTransfer.getData("eventID");
-    if (!eventID || eventID.length !== 24) {  
-        console.error("❌ Ogiltigt eventID:", eventID);
-        return;
+    // ❌ Radera event
+    async deleteEvent() {
+      try {
+        await axios.delete(`http://localhost:5001/api/delete-exam/${this.selectedEvent.id}`);
+        this.fetchEvents();
+        this.selectedEvent = null; 
+      } catch (error) {
+        console.error("Kunde inte radera event:", error);
+      }
     }
-
-    const oldDate = event.dataTransfer.getData("oldDate");
-
-    const eventIndex = this.events.findIndex(e => e.id === eventID);
-    if (eventIndex !== -1) {
-        // 🟢 Uppdatera det befintliga eventet istället för att skapa en kopia
-        this.events[eventIndex].date = newDate;
-        this.events = [...this.events]; // 🔥 Trigga Vue att uppdatera UI
-        this.generateWeekDays(this.selectedDate);
-
-        try {
-            console.log(`📡 PUT Request till servern: /api/update-exam/${eventID}`);
-            const response = await axios.put(`http://localhost:5001/api/update-exam/${eventID}`, { date: newDate });
-
-            console.log(`✅ Exam flyttat från ${oldDate} till ${newDate}:`, response.data);
-
-            // 🔄 Hämta uppdaterade event efter flytten
-            await this.fetchExams();
-        } catch (error) {
-            console.error("❌ Error updating exam:", error.response?.data || error.message);
-        }
-    }
-},
-
-
-
-    async submitExam() {
-    console.log("📌 Submitting exam data...");
-
-    try {
-        if (!this.selectedExamTime || !this.selectedExamMunicipality || !this.selectedExamLocation) {
-            alert("Välj tid, kommun och plats för provet.");
-            return;
-        }
-
-        if (!this.selectedExam.students || this.selectedExam.students.length === 0) {
-            alert("Det finns inga studenter att skapa slutprov för.");
-            return;
-        }
-
-        const studentIds = this.selectedExam.students.map(student => student._id);
-
-        const response = await axios.post("http://localhost:5001/api/add-exam", {
-            studentIds,
-            examTime: this.selectedExamTime,
-            examMunicipality: this.selectedExamMunicipality,
-            examLocation: this.selectedExamLocation,
-        });
-
-        console.log("✅ Exams saved:", response.data);
-
-        // 🔄 Ladda om kalendern för att visa den uppdaterade informationen
-        await this.fetchExams();
-        this.closeModal();
-    } catch (error) {
-        console.error("❌ Error adding exams:", error.response?.data || error.message);
-    }
-}
-
-
-
-
   },
-   async mounted() {
-    await this.fetchExams();
-
-    this.generateWeekDays(this.selectedDate);
-  },
+  async mounted() {
+    await this.fetchEvents();
+  }
 };
 </script>
 
-
 <style>
-.calendar-cell {
-  height: 60px;
-  border-bottom: 1px solid #ddd;
-  cursor: pointer;
-  background-color: white;
-}
-.calendar-cell:hover {
-  background-color: rgba(0, 123, 255, 0.2);
-}
-.calendar-container { 
-  display: flex; 
-}
-.sidebar { 
-  width: 300px; 
-  padding: 10px; 
-  border-right: 1px solid #ccc; 
-  background: #f8f9fa; 
-  display: flex; 
-  flex-direction: column; 
-  align-items: center; 
-}
-.html-datepicker { 
-  text-align: center; 
-}
-table { 
-  width: 100%; 
-  border-collapse: collapse; 
-}
-th, td { 
-  padding: 10px; 
-  text-align: center; 
-  cursor: pointer; 
-}
-th { 
-  background: #f1f3f4; 
-}
-td.selected { 
-  background: #007bff; 
-  color: white; 
-  border-radius: 50%; 
-}
-.main-calendar { 
-  flex: 1; 
-  padding: 10px; 
-}
-.header {
+.calendar-container {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px; 
 }
-.week-view { 
-  display: flex;
-  height: 100%;
-  border-top: 1px solid #ccc;
-}
-.time-column { 
-  width: 60px; 
-  display: flex;
-  flex-direction: column;
-  background: #f8f9fa;
-  text-align: center;
-}
-.time-slot {
-  height: 60px; /* Samma höjd som kalendercellerna */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-bottom: 1px solid #ddd;
-  font-size: 12px;
-}
-.time-label { 
-  height: 50px; 
-  text-align: center; 
-  border-bottom: 1px solid #ddd; 
-  background: #f1f3f4; 
-  font-size: 12px; 
-}
-.day-column { 
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+
+.sidebar {
+  width: 300px;
+  padding: 10px;
   border-right: 1px solid #ccc;
-}
-.events { 
-  position: relative; 
-  min-height: 100px; 
-}
-.event { 
-  background: #007bff; 
-  color: #fff; 
-  padding: 5px; 
-  margin: 5px 0; 
-  cursor: pointer; 
-  border-radius: 4px; 
-  font-size: 12px; 
-  position: relative; 
-}
-.event:hover { 
-  background: #0056b3; 
-}
-.week-header {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  text-align: center;
-  padding: 10px 0;
-}
-.week-day {
+  background: #f8f9fa;
   display: flex;
   flex-direction: column;
   align-items: center;
-  font-size: 14px;
-  color: #666;
 }
-.day-name {
-  font-size: 12px;
-  text-transform: uppercase;
+
+.main-calendar {
+  flex: 1;
+  padding: 10px;
 }
-.day-number {
-  font-size: 18px;
-  font-weight: bold;
-}
+
 .header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-}
-.mini-calendar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 10px;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-.mini-calendar .nav-buttons {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-}
-.mini-calendar table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.mini-calendar th, .mini-calendar td {
-  padding: 10px;
-  text-align: center;
-  font-size: 14px;
-  color: #333;
-}
-.mini-calendar th {
-  font-weight: bold;
-  color: #666;
-}
-/*
-.mini-calendar td.selected {
-  background: #007bff;
-  color: white;
-  border-radius: 50%;
-}
-  */
-.draggable-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 100px;
-}
-.days-container {
-  display: flex;
-  flex: 1;
-  border-left: 1px solid #ccc;
-}
-.event {
-  background: #007bff;
-  color: #fff;
-  padding: 5px;
-  margin: 5px 0;
-  cursor: pointer;
-  border-radius: 4px;
-  font-size: 12px;
-  position: relative;
-}
-.event:hover {
-  background: #0056b3;
-}
-
-
-
-.attendance-btn {
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  margin-left: 10px;
-  cursor: pointer;
-  border-radius: 5px;
-}
-
-.delete-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 18px;
-}
-
-.close {
-  font-size: 24px;
-  cursor: pointer;
-}
-
-.exam-form {
-  display: flex;
-  flex-direction: column;
+  justify-content: center;
   gap: 10px;
-  background: #f9f9f9;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-  max-width: 400px;
-  margin: 20px auto;
+  margin-bottom: 10px;
 }
 
-.exam-form h4 {
-  text-align: center;
-  margin-bottom: 15px;
-}
-
-.exam-form label {
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-
-.exam-form input, 
-.exam-form select {
-  padding: 10px;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  font-size: 16px;
-}
-
-.exam-form button {
-  background: #007bff;
-  color: white;
-  border: none;
-  padding: 10px;
-  font-size: 16px;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: 0.3s;
-}
-
-.exam-form button:hover {
-  background: #0056b3;
-}
-
-
-.calendar-icon {
-  cursor: pointer;
-  font-size: 20px;
-  margin-left: 10px;
-}
-
-.mini-calendar-popup {
-  position: absolute;
-  top: 50px; 
-  left: 50%;
-  transform: translateX(-50%);
-  background: white;
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-}
-@media (max-width: 768px) {
-  .sidebar {
-    display: none;
-  }
-  .mobile-datepicker {
-    display: block;
-  }
-}
-
-@media (min-width: 769px) {
-  .mobile-datepicker {
-    display: none;
-  }
+.fc {
+  max-width: 100%;
+  margin: auto;
 }
 </style>
