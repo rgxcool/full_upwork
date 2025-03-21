@@ -31,6 +31,11 @@ const routes = [
   // Public Routes
   { path: '/', name: 'home', component: Home, meta: { title: 'Home - Mindful Learning' } },
   {
+    path: '/unauthorized',
+    name: 'Unauthorized',
+    component: () => import('@/views/Unauthorized.vue'),
+  },
+  {
     path: '/login',
     name: 'login',
     component: LoginPage,
