@@ -9,11 +9,10 @@ const router = express.Router();
 router.get("/search", async (req, res) => {
     const query = req.query.q;
     if (!query || !query.trim()) {
-        return res.status(200).json([]); // Return empty array for empty search query
+        return res.status(200).json([]);
     }
 
     try {
-        // Hämta användare (övrig personal + lärare)
         const users = await User.find({
             $or: [
                 { username: { $regex: query, $options: "i" } },
@@ -21,16 +20,13 @@ router.get("/search", async (req, res) => {
             ],
         }).select("_id username email role");
 
-        // Hämta elever
         const students = await Student.find({
             name: { $regex: query, $options: "i" },
         }).select("_id name email");
 
-        // Filtrera ut lärare och övrig personal baserat på roll
         const teachers = users.filter(user => user.role === "teacher");
         const staff = users.filter(user => ["admin", "systemadmin", "syv", "specped", "coordinator"].includes(user.role));
 
-        // Formatera resultaten med en 'type' för att kunna särskilja
         const results = [
             ...students.map(student => ({
                 id: student._id,
@@ -110,22 +106,13 @@ router.put("/update-student/:id", async (req, res) => {
     }
 });
 
-
-router.put("/student/:id", async (req, res) => {
-    const { id } = req.params;
-    const updatedData = req.body;
-
+router.put("/update-user/:id", async (req, res) => {
     try {
-        const student = await Student.findByIdAndUpdate(id, updatedData, { new: true });
-
-        if (!student) {
-            return res.status(404).json({ message: "Studenten hittades inte" });
-        }
-
-        res.json(student);
+        const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(updatedUser);
     } catch (error) {
-        console.error("❌ Fel vid uppdatering av student:", error);
-        res.status(500).json({ message: "Serverfel vid uppdatering av student" });
+        console.error("❌ Error updating user:", error);
+        res.status(500).json({ message: "Kunde inte uppdatera användaren" });
     }
 });
 
