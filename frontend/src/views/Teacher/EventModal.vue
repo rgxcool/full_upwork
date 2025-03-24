@@ -9,6 +9,13 @@
           </div>
   
           <div class="modal-body">
+
+            <p>
+              <strong>Provdetaljer:</strong><br />
+              Tid: {{ examTime || 'Ej vald' }}<br />
+              Kommun: {{ examMunicipality || 'Ej vald' }}<br />
+              Plats: {{ examLocation || 'Ej vald' }}
+            </p>
             <h5>Studenter kopplade till detta prov</h5>
             <table class="table table-striped">
               <thead>
@@ -25,8 +32,8 @@
                   <td>
                     <input type="checkbox"
                            v-model="student.attended"
-                           @change="markAttendance(student._id, student.attended)"
-                           :disabled="student.attended">                
+                           @change="markAttendance(student.personalNumber, student.attended)"
+                           >                
                   </td>
                 </tr>
               </tbody>
@@ -96,18 +103,43 @@
             alert("Välj tid, kommun och plats för provet.");
             return;
           }
-  
-          await axios.put(`http://localhost:5001/api/update-exam/${this.event.id}`, {
-            date: this.event.date,
+
+          const studentIds = this.event.students.map(s => s._id);
+
+          await axios.post(`http://localhost:5001/api/examtime-location`, {
+            studentIds,
             examTime: this.examTime,
             examMunicipality: this.examMunicipality,
             examLocation: this.examLocation,
           });
-  
-          console.log("✅ Slutprov uppdaterat!");
+
+          this.event.examTime = this.examTime;
+          this.event.examMunicipality = this.examMunicipality;
+          this.event.examLocation = this.examLocation;
+
+          console.log("✅ Slutprov uppdaterat för alla studenter!");
+          this.$emit("update"); 
           this.closeModal();
         } catch (error) {
           console.error("❌ Fel vid uppdatering av prov:", error.response?.data || error.message);
+        }
+      },
+    },
+    watch: {
+      event: {
+        immediate: true,
+        handler(newEvent) {
+          if (newEvent) {
+            // Konvertera examTime till HH:mm
+            let time = newEvent.examTime || "";
+            if (time.includes(":")) {
+              time = time.slice(0, 5); // Tar bort ev. sekunder, t.ex. 13:45:00 → 13:45
+            }
+
+            this.examTime = time;
+            this.examMunicipality = newEvent.examMunicipality || "";
+            this.examLocation = newEvent.examLocation || "";
+          }
         }
       }
     }

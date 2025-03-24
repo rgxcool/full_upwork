@@ -10,31 +10,28 @@
         locale="sv"
         :firstDayOfWeek="1"
       />
+
     </aside>
 
-    <!-- Huvudkalender -->
     <div class="main-calendar">
-      <div class="header">
-        <button @click="changeView('dayGridMonth')">Månad</button>
-        <button @click="changeView('dayGridWeek')">Vecka</button>
-        <button @click="changeView('dayGridDay')">Dag</button>
-      </div>
-
       <FullCalendar ref="fullCalendar" :options="calendarOptions" />
 
-      <!-- 🟢 EventModal visas när ett event klickas -->
       <EventModal 
         v-if="selectedEvent" 
         :event="selectedEvent" 
         @close="selectedEvent = null" 
-        @update="updateEvent"
-        @delete="deleteEvent"
-      />
+        @update="handleExamUpdate"
+        />
+
+
     </div>
   </div>
 </template>
 
 <script>
+import { computed } from 'vue';
+import { useRouter } from 'vue-router';
+import { useStore } from 'vuex';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -45,20 +42,27 @@ import EventModal from './EventModal.vue';
 
 export default {
   components: { FullCalendar, EventModal, DatePicker },
+  setup() {
+    const router = useRouter();
+    const store = useStore();
+    const userRole = computed(() => store.getters.userRole || 'guest'); // Default to 'guest' if undefined
+    return { userRole };
+  },
   data() {
     return {
-      selectedDate: new Date(), // 🗓️ Håller reda på valt datum
+      selectedDate: new Date(),
       selectedEvent: null,
+      selectedView: "dayGridWeek", // Standard: Vecka
       calendarOptions: {
         plugins: [dayGridPlugin, interactionPlugin],
-        initialView: 'dayGridMonth', // Standardvy: Månad
+        initialView: 'dayGridWeek',
         editable: true, 
         selectable: true,
         events: [],
         eventClick: this.openEventModal, 
         eventDrop: this.handleEventDrop,
-        locale: "sv", // 🔥 Språk: Svenska
-        firstDay: 1, // 🔥 Veckan börjar på måndag
+        locale: "sv",
+        firstDay: 1,
         buttonText: {
           today: "Idag",
           month: "Månad",
@@ -69,36 +73,36 @@ export default {
         headerToolbar: {
           left: "prev,next today",
           center: "title",
-          right: "dayGridMonth,dayGridWeek,dayGridDay", // 🔥 Byt ut timeGrid mot dayGrid
+          right: "dayGridMonth,dayGridWeek,dayGridDay",
         },
-        displayEventTime: false, // 🔥 Döljer tider i eventen
-        allDaySlot: false, // 🔥 Tar bort "all-day" sektionen helt
+        displayEventTime: false,
+        allDaySlot: false,
       }
     };
   },
+  computed: {
+    isAdminOrTeacher() {
+      return ["systemadmin", "teacher", "admin"].includes(this.userRole);
+    }
+  },
   methods: {
-    // 🔄 Ändra vy i FullCalendar
     changeView(view) {
       const calendarApi = this.$refs.fullCalendar.getApi();
       calendarApi.changeView(view);
     },
-
-    // 🔄 När datum ändras i DatePicker, uppdatera FullCalendar
     onDateChange(newDate) {
       this.selectedDate = new Date(newDate);
       const calendarApi = this.$refs.fullCalendar.getApi();
-      calendarApi.gotoDate(this.selectedDate); // 🔥 Flytta kalendern till valt datum
+      calendarApi.gotoDate(this.selectedDate);
     },
-
-    // 🔄 Hämta event från backend
     async fetchEvents() {
       try {
         const response = await axios.get('http://localhost:5001/api/calendar-color');
         this.calendarOptions.events = response.data.map(event => ({
           id: event._id,
           title: event.title,
-          start: event.start.split("T")[0], // 🔥 Tar bort tid från datumet
-          allDay: true, // 🔥 Markerar eventen som hela dagen
+          start: event.start.split("T")[0],
+          allDay: true,
           color: event.color || "#007bff",
           extendedProps: { ...event.extendedProps }
         }));
@@ -106,24 +110,7 @@ export default {
         console.error("Fel vid hämtning av event:", error);
       }
     },
-
-    // 🔄 Uppdatera datum när man drar ett event
-    async handleEventDrop(info) {
-      try {
-        const updatedEvent = {
-          date: info.event.start.toISOString().split("T")[0],
-        };
-        await axios.put(`http://localhost:5001/api/update-exam/${info.event.id}`, updatedEvent);
-        console.log("Event flyttat:", info.event);
-      } catch (error) {
-        console.error("Kunde inte uppdatera event:", error);
-      }
-    },
-
-    // 🟢 Öppna modal med event-info
     openEventModal(info) {
-      console.log("📌 Event Clicked:", info.event.extendedProps);
-
       this.selectedEvent = {
         id: info.event.id,
         title: info.event.title,
@@ -131,31 +118,14 @@ export default {
         teacher: info.event.extendedProps.teacher,
         examMunicipality: info.event.extendedProps.examMunicipality,
         examLocation: info.event.extendedProps.examLocation,
+        examTime: info.event.extendedProps.examTime, // 🟢 Lägg till denna rad!
         students: info.event.extendedProps.students || [],
       };
     },
-
-    // 🟢 Uppdatera event efter modal ändring
-    async updateEvent(updatedData) {
-      try {
-        await axios.put(`http://localhost:5001/api/update-exam/${this.selectedEvent.id}`, updatedData);
-        this.fetchEvents();
-        this.selectedEvent = null; 
-      } catch (error) {
-        console.error("Kunde inte uppdatera event:", error);
-      }
+      async handleExamUpdate() {
+      await this.fetchEvents(); // Hämta uppdaterade data från backend
+      console.log("🔄 Kalendern har uppdaterats!");
     },
-
-    // ❌ Radera event
-    async deleteEvent() {
-      try {
-        await axios.delete(`http://localhost:5001/api/delete-exam/${this.selectedEvent.id}`);
-        this.fetchEvents();
-        this.selectedEvent = null; 
-      } catch (error) {
-        console.error("Kunde inte radera event:", error);
-      }
-    }
   },
   async mounted() {
     await this.fetchEvents();
@@ -183,15 +153,28 @@ export default {
   padding: 10px;
 }
 
-.header {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 10px;
+.view-selector {
+  margin-top: 10px;
+  padding: 5px;
+  width: 100%;
 }
 
-.fc {
-  max-width: 100%;
-  margin: auto;
+.admin-controls {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+.admin-controls button {
+  padding: 8px 12px;
+  border: none;
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.admin-controls button:hover {
+  background: #0056b3;
 }
 </style>

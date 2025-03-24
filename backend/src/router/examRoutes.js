@@ -27,7 +27,7 @@ router.get('/calendar-color', async (req, res) => {
                 if (!groupedEvents[key]) {
                     groupedEvents[key] = {
                         _id: student._id.toString(),
-                        title: `${teacherName} - ${student.examMunicipality} (${student.examTime})`,
+                        title: `${teacherName}`,
                         start: formattedDate,
                         color: teacher?.colorCode || '#cccccc',
                         extendedProps: {
@@ -60,38 +60,32 @@ router.get('/calendar-color', async (req, res) => {
 
 router.put('/update-exam/:id', async (req, res) => {
     const { id } = req.params;
-    const { date } = req.body;
-
+    const { examTime, examMunicipality, examLocation } = req.body;
+  
     if (!id || id.length !== 24) {
-        return res.status(400).json({ error: "Invalid student ID" });
+      return res.status(400).json({ error: "Ogiltigt student-ID" });
     }
-
+  
     try {
-        const student = await Student.findById(id);
-        if (!student) {
-            return res.status(404).json({ error: "Student not found" });
-        }
-
-        // 🔥 Se till att vi alltid sparar i **midnatt UTC**
-        const newDate = new Date(date);
-        newDate.setUTCHours(0, 0, 0, 0);  // 🕛 Sätter exakt midnatt i UTC
-
-        // 🟢 Uppdatera alla studenter som hade samma datum
-        const updatedStudents = await Student.updateMany(
-            { finalExamDate: student.finalExamDate }, 
-            { $set: { finalExamDate: newDate } }
-        );
-
-        console.log(`✅ Uppdaterade ${updatedStudents.modifiedCount} studenter från ${student.finalExamDate} till ${newDate.toISOString()}`);
-
-        res.json({ message: "Exam date updated", updatedStudents });
-
+      const student = await Student.findById(id);
+      if (!student) {
+        return res.status(404).json({ error: "Studenten hittades inte" });
+      }
+  
+      // Uppdatera endast dessa tre fält
+      if (examTime) student.examTime = examTime;
+      if (examMunicipality) student.examMunicipality = examMunicipality;
+      if (examLocation) student.examLocation = examLocation;
+  
+      await student.save();
+  
+      res.json({ message: "✅ Slutprov uppdaterat", student });
     } catch (error) {
-        console.error("❌ Error updating exam:", error);
-        res.status(500).json({ error: "Server error", details: error.message });
+      console.error("❌ Fel vid uppdatering av prov:", error.message);
+      res.status(500).json({ error: "Serverfel", details: error.message });
     }
-});
-
+  });
+  
 
 
 
@@ -144,7 +138,7 @@ router.put("/mark-attendance/:personalNumber", async (req, res) => {
         }
 
         // ✅ Markera närvaro
-        student.attendedExam = true;
+        student.attendedExam = req.body.attended;
         await student.save();
 
         console.log("✅ Attendance marked for:", student);
@@ -154,6 +148,34 @@ router.put("/mark-attendance/:personalNumber", async (req, res) => {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 });
+
+router.post("/examtime-location", async (req, res) => {
+    const { studentIds, examTime, examMunicipality, examLocation } = req.body;
+  
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ message: "Inga student-ID:n angivna" });
+    }
+  
+    try {
+      const result = await Student.updateMany(
+        { _id: { $in: studentIds } },
+        {
+          $set: {
+            examTime,
+            examMunicipality,
+            examLocation,
+          },
+        }
+      );
+  
+      console.log("✅ Uppdaterade studenter:", result.modifiedCount);
+      res.status(200).json({ message: "Provinfo uppdaterad", updatedCount: result.modifiedCount });
+    } catch (error) {
+      console.error("❌ Fel vid uppdatering av exam:", error.message);
+      res.status(500).json({ message: "Serverfel", error: error.message });
+    }
+  });
+  
 
 
 
