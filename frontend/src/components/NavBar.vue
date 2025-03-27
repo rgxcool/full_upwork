@@ -2,7 +2,7 @@
   <nav class="navbar px-5" @click.self="closeSearch">
     <div v-if="canSeeSearch" class="top-nav">
 
-      <div vclass="build-counter">v. {{ buildVersion }}</div>
+      <div class="build-counter">v. {{ buildVersion }}</div>
 
       <div class="search-container" @click.stop>
           <div class="search-bar">
@@ -25,13 +25,33 @@
               </svg>
             </button>
           </div>
-                  <!-- Sökresultat Dropdown -->
+
+        <!-- Sökresultat Dropdown -->
         <div v-if="showResults" class="search-results">
           <!-- Filterknappar -->
           <div class="filter-buttons">
             <button :class="{ active: filter === 'all' }" @click="setFilter('all')">Alla</button>
             <button :class="{ active: filter === 'Elev' }" @click="setFilter('Elev')">Elever</button>
             <button :class="{ active: filter === 'Lärare' }" @click="setFilter('Lärare')">Lärare</button>
+          </div>
+
+          <!-- Dropdown + DatePicker -->
+          <div class="filter-dropdowns">
+            <select v-model="selectedCourse" @change="filterByCourse">
+              <option disabled value="">Filtrera på kurs</option>
+              <option v-for="course in allCourses" :key="course._id" :value="course._id">
+                {{ course.name }}
+              </option>
+            </select>
+
+            <DatePicker 
+              v-model="selectedDate" 
+              @update:modelValue="filterByDate"
+              :auto-apply="true"
+              placeholder="Filtrera på datum"
+              locale="sv"
+              :format="'yyyy-MM-dd'"
+            />
           </div>
 
           <!-- Resultatlista -->
@@ -95,12 +115,15 @@
 </template>
 
 <script>
-  import { ref, computed } from 'vue'
+  import { ref, computed, onMounted } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
   import axios from 'axios'
+  import DatePicker from "@vuepic/vue-datepicker";
+  import "@vuepic/vue-datepicker/dist/main.css";
 
   export default {
+    components: { DatePicker },
     setup() {
       const store = useStore()
       const router = useRouter()
@@ -114,11 +137,10 @@
       const showResults = ref(false)
       const showFilters = ref(false)
       const filter = ref("all"); // Aktivt filter
+      const selectedCourse = ref("");
+      const selectedDate = ref(null);
+      const allCourses = ref([]);
 
-
-      const setFilter = (filterType) => {
-        filter.value = filterType;
-      }
 
       const filteredResults = computed(() => {
       if (filter.value === "all") return searchResults.value;
@@ -153,17 +175,62 @@
       }
 
       const handleSearch = async () => {
+        const params = new URLSearchParams();
+
+        if (searchQuery.value) params.append("q", searchQuery.value);
+        if (selectedCourse.value) params.append("courseId", selectedCourse.value);
+        if (selectedDate.value) {
+          const formatted = new Date(selectedDate.value).toISOString().split("T")[0];
+          params.append("date", formatted); // 💡 separat "date"-parameter
+        }
 
         try {
-          const response = await axios.get(`http://localhost:5001/api/search?q=${searchQuery.value}`);
-          console.log("Search results:", searchResults.value);
-
+          const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`);
           searchResults.value = response.data;
-          showResults.value = searchResults.value.length > 0;
+          showResults.value = true;
         } catch (error) {
-          console.error("Fel vid hämtning av sökresultat", error);
+          console.error("❌ Fel vid kombinerad sökning:", error);
         }
+      };
+
+
+      const fetchCourses = async () => {
+      try {
+        const res = await axios.get("http://localhost:5001/api/courses");
+        allCourses.value = res.data;
+      } catch (err) {
+        console.error("❌ Kunde inte hämta kurser:", err);
       }
+    };
+
+    const filterByCourse = async () => {
+      if (!selectedCourse.value) return;
+      try {
+        const response = await axios.get(`http://localhost:5001/api/search?courseId=${selectedCourse.value}`);
+        searchResults.value = response.data;
+        showResults.value = true;
+      } catch (error) {
+        console.error("❌ Fel vid kursfilter:", error);
+      }
+    };
+
+    const filterByDate = async () => {
+      if (!selectedDate.value) return;
+      const formatted = new Date(selectedDate.value).toISOString().split("T")[0];
+      try {
+        const res = await axios.get(`http://localhost:5001/api/search?q=${formatted}`);
+        searchResults.value = res.data;
+        showResults.value = true;
+      } catch (err) {
+        console.error("❌ Fel vid datumfilter:", err);
+      }
+    };
+
+    const setFilter = (f) => (filter.value = f);
+    const openSearchPanel = () => {
+      showResults.value = true;
+      fetchCourses();
+    };
 
       const menuItems = [
         { name: 'Användare', link: '/anvandare', role: 'admin' },
@@ -198,7 +265,13 @@
         filteredMenuItems,
         canSeeSearch,
         navigateToDetails,
-        setFilter
+        setFilter,
+        selectedCourse,
+        allCourses,
+        fetchCourses,
+        selectedDate,
+        filterByCourse,
+        filterByDate,
       }
     },
   }

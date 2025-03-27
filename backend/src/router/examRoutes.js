@@ -45,6 +45,7 @@ router.get('/calendar-color', async (req, res) => {
                     name: student.name || "Unknown student",
                     personalNumber: student.personalNumber || "No personal number",
                     attended: student.attendedExam || false,
+                    additionalInfo: student.additionalInfo || "",
                 });
             });
 

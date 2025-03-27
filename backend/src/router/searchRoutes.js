@@ -6,54 +6,117 @@ import Teacher from "../models/Teacher.js";
 
 const router = express.Router();
 
-router.get("/search", async (req, res) => {
-    const query = req.query.q;
-    if (!query || !query.trim()) {
-        return res.status(200).json([]);
-    }
-
+router.get("/courses", async (req, res) => {
     try {
-        const users = await User.find({
-            $or: [
-                { username: { $regex: query, $options: "i" } },
-                { email: { $regex: query, $options: "i" } },
-            ],
-        }).select("_id username email role");
+        const students = await Student.find({ "courses.courseId": { $exists: true } })
+            .populate("courses.courseId", "name")
+            .select("courses");
 
-        const students = await Student.find({
-            name: { $regex: query, $options: "i" },
-        }).select("_id name email");
+        const allCourseIds = [];
 
-        const teachers = users.filter(user => user.role === "teacher");
-        const staff = users.filter(user => ["admin", "systemadmin", "syv", "specped", "coordinator"].includes(user.role));
+        for (const student of students) {
+            for (const courseObj of student.courses) {
+                if (courseObj.courseId?._id && courseObj.courseId?.name) {
+                    allCourseIds.push({
+                        _id: courseObj.courseId._id.toString(),
+                        name: courseObj.courseId.name,
+                    });
+                }
+            }
+        }
 
-        const results = [
-            ...students.map(student => ({
-                id: student._id,
-                name: student.name,
-                type: "Elev",
-                extra: student.email
-            })),
-            ...teachers.map(teacher => ({
-                id: teacher._id,
-                name: teacher.username,
-                type: "Lärare",
-                extra: teacher.email
-            })),
-            ...staff.map(person => ({
-                id: person._id,
-                name: person.username,
-                type: "Personal",
-                extra: person.email
-            }))
-        ];
+        const uniqueCoursesMap = new Map();
+        allCourseIds.forEach(course => {
+            uniqueCoursesMap.set(course._id, course);
+        });
 
-        res.json(results);
+        const uniqueCourses = Array.from(uniqueCoursesMap.values());
+        res.json(uniqueCourses);
     } catch (error) {
-        console.error("❌ Search error:", error);
-        res.status(500).json({ message: "Server error during search." });
+        console.error("\u274C Error fetching courses from students:", error);
+        res.status(500).json({ message: "Serverfel vid h\u00e4mtning av kurser" });
     }
 });
+
+router.get("/search", async (req, res) => {
+    const { q, courseId, date } = req.query;
+  
+    try {
+      let students = [];
+      let users = [];
+      let results = [];
+  
+      // 1. Kursfilter
+      if (courseId) {
+        students = await Student.find({ "courses.courseId": courseId }).lean();
+      }
+  
+      // 2. Textfilter
+      if (q) {
+        users = await User.find({
+          $or: [
+            { username: { $regex: q, $options: "i" } },
+            { email: { $regex: q, $options: "i" } },
+          ],
+        }).select("_id username email role");
+  
+        const matchingStudents = await Student.find({
+          name: { $regex: q, $options: "i" },
+        }).select("_id name email");
+  
+        students = students.length ? students : matchingStudents;
+      }
+  
+      // 3. Datumfilter (start/slutdatum exakt match)
+      if (date) {
+        const parsed = new Date(date);
+        const dateMatches = await Student.find({
+          $or: [
+            { startDate: parsed },
+            { endDate: parsed }
+          ]
+        }).select("_id name email startDate endDate");
+  
+        students = students.length ? students.filter(s =>
+          dateMatches.some(m => m._id.toString() === s._id.toString())
+        ) : dateMatches;
+      }
+  
+      // 4. Om inga filter → returnera tom lista
+      if (!q && !courseId && !date) return res.json([]);
+  
+      // 5. Hämta lärare
+      const allTeachers = await User.find({ role: "teacher" }).select("username email");
+  
+      // 6. Bygg resultatlista
+      results = [
+        ...students.map(student => {
+          const teacher = allTeachers.find(t => t.username === student.teacher);
+          return {
+            id: student._id,
+            name: student.name,
+            type: "Elev",
+            extra: teacher ? `Lärare: ${teacher.username}` : "",
+          };
+        }),
+        ...users.map(user => {
+          const type = user.role === "teacher" ? "Lärare" : "Personal";
+          return {
+            id: user._id,
+            name: user.username,
+            type,
+            extra: user.email,
+          };
+        }),
+      ];
+  
+      return res.json(results);
+    } catch (error) {
+      console.error("❌ Search error:", error);
+      res.status(500).json({ message: "Serverfel vid sökning." });
+    }
+  });
+  
 
 
 router.get("/details/:type/:id", async (req, res) => {
