@@ -77,14 +77,11 @@ export default createStore({
       console.log('🔹 Vuex: Attempting login with:', credentials)
 
       try {
-        const response = await api.post('/auth/login', {
+        await api.post('/auth/login', {
           email: credentials.email.trim(),
           password: credentials.password.trim(),
         })
 
-        console.log('✅ Vuex: Login successful, response:', response.data)
-
-        // Ensure session is correctly established before proceeding
         await dispatch('fetchUser')
 
         return { success: true, message: 'Login successful' }
@@ -93,24 +90,20 @@ export default createStore({
         return { success: false, message: error.response?.data?.message || 'Login failed' }
       }
     },
-
     async fetchUser({ commit }) {
       try {
-        const { data } = await api.get('/auth/session')
+        const { data } = await api.get('/auth/me')
 
-        console.log('✅ User session fetched:', data)
-
-        commit('SET_USER', data.user)
+        console.log('✅ User authenticated:', data)
+        commit('SET_USER', data)
       } catch (error) {
-        console.error('❌ Failed to fetch user session:', error.response?.data?.message || error)
+        console.error('❌ Failed to fetch current user:', error.response?.data?.message || error)
 
-        // Handle session expiration (force logout)
         if (error.response?.status === 401) {
           commit('LOGOUT')
         }
       }
     },
-
     async logout({ commit }) {
       try {
         await api.post('/auth/logout')

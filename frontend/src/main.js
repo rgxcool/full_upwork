@@ -30,6 +30,7 @@ if (token) {
   console.warn('⚠️ No token found in Vuex state.')
 }
 
+await store.dispatch('fetchUser')
 const app = createApp(App)
 app.use(router)
 app.use(store)

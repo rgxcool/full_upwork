@@ -33,9 +33,17 @@ const StudentSchema = new mongoose.Schema({
   dropout: { type: Boolean, default: false },
   aplStatus: {
     type: String,
-    enum: ["GRAY", "RED", "BLUE", "ORANGE", "GREEN"],
+    enum: ["GRAY", "RED", "BLUE", "ORANGE", "GREEN", "WHITE"],
     default: "GRAY",
   },
+  commentHistory: [
+    {
+      comment: String,
+      date: { type: Date, default: Date.now },
+      author: String, // Optional: who wrote it
+      seenBy: [String], // Optional: who has seen it
+    },
+  ],
 });
 
 export default mongoose.model("Student", StudentSchema);
