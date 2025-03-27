@@ -48,7 +48,9 @@
               </div>
             </div>
             <div class="text-end mt-4">
-              <button class="btn btn-warning btn-sm" @click="deleteAllTasks">Rensa alla uppgifter</button>
+              <button class="btn btn-warning btn-sm" @click="deleteAllTasks">
+                Rensa alla uppgifter
+              </button>
             </div>
           </div>
         </div>
