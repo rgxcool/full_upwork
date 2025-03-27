@@ -1,16 +1,16 @@
 <template>
   <div class="apl-board">
     <div
-      v-for="status in statuses"
-      :key="status"
+      v-for="status in statusMap"
+      :key="status.key"
       class="column"
-      :class="status.toLowerCase()"
+      :class="status.key.toLowerCase()"
       @dragover.prevent
-      @drop="handleDrop($event, status)"
+      @drop="handleDrop($event, status.key)"
     >
-      <h3>{{ status }}</h3>
+      <h3>{{ status.label }}</h3>
       <div
-        v-for="student in studentsByStatus[status]"
+        v-for="student in studentsByStatus[status.key]"
         :key="student._id"
         class="student-card"
         draggable="true"
@@ -29,6 +29,13 @@
   const statuses = ['GRAY', 'RED', 'BLUE', 'ORANGE', 'GREEN']
   const students = ref([])
   const draggedStudent = ref(null)
+  const statusMap = [
+    { key: 'GRAY', label: 'Ej börjat' },
+    { key: 'RED', label: 'Praktik slut, ej närvarat' },
+    { key: 'BLUE', label: 'Bokade för samtal' },
+    { key: 'ORANGE', label: 'Är i fas' },
+    { key: 'GREEN', label: 'Har kontrakt, skall gå eller har börjat praktik' },
+  ]
 
   const fetchStudents = async () => {
     const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
