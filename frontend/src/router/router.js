@@ -26,6 +26,7 @@ const ProfilePage = () => import('@/views/Teacher/ProfilePage.vue')
 
 // Student Views
 import StudentDetails from '@/views/Student/StudentDetails.vue'
+import APLView from '@/views/APLView.vue'
 
 const routes = [
   // Public Routes
@@ -62,12 +63,12 @@ const routes = [
     component: AddStudent,
     meta: { title: 'Add Student', role: 'admin' },
   },
-  { 
-    path: "/detaljer/:type/:id", 
-    component: SearchResultDetails, 
-    props: true, 
-    meta: { title: 'Search Result Details', role: 'admin' }
-  }, 
+  {
+    path: '/detaljer/:type/:id',
+    component: SearchResultDetails,
+    props: true,
+    meta: { title: 'Search Result Details', role: 'admin' },
+  },
   {
     path: '/students',
     name: 'Students',
@@ -123,6 +124,12 @@ const routes = [
     name: 'PdfView',
     component: PdfView,
     meta: { title: 'PDF Viewer', role: 'admin' },
+  },
+  {
+    path: '/apl',
+    name: 'APLView',
+    component: APLView,
+    meta: { title: 'APL List', role: 'admin' },
   },
 ]
 
