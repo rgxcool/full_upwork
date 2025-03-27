@@ -22,6 +22,7 @@
                 <tr>
                   <th>Namn</th>
                   <th>Personnummer</th>
+                  <th>Info</th> 
                   <th>Närvaro</th>
                 </tr>
               </thead>
@@ -29,6 +30,7 @@
                 <tr v-for="(student, index) in event.students" :key="index">
                   <td>{{ student.name }}</td>
                   <td>{{ student.personalNumber }}</td>
+                  <td>{{ student.additionalInfo || '-' }}</td> <!-- 🟢 Visa info -->
                   <td>
                     <input type="checkbox"
                            v-model="student.attended"
@@ -152,5 +154,11 @@
     align-items: center;
     justify-content: center;
   }
+
+  .table td {
+  vertical-align: middle;
+  white-space: pre-line;
+}
+
   </style>
   
