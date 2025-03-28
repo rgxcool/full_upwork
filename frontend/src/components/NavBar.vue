@@ -11,7 +11,7 @@
             @input="handleSearch"
             @focus="showFilterOptions"
             placeholder="Sök efter lärare, elev, kurs eller datum..."
-          />
+          /> 
           <button @click="toggleSearch">
             <svg v-if="!showResults" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
               <path
@@ -40,24 +40,7 @@
             <button :class="{ active: filter === 'Lärare' }" @click="setFilter('Lärare')">Lärare</button>
           </div>
 
-          <!-- Dropdown + DatePicker -->
-          <div class="filter-dropdowns">
-            <select v-model="selectedCourse" @change="filterByCourse">
-              <option disabled value="">Filtrera på kurs</option>
-              <option v-for="course in allCourses" :key="course._id" :value="course._id">
-                {{ course.name }}
-              </option>
-            </select>
 
-            <DatePicker 
-              v-model="selectedDate" 
-              @update:modelValue="filterByDate"
-              :auto-apply="true"
-              placeholder="Filtrera på datum"
-              locale="sv"
-              :format="'yyyy-MM-dd'"
-            />
-          </div>
 
           <!-- Resultatlista -->
           <ul class="result-list">
@@ -203,28 +186,7 @@
       }
     };
 
-    const filterByCourse = async () => {
-      if (!selectedCourse.value) return;
-      try {
-        const response = await axios.get(`http://localhost:5001/api/search?courseId=${selectedCourse.value}`);
-        searchResults.value = response.data;
-        showResults.value = true;
-      } catch (error) {
-        console.error("❌ Fel vid kursfilter:", error);
-      }
-    };
 
-    const filterByDate = async () => {
-      if (!selectedDate.value) return;
-      const formatted = new Date(selectedDate.value).toISOString().split("T")[0];
-      try {
-        const res = await axios.get(`http://localhost:5001/api/search?q=${formatted}`);
-        searchResults.value = res.data;
-        showResults.value = true;
-      } catch (err) {
-        console.error("❌ Fel vid datumfilter:", err);
-      }
-    };
 
     const setFilter = (f) => (filter.value = f);
     const openSearchPanel = () => {
@@ -271,8 +233,7 @@
         allCourses,
         fetchCourses,
         selectedDate,
-        filterByCourse,
-        filterByDate,
+
       }
     },
   }
