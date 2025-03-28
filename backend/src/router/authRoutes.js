@@ -64,7 +64,15 @@ router.post("/auth/login", async (req, res) => {
       maxAge: 3600000, // 1 hour
     });
 
-    return res.json({ message: "Login lyckades!" });
+    return res.json({
+      message: "Login lyckades!",
+      user: {
+        userId: user._id,
+        name: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    });
   } catch (error) {
     console.error("❌ Login error:", error);
     return res.status(500).json({ message: "Serverfel." });
@@ -98,9 +106,16 @@ function requireUser(req, res, next) {
 }
 
 // ✅ Get logged in user's info (for frontend store)
-router.get("/auth/me", requireUser, (req, res) => {
+router.get("/auth/session", requireUser, (req, res) => {
   const { name, email, role, userId } = req.user;
-  return res.json({ name, email, role, userId });
+  return res.json({
+    user: {
+      userId,
+      name,
+      email,
+      role,
+    },
+  });
 });
 
 export { requireUser };

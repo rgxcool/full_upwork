@@ -16,7 +16,6 @@
         draggable="true"
         @dragstart="handleDragStart($event, student)"
         @click="openComments(student)"
-        style="position: relative"
       >
         {{ student.name }}
         <span
@@ -27,9 +26,9 @@
       </div>
     </div>
 
-    <v-dialog v-model="dialog" max-width="500px" @update:modelValue="onDialogClose">
+    <v-dialog v-model="dialog" max-width="500px">
       <v-card>
-        <v-card-title>Kommentarhistorik – {{ selectedStudent?.name }}</v-card-title>
+        <v-card-title> Kommentarhistorik – {{ selectedStudent?.name }} </v-card-title>
         <v-card-text>
           <div v-if="selectedStudent?.commentHistory?.length">
             <div
@@ -56,10 +55,10 @@
                 <div v-else>
                   <p>{{ entry.comment }}</p>
                   <div v-if="canEditComments" class="comment-actions">
-                    <v-btn icon size="xxx-small" color="primary" @click.stop="editComment(index)">
+                    <v-btn icon size="x-small" color="primary" @click.stop="editComment(index)">
                       <v-icon>mdi-pencil</v-icon>
                     </v-btn>
-                    <v-btn icon size="xxx-small" color="error" @click.stop="deleteComment(index)">
+                    <v-btn icon size="x-small" color="error" @click.stop="deleteComment(index)">
                       <v-icon>mdi-minus</v-icon>
                     </v-btn>
                   </div>
@@ -72,14 +71,12 @@
 
           <div v-if="canComment">
             <v-textarea v-model="newComment" label="Lägg till kommentar" rows="3" auto-grow />
-            <v-btn color="primary" class="mt-2" :disabled="!newComment" @click="submitComment">
-              Spara kommentar
-            </v-btn>
+            <v-btn color="primary" @click="submitComment">Spara kommentar</v-btn>
           </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn color="secondary" @click="dialog = false">Stäng</v-btn>
+          <v-btn color="secondary" @click="closeDialog">Stäng</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -90,9 +87,10 @@
   import { ref, onMounted, computed } from 'vue'
   import axios from 'axios'
   import { useStore } from 'vuex'
+
   const store = useStore()
-  const currentUserId = computed(() => store.state.user?.id)
   const currentUser = computed(() => store.state.user)
+  const currentUserId = computed(() => store.state.user?.userId?.toString() || '')
 
   const roleRank = {
     guest: 0,
@@ -117,11 +115,30 @@
   const students = ref([])
   const draggedStudent = ref(null)
 
+  const statusMap = [
+    { key: 'GRAY', label: 'Ej börjat' },
+    { key: 'RED', label: 'Praktik slut, ej närvarat' },
+    { key: 'BLUE', label: 'Bokade för samtal' },
+    { key: 'ORANGE', label: 'Är i fas' },
+    { key: 'GREEN', label: 'Har kontrakt, skall gå eller har börjat praktik' },
+  ]
+
   const commentStatus = (student) => {
     const history = student.commentHistory || []
     const userId = currentUserId.value
     if (!history.length) return null
-    const hasUnseen = history.some((comment) => !(comment.seenBy || []).includes(userId))
+
+    console.log('👁 Checking for user:', userId)
+    console.log(
+      '📜 commentHistory:',
+      history.map((c) => c.seenBy)
+    )
+
+    const hasUnseen = history.some(
+      (c) => !(c.seenBy || []).map((id) => id.toString()).includes(userId)
+    )
+
+    console.log('💡 hasUnseen:', hasUnseen)
     return hasUnseen ? 'green' : 'yellow'
   }
 
@@ -136,40 +153,57 @@
         {},
         { withCredentials: true }
       )
-      // Locally update seenBy for currentUserId
-      const index = students.value.findIndex((s) => s._id === student._id)
-      if (index !== -1) {
-        const updated = JSON.parse(JSON.stringify(students.value[index]))
-        updated.commentHistory = updated.commentHistory.map((entry) => {
-          if (!entry.seenBy?.includes(currentUserId.value)) {
-            return {
-              ...entry,
-              seenBy: [...(entry.seenBy || []), currentUserId.value],
-            }
-          }
-          return entry
-        })
-        students.value[index] = updated
+
+      const userId = currentUserId.value
+
+      const markSeen = (s) => {
+        s.commentHistory = (s.commentHistory || []).map((c) => ({
+          ...c,
+          seenBy: Array.isArray(c.seenBy)
+            ? [...new Set([...c.seenBy.map(String), userId])]
+            : [userId],
+        }))
       }
+
+      markSeen(selectedStudent.value)
+      const index = students.value.findIndex((s) => s._id === student._id)
+      if (index !== -1) markSeen(students.value[index])
     } catch (err) {
       console.error('⚠️ Failed to mark comments as seen:', err)
     }
   }
 
-  const onDialogClose = async (value) => {
-    if (!value) {
-      selectedStudent.value = null
+  const closeDialog = () => {
+    selectedStudent.value = null
+    dialog.value = false
+  }
+
+  const submitComment = async () => {
+    if (!newComment.value) return
+    try {
+      const { data } = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/students/${selectedStudent.value._id}/comment`,
+        { comment: newComment.value },
+        { withCredentials: true }
+      )
+
+      const userId = currentUserId.value
+
+      const patchedHistory = (data.commentHistory || []).map((c) => ({
+        ...c,
+        seenBy: Array.isArray(c.seenBy)
+          ? [...new Set([...c.seenBy.map(String), userId])]
+          : [userId],
+      }))
+
+      selectedStudent.value.commentHistory = patchedHistory
+      const index = students.value.findIndex((s) => s._id === selectedStudent.value._id)
+      if (index !== -1) students.value[index].commentHistory = patchedHistory
+
+      newComment.value = ''
+    } catch (err) {
+      console.error('❌ Failed to save comment:', err)
     }
-  }
-
-  const cancelEdit = () => {
-    editingIndex.value = null
-    editedComment.value = ''
-  }
-
-  const editComment = (index) => {
-    editingIndex.value = index
-    editedComment.value = selectedStudent.value.commentHistory[index].comment
   }
 
   const saveEditedComment = async () => {
@@ -178,13 +212,20 @@
       ...selectedStudent.value.commentHistory[editingIndex.value],
       comment: editedComment.value,
     }
+
     try {
       await axios.put(
         `${import.meta.env.VITE_API_URL}/api/students/${selectedStudent.value._id}/comment`,
         { index: editingIndex.value, updatedEntry },
         { withCredentials: true }
       )
-      selectedStudent.value.commentHistory[editingIndex.value] = updatedEntry
+
+      selectedStudent.value.commentHistory[editingIndex.value].comment = editedComment.value
+      const index = students.value.findIndex((s) => s._id === selectedStudent.value._id)
+      if (index !== -1) {
+        students.value[index].commentHistory[editingIndex.value].comment = editedComment.value
+      }
+
       editingIndex.value = null
       editedComment.value = ''
     } catch (err) {
@@ -198,48 +239,64 @@
         `${import.meta.env.VITE_API_URL}/api/students/${selectedStudent.value._id}/comment`,
         { data: { index }, withCredentials: true }
       )
+
       selectedStudent.value.commentHistory.splice(index, 1)
+      const i = students.value.findIndex((s) => s._id === selectedStudent.value._id)
+      if (i !== -1) students.value[i].commentHistory.splice(index, 1)
     } catch (err) {
       console.error('❌ Failed to delete comment', err)
     }
   }
 
-  const submitComment = async () => {
-    if (!newComment.value) return
+  const cancelEdit = () => {
+    editingIndex.value = null
+    editedComment.value = ''
+  }
+
+  const editComment = (index) => {
+    editingIndex.value = index
+    editedComment.value = selectedStudent.value.commentHistory[index].comment
+  }
+
+  const fetchStudents = async () => {
     try {
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/students/${selectedStudent.value._id}/comment`,
-        { comment: newComment.value },
-        { withCredentials: true }
-      )
-      selectedStudent.value.commentHistory.unshift({
-        comment: newComment.value,
-        author: currentUser.value.name,
-        date: new Date(),
-        seenBy: [currentUserId.value],
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
+        withCredentials: true,
       })
-      newComment.value = ''
+
+      console.log(
+        '🧩 Raw commentHistory from API:',
+        res.data.map((s) => ({
+          name: s.name,
+          history: (s.commentHistory || []).map((c) => c.seenBy),
+        }))
+      )
+
+      students.value = res.data.map((student) => ({
+        ...student,
+        commentHistory: (student.commentHistory || []).map((comment) => ({
+          ...comment,
+          seenBy: (comment.seenBy || []).map((id) => id.toString()),
+        })),
+      }))
+
+      console.log(
+        '🎯 Normalized commentHistory:',
+        students.value.map((s) => ({
+          name: s.name,
+          history: s.commentHistory.map((c) => c.seenBy),
+        }))
+      )
     } catch (err) {
-      console.error('❌ Failed to save comment:', err)
+      console.error('❌ Failed to fetch students:', err)
     }
   }
 
-  const statusMap = [
-    { key: 'GRAY', label: 'Ej börjat' },
-    { key: 'RED', label: 'Praktik slut, ej närvarat' },
-    { key: 'BLUE', label: 'Bokade för samtal' },
-    { key: 'ORANGE', label: 'Är i fas' },
-    { key: 'GREEN', label: 'Har kontrakt, skall gå eller har börjat praktik' },
-  ]
-
-  const fetchStudents = async () => {
-    const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
-      withCredentials: true,
-    })
-    students.value = res.data
-  }
-
-  onMounted(fetchStudents)
+  onMounted(() => {
+    console.log('🧠 currentUser:', currentUser.value)
+    console.log('🆔 currentUserId:', currentUserId.value)
+    fetchStudents()
+  })
 
   const studentsByStatus = computed(() => {
     return statusMap.reduce((acc, status) => {
@@ -260,8 +317,7 @@
         { aplStatus: newStatus },
         { withCredentials: true }
       )
-      draggedStudent.value.aplStatus = newStatus
-      students.value = [...students.value]
+      await fetchStudents()
       draggedStudent.value = null
     } catch (err) {
       console.error('❌ Failed to update student APL status', err)
@@ -282,7 +338,7 @@
     padding: 10px;
     border-radius: 8px;
     min-height: 300px;
-    background-color: #f1f1f1;
+    backgwnd-color: #f1f1f1;
   }
   .column.gray {
     background-color: #d3d3d3;
@@ -298,9 +354,6 @@
   }
   .column.green {
     background-color: #ccff90;
-  }
-  .column.white {
-    background-color: #ffffff;
   }
   .student-card {
     background: white;

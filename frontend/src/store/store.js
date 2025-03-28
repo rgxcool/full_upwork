@@ -92,18 +92,17 @@ export default createStore({
     },
     async fetchUser({ commit }) {
       try {
-        const { data } = await api.get('/auth/me')
-
+        const { data } = await api.get('/auth/session') // ← use correct endpoint
         console.log('✅ User authenticated:', data)
-        commit('SET_USER', data)
+        commit('SET_USER', data.user) // must be data.user
       } catch (error) {
         console.error('❌ Failed to fetch current user:', error.response?.data?.message || error)
-
         if (error.response?.status === 401) {
           commit('LOGOUT')
         }
       }
     },
+
     async logout({ commit }) {
       try {
         await api.post('/auth/logout')

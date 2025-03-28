@@ -4,15 +4,10 @@ import User from "../models/User.js";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.development" });
 
-console.log(
-  "\ud83d\udd0d JWT_SECRET in authController:",
-  process.env.JWT_SECRET
-);
+console.log("🔍 JWT_SECRET in authController:", process.env.JWT_SECRET);
 
 if (!process.env.JWT_SECRET) {
-  throw new Error(
-    "\ud83d\udea8 Missing `JWT_SECRET` in environment variables!"
-  );
+  throw new Error("🚨 Missing `JWT_SECRET` in environment variables!");
 }
 
 export const register = async (req, res) => {
@@ -29,9 +24,7 @@ export const register = async (req, res) => {
       role: userRole,
     });
 
-    console.log(
-      `\u2705 User Registered: ${newUser.email} - Role: ${newUser.role}`
-    );
+    console.log(`✅ User Registered: ${newUser.email} - Role: ${newUser.role}`);
 
     res.status(201).json({
       message: "User registered successfully",
@@ -43,7 +36,7 @@ export const register = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("\u274c Error registering user:", error);
+    console.error("❌ Error registering user:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -51,34 +44,36 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log(`\ud83d\udd39 Backend: Attempting login with email: ${email}`);
+    console.log(`🔹 Backend: Attempting login with email: ${email}`);
 
     const user = await User.findOne({ email });
     if (!user) {
-      console.log("\u274c User not found:", email);
-      return res.status(401).json({ error: "Fel email eller l\u00f6senord!" });
+      console.log("❌ User not found:", email);
+      return res.status(401).json({ error: "Fel email eller lösenord!" });
     }
 
-    console.log(`\u2705 User found: ${user.email} (Role: ${user.role})`);
+    console.log(`✅ User found: ${user.email} (Role: ${user.role})`);
 
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log(
-      isMatch ? "\u2705 Passwords match!" : "\u274c Passwords do NOT match!"
-    );
-
     if (!isMatch) {
-      return res.status(401).json({ error: "Fel email eller l\u00f6senord!" });
+      console.log("❌ Passwords do NOT match!");
+      return res.status(401).json({ error: "Fel email eller lösenord!" });
     }
 
-    console.log("\u2705 Password match! Generating token...");
+    console.log("✅ Password match! Generating token...");
 
     const token = jwt.sign(
-      { userId: user._id, role: user.role, name: user.name, email: user.email },
+      {
+        userId: user._id,
+        role: user.role,
+        name: user.name,
+        email: user.email,
+      },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    console.log("\ud83d\udd39 Backend: Setting token cookie...");
+    console.log("🔹 Backend: Setting token cookie...");
 
     res.cookie("token", token, {
       httpOnly: true,
@@ -87,17 +82,19 @@ export const login = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    console.log(
-      "\ud83d\udd0d Set-Cookie Header:",
-      res.getHeaders()["set-cookie"]
-    );
+    console.log("🔍 Set-Cookie Header:", res.getHeaders()["set-cookie"]);
 
     res.json({
       message: "Login successful",
-      user: { id: user._id, name: user.name, role: user.role },
+      user: {
+        userId: user._id, // ✅ Standard key
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     });
   } catch (error) {
-    console.error("\u274c Error logging in:", error);
+    console.error("❌ Error logging in:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -121,8 +118,10 @@ export const authenticateUser = (req, res, next) => {
   try {
     console.log("Verifying token");
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // 🛠 Set full decoded user with fallback `id`
     req.user = decoded;
-    req.userId = decoded.userId || decoded.id;
+    req.userId = decoded.userId;
 
     if (!req.userId) {
       return res
@@ -130,10 +129,10 @@ export const authenticateUser = (req, res, next) => {
         .json({ error: "Autentisering saknas (No userId in token)." });
     }
 
-    console.log("\u2705 Token verified, userId:", req.userId);
+    console.log("✅ Token verified, userId:", req.userId);
     next();
   } catch (error) {
-    console.error("\u274c JWT verification error:", error.message);
+    console.error("❌ JWT verification error:", error.message);
     return res.status(401).json({ error: "Ogiltig token." });
   }
 };
@@ -149,29 +148,36 @@ export const logout = async (req, res) => {
 };
 
 export const getSession = async (req, res) => {
-  console.log("\ud83d\udd39 Incoming Session Request...");
-  console.log("\ud83d\udd0d Cookies Received:", req.cookies);
+  console.log("🔹 Incoming Session Request...");
+  console.log("🔍 Cookies Received:", req.cookies);
 
   const token = req.cookies.token || req.cookies.authToken;
 
   if (!token) {
-    console.log("\u274c No valid token found.");
+    console.log("❌ No valid token found.");
     return res.status(401).json({ error: "No active session" });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log("\u2705 Decoded JWT:", decoded);
+    console.log("✅ Decoded JWT:", decoded);
 
     const user = await User.findById(decoded.userId).select("-password");
     if (!user) {
-      console.log("\u274c User not found in DB");
+      console.log("❌ User not found in DB");
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json({ user: { id: user._id, name: user.name, role: user.role } });
+    res.json({
+      user: {
+        userId: user._id, // ✅ Match login response
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
   } catch (error) {
-    console.error("\u274c Invalid session:", error);
+    console.error("❌ Invalid session:", error);
     res.status(403).json({ error: "Invalid session" });
   }
 };

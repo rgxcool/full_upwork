@@ -44,45 +44,16 @@
       const isVuexWorking = computed(() => typeof store.dispatch === 'function')
 
       const handleLogin = async () => {
-        console.log('🛠 Checking Vuex Store:', store)
-        console.log('🛠 Is Vuex Working?', isVuexWorking.value)
+        const result = await store.dispatch('login', {
+          email: email.value,
+          password: password.value,
+        })
+        console.log('🎯 Login result:', result)
 
-        if (!isVuexWorking.value) {
-          console.error('❌ Vuex is NOT properly registered! Check `main.js`.')
-          return
-        }
-
-        console.log('🛠 Attempting to login with:', email.value, password.value)
-
-        if (!email.value || !password.value) {
-          console.error('❌ Missing email or password!')
-          message.value = 'Please enter both email and password.'
-          return
-        }
-
-        console.log('🛠 Calling Vuex login action...')
-
-        try {
-          const response = await store.dispatch('login', {
-            email: email.value.trim(),
-            password: password.value.trim(),
-          })
-
-          console.log('✅ Vuex login response:', response)
-
-          if (!response || typeof response !== 'object' || response.success === false) {
-            console.error('❌ Invalid Vuex response:', response)
-            message.value = response?.message || 'Unexpected error occurred. Please try again.'
-            return
-          }
-
-          message.value = response.message || 'Login successful.'
-
-          console.log('🔄 Redirecting to Profile...')
-          router.push({ name: 'profile' }) // ✅ Redirect after successful login
-        } catch (error) {
-          console.error('❌ Error in `handleLogin()`:', error)
-          message.value = 'An unexpected error occurred.'
+        if (result.success) {
+          router.push('/profile')
+        } else {
+          message.value = result.message
         }
       }
 

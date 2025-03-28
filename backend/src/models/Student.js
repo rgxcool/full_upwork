@@ -14,7 +14,7 @@ const StudentSchema = new mongoose.Schema({
   ],
   courses: [
     {
-      courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" }, // ✅ Only store reference
+      courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
       addedAt: { type: Date, default: Date.now },
     },
   ],
@@ -31,17 +31,19 @@ const StudentSchema = new mongoose.Schema({
   additionalInfo: String,
   teacher: String,
   dropout: { type: Boolean, default: false },
+
+  // 🟨 Add these two:
   aplStatus: {
     type: String,
-    enum: ["GRAY", "RED", "BLUE", "ORANGE", "GREEN", "WHITE"],
+    enum: ["GRAY", "RED", "BLUE", "ORANGE", "GREEN"],
     default: "GRAY",
   },
   commentHistory: [
     {
       comment: String,
-      date: { type: Date, default: Date.now },
-      author: String, // Optional: who wrote it
-      seenBy: [String], // Optional: who has seen it
+      author: String,
+      date: Date,
+      seenBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     },
   ],
 });
