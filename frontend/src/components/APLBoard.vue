@@ -1,6 +1,14 @@
 <template>
   <div class="apl-board">
     <div
+      v-if="copied"
+      class="copied-floating"
+      :style="{ top: copiedPosition.y + 'px', left: copiedPosition.x + 'px' }"
+    >
+      Kopierat
+    </div>
+
+    <div
       v-for="status in statusMap"
       :key="status.key"
       class="column"
@@ -20,7 +28,7 @@
         {{ student.name }}
         <v-icon
           v-if="commentStatus(student)"
-          :class="['comment-icon', { blink: commentStatus(student) === 'unseen' }]"
+          :class="['comment-icon', { pulse: commentStatus(student) === 'unseen' }]"
           :color="commentStatus(student) === 'unseen' ? 'blue' : 'green'"
           size="24"
           title="Kommentarstatus"
@@ -31,57 +39,83 @@
     </div>
 
     <v-dialog v-model="dialog" max-width="500px">
-      <v-card>
-        <v-card-title> Kommentarhistorik – {{ selectedStudent?.name }} </v-card-title>
-        <v-card-text>
-          <div v-if="selectedStudent?.commentHistory?.length">
-            <div
-              v-for="(entry, index) in selectedStudent.commentHistory"
-              :key="index"
-              class="comment-entry"
+      <v-card v-if="selectedStudent" class="dialog-card">
+        <v-btn icon class="dialog-close-btn" @click="closeDialog">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+
+        <v-card-title>
+          <span
+            :class="{ clickable: true, blinkGreen: blinkedField === 'name' }"
+            @click="handleCopy(selectedStudent?.name, 'name', $event)"
+          >
+            <div>{{ selectedStudent?.name }}</div>
+          </span>
+        </v-card-title>
+
+        <v-card-subtitle style="margin-top: 0 px">
+          <div class="contact-info">
+            <span
+              :class="{ clickable: true }"
+              @click="handleCopy(selectedStudent?.email, 'email', $event)"
             >
-              <p>
-                <strong>{{ entry.author || 'Okänd' }}</strong> — {{ formatDate(entry.date) }}
-              </p>
+              {{ selectedStudent?.email }}
+            </span>
+            <br />
+            <span
+              :class="{ clickable: true }"
+              @click="handleCopy(selectedStudent?.phone, 'phone', $event)"
+            >
+              <div class="mb-2">{{ selectedStudent?.phone }}</div>
+            </span>
+          </div>
+        </v-card-subtitle>
+        <div
+          v-for="(entry, index) in selectedStudent.commentHistory"
+          :key="index"
+          class="comment-entry"
+        >
+          <div class="comment-header">
+            <span>{{ entry.author || 'Okänd' }}</span>
+            <span>{{ formatDate(entry.date) }}</span>
+          </div>
+
+          <div class="comment-box">
+            <div v-if="editingIndex === index">
+              <v-textarea v-model="editedComment" label="Redigera kommentar" auto-grow rows="2" />
+              <v-btn color="success" small class="ml-2 mr-10 mt-1" @click="saveEditedComment">
+                Spara
+              </v-btn>
+              <v-btn small @click="cancelEdit">Avbryt</v-btn>
+            </div>
+            <div v-else>
               <div class="comment-body">
-                <div v-if="editingIndex === index">
-                  <v-textarea
-                    v-model="editedComment"
-                    label="Redigera kommentar"
-                    auto-grow
-                    rows="2"
-                  />
-                  <v-btn color="success" small class="mt-1" @click="saveEditedComment">
-                    Spara
-                  </v-btn>
-                  <v-btn small @click="cancelEdit">Avbryt</v-btn>
-                </div>
-                <div v-else>
-                  <p>{{ entry.comment }}</p>
-                  <div v-if="canEditComments" class="comment-actions">
+                <p>{{ entry.comment }}</p>
+                <div v-if="canEditComments" class="comment-actions">
+                  <div class="edit-btn">
                     <v-btn size="24" icon color="primary" @click.stop="editComment(index)">
                       <v-icon :size="16">mdi-pencil</v-icon>
                     </v-btn>
+                  </div>
+                  <div class="delete-btn">
                     <v-btn size="24" icon color="error" @click.stop="deleteComment(index)">
                       <v-icon :size="16">mdi-minus</v-icon>
                     </v-btn>
                   </div>
                 </div>
               </div>
-              <hr v-if="index !== selectedStudent.commentHistory.length - 1" />
             </div>
           </div>
-          <p v-else>Inga kommentarer än.</p>
+        </div>
 
-          <div v-if="canComment">
-            <v-textarea v-model="newComment" label="Lägg till kommentar" rows="3" auto-grow />
-            <v-btn color="primary" @click="submitComment">Spara kommentar</v-btn>
+        <div class="comment-entry" v-if="canComment">
+          <v-textarea v-model="newComment" label="Lägg till kommentar" rows="3" auto-grow />
+
+          <div class="button-row">
+            <v-btn class="ml-3" small color="green" @click="submitComment">Spara</v-btn>
+            <v-btn class="mr-3" small color="primary" @click="closeDialog">Stäng</v-btn>
           </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn color="secondary" @click="closeDialog">Stäng</v-btn>
-        </v-card-actions>
+        </div>
       </v-card>
     </v-dialog>
   </div>
@@ -106,6 +140,34 @@
     teacher: 6,
     admin: 7,
     systemadmin: 8,
+  }
+
+  const copied = ref(false)
+  const blinkedField = ref('')
+  const copiedPosition = ref({ x: 0, y: 0 })
+
+  const handleCopy = async (text, field, event) => {
+    try {
+      if (!text) return
+      await navigator.clipboard.writeText(text)
+
+      // Flash at pointer
+      copied.value = true
+      blinkedField.value = field
+
+      const buffer = 12
+      copiedPosition.value = {
+        x: event.clientX + buffer,
+        y: event.clientY + buffer,
+      }
+
+      setTimeout(() => {
+        copied.value = false
+        blinkedField.value = ''
+      }, 600)
+    } catch (err) {
+      console.error('❌ Failed to copy to clipboard:', err)
+    }
   }
 
   const canComment = computed(() => roleRank[currentUser.value?.role] >= roleRank['coordinator'])
@@ -171,8 +233,10 @@
   }
 
   const closeDialog = () => {
-    selectedStudent.value = null
     dialog.value = false
+    setTimeout(() => {
+      selectedStudent.value = null
+    }, 99) // matches v-dialog close transition
   }
 
   const submitComment = async () => {
@@ -358,23 +422,59 @@
   .column.green {
     background-color: #ccff90;
   }
+  .tight-title {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    line-height: 0;
+  }
   .student-card {
     position: relative; /* ✅ required for absolute positioning of icon */
     background: white;
     padding: 8px;
     margin: 6px 0;
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: grab;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   }
   .comment-entry {
-    margin-bottom: 12px;
+    margin-bottom: 16px;
+    border: 1px solid rgb(194, 187, 187);
+    overflow: hidden;
+    background-color: #fafafa;
   }
+
+  .comment-header {
+    background: #f0f0f0;
+    padding: 8px 12px;
+    font-size: 0.95rem;
+    border-style: 1px solid white;
+    border-bottom: 1px solid white;
+    display: flex;
+    justify-content: space-between;
+    color: #333;
+  }
+
+  .comment-box {
+    border: 1px solid;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+  }
+
   .comment-actions {
     display: flex;
-    gap: 4px;
-    margin-top: 4px;
+    justify-content: space-between;
+    align-items: center;
   }
+
+  .edit-btn {
+    flex: 1;
+    text-align: left;
+  }
+
+  .delete-btn {
+    flex: 1;
+    text-align: right;
+  }
+
   .comment-icon {
     position: absolute;
     top: 8px;
@@ -397,7 +497,74 @@
       transform: scale(1);
     }
   }
+  .copied-floating {
+    position: fixed;
+    z-index: 9999;
+    background: #4caf50;
+    font-weight: bold;
+    padding: 4px 10px;
+    border-radius: 4px;
+    pointer-events: none;
+    font-size: 13px;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    animation: fadeAway 1s;
+  }
 
+  @keyframes fadeAway {
+    0% {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+  }
+
+  .clickable {
+    cursor: pointer;
+    text-decoration: underline;
+    color: #1976d2;
+    transition: all 0.3s ease;
+  }
+
+  .clickable:hover {
+    color: #0fce19; /* Strong green */
+  }
+
+  .blinkGreen {
+    animation: flash-green 0.6s;
+  }
+
+  @keyframes fade-green-reverse {
+    0% {
+      background-color: #c8e6c9;
+      color: #2e7d32;
+    }
+    100% {
+      background-color: transparent;
+      color: inherit;
+    }
+  }
+
+  @keyframes flash-green {
+    0% {
+      background-color: #c8e6c9;
+      color: #2e7d32;
+    }
+    100% {
+      background-color: transparent;
+      color: inherit;
+    }
+  }
+  .contact-info {
+    margin-top: 0px;
+  }
   .comment-dot {
     position: absolute;
     top: 6px;
@@ -413,9 +580,40 @@
     background-color: #ffeb3b;
   }
   .comment-dot-blue {
-    background-color: #aecbfa;
+    background-color: #009688;
   }
   .comment-dot.purple {
     background-color: #74016a;
+  }
+  .btn .no-margin-title {
+    margin-bottom: 0 !important;
+    display: inline-block;
+  }
+  .button-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+  .right {
+    float: right;
+    width: 300px;
+    border: 3px solid #73ad21;
+    padding: 10px;
+  }
+  .dialog-card {
+    position: relative;
+  }
+
+  .dialog-close-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
+    background-color: transparent;
+    color: #666;
+  }
+
+  .dialog-close-btn:hover {
+    color: #000;
   }
 </style>
