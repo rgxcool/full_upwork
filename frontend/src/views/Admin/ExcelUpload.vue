@@ -192,13 +192,7 @@
         formData.append('file', this.file)
 
         try {
-          const response = await axios.post(
-            `${import.meta.env.VITE_API_URL}/api/upload/xlsxupload`,
-            formData,
-            {
-              headers: { 'Content-Type': 'multipart/form-data' },
-            }
-          )
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
 
           console.log('✅ Response:', response.data)
           this.uploadSuccess = true
@@ -270,18 +264,20 @@
       },
 
       async fetchStudents() {
+        console.log('📡 fetchStudents called')
+
         try {
-          //console.log('📡 Fetching from API:', `${import.meta.env.VITE_API_URL}/api/students`)
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
+            withCredentials: true,
+          })
+          console.log('✅ Students fetched:', response.data)
 
-          //console.log('API Response for students:', response.data)
-
-          // ✅ Force Vue reactivity by mapping courses properly
           this.students = response.data.map((student) => ({
             ...student,
             courses: student.courses ? [...student.courses] : [],
           }))
         } catch (error) {
+          console.error('❌ Failed to fetch students:', error.response?.data || error)
           alert('Failed to fetch students.')
         }
       },
