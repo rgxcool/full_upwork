@@ -18,11 +18,15 @@
         @click="openComments(student)"
       >
         {{ student.name }}
-        <span
+        <v-icon
           v-if="commentStatus(student)"
-          class="comment-dot"
-          :class="commentStatus(student)"
-        ></span>
+          :class="['comment-icon', { blink: commentStatus(student) === 'unseen' }]"
+          :color="commentStatus(student) === 'unseen' ? 'blue' : 'green'"
+          size="24"
+          title="Kommentarstatus"
+        >
+          {{ commentStatus(student) === 'unseen' ? 'mdi-note-text' : 'mdi-pencil' }}
+        </v-icon>
       </div>
     </div>
 
@@ -128,18 +132,11 @@
     const userId = currentUserId.value
     if (!history.length) return null
 
-    console.log('👁 Checking for user:', userId)
-    console.log(
-      '📜 commentHistory:',
-      history.map((c) => c.seenBy)
-    )
-
     const hasUnseen = history.some(
       (c) => !(c.seenBy || []).map((id) => id.toString()).includes(userId)
     )
 
-    console.log('💡 hasUnseen:', hasUnseen)
-    return hasUnseen ? 'green' : 'yellow'
+    return hasUnseen ? 'unseen' : 'seen'
   }
 
   const openComments = async (student) => {
@@ -240,9 +237,15 @@
         { data: { index }, withCredentials: true }
       )
 
-      selectedStudent.value.commentHistory.splice(index, 1)
+      // ❗ Clone the arrays to avoid shared references
+      const newHistory = [...selectedStudent.value.commentHistory]
+      newHistory.splice(index, 1)
+      selectedStudent.value.commentHistory = newHistory
+
       const i = students.value.findIndex((s) => s._id === selectedStudent.value._id)
-      if (i !== -1) students.value[i].commentHistory.splice(index, 1)
+      if (i !== -1) {
+        students.value[i].commentHistory = [...newHistory] // clone here too
+      }
     } catch (err) {
       console.error('❌ Failed to delete comment', err)
     }
@@ -338,7 +341,7 @@
     padding: 10px;
     border-radius: 8px;
     min-height: 300px;
-    backgwnd-color: #f1f1f1;
+    background-color: #f1f1f1;
   }
   .column.gray {
     background-color: #d3d3d3;
@@ -356,13 +359,13 @@
     background-color: #ccff90;
   }
   .student-card {
+    position: relative; /* ✅ required for absolute positioning of icon */
     background: white;
     padding: 8px;
     margin: 6px 0;
     border-radius: 4px;
     cursor: grab;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    position: relative;
   }
   .comment-entry {
     margin-bottom: 12px;
@@ -372,6 +375,29 @@
     gap: 4px;
     margin-top: 4px;
   }
+  .comment-icon {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    transition: transform 0.3s ease;
+  }
+
+  .pulse {
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.3);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
   .comment-dot {
     position: absolute;
     top: 6px;
@@ -385,5 +411,11 @@
   }
   .comment-dot.yellow {
     background-color: #ffeb3b;
+  }
+  .comment-dot-blue {
+    background-color: #aecbfa;
+  }
+  .comment-dot.purple {
+    background-color: #74016a;
   }
 </style>
