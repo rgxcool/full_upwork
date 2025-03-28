@@ -5,6 +5,7 @@ import axios from 'axios'
 import router from './router/router.js'
 import store from './store/store.js'
 import './assets/styles/global.css'
+import '@mdi/font/css/materialdesignicons.css'
 
 // ✅ Import Vuetify and all components
 import { createVuetify } from 'vuetify'
@@ -16,6 +17,9 @@ import * as directives from 'vuetify/directives'
 const vuetify = createVuetify({
   components,
   directives,
+  icons: {
+    defaultSet: 'mdi',
+  },
 })
 
 console.log('🚀 Initializing Vue App...')

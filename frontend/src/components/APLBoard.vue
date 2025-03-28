@@ -55,11 +55,11 @@
                 <div v-else>
                   <p>{{ entry.comment }}</p>
                   <div v-if="canEditComments" class="comment-actions">
-                    <v-btn icon size="x-small" color="primary" @click.stop="editComment(index)">
-                      <v-icon>mdi-pencil</v-icon>
+                    <v-btn size="24" icon color="primary" @click.stop="editComment(index)">
+                      <v-icon :size="16">mdi-pencil</v-icon>
                     </v-btn>
-                    <v-btn icon size="x-small" color="error" @click.stop="deleteComment(index)">
-                      <v-icon>mdi-minus</v-icon>
+                    <v-btn size="24" icon color="error" @click.stop="deleteComment(index)">
+                      <v-icon :size="16">mdi-minus</v-icon>
                     </v-btn>
                   </div>
                 </div>
