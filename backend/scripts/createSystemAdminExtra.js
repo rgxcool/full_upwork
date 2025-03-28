@@ -26,7 +26,6 @@ async function createSystemAdmin() {
     const existingAdmin = await User.findOne({ role: "systemadmin" });
     if (existingAdmin) {
       console.log("⚠️ System Admin already exists:", existingAdmin.email);
-      process.exit(1);
     }
 
     // Generate a secure password
@@ -35,8 +34,8 @@ async function createSystemAdmin() {
 
     // Create System Admin User
     const systemAdmin = new User({
-      username: "Mindful Systemadmin",
-      email: "admin@mindful.com", // Change this before running!
+      username: "Mindful SystemadminExtra",
+      email: "adminextra@mindful.com", // Change this before running!
       password: hashedPassword,
       role: "systemadmin",
       createdAt: new Date(),
@@ -45,7 +44,7 @@ async function createSystemAdmin() {
 
     await systemAdmin.save();
     console.log("🎉 System Admin created successfully!");
-    console.log(`🔑 Login Email: admin@mindful.com`);
+    console.log(`🔑 Login Email: adminextra@mindful.com`);
     console.log(`🔑 Password: ${plainPassword} (Change this ASAP!)`);
 
     process.exit(0);

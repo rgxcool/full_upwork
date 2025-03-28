@@ -6,8 +6,14 @@
 
     <!-- Form Selection -->
     <div class="btn-group" role="group" aria-label="Form Selection">
-      <button class="btn btn-primary" @click="formType = 'Kurs'" :disabled="formType === 'Kurs'">Kurs</button>
-      <button class="btn btn-primary" @click="formType = 'Kurspaket'" :disabled="formType === 'Kurspaket'">
+      <button class="btn btn-primary" @click="formType = 'Kurs'" :disabled="formType === 'Kurs'">
+        Kurs
+      </button>
+      <button
+        class="btn btn-primary"
+        @click="formType = 'Kurspaket'"
+        :disabled="formType === 'Kurspaket'"
+      >
         Kurspaket
       </button>
     </div>
@@ -15,7 +21,11 @@
     <br />
     <br />
     <!-- Kurs Form -->
-    <form v-if="formType === 'Kurs'" @submit.prevent="submitKursForm" @keydown.enter="handleEnterKey">
+    <form
+      v-if="formType === 'Kurs'"
+      @submit.prevent="submitKursForm"
+      @keydown.enter="handleEnterKey"
+    >
       <!-- Name -->
       <div class="mb-3">
         <label for="name" class="form-label">Namn:</label>
@@ -25,7 +35,13 @@
       <!-- Personnummer -->
       <div class="mb-3">
         <label for="personnummer" class="form-label">Personnummer:</label>
-        <input type="text" id="personnummer" v-model="kursForm.personnummer" class="form-control" required />
+        <input
+          type="text"
+          id="personnummer"
+          v-model="kursForm.personnummer"
+          class="form-control"
+          required
+        />
       </div>
 
       <!-- Kurspaket -->
@@ -267,16 +283,36 @@
         this.kursForm.slutDatum = endDate.toISOString()
       },
       async submitKursForm() {
-        if (!this.kursForm.namn || !this.kursForm.personnummer || !this.kursForm.startDatum || !this.kursForm.mail) {
+        if (
+          !this.kursForm.namn ||
+          !this.kursForm.personnummer ||
+          !this.kursForm.startDatum ||
+          !this.kursForm.mail
+        ) {
           alert('Please fill in all required fields!')
           return
         }
 
+        const payload = {
+          name: this.kursForm.namn,
+          personalNumber: this.kursForm.personnummer,
+          email: this.kursForm.mail,
+          startDate: this.kursForm.startDatum,
+          endDate: this.kursForm.slutDatum,
+          finalExamDate: this.kursForm.slutprovDatum,
+          municipality: this.kursForm.kommun,
+          phone: this.kursForm.telefon,
+          exam: this.kursForm.prov,
+          additionalInfo: this.kursForm.ovrigt,
+          teacher: this.kursForm.teacher,
+          dropout: this.kursForm.dropout || false,
+        }
+
         try {
-          await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, this.kursForm)
+          await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, payload)
           alert('Eleven blev tillagd!')
 
-          //  Reset form fields after successful submission
+          // Reset the form
           this.kursForm = {
             namn: '',
             personnummer: '',
@@ -293,9 +329,9 @@
             dropout: false,
             teacher: '',
           }
-
-          this.formattedFinalTestDate = null //  Reset the final test date
+          this.formattedFinalTestDate = null
         } catch (error) {
+          console.error('❌ Backend error:', error.response?.data || error)
           alert('Kunde inte lägga till Elev. Något gick fel. Försök igen.')
         }
       },

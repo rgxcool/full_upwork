@@ -1,17 +1,20 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
 import CoursePackage from "../models/CoursePackage.js";
+import { authenticateUser } from "../controllers/authController.js";
+import { hasCommentPermission } from "../utils/roles.js";
 
 const router = Router();
 
-// ✅ Get all students (Populates coursePackages, and courses)
-router.get("/students", async (req, res) => {
+router.get("/students", authenticateUser, async (req, res) => {
   try {
     const students = await Student.find()
-      .populate("courses.courseId", "courseName courseCode") // ✅ Only populate courseId
-      .populate("coursePackages.coursePackageId", "coursePackageName");
+      .populate("courses.courseId", "courseName courseCode")
+      .populate("coursePackages.coursePackageId", "coursePackageName")
+      .select("+commentHistory.seenBy");
 
     res.status(200).json(students);
   } catch (error) {
@@ -20,7 +23,7 @@ router.get("/students", async (req, res) => {
   }
 });
 
-// ✅ Add a single student
+// ✅ Add a new student
 router.post("/student", async (req, res) => {
   try {
     const student = new Student(req.body);
@@ -32,7 +35,7 @@ router.post("/student", async (req, res) => {
   }
 });
 
-// ✅ Update student dropout status
+// ✅ Update dropout status
 router.put("/student/:id", async (req, res) => {
   try {
     const updatedStudent = await Student.findByIdAndUpdate(
@@ -54,28 +57,23 @@ router.put("/student/:id", async (req, res) => {
   }
 });
 
-// ✅ Add a course to a student by ID
+// ✅ Add course to student
 router.post("/student/:studentId/addcourse", async (req, res) => {
   const { studentId } = req.params;
   const { courseId } = req.body;
 
   try {
     const student = await Student.findById(studentId);
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
-    }
+    if (!student) return res.status(404).json({ error: "Student not found" });
 
     const course = await Course.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ error: "Course not found" });
-    }
+    if (!course) return res.status(404).json({ error: "Course not found" });
 
-    // ✅ Add courseId only (no duplicate name)
     student.courses.push({ courseId: course._id });
     await student.save();
 
     const updatedStudent = await Student.findById(studentId)
-      .populate("courses.courseId", "courseName courseCode") // ✅ Populate correctly
+      .populate("courses.courseId", "courseName courseCode")
       .populate("coursePackages.coursePackageId", "coursePackageName");
 
     res.status(200).json(updatedStudent);
@@ -85,13 +83,11 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
   }
 });
 
-// ✅ Remove a course from a student
+// ✅ Remove course from student
 router.delete("/student/:id/courses/:courseId", async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
-    }
+    if (!student) return res.status(404).json({ error: "Student not found" });
 
     student.courses = student.courses.filter(
       (course) => course.courseId.toString() !== req.params.courseId
@@ -105,16 +101,15 @@ router.delete("/student/:id/courses/:courseId", async (req, res) => {
   }
 });
 
-// ✅ Fetch student details by ID
+// ✅ Get single student by ID
 router.get("/student/:id", async (req, res) => {
   try {
     const student = await Student.findById(req.params.id)
       .populate("coursePackages.coursePackageId", "coursePackageName")
       .populate("courses.courseId", "courseName courseCode");
 
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
-    }
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
     res.json(student);
   } catch (error) {
     console.error("❌ Error fetching student:", error);
@@ -122,7 +117,7 @@ router.get("/student/:id", async (req, res) => {
   }
 });
 
-// ✅ Delete a single student by ID
+// ✅ Delete single student
 router.delete("/student/:id", async (req, res) => {
   try {
     const deletedStudent = await Student.findByIdAndDelete(req.params.id);
@@ -137,7 +132,7 @@ router.delete("/student/:id", async (req, res) => {
   }
 });
 
-// ✅ Delete all students (⚠️ Be careful using this in production)
+// ✅ Delete all students
 router.delete("/students", async (req, res) => {
   try {
     await Student.deleteMany({});
@@ -145,23 +140,6 @@ router.delete("/students", async (req, res) => {
   } catch (error) {
     console.error("❌ Error deleting all students:", error);
     res.status(500).json({ error: "Failed to delete all students" });
-  }
-});
-
-// ✅ Test route to verify student data
-router.get("/test-students", async (req, res) => {
-  try {
-    const students = await Student.find()
-      .populate("program", "programName")
-      .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("courses.courseId", "courseName courseCode");
-
-    res.status(200).json(students);
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to fetch students",
-      details: error.message,
-    });
   }
 });
 
@@ -178,5 +156,123 @@ router.patch("/students/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to update APL status" });
   }
 });
+
+// ✅ Add comment
+router.post("/students/:id/comment", authenticateUser, async (req, res) => {
+  const { comment } = req.body;
+  const { userId, role, name } = req.user;
+
+  if (!hasCommentPermission(role)) {
+    return res
+      .status(403)
+      .json({ error: "Insufficient permissions to comment." });
+  }
+
+  try {
+    const student = await Student.findById(req.params.id);
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    student.commentHistory.unshift({
+      comment,
+      author: name,
+      date: new Date(),
+      seenBy: [new mongoose.Types.ObjectId(userId)],
+    });
+
+    await student.save();
+    res.status(200).json({ commentHistory: student.commentHistory });
+  } catch (err) {
+    console.error("❌ Failed to save comment:", err);
+    res.status(500).json({ error: "Failed to add comment" });
+  }
+});
+
+// ✅ Edit comment
+router.put("/students/:id/comment", authenticateUser, async (req, res) => {
+  const { index, updatedEntry } = req.body;
+  const { role } = req.user;
+
+  if (!["admin", "systemadmin"].includes(role)) {
+    return res
+      .status(403)
+      .json({ error: "You don't have permission to edit comments." });
+  }
+
+  const student = await Student.findById(req.params.id);
+  if (!student || !student.commentHistory[index]) {
+    return res.status(404).json({ error: "Comment not found." });
+  }
+
+  student.commentHistory[index] = updatedEntry;
+  await student.save();
+  res.json({ success: true });
+});
+
+// ✅ Delete comment
+router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
+  const { index } = req.body;
+  const { role } = req.user;
+
+  if (!["admin", "systemadmin"].includes(role)) {
+    return res
+      .status(403)
+      .json({ error: "You don't have permission to delete comments." });
+  }
+
+  const student = await Student.findById(req.params.id);
+  if (!student || !student.commentHistory[index]) {
+    return res.status(404).json({ error: "Comment not found." });
+  }
+
+  student.commentHistory.splice(index, 1);
+  await student.save();
+  res.json({ success: true });
+});
+
+// ✅ Mark comments as seen (🛠 FIXED)
+router.post(
+  "/students/:id/mark-comments-seen",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const student = await Student.findById(req.params.id);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const userId = req.userId;
+      console.log("🔑 userId from session:", userId);
+      console.log(
+        "🎯 seenBy BEFORE update:",
+        student.commentHistory.map((c) => c.seenBy)
+      );
+
+      const objectId = new mongoose.Types.ObjectId(userId);
+      let updated = false;
+
+      student.commentHistory.forEach((entry, i) => {
+        const alreadySeen = (entry.seenBy || []).some((id) =>
+          id.equals(objectId)
+        );
+        if (!alreadySeen) {
+          entry.seenBy.push(objectId);
+          updated = true;
+        }
+      });
+
+      if (updated) {
+        student.markModified("commentHistory");
+        await student.save();
+        console.log(
+          "✅ Final seenBy in DB:",
+          student.commentHistory.map((c) => c.seenBy)
+        );
+      }
+
+      res.json({ message: "Marked as seen", updatedStudent: student });
+    } catch (err) {
+      console.error("❌ Error in mark-comments-seen:", err);
+      res.status(500).json({ error: "Failed to mark comments as seen." });
+    }
+  }
+);
 
 export default router;
