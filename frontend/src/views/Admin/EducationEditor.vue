@@ -89,8 +89,12 @@
         try {
           console.log('🔍 Fetching students and programs...')
           const [studentsResponse, programsResponse] = await Promise.all([
-            axios.get(`${import.meta.env.VITE_API_URL}/api/students`),
-            axios.get(`${import.meta.env.VITE_API_URL}/api/programs`),
+            await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
+              withCredentials: true,
+            }),
+            await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`, {
+              withCredentials: true,
+            }),
           ])
 
           students.value = studentsResponse.data

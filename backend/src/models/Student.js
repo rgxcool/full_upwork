@@ -18,6 +18,7 @@ const StudentSchema = new mongoose.Schema({
       addedAt: { type: Date, default: Date.now },
     },
   ],
+  attended: { type: Boolean, default: false },
   startDate: Date,
   endDate: Date,
   finalExamDate: Date,
