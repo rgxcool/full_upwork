@@ -1,87 +1,75 @@
 import { Router } from "express";
 const router = Router();
 import Student from "../models/Student.js";
+import { authenticateUser } from "../controllers/authController.js";
 
-router.get("/betygsattning", async (req, res) => {
-    try {
-        const idag = new Date();
-        idag.setHours(0, 0, 0, 0); // Nollställ tid för dagens datum
-
-        // Hämta alla elever med betyg null
-        const allaElever = await Student.find({ "betyg.grade": null });
-
-        // Konvertera slutDatum från sträng till Date och jämför
-        const elever = allaElever.filter((elev) => {
-            if (!elev.slutDatum) return false; // Säkerställ att slutDatum finns
-            const slutDatum = new Date(elev.slutDatum); // Konvertera sträng till Date
-            slutDatum.setHours(0, 0, 0, 0); // Nollställ tid för slutdatumet
-            return slutDatum <= idag; // Jämför om slutDatum är mindre än eller lika med idag
-        });
-
-        res.json(elever); // Skicka de filtrerade eleverna
-    } catch (error) {
-        console.error("Error fetching students:", error);
-        res.status(500).send("Server error");
+router.get("/students-to-grade/", authenticateUser, async (req, res) => {
+    const user = req.user;
+    const today = new Date();
+  
+    const isAdmin = ["admin", "systemadmin"].includes(user.role);
+    const isTeacher = user.role === "teacher";
+  
+    let query = {
+        courses: {
+            $elemMatch: {
+              endDate: { $lte: new Date() },
+              $or: [
+                { "grades.grade": null },
+                { "grades.grade": { $exists: false } },
+                { grades: { $exists: false } }
+              ]
+            }
+          }
+          
+    };
+  
+    if (isTeacher) {
+      query.teacher = user._id;
     }
-});
+  
+    console.log("🔍 Query som skickas till DB:", JSON.stringify(query, null, 2));
+  
+    const students = await Student.find(query).populate("courses.courseId teacher");
+  
+    console.log("✅ Elever funna:", students.length);
+    res.json(students);
+  });
+  
+  
+  
 
-router.post("/betygsattning", async (req, res) => {
-    try {
-        console.log("Mottagen data:", req.body); // Logga inkommande data
+  // POST /api/teacher/save-grade
+router.post("/teacher/save-grade/", authenticateUser, async (req, res) => {
+    const { studentId, courseId, grade, reason, comments, npScore } = req.body;
+  
+    const student = await Student.findById(studentId);
+    const course = student.courses.find(c => c.courseId.toString() === courseId);
+  
+    if (!course) return res.status(404).send("Kurs ej funnen");
+  
+    course.grades = { grade, reason, comments, npScore, locked: false };
+    await student.save();
+  
+    res.send("Betyg sparat");
+  });
 
-        const { elever } = req.body;
-        for (const elev of elever) {
-            await Student.updateOne(
-                { _id: elev._id },
-                {
-                    $set: {
-                        "betyg.grade": elev.betyg.grade,
-                        "betyg.comments": elev.betyg.comments,
-                        "betyg.locked": elev.betyg.locked,
-                    },
-                }
-            );
-        }
-
-        res.send("Betygen har sparats!");
-    } catch (error) {
-        console.error("Error saving grades:", error);
-        res.status(500).send("Server error");
-    }
-});
-
-router.get("/eleverMedBetyg", async (req, res) => {
-    try {
-        const elever = await Student.find({
-            "betyg.grade": { $ne: null },
-            "betyg.locked": false,
-        });
-        res.json(elever);
-    } catch (error) {
-        console.error("Error fetching students with grades:", error);
-        res.status(500).send("Server error");
-    }
-});
-
-router.post("/lasaBetyg", async (req, res) => {
-    try {
-        const { _id } = req.body;
-        await Student.updateOne({ _id }, { $set: { "betyg.locked": true } });
-        res.send("Betyget är låst!");
-    } catch (error) {
-        console.error("Error locking grade:", error);
-        res.status(500).send("Server error");
-    }
-});
-
-router.get("/lastaBetyg", async (req, res) => {
-    try {
-        const elever = await Student.find({ "betyg.locked": true });
-        res.json(elever);
-    } catch (error) {
-        console.error("Error fetching locked grades:", error);
-        res.status(500).send("Server error");
-    }
-});
+  // POST /api/teacher/lock-grade
+router.post("/teacher/lock-grade/", authenticateUser, async (req, res) => {
+    const { studentId, courseId } = req.body;
+  
+    const student = await Student.findById(studentId);
+    const course = student.courses.find(c => c.courseId.toString() === courseId);
+  
+    if (!course || !course.grades?.grade || !course.grades?.reason)
+      return res.status(400).send("Betyg ej komplett");
+  
+    course.grades.locked = true;
+    await student.save();
+  
+    // TODO: Skicka avisering till admin
+    res.send("Betyg låst!");
+  });
+  
 
 export default router;

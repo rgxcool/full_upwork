@@ -1,197 +1,162 @@
 <template>
-  <div class="container mt-4">
-    <h2 class="mb-4">Betygshantering</h2>
-
-    <!-- Fliknavigation -->
-    <ul class="nav nav-tabs">
-      <li class="nav-item">
-        <button
-          class="nav-link"
-          :class="{ active: activeTab === 'betygsattning' }"
-          @click="activeTab = 'betygsattning'"
+  <section class="tab-container">
+    <div class="tab-menu">
+      <ul>
+        <li
+          v-for="tab in tabs"
+          :key="tab.key"
+          :class="{ active: activeTab === tab.key }"
+          @click="activeTab = tab.key"
         >
-          Betygsättning
-        </button>
-      </li>
-      <li class="nav-item">
-        <button
-          class="nav-link"
-          :class="{ active: activeTab === 'eleverMedBetyg' }"
-          @click="activeTab = 'eleverMedBetyg'"
-        >
-          Elever med betyg
-        </button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" :class="{ active: activeTab === 'lastaBetyg' }" @click="activeTab = 'lastaBetyg'">
-          Låsta betyg
-        </button>
-      </li>
-    </ul>
+          {{ tab.label }}
+        </li>
+      </ul>
+    </div>
 
-    <!-- Flikinnehåll -->
-    <div v-if="activeTab === 'betygsattning'" class="tab-content">
-      <h4>Betygsättning</h4>
-      <table class="table table-bordered" v-if="eleverAttBetygsatta.length > 0">
-        <thead class="table-light">
-          <tr>
-            <th>Namn</th>
-            <th>Personnummer</th>
-            <th>Kurs</th>
-            <th>Slutdatum</th>
-            <th>Betyg</th>
-            <th>Kommentar</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="elev in eleverAttBetygsatta" :key="elev._id">
-            <td>{{ elev.namn }}</td>
-            <td>{{ elev.personnummer }}</td>
-            <td>{{ elev.kurspaket }}</td>
-            <td>{{ new Date(elev.slutDatum).toLocaleDateString() }}</td>
-            <td>
-              <select v-model="elev.betyg.grade" class="form-select">
-                <option value="">Välj betyg</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-                <option value="E">E</option>
-                <option value="F">F</option>
-              </select>
-            </td>
-            <td>
-              <input v-model="elev.betyg.comments" placeholder="Kommentar" class="form-control" />
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-else>
-        <p class="text-muted">Det finns inga elever att betygsätta just nu.</p>
+    <div class="content">
+      <div v-if="activeTab === 'betygsattning'">
+        <h3>Betygsättning</h3>
+        <div v-if="studentsToGrade.length">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Elev</th>
+                <th>Kurs</th>
+                <th>Slutdatum</th>
+                <th>Betyg</th>
+                <th>Motivering</th>
+                <th>Kommentar</th>
+                <th>NP-poäng</th>
+                <th>Lås</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="student in studentsToGrade" :key="student._id">
+              <template v-for="course in student.courses" :key="course._id">
+                <tr v-if="shouldShowCourse(course)">
+                  <td>{{ student.name }}</td>
+                  <td>{{ course.courseId?.courseCode || '-' }}</td>
+                  <td>{{ formatDate(course.endDate) }}</td>
+                  <td>
+                    <select v-model="course.grades.grade">
+                      <option disabled value="">Välj betyg</option>
+                      <option v-for="g in grades" :key="g">{{ g }}</option>
+                    </select>
+                  </td>
+                  <td><input v-model="course.grades.reason" placeholder="Motivering" /></td>
+                  <td><textarea v-model="course.grades.comments" placeholder="Kommentar" /></td>
+                  <td><input type="number" v-model="course.grades.npScore" /></td>
+                  <td>
+                    <button v-if="!course.grades.locked && !isAdmin" @click="lockGrade(student._id, course.courseId._id)">Lås</button>
+                    <span v-else-if="course.grades.locked">🔒 Låst</span>
+                    <button v-if="course.grades.locked && isAdmin" @click="unlockGrade(student._id, course.courseId._id)">Lås upp</button>
+                  </td>
+                </tr>
+              </template>
+            </tr>
+
+            </tbody>
+          </table>
+        </div>
+        <div v-else>
+          <p class="text-muted">Inga elever har kopplade kurser ännu.</p>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'lastaBetyg'">
+        <h3>Låsta betyg</h3>
+        <!-- Visa låsta betyg här -->
       </div>
     </div>
-
-    <div v-if="activeTab === 'eleverMedBetyg'" class="tab-content">
-      <h4>Elever med betyg</h4>
-      <table class="table table-bordered">
-        <thead class="table-light">
-          <tr>
-            <th>Namn</th>
-            <th>Personnummer</th>
-            <th>Kurs</th>
-            <th>Betyg</th>
-            <th>Lås betyg</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="elev in eleverMedBetyg" :key="elev._id">
-            <td>{{ elev.namn }}</td>
-            <td>{{ elev.personnummer }}</td>
-            <td>{{ elev.kurspaket }}</td>
-            <td>{{ elev.betyg.grade }}</td>
-            <td>
-              <button class="btn btn-warning btn-sm" @click="lasaBetyg(elev)">Lås</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div v-if="activeTab === 'lastaBetyg'" class="tab-content">
-      <h4>Låsta betyg</h4>
-      <table class="table table-bordered">
-        <thead class="table-light">
-          <tr>
-            <th>Namn</th>
-            <th>Personnummer</th>
-            <th>Kurs</th>
-            <th>Betyg</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="elev in lastaBetyg" :key="elev._id">
-            <td>{{ elev.namn }}</td>
-            <td>{{ elev.personnummer }}</td>
-            <td>{{ elev.kurspaket }}</td>
-            <td>{{ elev.betyg.grade }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+  </section>
 </template>
 
-<script>
-  import axios from 'axios'
+<script setup>
+import { ref, onMounted, computed } from 'vue';
+import axios from 'axios';
 
-  export default {
-    data() {
-      return {
-        activeTab: 'betygsattning', // Aktuell flik
-        eleverAttBetygsatta: [],
-        eleverMedBetyg: [],
-        lastaBetyg: [],
-      }
-    },
-    async mounted() {
-      await this.hämtaData()
-    },
-    methods: {
-      async hämtaData() {
-        try {
-          // Hämta elever att betygsätta
-          const betygsattningResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/betygsattning`)
-          this.eleverAttBetygsatta = betygsattningResponse.data
+const tabs = [
+  { key: 'betygsattning', label: 'Betygsättning' },
+  { key: 'lastaBetyg', label: 'Låsta betyg' }
+];
 
-          // Hämta elever med betyg
-          const eleverMedBetygResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/studentMedBetyg`)
-          this.eleverMedBetyg = eleverMedBetygResponse.data
+const activeTab = ref('betygsattning');
+const studentsToGrade = ref([]);
+const grades = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-          // Hämta låsta betyg
-          const lastaBetygResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/lastaBetyg`)
-          this.lastaBetyg = lastaBetygResponse.data
-        } catch (error) {
-          console.error('Error fetching data:', error)
-        }
-      },
-      async sparaBetyg() {
-        try {
-          await axios.post(`${import.meta.env.VITE_API_URL}/api/betygsattning`, {
-            elever: this.eleverAttBetygsatta,
-          })
-          alert('Betyg sparade!')
-          await this.hämtaData() // Uppdatera data efter sparande
-        } catch (error) {
-          console.error('Error saving grades:', error)
-        }
-      },
-      async lasaBetyg(elev) {
-        try {
-          await axios.post(`${import.meta.env.VITE_API_URL}/api/lasaBetyg`, {
-            _id: elev._id,
-          })
-          alert('Betyg låst!')
-          await this.hämtaData() // Uppdatera data efter låsning
-        } catch (error) {
-          console.error('Error locking grade:', error)
-        }
-      },
-    },
-  }
+const isAdmin = computed(() => ['admin', 'systemadmin'].includes(userRole.value));
+
+
+const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString();
+
+const shouldShowCourse = (course) => {
+  const today = new Date();
+  const end = new Date(course.endDate);
+  return end <= today && !course.grades?.grade;
+};
+
+const loadStudents = async () => {
+  const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/students-to-grade`, {
+  withCredentials: true,
+});
+  studentsToGrade.value = data;
+};
+
+const lockGrade = async (studentId, courseId) => {
+  await axios.post(`${import.meta.env.VITE_API_URL}/api/teacher/lock-grade`, { studentId, courseId });
+  await loadStudents();
+};
+
+const unlockGrade = async (studentId, courseId) => {
+  await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/unlock-grade`, { studentId, courseId });
+  await loadStudents();
+};
+
+onMounted(loadStudents);
 </script>
 
 <style scoped>
-  .nav-tabs .nav-link.active {
-    background-color: #d9d9d9;
-    color: white;
-  }
-
-  .nav-tabs .nav-link {
-    cursor: pointer;
-  }
-
-  .table {
-    text-align: center;
-    vertical-align: middle;
-  }
+.tab-container {
+  padding: 20px;
+  height: 70vh;
+}
+.tab-menu {
+  display: flex;
+  gap: 20px;
+  padding-bottom: 10px;
+}
+.tab-menu ul {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tab-menu li {
+  font-size: 18px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: bold;
+  color: gray;
+  transition: color 0.3s ease-in-out;
+}
+.tab-menu li.active {
+  color: black;
+  border-bottom: 3px solid black;
+}
+.content {
+  margin-top: 20px;
+  background: white;
+  padding: 25px;
+  border-radius: 15px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th, .table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: center;
+}
 </style>
