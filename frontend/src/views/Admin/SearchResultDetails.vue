@@ -24,17 +24,17 @@ import { useRoute, useRouter } from "vue-router";
 import axios from "axios";
 import AccountTab from "@/views/Admin/SearchTabs/AccountTab.vue";
 import StudyPlan from "@/views/Admin/SearchTabs/StudyPlan.vue";
-import APLSection from "@/views/Admin/SearchTabs/APLSection.vue";
+import DocumentSection from "@/views/Admin/SearchTabs/DocumentSection.vue";
 
 export default {
-  components: { AccountTab, StudyPlan, APLSection },
+  components: { AccountTab, StudyPlan, DocumentSection },
   setup() {
     const route = useRoute();
     const router = useRouter();
     const data = ref(null);
     const activeTab = ref("Användare");
 
-    const tabs = ["Användare", "Studieplan", "APL"];
+    const tabs = ["Användare", "Studieplan", "Dokument"];
 
     const fetchData = async () => {
       const { type, id } = route.params;
@@ -59,7 +59,7 @@ export default {
     const currentComponent = computed(() => {
       switch (activeTab.value) {
         case "Studieplan": return StudyPlan;
-        case "APL": return APLSection;
+        case "Dokument": return DocumentSection;
         default: return AccountTab;
       }
     });

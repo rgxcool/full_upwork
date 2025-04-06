@@ -1,5 +1,5 @@
 import { Router } from "express";
-import taskRoutes from "./taskRoutes.js"; //  Ensure all imports are correct
+import taskRoutes from "./taskRoutes.js"; 
 import authRoutes from "./authRoutes.js";
 import studentRoutes from "./studentRoutes.js";
 import userRoutes from "./userRoutes.js";
@@ -11,8 +11,9 @@ import courseRoutes from "./courseRoutes.js";
 import coursePackageRoutes from "./coursePackageRoutes.js";
 import searchRoutes from "./searchRoutes.js"; 
 import examRoutes from "./examRoutes.js"
-import meetingroutes from "./meetingroutes.js"; //  Ensure all imports are correct
-import notificationRoutes from "./notificationRoutes.js"; //  Ensure all imports are correct
+import meetingroutes from "./meetingroutes.js"; 
+import notificationRoutes from "./notificationRoutes.js"; 
+import documentRoutes from "./documentRoutes.js"; 
 
 const router = Router();
 
@@ -33,5 +34,6 @@ router.use("/api", coursePackageRoutes);
 router.use("/api", searchRoutes);
 router.use("/api", meetingroutes);
 router.use("/api", notificationRoutes)
+router.use("/api", documentRoutes);
 
 export default router;

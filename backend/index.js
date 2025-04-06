@@ -44,6 +44,9 @@ console.log("Router successfully mounted!");
 // Ensure preflight (OPTIONS) requests are handled
 app.options("*", cors());
 
+app.use('/api/uploads', express.static('public/uploads'));
+
+
 // MongoDB Connection
 mongoose
     .connect(process.env.MONGO_URI, {
