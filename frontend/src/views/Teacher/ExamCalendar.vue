@@ -82,7 +82,7 @@ export default {
   },
   computed: {
     isAdminOrTeacher() {
-      return ["systemadmin", "teacher", "admin"].includes(this.userRole);
+      return ["systemadmin", "teacher", "admin", "syv", "specped"].includes(this.userRole);
     }
   },
   methods: {

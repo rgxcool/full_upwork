@@ -9,6 +9,7 @@ import { hasCommentPermission } from "../utils/roles.js";
 
 const router = Router();
 
+
 router.get("/students", authenticateUser, async (req, res) => {
   try {
     const students = await Student.find()

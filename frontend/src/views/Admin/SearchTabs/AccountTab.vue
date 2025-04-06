@@ -5,18 +5,35 @@
     </h3>
     <section v-if="userType === 'Elev'">
       <div class="info-item">
-        <strong>Personnummer:</strong> {{ userData?.personalNumber || "Ej tillgänglig" }}
+        <strong>Personnummer:</strong> {{ userData?.personalNumber || 'Ej tillgänglig' }}
       </div>
       <div v-for="(value, key) in editableStudentData" :key="key">
         <div class="info-item" v-if="key !== 'personalNumber'">
           <strong>{{ fieldStudentLabels[key] }}:</strong>
           <span v-if="!editFields[key]">{{ value || 'Ej tillgänglig' }}</span>
+          <textarea v-else-if="['syvNotes', 'examAdaptations', 'studyPlan', 'additionalInfo'].includes(key)" v-model="editableStudentData[key]" />
           <input v-else v-model="editableStudentData[key]" />
-          <button @click="toggleEdit(key)">
+          <button v-if="canEditField(key)" @click="toggleEdit(key)">
             <i :class="editFields[key] ? 'fas fa-save' : 'fas fa-edit'"></i>
           </button>
         </div>
       </div>
+
+
+      <button
+        v-if="['syv', 'specialpedagog'].includes(userRole)"
+        class="btn btn-secondary"
+        @click="openMeetingModal"
+      >
+        Boka möte med eleven
+      </button>
+      <MeetingModal
+        v-if="showMeetingModal"
+        :studentId="userData._id"
+        :studentName="userData.name"
+        @close="showMeetingModal = false"
+      />
+
 
     </section>
 
@@ -37,11 +54,15 @@
 import { computed, ref, watch } from 'vue';
 import { useStore } from 'vuex';
 import axios from 'axios';
+import MeetingModal from '../MeetingModal.vue'; // Importera din MeetingModal komponent
 
 export default {
   props: {
     userData: Object,
     userType: String
+  },
+  components: {
+    MeetingModal
   },
   setup(props) {
     const store = useStore();
@@ -50,6 +71,7 @@ export default {
 
     const editableStudentData = ref({});
     const editablePersonalData = ref({});
+    const showMeetingModal = ref(false);
 
     const fieldStudentLabels = {
       name: "Namn",
@@ -67,16 +89,27 @@ export default {
 
     const updateEditableData = () => {
       editableStudentData.value = {
-        name: props.userData?.name || "",
-        email: props.userData?.email || "",
-        phone: props.userData?.phone || "",
-        municipality: props.userData?.municipality || ""
+        name: props.userData?.name || '',
+        email: props.userData?.email || '',
+        phone: props.userData?.phone || '',
+        municipality: props.userData?.municipality || '',
+        syvNotes: props.userData?.syvNotes || '',
+        examAdaptations: props.userData?.examAdaptations || '',
+        studyPlan: props.userData?.studyPlan || '',
+        additionalInfo: props.userData?.additionalInfo || ''  
       };
 
       editablePersonalData.value = {
         username: props.userData?.username || "",
         email: props.userData?.email || ""
       };
+      
+    };
+
+    const canEditField = (key) => {
+      if (userRole.value === 'syv') return ['syvNotes', 'studyPlan', 'additionalInfo'].includes(key);
+      if (userRole.value === 'specialpedagog') return ['examAdaptations', 'additionalInfo'].includes(key);
+      return isAdminOrTeacher.value;
     };
 
     watch(() => props.userData, updateEditableData, { immediate: true });
@@ -103,8 +136,12 @@ export default {
   editFields.value[key] = !editFields.value[key];
 };
 
+  const openMeetingModal = () => {
+      showMeetingModal.value = true;
+    };
 
-    return { isAdminOrTeacher, editableStudentData, editablePersonalData, editFields, toggleEdit, fieldStudentLabels, fieldPersonalLabels };
+
+    return { openMeetingModal, showMeetingModal, isAdminOrTeacher, editableStudentData, canEditField, editablePersonalData, editFields, toggleEdit, fieldStudentLabels, fieldPersonalLabels };
   }
 };
 </script>

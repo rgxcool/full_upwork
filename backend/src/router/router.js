@@ -11,6 +11,7 @@ import courseRoutes from "./courseRoutes.js";
 import coursePackageRoutes from "./coursePackageRoutes.js";
 import searchRoutes from "./searchRoutes.js"; 
 import examRoutes from "./examRoutes.js"
+import meetingroutes from "./meetingroutes.js"; //  Ensure all imports are correct
 
 const router = Router();
 
@@ -29,5 +30,6 @@ router.use("/api", gradeRoutes);
 router.use("/api", courseRoutes);
 router.use("/api", coursePackageRoutes);
 router.use("/api", searchRoutes);
+router.use("/api", meetingroutes);
 
 export default router;
