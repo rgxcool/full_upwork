@@ -177,4 +177,8 @@ export default {
 .admin-controls button:hover {
   background: #0056b3;
 }
+
+.dp__btn.dp__button.dp__button_bottom {
+  display: none !important;
+}
 </style>

@@ -74,6 +74,35 @@
 
     <!-- Icons -->
     <div class="icon-container">
+
+      <div class="icon-group">
+        <div v-if="isLoggedIn && canSeeNotifications" class="icon notification-icon" @click="toggleNotificationPanel">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+        <path fill="currentColor" d="M12 2C10.3 2 9 3.3 9 5v1.1c-2.8.5-5 3-5 5.9v4l-1 1v1h16v-1l-1-1v-4c0-2.9-2.2-5.4-5-5.9V5c0-1.7-1.3-3-3-3zm0 18c1.1 0 2-.9 2-2H10c0 1.1.9 2 2 2z"/>
+      </svg>
+      <span v-if="totalNotifications > 0" class="notis-badge">{{ totalNotifications }}</span>
+
+        <span v-if="notifications.length" class="notis-badge">{{ notifications.length }}</span>
+      </div>
+
+          <!-- Notispanel -->
+          <div v-if="showNotisPanel" class="notis-panel">
+            <div class="notis-header">Notiser</div>
+            <div v-if="notifications.length === 0" class="notis-empty">
+              Inga notiser just nu
+            </div>
+            <ul v-else>
+              <li v-for="notification in notifications" :key="notification._id">
+                <label>
+                  <input type="checkbox" v-model="notification.resolved" @change="resolveNote(notification._id)" />
+                  {{ notification.message }}
+                </label>
+              </li>
+            </ul>
+
+          </div>
+
+
       <router-link v-if="isLoggedIn" to="/profile" class="icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
           <path
@@ -97,6 +126,7 @@
         <button v-else @click="logout" class="logout-btn">Logout</button>
       </div>
     </div>
+    </div>
   </nav>
 </template>
 
@@ -115,7 +145,10 @@
       const router = useRouter()
 
       const userRole = computed(() => store.getters.userRole || 'guest') // Default to 'guest' if undefined
+      const canSeeNotifications = computed(() => ['teacher', 'admin', 'systemadmin'].includes(userRole.value));
 
+      const notifications = ref([]);
+      const showNotisPanel = ref(false);
       // Fix missing properties
       const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
       const searchQuery = ref('')
@@ -126,6 +159,70 @@
       const selectedCourse = ref("");
       const selectedDate = ref(null);
       const allCourses = ref([]);
+      const showNotification = ref(false);
+
+
+      const endDateNotifications = ref([]);
+      const missingGradeNotifications = ref([]);
+
+      const totalNotifications = computed(() =>
+        (showNotification.value ? 1 : 0) + 
+        (endDateNotifications.value?.length || 0) + 
+        (missingGradeNotifications.value?.length || 0)
+      );
+
+
+        const fetchNotifications = async () => {
+          const res = await axios.get("/api/notifications");
+          notifications.value = res.data;
+        };
+
+        const resolveNote = async (id) => {
+          await axios.put(`/api/notifications/${id}/resolve`, {
+            userId: store.getters.userId
+          });
+          await fetchNotifications(); // uppdatera listan
+        };
+
+        /*
+
+      const fetchNotifications = async () => {
+        if (['teacher', 'admin', 'systemadmin'].includes(userRole.value)) {
+          try {
+            const res = await axios.get('/api/course-end-notifications');
+            showNotification.value = res.data.hasPendingGrades;
+          } catch (err) {
+            console.error('❌ Fel vid notishämtning:', err);
+          }
+      }
+      };
+      */
+
+      const canResetNotifications = computed(() =>
+        ['admin', 'systemadmin'].includes(userRole.value)
+      );
+
+      const resetNotification = async (id) => {
+        try {
+          await axios.put(`/api/notifications/${id}/reset`);
+          await fetchNotifications(); // hämta igen efter reset
+        } catch (err) {
+          console.error("❌ Kunde inte återställa notis:", err);
+        }
+      };
+
+
+      const checkForNewNotifications = async () => {
+        try {
+          await axios.get("/api/course-end-notifications");
+        } catch (err) {
+          console.error("❌ Kunde inte kontrollera kursslutsnotiser:", err);
+        }
+      };
+
+      const toggleNotificationPanel = () => {
+        showNotisPanel.value = !showNotisPanel.value;
+      };
 
 
       const filteredResults = computed(() => {
@@ -214,7 +311,22 @@
         })
       })
 
+
+      onMounted(async () => {
+        if (isLoggedIn.value && canSeeNotifications.value) {
+          await checkForNewNotifications(); // 👈 se till att detta körs först!
+          await fetchNotifications();
+        }
+      });
+
       return {
+        totalNotifications,
+        endDateNotifications,
+        missingGradeNotifications,
+        notifications,
+        showNotisPanel,
+        toggleNotificationPanel,
+        canSeeNotifications,
         buildVersion,
         filter,
         filteredResults,
@@ -233,6 +345,14 @@
         allCourses,
         fetchCourses,
         selectedDate,
+        showNotification,
+        totalNotifications,
+        resolveNote,
+        notifications,
+        showNotisPanel,
+          resetNotification,
+  canResetNotifications,
+
 
       }
     },
@@ -365,27 +485,45 @@
     height: 50px;
   }
 
-  /* Ikoner exakt till höger */
   .icon-container {
-    flex: 0 0 auto; /* Prevents it from growing */
-    display: flex;
-    justify-content: flex-end;
-    gap: 15px;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+  position: relative;
+}
 
-  .icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #ece6f0;
-    text-decoration: none;
-    color: #333;
-    transition: background 0.3s;
-  }
+.icon-group {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  position: relative;
+}
 
+.icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #ece6f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.notis-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #f44336;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 999px;
+  line-height: 1;
+  z-index: 10;
+}
   .icon:hover {
     background: #dcd4e6;
   }
@@ -436,6 +574,74 @@
     background: blue;
     color: white;
   }
+
+  .notis-panel {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  background: #fff;
+  border-radius: 12px;
+  width: 300px;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  font-family: "Inter", sans-serif;
+}
+
+.notis-header {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.notis-empty {
+  color: #999;
+  font-style: italic;
+  font-size: 14px;
+  text-align: center;
+}
+
+.notis-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #f44336;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 999px;
+  line-height: 1;
+}
+
+.icon-container,.icon-wrapper {
+  position: relative;
+}
+
+.notis-panel ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.notis-panel li {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 14px;
+  color: #444;
+}
+
+.notis-panel input[type="checkbox"] {
+  margin-right: 10px;
+  transform: scale(1.2);
+  accent-color: #6c63ff;
+}
+
+.icon-container {
+  position: relative; /* viktigt! */
+}
 
   @media (max-width: 768px) {
     .nav-links {
