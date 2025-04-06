@@ -82,27 +82,25 @@ async function uploadXlsx(req, res) {
         // ✅ Map students with correct ObjectId references
         studentsToSave = studentsToSave.map((student) => {
             const existingStudent = existingStudentsMap.get(student.email);
-
+          
             return {
-                ...student,
-                program: programMap[student.program] || null,
-                coursePackages: student.coursePackages.map((cp) => ({
-                    coursePackageId:
-                        coursePackageMap[cp.coursePackageName] || null,
-                    coursePackageName: cp.coursePackageName,
-                    addedAt: new Date(),
-                })),
-                courses: student.courses.map((c) => ({
-                    courseId: courseMap[c.courseName] || null,
-                    courseName: c.courseName,
-                    addedAt: new Date(),
-                })),
-                createdAt: existingStudent
-                    ? existingStudent.createdAt
-                    : new Date(),
-                updatedAt: new Date(),
+              ...student,
+              aplStatus: existingStudent ? existingStudent.aplStatus : 'GRAY',
+              program: programMap[student.program] || null,
+              coursePackages: student.coursePackages.map((cp) => ({
+                coursePackageId: coursePackageMap[cp.coursePackageName] || null,
+                addedAt: new Date(),
+              })),
+              courses: student.courses.map((c) => ({
+                courseId: courseMap[c.courseName] || null,
+                addedAt: new Date(),
+              })),
+              createdAt: existingStudent ? existingStudent.createdAt : new Date(),
+              updatedAt: new Date(),
+              uploadedBy: teacherName,
             };
-        });
+          });          
+    
 
         console.log(
             "📝 Final student data before saving:",

@@ -229,6 +229,27 @@ router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
   await student.save();
   res.json({ success: true });
 });
+// ✅ Update student fully (not just dropout)
+router.put("/student/:id", async (req, res) => {
+  try {
+    const updatedStudent = await Student.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    )
+      .populate("coursePackages.coursePackageId", "coursePackageName")
+      .populate("courses.courseId", "courseName courseCode");
+
+    if (!updatedStudent) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    res.status(200).json(updatedStudent);
+  } catch (error) {
+    console.error("❌ Error updating student:", error);
+    res.status(500).json({ error: "Failed to update student" });
+  }
+});
 
 // ✅ Mark comments as seen (🛠 FIXED)
 router.post(
@@ -274,6 +295,7 @@ router.post(
       res.status(500).json({ error: "Failed to mark comments as seen." });
     }
   }
+  
 );
 
 export default router;

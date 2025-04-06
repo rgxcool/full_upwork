@@ -163,3 +163,5 @@ export default createStore({
     },
   },
 })
+// add this to bottom of store.js
+export { api }

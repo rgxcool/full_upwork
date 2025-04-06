@@ -15,7 +15,7 @@
         <div class="file-input-wrapper">
           <label for="fileUpload" class="custom-file-label">Choose File</label>
           <span class="file-name">{{ selectedFileName || 'No file selected' }}</span>
-          <input type="file" id="fileUpload" @change="handleFileUpload" hidden />
+          <input type="file" id="fileUpload" ref="fileInput" @change="handleFileUpload" hidden />
           <button class="btn btn-primary" type="submit">Upload</button>
         </div>
       </form>
@@ -118,6 +118,30 @@
                 Delete
               </button>
             </td>
+            <td>
+              <button class="btn btn-secondary btn-xs" @click="openEditStudent(student)">
+                Edit
+              </button>
+            </td>
+            <dialog v-if="editingStudent" class="edit-dialog" open>
+              <h3>Edit Student</h3>
+              <form @submit.prevent="saveEditedStudent">
+                <input v-model="editingStudent.name" placeholder="Name" required />
+                <input v-model="editingStudent.email" placeholder="Email" required />
+                <input v-model="editingStudent.phone" placeholder="Phone" />
+                <input v-model="editingStudent.municipality" placeholder="Municipality" />
+                <textarea
+                  v-model="editingStudent.additionalInfo"
+                  placeholder="Info"
+                  rows="3"
+                ></textarea>
+
+                <!-- Add more fields as needed -->
+
+                <button type="submit" class="btn btn-success">Save</button>
+                <button @click="cancelEdit" class="btn btn-secondary" type="button">Cancel</button>
+              </form>
+            </dialog>
           </tr>
         </tbody>
       </table>
@@ -127,6 +151,7 @@
 
 <script>
   import axios from 'axios'
+  import { api } from '../../store/store.js'
 
   export default {
     data() {
@@ -136,12 +161,12 @@
         searchQuery: '',
         selectedFileName: '',
         uploadSuccess: false,
+        editingStudent: null,
       }
     },
 
     computed: {
       filteredStudents() {
-        //console.log('🔎 Debugging student courses in computed property:', this.students)
         return this.students
           .map((student) => ({
             ...student,
@@ -157,6 +182,26 @@
     },
 
     methods: {
+      openEditStudent(student) {
+        this.editingStudent = { ...student } // clone so editing doesn't mutate directly
+      },
+      cancelEdit() {
+        this.editingStudent = null
+      },
+      async saveEditedStudent() {
+        try {
+          const { data } = await axios.put(
+            `${import.meta.env.VITE_API_URL}/api/student/${this.editingStudent._id}`,
+            this.editingStudent
+          )
+          const index = this.students.findIndex((s) => s._id === data._id)
+          if (index !== -1) this.students.splice(index, 1, data)
+          this.editingStudent = null
+        } catch (err) {
+          console.error('❌ Failed to update student:', err)
+          alert('Could not save student.')
+        }
+      },
       getCourseName(course) {
         //console.log('🔍 Debugging Course:', course) // See what's happening
         if (!course) return 'No course data'
@@ -192,9 +237,14 @@
         formData.append('file', this.file)
 
         try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`)
+          // ✅ Use api instance so cookies (JWT) are sent!
+          const response = await api.post('/upload/xlsxupload', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          })
 
-          console.log('✅ Response:', response.data)
+          console.log('✅ Upload successful:', response.data)
           this.uploadSuccess = true
 
           setTimeout(() => {
@@ -207,6 +257,8 @@
 
           if (error.response?.status === 409) {
             alert('⚠️ Some students were already in the system and were not added.')
+          } else if (error.response?.status === 401) {
+            alert('❌ Du är inte inloggad. Vänligen logga in igen.')
           } else {
             alert('❌ Failed to upload students.')
           }
@@ -423,5 +475,22 @@
     padding: 2px 6px; /* Smaller padding */
     font-size: 10px; /* Smaller text */
     line-height: 1;
+  }
+  .edit-dialog {
+    position: fixed;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 2000;
+    max-width: 500px;
+    width: 100%;
+  }
+  .edit-dialog form > * {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
   }
 </style>
