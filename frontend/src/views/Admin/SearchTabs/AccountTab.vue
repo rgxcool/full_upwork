@@ -7,6 +7,9 @@
       <div class="info-item">
         <strong>Personnummer:</strong> {{ userData?.personalNumber || 'Ej tillgänglig' }}
       </div>
+      <div class="info-item">
+        <strong>Namn:</strong> {{ userData?.name || 'Ej tillgänglig' }}
+      </div>
       <div v-for="(value, key) in editableStudentData" :key="key">
         <div class="info-item" v-if="key !== 'personalNumber'">
           <strong>{{ fieldStudentLabels[key] }}:</strong>
@@ -40,7 +43,7 @@
     <section v-else>
       <div class="info-item" v-for="(value, key) in editablePersonalData" :key="key">
         <strong>{{ fieldPersonalLabels[key] }}:</strong>
-        <span v-if="!editFields[key]">{{ value || 'Ej tillgänglig' }}</span>
+        <span v-if="!editFields[key]">{{ value || '-' }}</span>
         <input v-else v-model="editablePersonalData[key]" />
         <button @click="toggleEdit(key)">
           <i :class="editFields[key] ? 'fas fa-save' : 'fas fa-edit'"></i>
@@ -74,10 +77,12 @@ export default {
     const showMeetingModal = ref(false);
 
     const fieldStudentLabels = {
-      name: "Namn",
       email: "Email",
       phone: "Telefon",
-      municipality: "Folkbokföringskommun"
+      municipality: "Folkbokföringskommun",
+      syvNotes: "SYV Anteckningar",
+      examAdaptations: "Anpassningar vid prov",
+      additionalInfo: "Övrig information"
     };
 
     const fieldPersonalLabels = {
@@ -89,13 +94,11 @@ export default {
 
     const updateEditableData = () => {
       editableStudentData.value = {
-        name: props.userData?.name || '',
         email: props.userData?.email || '',
         phone: props.userData?.phone || '',
         municipality: props.userData?.municipality || '',
         syvNotes: props.userData?.syvNotes || '',
         examAdaptations: props.userData?.examAdaptations || '',
-        studyPlan: props.userData?.studyPlan || '',
         additionalInfo: props.userData?.additionalInfo || ''  
       };
 
