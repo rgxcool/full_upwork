@@ -41,6 +41,7 @@
             <th>Personnummer</th>
             <!-- <th>Course Packages</th> -->
             <th>Utbildning</th>
+            <th>Edit</th>
             <th>Startdatum</th>
             <th>Slutdatum</th>
             <th>Slutprovsdatum</th>
@@ -50,7 +51,6 @@
             <th>Övrigt</th>
             <th>Lärare</th>
             <th class="dropout-column">Avhopp</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -79,6 +79,15 @@
 
             <td class="course-cell">
               <div class="course-list">
+                <ul v-if="student.education && student.education.length">
+                  <li v-for="(edu, index) in student.education" :key="'edu-' + index">
+                    <strong>{{ edu.type }}:</strong> {{ edu.name }}
+                    <span v-if="edu.grade"
+                      ><strong>({{ edu.grade }})</strong></span
+                    >
+                  </li>
+                </ul>
+
                 <ul v-if="student.program && student.program.programId">
                   <li>
                     <strong>Program:</strong> {{ student.program.programId.programName }}
@@ -102,6 +111,59 @@
               </div>
             </td>
 
+            <td>
+              <button class="btn btn-secondary btn-xs" @click="openEditStudent(student)">
+                Edit
+              </button>
+            </td>
+            <dialog v-if="editingStudent" class="edit-dialog" open>
+              <h3>Edit Student</h3>
+              <form @submit.prevent="saveEditedStudent">
+                <input v-model="editingStudent.name" placeholder="Name" required />
+                <input v-model="editingStudent.email" placeholder="Email" required />
+                <input v-model="editingStudent.phone" placeholder="Phone" />
+                <input v-model="editingStudent.municipality" placeholder="Municipality" />
+                <h4>Utbildning</h4>
+                <div v-for="(edu, index) in editingStudent.education" :key="index" class="mb-2">
+                  <v-autocomplete
+                    v-model="editingStudent.education[index]"
+                    :items="educationOptions"
+                    item-title="name"
+                    return-object
+                    label="Add or edit education"
+                    class="mb-2"
+                  />
+
+                  <!-- Grade dropdown for courses -->
+                  <v-select
+                    v-if="edu.type === 'Course'"
+                    v-model="edu.grade"
+                    :items="['A', 'B', 'C', 'D', 'E', 'F']"
+                    label="Select grade"
+                    class="mt-2"
+                  />
+
+                  <button class="btn btn-danger btn-xs" @click="removeEducation(index)">
+                    Ta bort
+                  </button>
+                </div>
+
+                <button class="btn btn-sm btn-secondary mt-2" @click="addEducation">
+                  + Lägg till utbildning
+                </button>
+
+                <textarea
+                  v-model="editingStudent.additionalInfo"
+                  placeholder="Info"
+                  rows="3"
+                ></textarea>
+
+                <!-- Add more fields as needed -->
+
+                <button type="submit" class="btn btn-success">Save</button>
+                <button @click="cancelEdit" class="btn btn-secondary" type="button">Cancel</button>
+              </form>
+            </dialog>
             <td>{{ formatDate(student.startDate) }}</td>
             <td>{{ formatDate(student.endDate) }}</td>
             <td>{{ formatDate(student.finalExamDate) }}</td>
@@ -128,30 +190,6 @@
                 Delete
               </button>
             </td>
-            <td>
-              <button class="btn btn-secondary btn-xs" @click="openEditStudent(student)">
-                Edit
-              </button>
-            </td>
-            <dialog v-if="editingStudent" class="edit-dialog" open>
-              <h3>Edit Student</h3>
-              <form @submit.prevent="saveEditedStudent">
-                <input v-model="editingStudent.name" placeholder="Name" required />
-                <input v-model="editingStudent.email" placeholder="Email" required />
-                <input v-model="editingStudent.phone" placeholder="Phone" />
-                <input v-model="editingStudent.municipality" placeholder="Municipality" />
-                <textarea
-                  v-model="editingStudent.additionalInfo"
-                  placeholder="Info"
-                  rows="3"
-                ></textarea>
-
-                <!-- Add more fields as needed -->
-
-                <button type="submit" class="btn btn-success">Save</button>
-                <button @click="cancelEdit" class="btn btn-secondary" type="button">Cancel</button>
-              </form>
-            </dialog>
           </tr>
         </tbody>
       </table>
@@ -172,6 +210,7 @@
         selectedFileName: '',
         uploadSuccess: false,
         editingStudent: null,
+        educationOptions: [],
       }
     },
 
@@ -192,6 +231,17 @@
     },
 
     methods: {
+      async saveGrade(studentId, courseId, grade) {
+        try {
+          const response = await axios.put(
+            `${import.meta.env.VITE_API_URL}/api/student/${studentId}/education/${courseId}/grade`,
+            { grade }
+          )
+          console.log('✅ Grade updated:', response.data)
+        } catch (error) {
+          console.error('❌ Error updating grade:', error)
+        }
+      },
       openEditStudent(student) {
         this.editingStudent = { ...student } // clone so editing doesn't mutate directly
       },
@@ -311,7 +361,6 @@
           alert('Failed to delete all students.')
         }
       },
-
       async fetchStudents() {
         console.log('📡 fetchStudents called')
 
@@ -330,15 +379,64 @@
           alert('Failed to fetch students.')
         }
       },
+      async fetchEducationOptions() {
+        try {
+          const [programsRes, packagesRes, coursesRes] = await Promise.all([
+            axios.get(`${import.meta.env.VITE_API_URL}/api/programs`, { withCredentials: true }),
+            axios.get(`${import.meta.env.VITE_API_URL}/api/course-packages`, {
+              withCredentials: true,
+            }),
+            axios.get(`${import.meta.env.VITE_API_URL}/api/courses`, { withCredentials: true }),
+          ])
+
+          this.educationOptions = [
+            ...programsRes.data.map((p) => ({
+              type: 'Program',
+              name: p.programName,
+              refId: p._id,
+            })),
+            ...packagesRes.data.map((p) => ({
+              type: 'CoursePackage',
+              name: p.coursePackageName,
+              refId: p._id,
+            })),
+            ...coursesRes.data.map((c) => ({
+              type: 'Course',
+              name: c.courseName,
+              refId: c._id,
+            })),
+          ]
+
+          console.log('📘 Loaded education options:', this.educationOptions)
+        } catch (err) {
+          console.error('❌ Failed to load education options:', err)
+        }
+      },
       formatDate(value) {
         if (!value) return ''
         if (typeof value === 'string' && value.includes('T')) return value.split('T')[0]
         return value
       },
+      addEducation() {
+        if (!this.editingStudent.education) this.editingStudent.education = []
+        this.editingStudent.education.push({
+          type: '',
+          name: '',
+          refId: null,
+          addedAt: new Date(),
+          addedBy: this.$store.state.user?.name || 'unknown',
+          grade: null,
+          removedAt: null,
+        })
+      },
+      removeEducation(index) {
+        this.editingStudent.education.splice(index, 1)
+      },
     },
 
     mounted() {
       this.fetchStudents()
+      this.fetchEducationOptions()
     },
   }
 </script>
@@ -482,9 +580,12 @@
     padding: 20px;
     border-radius: 10px;
     z-index: 2000;
+    max-height: 500px; /* ✅ max height */
+    overflow-y: auto; /* ✅ enable vertical scroll */
     max-width: 500px;
     width: 100%;
   }
+
   .edit-dialog form > * {
     display: block;
     width: 100%;
