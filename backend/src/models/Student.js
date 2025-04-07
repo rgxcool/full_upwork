@@ -3,22 +3,27 @@ import mongoose from "mongoose";
 const StudentSchema = new mongoose.Schema({
   name: { type: String, required: true },
   personalNumber: { type: String, required: true },
-  program: { type: mongoose.Schema.Types.ObjectId, ref: "Program" },
+
+  program: {
+    programId: { type: mongoose.Schema.Types.ObjectId, ref: "Program" },
+    grade: { type: String, enum: ['A', 'B', 'C', 'D', 'E', 'F', null], default: null },
+  },
+
   coursePackages: [
     {
-      coursePackageId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "CoursePackage",
-      },
+      coursePackageId: { type: mongoose.Schema.Types.ObjectId, ref: "CoursePackage" },
+      grade: { type: String, enum: ['A', 'B', 'C', 'D', 'E', 'F', null], default: null },
     },
   ],
+
   courses: [
     {
       courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
       addedAt: { type: Date, default: Date.now },
+      grade: { type: String, enum: ['A', 'B', 'C', 'D', 'E', 'F', null], default: null },
     },
   ],
-  attended: { type: Boolean, default: false },
+
   startDate: Date,
   endDate: Date,
   finalExamDate: Date,
@@ -33,20 +38,16 @@ const StudentSchema = new mongoose.Schema({
   teacher: String,
   dropout: { type: Boolean, default: false },
 
-  // 🟨 Add these two:
-  aplStatus: {
-    type: String,
-    enum: ["GRAY", "RED", "BLUE", "ORANGE", "GREEN"],
-    default: "GRAY",
-  },
   commentHistory: [
     {
       comment: String,
       author: String,
-      date: Date,
+      date: { type: Date, default: Date.now },
       seenBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     },
   ],
+
+  aplStatus: { type: String, default: "GRAY" },
 });
 
 export default mongoose.model("Student", StudentSchema);

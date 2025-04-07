@@ -13,9 +13,10 @@ const router = Router();
 router.get("/students", authenticateUser, async (req, res) => {
   try {
     const students = await Student.find()
-      .populate("courses.courseId", "courseName courseCode")
-      .populate("coursePackages.coursePackageId", "coursePackageName")
-      .select("+commentHistory.seenBy");
+      .populate('courses.courseId', 'courseName courseCode coursePoints courseExtent')
+      .populate('coursePackages.coursePackageId', 'coursePackageName coursePackageCode')
+      .populate('program.programId', 'programName')      
+      .select('+commentHistory.seenBy');
 
     res.status(200).json(students);
   } catch (error) {
@@ -23,6 +24,8 @@ router.get("/students", authenticateUser, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
 
 // ✅ Add a new student
 router.post("/student", async (req, res) => {
@@ -36,29 +39,9 @@ router.post("/student", async (req, res) => {
   }
 });
 
-// ✅ Update dropout status
-router.put("/student/:id", async (req, res) => {
-  try {
-    const updatedStudent = await Student.findByIdAndUpdate(
-      req.params.id,
-      { $set: { dropout: req.body.dropout } },
-      { new: true }
-    )
-      .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("courses.courseId", "courseName courseCode");
 
-    if (!updatedStudent) {
-      return res.status(404).json({ error: "Student not found" });
-    }
 
-    res.status(200).json(updatedStudent);
-  } catch (error) {
-    console.error("❌ Error updating dropout status:", error);
-    res.status(500).json({ error: "Failed to update student" });
-  }
-});
-
-// ✅ Add course to student
+// Add a course to student with default grade
 router.post("/student/:studentId/addcourse", async (req, res) => {
   const { studentId } = req.params;
   const { courseId } = req.body;
@@ -84,6 +67,45 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
   }
 });
 
+// Similarly, add a program with default grade
+router.post("/student/:studentId/setprogram", async (req, res) => {
+  const { studentId } = req.params;
+  const { programId } = req.body;
+
+  try {
+    const student = await Student.findById(studentId);
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    student.program = { programId, grade: null };
+    await student.save();
+
+    res.status(200).json(student);
+  } catch (error) {
+    console.error("❌ Error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Adding course package similarly
+router.post("/student/:studentId/addcoursepackage", async (req, res) => {
+  const { studentId } = req.params;
+  const { coursePackageId } = req.body;
+
+  try {
+    const student = await Student.findById(studentId);
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    student.coursePackages.push({ coursePackageId, grade: null });
+    await student.save();
+
+    res.status(200).json(student);
+  } catch (error) {
+    console.error("❌ Error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
 // ✅ Remove course from student
 router.delete("/student/:id/courses/:courseId", async (req, res) => {
   try {
@@ -106,8 +128,9 @@ router.delete("/student/:id/courses/:courseId", async (req, res) => {
 router.get("/student/:id", async (req, res) => {
   try {
     const student = await Student.findById(req.params.id)
-      .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("courses.courseId", "courseName courseCode");
+      .populate('courses.courseId', 'courseName courseCode coursePoints courseExtent')
+      .populate('coursePackages.coursePackageId', 'coursePackageName')
+      .populate('program.programId', 'programName');
 
     if (!student) return res.status(404).json({ error: "Student not found" });
 
@@ -117,6 +140,7 @@ router.get("/student/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch student details" });
   }
 });
+
 
 // ✅ Delete single student
 router.delete("/student/:id", async (req, res) => {
@@ -237,8 +261,9 @@ router.put("/student/:id", async (req, res) => {
       req.body,
       { new: true }
     )
+      .populate("courses.courseId", "courseName courseCode")
       .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("courses.courseId", "courseName courseCode");
+      .populate("program.programId", "programName");
 
     if (!updatedStudent) {
       return res.status(404).json({ error: "Student not found" });
@@ -297,5 +322,26 @@ router.post(
   }
   
 );
+router.patch("/student/:studentId/course/:courseId/grade", async (req, res) => {
+  const { studentId, courseId } = req.params;
+  const { grade } = req.body;
+
+  if (!['A', 'B', 'C', 'D', 'E', 'F'].includes(grade))
+    return res.status(400).json({ error: "Invalid grade." });
+
+  try {
+    const student = await Student.findOneAndUpdate(
+      { _id: studentId, "courses.courseId": courseId },
+      { $set: { "courses.$.grade": grade } },
+      { new: true }
+    ).populate('courses.courseId', 'courseName courseCode');
+
+    res.json(student);
+  } catch (error) {
+    console.error("❌ Error updating grade:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 export default router;

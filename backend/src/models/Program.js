@@ -1,22 +1,12 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const programSchema = new mongoose.Schema({
-    programName: {
-        type: String,
-        required: true,
-    },
-    programCoursePackages: [
-        {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "CoursePackage",
-        },
-    ],
-    programCourses: [
-        {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Course",
-        },
-    ],
+const ProgramSchema = new mongoose.Schema({
+  programName: { type: String, required: true },
+  programCourses: [{
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+    order: { type: Number, required: true }
+  }],
+  programCoursePackages: [{ type: mongoose.Schema.Types.ObjectId, ref: 'CoursePackage' }]
 });
 
-export default mongoose.model("Program", programSchema, "programs");
+export default mongoose.model('Program', ProgramSchema);

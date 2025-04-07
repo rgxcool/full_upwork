@@ -79,14 +79,24 @@
 
             <td class="course-cell">
               <div class="course-list">
-                <ul>
-                  <!-- ✅ Ensure Vue properly iterates over all courses -->
+                <ul v-if="student.program && student.program.programId">
+                  <li>
+                    <strong>Program:</strong> {{ student.program.programId.programName }}
+                    <span v-if="student.program.grade">({{ student.program.grade }})</span>
+                  </li>
+                </ul>
+
+                <ul v-if="student.coursePackages && student.coursePackages.length">
+                  <li v-for="(pkg, index) in student.coursePackages" :key="'pkg-' + index">
+                    <strong>Package:</strong> {{ pkg.coursePackageId.coursePackageName }}
+                    <span v-if="pkg.grade">({{ pkg.grade }})</span>
+                  </li>
+                </ul>
+
+                <ul v-if="student.courses && student.courses.length">
                   <li v-for="(course, index) in student.courses" :key="'course-' + index">
-                    <!-- ✅ Check if course.courseId exists -->
-                    {{ course.courseId?.courseName || 'No course name' }}
-                    <!-- <span v-if="course.courseId?.courseCode">
-                      - {{ course.courseId.courseCode }}
-                    </span> Add if coursecode is needed. -->
+                    {{ getCourseName(course) }}
+                    <span v-if="course.grade">({{ course.grade }})</span>
                   </li>
                 </ul>
               </div>
@@ -203,22 +213,9 @@
         }
       },
       getCourseName(course) {
-        //console.log('🔍 Debugging Course:', course) // See what's happening
-        if (!course) return 'No course data'
-
-        // Check for populated course object
-        if (course.courseId && typeof course.courseId === 'object') {
-          return course.courseId.courseName || 'Unnamed Course'
-        }
-
-        // Directly stored course name
-        if (course.courseName) {
-          return course.courseName
-        }
-
-        return 'Unknown Course'
+        if (!course || !course.courseId) return 'No course data'
+        return course.courseId.courseName || 'Unnamed Course'
       },
-
       handleFileUpload(event) {
         this.selectedFileName =
           event.target.files.length > 0 ? event.target.files[0].name : 'No file selected'

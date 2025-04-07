@@ -1,5 +1,4 @@
 import ExcelJS from "exceljs";
-import mongoose from "mongoose";
 import Program from "../src/models/Program.js";
 import CoursePackage from "../src/models/CoursePackage.js";
 import Course from "../src/models/Course.js";

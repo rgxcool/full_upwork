@@ -25,20 +25,15 @@ async function parseStudentExcel(fileBuffer, teacherName) {
       const columnName = headers[colNumber - 1]
       if (columnName) {
         rowObject[columnName] = cell.value
-      }
-
-      // Detect dropout status via red fill
-      if (
-        cell.style.fill?.fgColor?.argb?.toUpperCase() === "FFFF0000"
-      ) {
-        hasRedBackground = true
+        if (cell.style.fill?.fgColor?.argb?.toUpperCase() === "FFFF0000") {
+          hasRedBackground = true
+        }
       }
     })
 
     rowObject["teacher"] = teacherName
     rowObject["dropout"] = hasRedBackground
 
-    // Skip if empty row
     if (requiredFields.every(field => !rowObject[field])) {
       consecutiveEmptyRows++
       if (consecutiveEmptyRows >= 5) {
@@ -50,93 +45,95 @@ async function parseStudentExcel(fileBuffer, teacherName) {
       consecutiveEmptyRows = 0
     }
 
-    // Program lookup
-    let programId = null
+    let programRef = null
     if (rowObject["PROGRAM"]) {
-      const rawProgram = rowObject["PROGRAM"]
-      const programName = rawProgram?.toUpperCase().trim()
-      const programDoc = await Program.findOne({ name: programName })
-      programId = programDoc?._id || null
+      const programName = rowObject["PROGRAM"]?.toUpperCase().trim()
+      const programDoc = await Program.findOne({ programName })
+      if (programDoc) {
+        programRef = { programId: programDoc._id, grade: null }
+      } else {
+        console.warn(`⚠️ No Program found for: ${programName}`)
+      }
     }
 
-    // Courses & Course Packages
-    let courseIds = []
-    let coursePackageIds = []
+    let rawInput = rowObject["KURS/PAKET"]
+    let rawNames = []
 
-    if (rowObject["KURS/PAKET"]) {
-      const rawCourseNames = rowObject["KURS/PAKET"]
-        .split(",")
-        .map(name => name.trim().toUpperCase())
+    if (typeof rawInput === "string") {
+      rawNames = rawInput.split(/[,;|]/).map(n => n.trim().toUpperCase()).filter(Boolean)
+    } else if (Array.isArray(rawInput)) {
+      rawNames = rawInput.map(n => n.trim().toUpperCase()).filter(Boolean)
+    } else if (rawInput && typeof rawInput.text === "string") {
+      rawNames = rawInput.text.split(/[,;|]/).map(n => n.trim().toUpperCase()).filter(Boolean)
+    }
 
-      console.log(`🔍 Searching for courses/packages:`, rawCourseNames)
+    const courses = []
+    const coursePackages = []
+    const education = []
 
-      const foundCourses = await Course.find({
-        courseName: { $in: rawCourseNames },
-      }).lean()
-
-      const courseMap = Object.fromEntries(foundCourses.map(c => [c.courseName, c._id]))
-
-      const unmatched = rawCourseNames.filter(name => !courseMap[name])
-      const foundPackages = await CoursePackage.find({
-        name: { $in: unmatched },
-      }).lean()
-
-      const packageMap = Object.fromEntries(foundPackages.map(p => [p.name, p._id]))
-
-      courseIds = foundCourses.map(course => ({
-        courseId: course._id,
-        courseName: course.courseName,
-        addedAt: new Date(),
-      }))
-
-      coursePackageIds = foundPackages.map(pkg => ({
-        coursePackageId: pkg._id,
-        coursePackageName: pkg.name,
-        addedAt: new Date(),
-      }))
-
-      const completelyUnmatched = unmatched.filter(name => !packageMap[name])
-      if (completelyUnmatched.length > 0) {
-        console.warn(`⚠️ No match found for: ${completelyUnmatched.join(", ")}`)
+    for (const name of rawNames) {
+      const programDoc = await Program.findOne({ programName: name })
+      if (programDoc) {
+        if (!programRef) programRef = { programId: programDoc._id, grade: null }
+        education.push({ type: "Program", refId: programDoc._id, name })
+        continue
       }
+
+      const packageDoc = await CoursePackage.findOne({ coursePackageName: name })
+      if (packageDoc) {
+        coursePackages.push({ coursePackageId: packageDoc._id, grade: null })
+        education.push({ type: "CoursePackage", refId: packageDoc._id, name })
+        continue
+      }
+
+      const courseDoc = await Course.findOne({ courseName: name })
+      if (courseDoc) {
+        courses.push({ courseId: courseDoc._id, addedAt: new Date(), grade: null })
+        education.push({ type: "Course", refId: courseDoc._id, name })
+        continue
+      }
+
+      console.warn(`⚠️ No match for: ${name}`)
     }
 
     studentsToSave.push({
       name: rowObject["NAMN"],
       personalNumber: rowObject["PERSONNUMMER"],
-      program: programId,
-      coursePackages: coursePackageIds,
-      courses: courseIds,
+      program: programRef,
+      coursePackages,
+      courses,
       startDate: parseExcelDate(rowObject["START"]),
       endDate: parseExcelDate(rowObject["SLUT"]),
+      finalExamDate: parseExcelDate(rowObject["PREL. DATUM SLUTPROV"]),
       municipality: rowObject["KOMMUN/PRIVAT"],
       phone: rowObject["TELEFON"] || "",
       email: extractMail(rowObject["MAIL"]),
       exam: rowObject["PROV"] || "",
       additionalInfo: rowObject["ÖVRIGT"] || "",
-      finalExamDate: parseExcelDate(rowObject["PREL. DATUM SLUTPROV"]),
-      dropout: hasRedBackground,
       teacher: teacherName,
+      dropout: hasRedBackground,
+      aplStatus: "GRAY",
+      education,
     })
 
-    console.log(`✅ Processed: ${rowObject["NAMN"]}, dropout: ${hasRedBackground}`)
+    console.log(`✅ Processed student: ${rowObject["NAMN"]}, dropout: ${hasRedBackground}`)
   }
 
   console.log(`✅ Parsed ${studentsToSave.length} students.`)
   return studentsToSave
 }
 
-// Parse Excel date formats (number or Date)
+// ✅ Excel date normalization
 function parseExcelDate(value) {
   if (!value) return null
   if (value instanceof Date) return value.toISOString()
   if (typeof value === "number") {
     return new Date((value - 25569) * 86400 * 1000).toISOString()
   }
-  return value
+  return null
 }
 
-// Normalize mail field regardless of format
+// ✅ Mail field normalization
 function extractMail(value) {
   if (!value) return ""
   if (typeof value === "object" && value.text) return value.text.trim()
