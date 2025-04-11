@@ -1,3 +1,4 @@
+// ✅ studentController.js (education[] aware)
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
@@ -8,7 +9,6 @@ async function uploadXlsx(req, res) {
     console.log("🟢 Received XLSX file upload request");
 
     if (!req.file) {
-        console.error("❌ No file received!");
         return res.status(400).json({ error: "No file uploaded" });
     }
 
@@ -17,124 +17,102 @@ async function uploadXlsx(req, res) {
         const fileName = req.file.originalname;
         const teacherName = fileName.split(" ").pop().split(".")[0];
 
-        console.log(`🔹 Extracted teacher name: ${teacherName}`);
-
-        // ✅ Parse the Excel file
-        let studentsToSave = await parseStudentExcel(fileBuffer, teacherName);
-
-        console.log(`✅ Processed ${studentsToSave.length} students...`);
-
-        if (studentsToSave.length === 0) {
-            console.warn("⚠️ No valid student data found");
+        const parsedStudents = await parseStudentExcel(fileBuffer, teacherName);
+        if (parsedStudents.length === 0) {
             return res.status(400).json({ error: "No valid data to save." });
         }
 
-        // ✅ Ensure uniqueness based on email before inserting
-        const emails = studentsToSave.map((student) => student.email);
+        const emails = parsedStudents.map((s) => s.email);
         const existingStudents = await Student.find({ email: { $in: emails } });
+        const existingMap = new Map(existingStudents.map((s) => [s.email, s]));
 
-        // ✅ Convert existing students to a Map for quick lookup
-        const existingStudentsMap = new Map(
-            existingStudents.map((s) => [s.email, s])
-        );
+        // 🧠 Gather all unique names from education[]
+        const educationEntries = parsedStudents.flatMap((s) => s.education);
+        const allNames = [...new Set(educationEntries.map((e) => e.name))];
 
-        // ✅ Fetch all required program, course, and course package names
-        const programNames = [
-            ...new Set(studentsToSave.map((s) => s.program).filter(Boolean)),
-        ];
-        const courseNames = [
-            ...new Set(
-                studentsToSave.flatMap((s) =>
-                    s.courses.map((c) => c.courseName)
-                )
-            ),
-        ];
-        const coursePackageNames = [
-            ...new Set(
-                studentsToSave.flatMap((s) =>
-                    s.coursePackages.map((cp) => cp.coursePackageName)
-                )
-            ),
-        ];
-
-        console.log(
-            `🔍 Fetching programs: ${programNames.length}, courses: ${courseNames.length}, course packages: ${coursePackageNames.length}`
-        );
-
-        // ✅ Fetch existing records
-        const [programs, courses, coursePackages] = await Promise.all([
-            Program.find({ name: { $in: programNames } }).lean(),
-            Course.find({ courseName: { $in: courseNames } }).lean(),
-            CoursePackage.find({ name: { $in: coursePackageNames } }).lean(),
+        const [programs, packages, courses] = await Promise.all([
+            Program.find({ programName: { $in: allNames } }).lean(),
+            CoursePackage.find({ coursePackageName: { $in: allNames } }).lean(),
+            Course.find({ courseName: { $in: allNames } }).lean(),
         ]);
 
-        // ✅ Create lookup maps
         const programMap = Object.fromEntries(
-            programs.map((p) => [p.name, p._id])
+            programs.map((p) => [p.programName, p._id])
+        );
+        const packageMap = Object.fromEntries(
+            packages.map((p) => [p.coursePackageName, p._id])
         );
         const courseMap = Object.fromEntries(
             courses.map((c) => [c.courseName, c._id])
         );
-        const coursePackageMap = Object.fromEntries(
-            coursePackages.map((cp) => [cp.name, cp._id])
-        );
 
-        // ✅ Map students with correct ObjectId references
-        studentsToSave = studentsToSave.map((student) => {
-            const existingStudent = existingStudentsMap.get(student.email);
-          
+        const now = new Date();
+
+        const studentsToSave = parsedStudents.map((student) => {
+            const existing = existingMap.get(student.email);
+
+            const education = student.education.map((entry) => {
+                let refId = null;
+                let type = entry.type;
+
+                if (programMap[entry.name]) {
+                    refId = programMap[entry.name];
+                    type = "Program";
+                } else if (packageMap[entry.name]) {
+                    refId = packageMap[entry.name];
+                    type = "CoursePackage";
+                } else if (courseMap[entry.name]) {
+                    refId = courseMap[entry.name];
+                    type = "Course";
+                } else {
+                    type = entry.type !== "Auto" ? entry.type : "Course";
+                }
+
+                return {
+                    type,
+                    refId,
+                    name: entry.name,
+                    grade: null,
+                    addedAt: now,
+                    addedBy: teacherName,
+                    removedAt: null,
+                };
+            });
+
             return {
-              ...student,
-              aplStatus: existingStudent ? existingStudent.aplStatus : 'GRAY',
-              program: programMap[student.program] || null,
-              coursePackages: student.coursePackages.map((cp) => ({
-                coursePackageId: coursePackageMap[cp.coursePackageName] || null,
-                addedAt: new Date(),
-              })),
-              courses: student.courses.map((c) => ({
-                courseId: courseMap[c.courseName] || null,
-                addedAt: new Date(),
-              })),
-              createdAt: existingStudent ? existingStudent.createdAt : new Date(),
-              updatedAt: new Date(),
-              uploadedBy: teacherName,
+                ...student,
+                education,
+                aplStatus: existing ? existing.aplStatus : "GRAY",
+                createdAt: existing?.createdAt || now,
+                updatedAt: now,
+                uploadedBy: teacherName,
             };
-          });          
-    
+        });
 
-        console.log(
-            "📝 Final student data before saving:",
-            JSON.stringify(studentsToSave, null, 2)
-        );
-
-        // ✅ Use `bulkWrite()` for efficiency and prevent duplicate errors
         const bulkOps = studentsToSave.map((student) => ({
             updateOne: {
                 filter: { email: student.email },
                 update: { $set: student },
-                upsert: true, // ✅ Ensures existing students are updated instead of inserting duplicates
+                upsert: true,
             },
         }));
 
         await Student.bulkWrite(bulkOps);
-        console.log("✅ Data successfully inserted/updated in MongoDB");
+
+        const sample = await Student.findOne({
+            email: parsedStudents[0].email,
+        });
+        console.log("🔍 Sample saved student.education:", sample.education);
 
         res.status(200).json({
             message: "Upload successful",
             students: studentsToSave,
         });
-    } catch (error) {
-        console.error("❌ Error processing file:", error);
-
-        if (error.code === 11000) {
-            return res.status(409).json({
-                error: "Duplicate entry: A student with this email already exists.",
-            });
-        }
-
+    } catch (err) {
+        console.error("❌ Upload failed:", err);
         res.status(500).json({
             error: "Failed to process file",
-            details: error.message,
+            details: err.message,
         });
     }
 }

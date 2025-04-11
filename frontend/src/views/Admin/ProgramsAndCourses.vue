@@ -21,7 +21,11 @@
     }
   }
 
-  onMounted(fetchPrograms)
+  //onMounted(fetchPrograms)
+  onMounted(async () => {
+    await fetchPrograms()
+    window.programs = programs // ← now you can type `programs.value` in devtools
+  })
 </script>
 
 <template>
@@ -63,7 +67,9 @@
                     >
                       <strong>{{ program.programName }}</strong>
                     </td>
-                    <td class="course-name-column">{{ course.courseName }}</td>
+                    <td class="course-name-column">
+                      {{ course.courseName || 'No coursename found' }}
+                    </td>
                     <td class="fixed-width">{{ course.courseCode || 'N/A' }}</td>
                     <td class="fixed-width">{{ course.coursePoints || 'N/A' }}</td>
                     <td class="fixed-width">{{ course.courseExtent || 'N/A' }}</td>
