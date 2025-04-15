@@ -9,6 +9,32 @@ import { hasCommentPermission } from "../utils/roles.js";
 
 const router = Router();
 
+// PUT: Uppdatera kursstatus för en specifik kurs i studentens kurslista
+router.put('/students/:studentId/course/:courseId/status', async (req, res) => {
+    console.log("📥 ROUTE HIT", req.params);
+
+    console.log("BODY", req.body)
+
+  const { studentId, courseId } = req.params;
+  const { status } = req.body;
+
+  try {
+    const student = await Student.findById(studentId);
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    const course = student.courses.find(c => c.courseId.toString() === courseId);
+    if (!course) return res.status(404).json({ message: 'Course not found in student' });
+
+    course.status = status; // 👈 Lägg till status i schemat om det inte finns!
+
+    await student.save();
+    res.status(200).json({ message: 'Status updated successfully' });
+  } catch (error) {
+    console.error("Error updating status:", error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 router.get("/students", authenticateUser, async (req, res) => {
     try {
         const students = await Student.find()

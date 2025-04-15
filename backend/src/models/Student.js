@@ -29,6 +29,7 @@ const StudentSchema = new mongoose.Schema({
             grade: { type: String, default: null },
             addedAt: { type: Date, default: Date.now },
             addedBy: { type: String },
+            status: { type: String, default: null }, // 🔥 Lägg till denna rad
             removedAt: { type: Date, default: null },
         },
     ],

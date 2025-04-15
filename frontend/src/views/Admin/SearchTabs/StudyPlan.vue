@@ -1,25 +1,28 @@
-v<template>
+<template>
     <div>
       <h2>{{ student.name }}</h2>
       <table class="table">
         <thead>
           <tr>
-            <th>Kurs</th>
+            <th>Kursnamn</th>
+            <th>Kurskod</th>
             <th>Status</th>
-            <th>Startdatum</th>
-            <th>Slutdatum</th>
+            <th>Poäng</th>
+            <th>Extent</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="course in student.courses" :key="course._id">
-            <td>{{ course.courseId?.courseCode }}</td>
+            <td>{{ course.courseId?.courseName || 'Ingen kursdata' }}</td>
+            <td>{{ course.courseId?.courseCode || 'Ingen kursdata' }}</td>
             <td>
               <select v-model="course.status" @change="updateStatus(course)">
+                <option value="" selected>Choose here</option>
                 <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
               </select>
             </td>
-            <td>{{ formatDate(course.startDate) }}</td>
-            <td>{{ formatDate(course.endDate) }}</td>
+            <td>{{ course.courseId?.coursePoints || 'Ej angivet' }}</td>
+            <td>{{ course.courseId?.courseExtent || 'Ej angivet' }}</td>
           </tr>
         </tbody>
       </table>
@@ -38,10 +41,32 @@ const student = computed(() => props.userData || { courses: [] });
 const statuses = ["Antagen", "Betygsatt", "Avbrott", "Ej påbörjad", "Reviderad"];
 
 const updateStatus = async (course) => {
-  await axios.put(`/api/students/${student.value._id}/course/${course.courseId._id}/status`, {
-    status: course.status,
-  });
+  const rawCourseId = course.courseId;
+  const isObject = typeof rawCourseId === 'object';
+  const finalCourseId = isObject ? rawCourseId._id : rawCourseId;
+
+  console.log("🧪 Uppdaterar status för kurs:");
+  console.log("📘 course:", course);
+  console.log("🔍 course.courseId:", rawCourseId);
+  console.log("🔍 typeof course.courseId:", typeof rawCourseId);
+  console.log("✅ courseId som skickas till backend:", finalCourseId);
+
+  try {
+    const response = await axios.put(
+      `http://localhost:5001/api/students/${student.value._id}/course/${finalCourseId}/status`,
+      { status: course.status }
+    );
+    console.log("✅ Status uppdaterad:", response.data);
+  } catch (err) {
+    console.error("❌ Error updating status:", err.response?.data || err.message);
+    alert("Kunde inte uppdatera kursstatus.");
+  }
 };
+
+
+
+console.log("👤 Student data received:", student.value);
+
 
 const formatDate = (date) => date ? new Date(date).toLocaleDateString() : '';
 
@@ -58,5 +83,9 @@ const formatDate = (date) => date ? new Date(date).toLocaleDateString() : '';
     border: 1px solid #ccc;
     padding: 0.5rem;
   }
+
+  button, input, select, textarea, option {
+    all: revert !important;
+}
   </style>
   

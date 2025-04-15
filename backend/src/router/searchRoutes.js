@@ -126,12 +126,14 @@ router.get("/details/:type/:id", async (req, res) => {
         let result;
 
         switch (type) {
-            case "Elev":
-                result = await Student.findById(id)
-                    .populate("program")
-                    .populate("teacher", "name email")
-                    .select("-__v"); // Exkludera metadata
-                break;
+          case "Elev":
+            result = await Student.findById(id)
+                .populate("program.programId", "programName")
+                .populate("teacher", "name email")
+                .populate("courses.courseId", "courseName courseCode coursePoints courseExtent")
+                .populate("coursePackages.coursePackageId", "coursePackageName")
+                .select("-__v");
+            break;
             case "Lärare":
                 result = await User.findById(id)
                     .select("username email role")
