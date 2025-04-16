@@ -1,119 +1,136 @@
 <template>
-  <section class="tab-container">
-    <div class="tab-menu">
-      <ul>
-        <li
-          v-for="tab in tabs"
-          :key="tab.key"
-          :class="{ active: activeTab === tab.key }"
-          @click="activeTab = tab.key"
-        >
-          {{ tab.label }}
-        </li>
-      </ul>
+  <section>
+    <div v-if="studentsToGrade.length === 0">
+        <p class="text-muted">Inga elever att betygsätta just nu.</p>
     </div>
-
-    <div class="content">
-      <div v-if="activeTab === 'betygsattning'">
-        <h3>Betygsättning</h3>
-        <div v-if="studentsToGrade.length">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Elev</th>
-                <th>Kurs</th>
-                <th>Slutdatum</th>
-                <th>Betyg</th>
-                <th>Motivering</th>
-                <th>Kommentar</th>
-                <th>NP-poäng</th>
-                <th>Lås</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="student in studentsToGrade" :key="student._id">
-              <template v-for="course in student.courses" :key="course._id">
-                <tr v-if="shouldShowCourse(course)">
-                  <td>{{ student.name }}</td>
-                  <td>{{ course.courseId?.courseCode || '-' }}</td>
-                  <td>{{ formatDate(course.endDate) }}</td>
-                  <td>
-                    <select v-model="course.grades.grade">
-                      <option disabled value="">Välj betyg</option>
-                      <option v-for="g in grades" :key="g">{{ g }}</option>
-                    </select>
-                  </td>
-                  <td><input v-model="course.grades.reason" placeholder="Motivering" /></td>
-                  <td><textarea v-model="course.grades.comments" placeholder="Kommentar" /></td>
-                  <td><input type="number" v-model="course.grades.npScore" /></td>
-                  <td>
-                    <button v-if="!course.grades.locked && !isAdmin" @click="lockGrade(student._id, course.courseId._id)">Lås</button>
-                    <span v-else-if="course.grades.locked">🔒 Låst</span>
-                    <button v-if="course.grades.locked && isAdmin" @click="unlockGrade(student._id, course.courseId._id)">Lås upp</button>
-                  </td>
-                </tr>
-              </template>
-            </tr>
-
-            </tbody>
-          </table>
-        </div>
-        <div v-else>
-          <p class="text-muted">Inga elever har kopplade kurser ännu.</p>
-        </div>
-      </div>
-
-      <div v-if="activeTab === 'lastaBetyg'">
-        <h3>Låsta betyg</h3>
-        <!-- Visa låsta betyg här -->
-      </div>
+    
+    <table v-else class="table">
+      <thead>
+        <tr>
+          <th>Elev</th>
+          <th>Kurs</th>
+          <th>Betyg</th>
+          <th>Motivering</th>
+          <th>Kommentar</th>
+          <th>NP-poäng</th>
+          <th>Lås</th>
+        </tr>
+      </thead>
+    <tbody>
+      <div v-for="student in studentsToGrade" :key="student._id">
+      <tr
+        v-for="course in student.courses"
+        :key="student._id + '-' + course._id"
+        v-if="shouldShowCourse(course, student)"
+      >
+        <td>{{ student.name }}</td>
+        <td>{{ course.courseId?.courseCode || '-' }}</td>
+        <td>
+          <select v-model="course.grades.grade">
+            <option disabled value="">Välj betyg</option>
+            <option v-for="g in grades" :key="g">{{ g }}</option>
+          </select>
+        </td>
+        <td><input v-model="course.grades.reason" placeholder="Motivering" /></td>
+        <td><textarea v-model="course.grades.comments" placeholder="Kommentar" /></td>
+        <td v-if="shouldShowNp(course)">
+          <input type="number" v-model="course.grades.npScore" />
+        </td>
+        <td v-else>-</td>
+        <td>
+          <button
+            v-if="!course.grades.locked && !isAdmin"
+            @click="lockGrade(student._id, course.courseId?._id || course.courseId)"
+            :disabled="!course.grades.grade || !course.grades.reason"
+          >
+            Lås
+          </button>
+          <span v-else-if="course.grades.locked">🔒 Låst</span>
+          <button
+            v-if="course.grades.locked && isAdmin"
+            @click="unlockGrade(student._id, course.courseId._id)"
+          >
+            Lås upp
+          </button>
+        </td>
+      </tr>
     </div>
+    </tbody>
+    </table>
+
   </section>
 </template>
 
+
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { useStore } from 'vuex';
 import axios from 'axios';
 
-const tabs = [
-  { key: 'betygsattning', label: 'Betygsättning' },
-  { key: 'lastaBetyg', label: 'Låsta betyg' }
-];
+const store = useStore();
+const userRole = computed(() => store.getters.userRole);
+const isAdmin = computed(() => store.getters.isAdmin);
 
 const activeTab = ref('betygsattning');
 const studentsToGrade = ref([]);
 const grades = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-const isAdmin = computed(() => ['admin', 'systemadmin'].includes(userRole.value));
-
-
 const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString();
 
-const shouldShowCourse = (course) => {
+const shouldShowCourse = (course, student) => {
+  if (!course || !student || !student.endDate) return false;
+  if (!course.grades) course.grades = {}; // Se till att den finns!
+
   const today = new Date();
-  const end = new Date(course.endDate);
+  const end = new Date(student.endDate);
   return end <= today && !course.grades?.grade;
+};
+
+const shouldShowNp = (course) => {
+  const code = course.courseId?.courseCode?.toLowerCase() || '';
+  return code.startsWith('sve') || code.startsWith('eng') || code.startsWith('mat');
 };
 
 const loadStudents = async () => {
   const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/students-to-grade`, {
-  withCredentials: true,
-});
+    withCredentials: true,
+  });
+
+  // Se till att varje course har grades-objekt
+  data.forEach(student => {
+    student.courses?.forEach(course => {
+      if (!course.grades) {
+        course.grades = {};
+      }
+    });
+  });
+
   studentsToGrade.value = data;
 };
 
 const lockGrade = async (studentId, courseId) => {
-  await axios.post(`${import.meta.env.VITE_API_URL}/api/teacher/lock-grade`, { studentId, courseId });
-  await loadStudents();
+  try {
+    await axios.post(`${import.meta.env.VITE_API_URL}/api/teacher/lock-grade`, {
+      studentId, courseId
+  }, { withCredentials: true });
+
+    await loadStudents();
+  } catch (err) {
+    console.error("❌ Axios error vid lockGrade:", err.response?.data || err.message);
+  }
 };
 
 const unlockGrade = async (studentId, courseId) => {
-  await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/unlock-grade`, { studentId, courseId });
+  await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/unlock-grade`, {
+    studentId, courseId
+  }, { withCredentials: true });
+
   await loadStudents();
 };
 
 onMounted(loadStudents);
 </script>
+
 
 <style scoped>
 .tab-container {

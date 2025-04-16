@@ -26,10 +26,17 @@ const StudentSchema = new mongoose.Schema({
     courses: [
         {
             courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
-            grade: { type: String, default: null },
+            grade: { type: String, default: null }, // ← detta kan du ta bort om du går all in på "grades"
+            grades: {
+              grade: { type: String },
+              reason: { type: String },
+              comments: { type: String },
+              npScore: { type: Number },
+              locked: { type: Boolean, default: false }
+            },
             addedAt: { type: Date, default: Date.now },
             addedBy: { type: String },
-            status: { type: String, default: null }, // 🔥 Lägg till denna rad
+            status: { type: String, default: null },
             removedAt: { type: Date, default: null },
         },
     ],

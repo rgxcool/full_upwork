@@ -4,42 +4,34 @@ import Student from "../models/Student.js";
 import { authenticateUser } from "../controllers/authController.js";
 
 router.get("/students-to-grade/", authenticateUser, async (req, res) => {
-    const user = req.user;
-    const today = new Date();
-  
-    const isAdmin = ["admin", "systemadmin"].includes(user.role);
-    const isTeacher = user.role === "teacher";
-  
-    let query = {
-        courses: {
-            $elemMatch: {
-              endDate: { $lte: new Date() },
-              $or: [
-                { "grades.grade": null },
-                { "grades.grade": { $exists: false } },
-                { grades: { $exists: false } }
-              ]
-            }
-          }
-          
-    };
-  
-    if (isTeacher) {
-      query.teacher = user._id;
+  const user = req.user;
+
+  const isAdmin = ["admin", "systemadmin"].includes(user.role);
+  const isTeacher = user.role === "teacher";
+
+  let query = {
+    endDate: { $lte: new Date() },
+    courses: {
+      $elemMatch: {
+        $or: [
+          { "grades.grade": null },
+          { "grades.grade": { $exists: false } }
+        ]
+      }
     }
-  
-    console.log("🔍 Query som skickas till DB:", JSON.stringify(query, null, 2));
-  
-    const students = await Student.find(query).populate("courses.courseId teacher");
-  
-    console.log("✅ Elever funna:", students.length);
-    res.json(students);
-  });
-  
-  
+  };
+
+  if (isTeacher) {
+    query.teacher = user._id;
+  }
+
+  const students = await Student.find(query).populate("courses.courseId");
+
+  console.log("📦 Elever att betygsätta:", students.length);
+  res.json(students);
+});
   
 
-  // POST /api/teacher/save-grade
 router.post("/teacher/save-grade/", authenticateUser, async (req, res) => {
     const { studentId, courseId, grade, reason, comments, npScore } = req.body;
   
@@ -54,10 +46,9 @@ router.post("/teacher/save-grade/", authenticateUser, async (req, res) => {
     res.send("Betyg sparat");
   });
 
-  // POST /api/teacher/lock-grade
 router.post("/teacher/lock-grade/", authenticateUser, async (req, res) => {
     const { studentId, courseId } = req.body;
-  
+     
     const student = await Student.findById(studentId);
     const course = student.courses.find(c => c.courseId.toString() === courseId);
   

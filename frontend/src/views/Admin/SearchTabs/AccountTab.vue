@@ -1,8 +1,5 @@
 <template>
   <div class="account-info">
-    <h3>
-      Användarinformation
-    </h3>
     <section v-if="userType === 'Elev'">
       <div class="info-item">
         <strong>Personnummer:</strong> {{ userData?.personalNumber || 'Ej tillgänglig' }}

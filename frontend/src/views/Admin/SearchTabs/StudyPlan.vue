@@ -1,6 +1,5 @@
 <template>
     <div>
-      <h2>{{ student.name }}</h2>
       <table class="table">
         <thead>
           <tr>
@@ -12,12 +11,13 @@
           </tr>
         </thead>
         <tbody>
+
           <tr v-for="course in student.courses" :key="course._id">
             <td>{{ course.courseId?.courseName || 'Ingen kursdata' }}</td>
             <td>{{ course.courseId?.courseCode || 'Ingen kursdata' }}</td>
             <td>
               <select v-model="course.status" @change="updateStatus(course)">
-                <option value="" selected>Choose here</option>
+                <option disabled selected>Choose here</option>
                 <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
               </select>
             </td>
@@ -85,7 +85,18 @@ const formatDate = (date) => date ? new Date(date).toLocaleDateString() : '';
   }
 
   button, input, select, textarea, option {
-    all: revert !important;
+  font: inherit;
+  color: inherit;
+  background: none;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+select {
+  min-width: 150px;
+  width: 100%;
+  box-sizing: border-box;
 }
   </style>
   

@@ -1,8 +1,6 @@
 <!-- DocumentSection.vue -->
 <template>
-    <div class="document-section">
-      <h3>Dokument</h3>
-  
+    <div class="document-section">  
       <form @submit.prevent="uploadFile">
         <input type="file" @change="handleFileChange" />
         <button type="submit" :disabled="!selectedFile">Ladda upp</button>

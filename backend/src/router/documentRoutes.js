@@ -1,7 +1,6 @@
 import express from 'express';
 import multer from 'multer';
 import Document from '../models/Document.js';
-import path from 'path';
 
 const router = express.Router();
 
