@@ -37,6 +37,11 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use((req, res, next) => {
+    console.log(`Incoming request: ${req.method} ${req.url}`); // Log method and URL
+    next(); // Proceed to the next middleware/route handler
+});
+
 console.log("Attempting to mount router...");
 app.use("/", router);
 console.log("Router successfully mounted!");
@@ -44,8 +49,7 @@ console.log("Router successfully mounted!");
 // Ensure preflight (OPTIONS) requests are handled
 app.options("*", cors());
 
-app.use('/api/uploads', express.static('public/uploads'));
-
+app.use("/api/uploads", express.static("public/uploads"));
 
 // MongoDB Connection
 mongoose
