@@ -33,7 +33,7 @@ vi.mock('axios', () => {
             ],
           })
         }
-        if (url.includes('/api/programs')) {
+        if (url.includes('/api/all-programs')) {
           return Promise.resolve({
             data: [
               {
@@ -43,7 +43,7 @@ vi.mock('axios', () => {
             ],
           })
         }
-        if (url.includes('/api/courses')) {
+        if (url.includes('/api/all-courses')) {
           return Promise.resolve({
             data: [
               {
