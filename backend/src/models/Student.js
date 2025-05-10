@@ -32,7 +32,7 @@ const StudentSchema = new mongoose.Schema({
                 reason: { type: String },
                 comments: { type: String },
                 npScore: { type: Number },
-                locked: { type: Boolean, default: false }
+                locked: { type: Boolean, default: false },
             },
             addedAt: { type: Date, default: Date.now },
             addedBy: { type: String },
@@ -70,6 +70,30 @@ const StudentSchema = new mongoose.Schema({
     additionalInfo: String,
     teacher: String,
     dropout: { type: Boolean, default: false },
+
+    aplStatus: {
+        type: String,
+        enum: ["GRAY", "RED", "BLUE", "YELLOW", "GREEN"],
+        default: "GRAY",
+    },
+    aplStatusHistory: [
+        {
+            status: {
+                type: String,
+                enum: ["GRAY", "RED", "BLUE", "YELLOW", "GREEN"],
+            },
+            changedAt: { type: Date, default: Date.now },
+            changedBy: { type: String },
+        },
+    ],
+    commentHistory: [
+        {
+            comment: String,
+            author: String,
+            date: Date,
+            seenBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+        },
+    ],
 });
 
 export default mongoose.model("Student", StudentSchema);

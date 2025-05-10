@@ -189,7 +189,7 @@
     { key: 'GRAY', label: 'Ej börjat' },
     { key: 'RED', label: 'Praktik slut, ej närvarat' },
     { key: 'BLUE', label: 'Bokade för samtal' },
-    { key: 'ORANGE', label: 'Är i fas' },
+    { key: 'YELLOW', label: 'Är i fas' },
     { key: 'GREEN', label: 'Har kontrakt, skall gå eller har börjat praktik' },
   ]
 
@@ -448,7 +448,7 @@
     background-color: #aecbfa;
   }
 
-  .column.orange {
+  .column.yellow {
     background-color: #fdd663;
   }
 
