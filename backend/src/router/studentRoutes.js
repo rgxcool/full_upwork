@@ -14,12 +14,12 @@ const router = Router();
 router.put('/students/:studentId/education/:educationId/status', async (req, res) => {
     console.log("📥 ROUTE HIT", req.params);
 
-    const { studentId, educationId } = req.params;
-    const { status } = req.body;
+      const { studentId, educationId } = req.params;
+      const { status } = req.body;
 
-    try {
-        const student = await Student.findById(studentId);
-        if (!student) return res.status(404).json({ message: 'Student not found' });
+      try {
+            const student = await Student.findById(studentId);
+            if (!student) return res.status(404).json({ message: 'Student not found' });
 
         const education = student.education.find(e => e._id.toString() === educationId);
         if (!education) return res.status(404).json({ message: 'Education not found for student' });
@@ -137,7 +137,7 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
         );
 
         if (alreadyExists) {
-            return res.status(400).json({ error: "Course already exists"})
+            return res.status(400).json({ error: "Course already exists" })
         }
 
         student.courses.push({ courseId: course._id });
@@ -146,7 +146,7 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
         const updatedStudent = await Student.findById(studentId)
             .populate("courses.courseId", "courseName courseCode")
             .populate("coursePackages.coursePackageId", "coursePackageName");
-            
+
         res.status(200).json(updatedStudent);
     } catch (error) {
         console.error("❌ Error adding course to student:", error);
@@ -187,10 +187,10 @@ router.post("/student/:studentId/addcoursepackage", async (req, res) => {
 
             return res.status(404).json({ error: "Student not found" });
 
-            student.coursePackages.push({ coursePackageId, grade: null });
-            await student.save();
+        student.coursePackages.push({ coursePackageId, grade: null });
+        await student.save();
 
-            res.status(200).json(student);
+        res.status(200).json(student);
 
 
     } catch (error) {
@@ -453,15 +453,15 @@ router.patch("/student/:studentId/course/:courseId/grade", async (req, res) => {
     }
 });
 
-router.get("/programs", async (req, res) => {
+router.get("/all-programs", async (req, res) => {
     const programs = await Program.find().select("programName");
     res.json(programs);
 });
-router.get("/course-packages", async (req, res) => {
+router.get("/all-course-packages", async (req, res) => {
     const packages = await CoursePackage.find().select("coursePackageName");
     res.json(packages);
 });
-router.get("/courses", async (req, res) => {
+router.get("/all-courses", async (req, res) => {
     const courses = await Course.find().select("courseName");
     res.json(courses);
 });

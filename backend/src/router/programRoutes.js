@@ -5,6 +5,7 @@ const router = express.Router()
 
 // ✅ Get all programs + their courses populated
 // backend router example: src/router/programRoutes.js
+// GET all programs with populated course packages and their courses
 router.get('/programs', async (req, res) => {
   try {
     const programs = await Program.find()
@@ -15,21 +16,40 @@ router.get('/programs', async (req, res) => {
       })
       .populate({
         path: 'programCoursePackages',
-        model: 'CoursePackage'
+        model: 'CoursePackage',
+        populate: {
+          path: 'coursePackageCourses',
+          model: 'Course',
+          select: 'courseName courseCode courseExtent'
+        }
       });
 
-    // Map to ensure direct course info (frontend expects course details directly)
     const formattedPrograms = programs.map(program => ({
-      ...program._doc,
+      _id: program._id,
+      programName: program.programName,
       programCourses: program.programCourses.map(pc => ({
-        ...pc.courseId._doc, // spread populated course details
+        ...pc.courseId?._doc,
         order: pc.order
+      })),
+      programCoursePackages: program.programCoursePackages.map(pkg => ({
+        _id: pkg._id,
+        coursePackageName: pkg.coursePackageName,
+        coursePackageCode: pkg.coursePackageCode,
+        coursePackageExtent: pkg.coursePackageExtent,
+        coursePackageCourses: (pkg.coursePackageCourses || []).map(course => ({
+          _id: course._id,
+          courseName: course.courseName,
+          courseCode: course.courseCode,
+          courseExtent: course.courseExtent
+        }))
       }))
     }));
 
+    console.dir(formattedPrograms, { depth: null });
+
     res.json(formattedPrograms);
   } catch (error) {
-    console.error('Error fetching programs:', error);
+    console.error('❌ Error fetching programs:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

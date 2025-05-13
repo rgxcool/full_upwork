@@ -1,9 +1,9 @@
 // src/utils/integratedEducationParser.js
 import ExcelJS from 'exceljs';
 import mongoose from 'mongoose';
-import Program from '../models/Program.js';
-import CoursePackage from '../models/CoursePackage.js';
-import Course from '../models/Course.js';
+import Program from '../src/models//Program.js';
+import CoursePackage from '../src/models/CoursePackage.js';
+import Course from '../src/models/Course.js';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mindfullearning';
 
