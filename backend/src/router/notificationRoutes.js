@@ -5,6 +5,19 @@ const router = express.Router();
 
 // === backend/routes/notificationRoutes.js ===
 // === routes/notificationRoutes.js ===
+
+// routes/notificationRoutes.js
+router.get("/notifications", async (req, res) => {
+  try {
+    const notes = await Notification.find({ resolved: false });
+    res.json(notes);
+  } catch (err) {
+    console.error('Fel vid hämtning av notiser:', err);
+    res.status(500).json({ message: 'Serverfel' });
+  }
+});
+
+
 router.get('/course-end-notifications', async (req, res) => {
     try {
       const today = new Date();
@@ -68,5 +81,54 @@ router.put("/notifications/:id/reset", async (req, res) => {
     }
   });
   
+  // Endpoint för att hämta notiser om F-elever
+  router.get("/failing-students-notifications", async (req, res) => {
+    try {
+      const notifications = await Notification.find({
+        type: "failing_grade",  // Filtrera på typ av notis
+      })
+      .populate('meta.studentId', 'name')  // Hämta studentens namn
+      .populate('meta.courseId', 'courseName')  // Hämta kursnamn om relevant
+      .populate('meta.teacherId', 'name');  // Hämta lärarens namn om relevant
+  
+      res.json(notifications);
+    } catch (error) {
+      console.error('Fel vid hämtning av F-elever notiser:', error);
+      res.status(500).send('Serverfel');
+    }
+  });
 
-export default router;
+
+// Funktion för att skapa notis för F-elever
+const createFailingStudentNotification = async (studentId) => {
+  try {
+    // Hämta elevens information (eller skapa logik för när betygen sätts)
+    const student = await Student.findById(studentId);
+
+    if (student.grade === 'F') {
+      // Skapa notisen om eleven har fått F
+      const notification = new Notification({
+        type: 'failing_grade',
+        message: `Eleven ${student.name} har fått F i betyg!`,
+        meta: {
+          studentId: student._id,
+          courseId: student.courseId,  // Om du också har kursen
+          teacherId: student.teacherId,  // Om du har information om läraren
+          url: `/students/${student._id}`,  // Direktlänk till elevens sida
+        }
+      });
+
+      // Spara notisen i databasen
+      await notification.save();
+    }
+  } catch (error) {
+    console.error('Fel vid skapande av F-notis:', error);
+  }
+};
+
+  
+  export default router;
+  
+
+  
+

@@ -87,30 +87,42 @@
 
           <!-- Notispanel -->
           <div v-if="showNotisPanel" class="notis-panel">
-            <div class="notis-header">Notiser</div>
-            <div v-if="notifications.length === 0" class="notis-empty">
-              Inga notiser just nu
-            </div>
-            <ul v-else>
-              <li v-for="notification in notifications" :key="notification._id">
-                <label>
-                  <input type="checkbox" v-model="notification.resolved" @change="resolveNote(notification._id)" />
-                  {{ notification.message }}
-                </label>
-              </li>
-            </ul>
+
+            <NotificationBox />
 
           </div>
 
+          <!-- Hamburgermenyn syns bara på mobil -->
 
-      <router-link v-if="isLoggedIn" to="/profile" class="icon">
+
+          <!-- Mobilmenyn visas när togglad -->
+      <div v-if="isMobileMenuOpen" class="mobile-menu">
+        <button @click="logout" class="logout-btn">Logga ut</button>
+
+        <ul class="mobile-nav-links">
+          <li v-for="item in filteredMenuItems" :key="item.link">
+            <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
+          </li>
+        </ul>
+      </div>
+
+
+      <div class="icon profile-icon" @click="toggleProfileMenu">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
           <path
             fill="currentColor"
             d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4"
           />
         </svg>
-      </router-link>
+
+        <!-- Mobilmeny under profilikonen -->
+        <div v-if="showProfileMenu" class="profile-dropdown">
+          <button v-if="isLoggedIn" @click="logout" class="logout-btn">Logga ut</button>
+          <router-link v-else to="/register" class="dropdown-link">Registrera</router-link>
+          <router-link v-else to="/login" class="dropdown-link">Logga in</router-link>
+        </div>
+      </div>
+
 
       <div class="auth-links">
         <router-link
@@ -123,7 +135,20 @@
         <router-link v-if="!isLoggedIn" to="/login" class="px-4 py-2 text-blue-600 hover:underline">
           Login
         </router-link>
-        <button v-else @click="logout" class="logout-btn">Logout</button>
+
+
+        <button class="burger-menu" @click="toggleMobileMenu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+              <path
+                fill="currentColor"
+                d="M3 6h18M3 12h18M3 18h18"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+
       </div>
     </div>
     </div>
@@ -137,9 +162,10 @@
   import axios from 'axios'
   import DatePicker from "@vuepic/vue-datepicker";
   import "@vuepic/vue-datepicker/dist/main.css";
+import NotificationBox from './notificationBox.vue';
 
   export default {
-    components: { DatePicker },
+    components: { DatePicker, NotificationBox },
     setup() {
       const store = useStore()
       const router = useRouter()
@@ -164,6 +190,12 @@
 
       const endDateNotifications = ref([]);
       const missingGradeNotifications = ref([]);
+
+      const isMobileMenuOpen = ref(false);
+
+      const toggleMobileMenu = () => {
+        isMobileMenuOpen.value = !isMobileMenuOpen.value;
+      }
 
       const totalNotifications = computed(() =>
         (showNotification.value ? 1 : 0) + 
@@ -296,12 +328,12 @@
         { name: 'Användare', link: '/anvandare', role: 'admin' },
         { name: 'Kalender', link: '/kalender', role: 'teacher' },
         { name: 'Utbildning', link: '/education', role: 'admin' },
-        { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
         { name: 'Elev+', link: '/addstudent', role: 'admin' },
         { name: 'Elever', link: '/students', role: 'admin' },
         { name: 'PDF', link: '/pdf', role: 'admin' },
+        { name: 'Grades', link: '/grades', role: 'teacher' }
       ]
 
       const filteredMenuItems = computed(() => {
@@ -321,6 +353,8 @@
 
       return {
         totalNotifications,
+        isMobileMenuOpen,
+        toggleMobileMenu,
         endDateNotifications,
         missingGradeNotifications,
         notifications,
@@ -643,6 +677,64 @@
   position: relative; /* viktigt! */
 }
 
+
+
+.burger-menu {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .burger-menu {
+    display: block;
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 1100;
+  }
+
+  .nav-links {
+    display: none !important;
+  }
+
+  .mobile-menu {
+    position: absolute;
+    top: 70px;
+    right: 0;
+    width: 100%;
+    background: #f8f8f8;
+    border-top: 1px solid #ddd;
+    padding: 20px;
+    z-index: 1000;
+  }
+
+  .mobile-nav-links {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .mobile-nav-links .nav-link {
+    font-size: 16px;
+    text-align: left;
+    padding: 10px;
+    display: block;
+    color: #333;
+  }
+
+  .logout-btn {
+    margin-bottom: 20px;
+    width: 100%;
+    text-align: left;
+    color: red;
+  }
+}
+
   @media (max-width: 768px) {
     .nav-links {
       display: none;
@@ -654,4 +746,38 @@
       display: block;
     }
   }
+
+
+  .profile-icon {
+  position: relative;
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: 45px;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  z-index: 1200;
+  width: 150px;
+}
+
+.dropdown-link {
+  padding: 10px;
+  text-align: left;
+  text-decoration: none;
+  color: #333;
+  border-radius: 4px;
+}
+
+.dropdown-link:hover,
+.profile-dropdown .logout-btn:hover {
+  background-color: #f0f0f0;
+}
+
 </style>

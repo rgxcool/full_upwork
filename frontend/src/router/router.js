@@ -27,6 +27,7 @@ const ProfilePage = () => import('@/views/Teacher/ProfilePage.vue')
 // Student Views
 import StudentDetails from '@/views/Student/StudentDetails.vue'
 import APLView from '@/views/APLView.vue'
+import GradeStudent from '../views/Admin/gradeStudent.vue'
 
 const routes = [
   // Public Routes
@@ -131,6 +132,12 @@ const routes = [
     component: APLView,
     meta: { title: 'APL List', role: 'admin' },
   },
+  {
+    path: '/grades',
+    name: 'Grades',
+    component: GradeStudent,
+    meta: { title: 'Grade Student', role: 'admin' },
+  }
 ]
 
 const router = createRouter({

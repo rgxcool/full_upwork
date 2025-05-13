@@ -26,7 +26,6 @@ const StudentSchema = new mongoose.Schema({
     courses: [
         {
             courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
-            grade: { type: String, default: null }, // ← detta kan du ta bort om du går all in på "grades"
             grades: {
               grade: { type: String },
               reason: { type: String },
@@ -48,12 +47,21 @@ const StudentSchema = new mongoose.Schema({
                 enum: ["Program", "CoursePackage", "Course"],
                 required: true,
             },
-            refId: { type: mongoose.Schema.Types.ObjectId },
-            name: { type: String, required: true },
+            refId: { type: mongoose.Schema.Types.ObjectId             },
+            name: { type: String },
+            
+            //Betygsdata
             grade: { type: String, default: null },
+            reason: { type: String, default: null },
+            comments: { type: String, default: null },
+            npScore: { type: Number, default: null },
+            locked: { type: Boolean, default: false },
+            
             addedAt: { type: Date, default: Date.now },
             addedBy: { type: String },
             removedAt: { type: Date, default: null },
+            status: { type: String, default: "" }
+
         },
     ],
 

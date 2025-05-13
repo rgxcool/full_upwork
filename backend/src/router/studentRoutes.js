@@ -3,37 +3,88 @@ import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
+import Notification from "../models/Notification.js";
 import CoursePackage from "../models/CoursePackage.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasCommentPermission } from "../utils/roles.js";
+import User from "../models/User.js";
 
 const router = Router();
 
-// PUT: Uppdatera kursstatus för en specifik kurs i studentens kurslista
-router.put('/students/:studentId/course/:courseId/status', async (req, res) => {
+router.put('/students/:studentId/education/:educationId/status', async (req, res) => {
     console.log("📥 ROUTE HIT", req.params);
 
-    console.log("BODY", req.body)
+    const { studentId, educationId } = req.params;
+    const { status } = req.body;
 
-  const { studentId, courseId } = req.params;
-  const { status } = req.body;
+    try {
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
 
-  try {
-    const student = await Student.findById(studentId);
-    if (!student) return res.status(404).json({ message: 'Student not found' });
+        const education = student.education.find(e => e._id.toString() === educationId);
+        if (!education) return res.status(404).json({ message: 'Education not found for student' });
 
-    const course = student.courses.find(c => c.courseId.toString() === courseId);
-    if (!course) return res.status(404).json({ message: 'Course not found in student' });
+        education.status = status; // Uppdatera statusen för education
 
-    course.status = status; // 👈 Lägg till status i schemat om det inte finns!
-
-    await student.save();
-    res.status(200).json({ message: 'Status updated successfully' });
-  } catch (error) {
-    console.error("Error updating status:", error);
-    res.status(500).json({ message: 'Server error' });
-  }
+        if (status === "Avbrott") {
+            const notification = await sendNotificationToTeacherAndAdmin(
+              student,         // ✅ Fullt objekt med name
+              student.teacher, // ✅ Lärar-id
+              education        // ✅ Utbildningsobjekt
+            );
+          
+            await student.save();
+          
+            return res.status(200).json({
+              message: 'Status updated successfully',
+              notification
+            });
+          }
+          
+        
+    } catch (error) {
+        console.error("Error updating status:", error);
+        res.status(500).json({ message: 'Server error' });
+    }
 });
+
+
+const sendNotificationToTeacherAndAdmin = async (student, teacher, education) => {
+
+    console.log("DEBUG student.name:", student.name);
+    console.log("DEBUG student objekt:", student);
+
+    const existing = await Notification.findOne({
+        type: "dropout",
+        "meta.studentId": student._id,
+        "meta.educationId": education._id,
+    });
+    
+    if (existing) {
+        console.log("🔁 Notis redan finns, ingen ny sparas.");
+        return existing; // Skicka tillbaka befintlig
+    }
+
+    const notification = new Notification({
+      type: "dropout",
+      message: `Studenten ${student.name} har avbrutit utbildningen ${education?.name || 'okänd utbildning'}`,
+      meta: {
+        teacherId: teacher || null,
+        studentId: student._id || null,
+        educationId: education?._id || null,
+        courseId: education?.refId || null,
+        url: `/students/${student._id}/education`
+      }
+    });
+  
+    await notification.save();
+    return notification;
+  };
+  
+
+  
+  
+  
 
 router.get("/students", authenticateUser, async (req, res) => {
     try {
