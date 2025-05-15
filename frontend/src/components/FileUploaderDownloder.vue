@@ -26,12 +26,10 @@
       <h3>Uploaded Files</h3>
       <v-list two-line>
         <v-list-item v-for="file in files" :key="file._id" class="file-item">
-          <v-list-item-content>
-            <v-list-item-title>{{ file.filename }}</v-list-item-title>
-            <v-list-item-subtitle>
-              Uploaded: {{ formatDate(file.uploadedAt || file.uploadDate) }}
-            </v-list-item-subtitle>
-          </v-list-item-content>
+          <v-list-item-title>{{ file.filename }}</v-list-item-title>
+          <v-list-item-subtitle>
+            Uploaded: {{ formatDate(file.uploadedAt || file.uploadDate) }}
+          </v-list-item-subtitle>
 
           <v-list-item-action>
             <v-btn icon @click="downloadFile(file._id)" :title="'Download ' + file.filename">
