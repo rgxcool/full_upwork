@@ -60,7 +60,7 @@
         </v-icon>
       </div>
     </div>
-    <v-dialog v-model="dialog" max-width="500px">
+    <v-dialog v-model="dialog" max-width="600px">
       <v-card v-if="selectedStudent" class="dialog-card">
         <v-btn icon class="dialog-close-btn" @click="closeDialog">
           <v-icon>mdi-close</v-icon>
@@ -89,61 +89,24 @@
             </span>
           </div>
         </v-card-subtitle>
-        <div class="comment-history-scroll" ref="commentContainerRef">
-          <template v-for="(entry, index) in getSortedComments" :key="index">
-            <div v-if="shouldShowDateSeparator(index)" class="date-separator">
-              🕒 {{ formatDate(entry.date) }}
-            </div>
-            <div class="comment-entry">
-              <div class="comment-header">
-                <span>{{ entry.author || 'Okänd' }}</span>
-                <span>{{ formatDate(entry.date) }}</span>
-              </div>
-              <div class="comment-box">
-                <div v-if="editingIndex === index">
-                  <v-textarea
-                    v-model="editedComment"
-                    label="Redigera kommentar"
-                    auto-grow
-                    rows="2"
-                  />
-                  <v-btn color="success" small class="ml-2 mr-10 mt-1" @click="saveEditedComment"
-                    >Spara</v-btn
-                  >
-                  <v-btn small @click="cancelEdit">Avbryt</v-btn>
-                </div>
-                <div v-else>
-                  <div class="comment-body">
-                    <p>{{ entry.comment }}</p>
-                    <div v-if="canEditComments" class="comment-actions">
-                      <div class="edit-btn">
-                        <v-btn size="24" icon color="primary" @click.stop="editComment(index)">
-                          <v-icon :size="16">mdi-pencil</v-icon>
-                        </v-btn>
-                      </div>
-                      <div class="delete-btn">
-                        <v-btn size="24" icon color="error" @click.stop="deleteComment(index)">
-                          <v-icon :size="16">mdi-minus</v-icon>
-                        </v-btn>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
-        </div>
-        <!-- <div class="jump-button">
-          <v-btn icon color="primary" @click="scrollToLatest">
-            <v-icon>mdi-arrow-down-bold</v-icon>
-          </v-btn>
-        </div> -->
-        <div class="comment-entry" v-if="canComment">
-          <v-textarea v-model="newComment" label="Lägg till kommentar" rows="3" auto-grow />
-          <div class="button-row">
-            <v-btn class="ml-3" small color="green" @click="submitComment">Spara</v-btn>
-            <v-btn class="mr-3" small color="primary" @click="closeDialog">Stäng</v-btn>
-          </div>
+
+        <!-- Replace old upload and file list with FileUploaderDownloader -->
+        <FileUploaderDownloader
+          v-if="selectedStudent"
+          :studentId="selectedStudent._id"
+          :studentName="selectedStudent.name"
+        />
+
+        <v-textarea
+          v-model="newComment"
+          label="Lägg till kommentar"
+          rows="3"
+          auto-grow
+          class="mt-4"
+        />
+        <div class="button-row">
+          <v-btn class="ml-3" small color="green" @click="submitComment">Spara</v-btn>
+          <v-btn class="mr-3" small color="primary" @click="closeDialog">Stäng</v-btn>
         </div>
       </v-card>
     </v-dialog>
@@ -154,6 +117,9 @@
   import { ref, computed, onMounted, nextTick } from 'vue'
   import axios from 'axios'
   import { useStore } from 'vuex'
+
+  // Import the new uploader/downloader component
+  import FileUploaderDownloader from '../components/FileUploaderDownloder.vue'
 
   const store = useStore()
   const currentUser = computed(() => store.state.user)
@@ -172,6 +138,9 @@
   const students = ref([])
   const draggedStudent = ref(null)
   const commentContainerRef = ref(null)
+
+  const fileInput = ref(null)
+  const studentFiles = ref([])
 
   const roleRank = {
     guest: 0,
@@ -192,7 +161,6 @@
     { key: 'YELLOW', label: 'Är i fas' },
     { key: 'GREEN', label: 'Har kontrakt, skall gå eller har börjat praktik' },
   ]
-
   const studentsByStatus = computed(() => {
     if (!Array.isArray(students.value)) return {}
     return statusMap.reduce((acc, status) => {
@@ -234,12 +202,25 @@
     }
   }
 
+  const fetchStudentFiles = async () => {
+    try {
+      const { data } = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/uploads/${selectedStudent.value._id}`,
+        { withCredentials: true }
+      )
+      studentFiles.value = data
+    } catch (err) {
+      console.error('❌ Failed to fetch student files:', err)
+    }
+  }
+
   const openComments = async (student) => {
     selectedStudent.value = student
     newComment.value = ''
     dialog.value = true
     await nextTick()
     scrollToLatest()
+    await fetchStudentFiles()
 
     try {
       await axios.post(

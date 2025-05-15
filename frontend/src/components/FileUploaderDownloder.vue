@@ -1,0 +1,205 @@
+<template>
+  <div>
+    <v-card class="pa-4" outlined>
+      <h3>Upload File for {{ studentName }}</h3>
+      <v-file-input label="Choose file" v-model="selectedFile" :show-size="true" dense clearable />
+
+      <v-btn
+        :disabled="!selectedFile || uploading"
+        color="primary"
+        @click="uploadFile"
+        class="mt-2"
+      >
+        <v-icon left>mdi-upload</v-icon>
+        Upload
+      </v-btn>
+
+      <v-progress-linear
+        v-if="uploading"
+        indeterminate
+        color="primary"
+        class="my-2"
+      ></v-progress-linear>
+    </v-card>
+
+    <v-card class="pa-4 mt-4" outlined>
+      <h3>Uploaded Files</h3>
+      <v-list two-line>
+        <v-list-item v-for="file in files" :key="file._id" class="file-item">
+          <v-list-item-content>
+            <v-list-item-title>{{ file.filename }}</v-list-item-title>
+            <v-list-item-subtitle>
+              Uploaded: {{ formatDate(file.uploadedAt || file.uploadDate) }}
+            </v-list-item-subtitle>
+          </v-list-item-content>
+
+          <v-list-item-action>
+            <v-btn icon @click="downloadFile(file._id)" :title="'Download ' + file.filename">
+              <v-icon>mdi-download</v-icon>
+            </v-btn>
+          </v-list-item-action>
+
+          <v-list-item-action>
+            <v-btn
+              icon
+              color="error"
+              @click="deleteFile(file._id)"
+              :title="'Delete ' + file.filename"
+            >
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+          </v-list-item-action>
+        </v-list-item>
+      </v-list>
+
+      <div v-if="!files.length" class="text-center grey--text">No files uploaded yet.</div>
+    </v-card>
+  </div>
+</template>
+
+<script setup>
+  import { ref, watchEffect } from 'vue'
+  import axios from 'axios'
+
+  const props = defineProps({
+    studentId: {
+      type: String,
+      required: true,
+    },
+    studentName: {
+      type: String,
+      default: '',
+    },
+  })
+
+  const selectedFile = ref(null)
+  const uploading = ref(false)
+  const files = ref([])
+
+  // API base URL - adjust as needed or inject
+  const API_BASE =
+    (import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001') + '/api/uploads'
+
+  // Fetch files for the student
+  async function fetchFiles() {
+    try {
+      const res = await axios.get(`${API_BASE}/${props.studentId}`, { withCredentials: true })
+      files.value = res.data
+    } catch (e) {
+      console.error('Failed to fetch files:', e)
+      files.value = []
+    }
+  }
+
+  // Upload selected file
+  async function uploadFile() {
+    if (!selectedFile.value) return
+
+    uploading.value = true
+    const formData = new FormData()
+    formData.append('file', selectedFile.value)
+
+    try {
+      await axios.post(`${API_BASE}/${props.studentId}`, formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      selectedFile.value = null
+      await fetchFiles()
+    } catch (e) {
+      console.error('Upload failed:', e)
+      alert('Failed to upload file.')
+    } finally {
+      uploading.value = false
+    }
+  }
+  function getFilenameFromDisposition(disposition = '') {
+    let filename = 'download'
+
+    // Try RFC 5987 encoding (filename*=UTF-8'')
+    const utf8Regex = /filename\*=UTF-8''([^;]*)/i
+    const utf8Match = disposition.match(utf8Regex)
+    if (utf8Match && utf8Match[1]) {
+      filename = decodeURIComponent(utf8Match[1])
+    } else {
+      // Fallback to plain filename="..."
+      const asciiRegex = /filename="?([^\";]+)"?/i
+      const asciiMatch = disposition.match(asciiRegex)
+      if (asciiMatch && asciiMatch[1]) {
+        filename = asciiMatch[1]
+      }
+    }
+    return filename
+  }
+
+  async function downloadFile(fileId) {
+    try {
+      const res = await axios.get(`${API_BASE}/download/${fileId}`, {
+        responseType: 'blob',
+        withCredentials: true,
+      })
+
+      const disposition = res.headers['content-disposition'] || ''
+      let filename = 'download'
+
+      // RFC 5987 filename* parsing (UTF-8)
+      const utf8FilenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+      if (utf8FilenameMatch && utf8FilenameMatch[1]) {
+        filename = decodeURIComponent(utf8FilenameMatch[1])
+      } else {
+        // Fallback to standard filename
+        const asciiFilenameMatch = disposition.match(/filename="?([^\";]+)"?/i)
+        if (asciiFilenameMatch && asciiFilenameMatch[1]) {
+          filename = asciiFilenameMatch[1]
+        }
+      }
+
+      // Debug logs to verify filename extraction
+      console.log('Content-Disposition:', disposition)
+      console.log('Extracted filename:', filename)
+
+      const blobUrl = window.URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (error) {
+      console.error('Download failed:', error)
+      alert('Failed to download file.')
+    }
+  }
+
+  // Delete file by id
+  async function deleteFile(fileId) {
+    if (!confirm('Are you sure you want to delete this file?')) return
+    try {
+      await axios.delete(`${API_BASE}/${fileId}`, { withCredentials: true })
+      await fetchFiles()
+    } catch (e) {
+      console.error('Delete failed:', e)
+      alert('Failed to delete file.')
+    }
+  }
+
+  // Load files initially and when studentId changes
+  watchEffect(() => {
+    if (props.studentId) {
+      fetchFiles()
+    }
+  })
+
+  // Utility for date formatting
+  function formatDate(dateStr) {
+    const d = new Date(dateStr)
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString()
+  }
+</script>
+
+<style scoped>
+  .file-item {
+    border-bottom: 1px solid #eee;
+  }
+</style>
