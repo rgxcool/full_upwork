@@ -52,7 +52,9 @@ export async function parseCourses(filePath) {
         );
 
         await Program.findByIdAndUpdate(currentProgram._id, {
-            $addToSet: { programCourses: existingCourse._id },
+            $addToSet: {
+                programCourses: existingCourse._id
+            }
         });
 
         console.log(
