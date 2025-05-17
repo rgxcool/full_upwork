@@ -60,7 +60,7 @@
         </v-icon>
       </div>
     </div>
-    <v-dialog v-model="dialog" max-width="500px">
+    <v-dialog v-model="dialog" max-width="600px">
       <v-card v-if="selectedStudent" class="dialog-card">
         <v-btn icon class="dialog-close-btn" @click="closeDialog">
           <v-icon>mdi-close</v-icon>
@@ -73,7 +73,7 @@
             <div>{{ selectedStudent?.name }}</div>
           </span>
         </v-card-title>
-        <v-card-subtitle style="margin-top: 0 px">
+        <v-card-subtitle style="margin-top: 0px">
           <div class="contact-info">
             <span
               :class="{ clickable: true }"
@@ -89,61 +89,70 @@
             </span>
           </div>
         </v-card-subtitle>
+
+        <FileUploaderDownloader
+          v-if="selectedStudent"
+          :studentId="selectedStudent._id"
+          :studentName="selectedStudent.name"
+        />
+
         <div class="comment-history-scroll" ref="commentContainerRef">
           <template v-for="(entry, index) in getSortedComments" :key="index">
-            <div v-if="shouldShowDateSeparator(index)" class="date-separator">
-              🕒 {{ formatDate(entry.date) }}
-            </div>
             <div class="comment-entry">
               <div class="comment-header">
-                <span>{{ entry.author || 'Okänd' }}</span>
-                <span>{{ formatDate(entry.date) }}</span>
+                <div>
+                  <strong>{{ entry.author || 'Okänd' }}</strong>
+                </div>
+                <div class="comment-actions">
+                  <span>{{ formatDate(entry.date) }}</span>
+                </div>
               </div>
-              <div class="comment-box">
-                <div v-if="editingIndex === index">
-                  <v-textarea
-                    v-model="editedComment"
-                    label="Redigera kommentar"
-                    auto-grow
-                    rows="2"
-                  />
-                  <v-btn color="success" small class="ml-2 mr-10 mt-1" @click="saveEditedComment"
-                    >Spara</v-btn
-                  >
-                  <v-btn small @click="cancelEdit">Avbryt</v-btn>
-                </div>
-                <div v-else>
-                  <div class="comment-body">
-                    <p>{{ entry.comment }}</p>
-                    <div v-if="canEditComments" class="comment-actions">
-                      <div class="edit-btn">
-                        <v-btn size="24" icon color="primary" @click.stop="editComment(index)">
-                          <v-icon :size="16">mdi-pencil</v-icon>
-                        </v-btn>
-                      </div>
-                      <div class="delete-btn">
-                        <v-btn size="24" icon color="error" @click.stop="deleteComment(index)">
-                          <v-icon :size="16">mdi-minus</v-icon>
-                        </v-btn>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div class="comment-box" v-if="editingIndex !== index">
+                {{ entry.comment }}
+              </div>
+              <v-textarea
+                v-else
+                v-model="editedComment"
+                auto-grow
+                label="Redigera kommentar"
+                rows="2"
+                class="mb-2"
+              />
+              <div class="button-row">
+                <v-btn
+                  v-if="editingIndex === index"
+                  color="green"
+                  small
+                  @click="saveEditedComment(index)"
+                >
+                  <v-icon left>mdi-content-save</v-icon> Spara
+                </v-btn>
+                <v-btn v-if="editingIndex === index" color="grey" small @click="cancelEdit">
+                  <v-icon left>mdi-cancel</v-icon> Avbryt
+                </v-btn>
+                <v-btn
+                  v-if="editingIndex !== index"
+                  color="yellow darken-2"
+                  icon
+                  @click="editComment(index)"
+                >
+                  <v-icon>mdi-comment-edit</v-icon>
+                </v-btn>
+                <v-btn color="red" icon @click="confirmDelete(index)" v-if="canDelete(entry)">
+                  <v-icon>mdi-delete</v-icon>
+                </v-btn>
               </div>
             </div>
           </template>
-        </div>
-        <!-- <div class="jump-button">
-          <v-btn icon color="primary" @click="scrollToLatest">
-            <v-icon>mdi-arrow-down-bold</v-icon>
-          </v-btn>
-        </div> -->
-        <div class="comment-entry" v-if="canComment">
-          <v-textarea v-model="newComment" label="Lägg till kommentar" rows="3" auto-grow />
-          <div class="button-row">
-            <v-btn class="ml-3" small color="green" @click="submitComment">Spara</v-btn>
-            <v-btn class="mr-3" small color="primary" @click="closeDialog">Stäng</v-btn>
+
+          <div v-if="canComment" class="mt-4">
+            <v-textarea v-model="newComment" label="Lägg till kommentar" rows="3" auto-grow />
           </div>
+        </div>
+
+        <div class="button-row">
+          <v-btn class="ml-3" small color="green" @click="submitComment">Spara</v-btn>
+          <v-btn class="mr-3" small color="primary" @click="closeDialog">Stäng</v-btn>
         </div>
       </v-card>
     </v-dialog>
@@ -154,10 +163,15 @@
   import { ref, computed, onMounted, nextTick } from 'vue'
   import axios from 'axios'
   import { useStore } from 'vuex'
+  import FileUploaderDownloader from '../components/FileUploaderDownloder.vue'
 
   const store = useStore()
   const currentUser = computed(() => store.state.user)
+  console.log('Current user:', currentUser.value)
+
+  console.log('Role:', currentUser.value?.role)
   const currentUserId = computed(() => store.state.user?.userId?.toString() || '')
+  console.log('Current user ID:', currentUserId.value)
   const totalStudents = computed(() => students.value.length)
 
   const commentAscOrder = ref(true)
@@ -234,6 +248,46 @@
     }
   }
 
+  const fetchStudents = async () => {
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
+        withCredentials: true,
+      })
+      students.value = res.data.map((student) => ({
+        ...student,
+        commentHistory: (student.commentHistory || []).map((comment) => ({
+          ...comment,
+          seenBy: (comment.seenBy || []).map((id) => id.toString()),
+        })),
+      }))
+    } catch (err) {
+      console.error('❌ Failed to fetch students:', err)
+    }
+  }
+
+  onMounted(() => {
+    fetchStudents()
+  })
+
+  const handleDragStart = (e, student) => {
+    draggedStudent.value = student
+  }
+
+  const handleDrop = async (e, newStatus) => {
+    if (!draggedStudent.value || draggedStudent.value.aplStatus === newStatus) return
+    try {
+      await axios.patch(
+        `${import.meta.env.VITE_API_URL}/api/students/${draggedStudent.value._id}`,
+        { aplStatus: newStatus },
+        { withCredentials: true }
+      )
+      await fetchStudents()
+      draggedStudent.value = null
+    } catch (err) {
+      console.error('❌ Failed to update student APL status', err)
+    }
+  }
+
   const openComments = async (student) => {
     selectedStudent.value = student
     newComment.value = ''
@@ -296,49 +350,8 @@
     if (el) el.scrollTop = el.scrollHeight
   }
 
-  const fetchStudents = async () => {
-    try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
-        withCredentials: true,
-      })
-      students.value = res.data.map((student) => ({
-        ...student,
-        commentHistory: (student.commentHistory || []).map((comment) => ({
-          ...comment,
-          seenBy: (comment.seenBy || []).map((id) => id.toString()),
-        })),
-      }))
-    } catch (err) {
-      console.error('❌ Failed to fetch students:', err)
-    }
-  }
-
-  onMounted(() => {
-    fetchStudents()
-  })
-
-  const handleDragStart = (e, student) => {
-    draggedStudent.value = student
-  }
-
-  const handleDrop = async (e, newStatus) => {
-    if (!draggedStudent.value || draggedStudent.value.aplStatus === newStatus) return
-    try {
-      await axios.patch(
-        `${import.meta.env.VITE_API_URL}/api/students/${draggedStudent.value._id}`,
-        { aplStatus: newStatus },
-        { withCredentials: true }
-      )
-      await fetchStudents()
-      draggedStudent.value = null
-    } catch (err) {
-      console.error('❌ Failed to update student APL status', err)
-    }
-  }
-
   const canComment = computed(() => roleRank[currentUser.value?.role] >= roleRank['coordinator'])
-  const canEditComments = computed(() => ['admin', 'systemadmin'].includes(currentUser.value?.role))
-
+  console.log('Role rank:', roleRank[currentUser.value?.role])
   const closeDialog = () => {
     dialog.value = false
     setTimeout(() => {
@@ -370,40 +383,6 @@
     }
   }
 
-  const saveEditedComment = async () => {
-    if (editingIndex.value === null) return
-    const updatedEntry = {
-      ...getSortedComments.value[editingIndex.value],
-      comment: editedComment.value,
-    }
-    try {
-      await axios.put(
-        `${import.meta.env.VITE_API_URL}/api/students/${selectedStudent.value._id}/comment`,
-        { index: editingIndex.value, updatedEntry },
-        { withCredentials: true }
-      )
-      selectedStudent.value.commentHistory[editingIndex.value].comment = editedComment.value
-      const index = students.value.findIndex((s) => s._id === selectedStudent.value._id)
-      if (index !== -1) {
-        students.value[index].commentHistory[editingIndex.value].comment = editedComment.value
-      }
-      editingIndex.value = null
-      editedComment.value = ''
-    } catch (err) {
-      console.error('❌ Failed to update comment', err)
-    }
-  }
-
-  const cancelEdit = () => {
-    editingIndex.value = null
-    editedComment.value = ''
-  }
-
-  const editComment = (index) => {
-    editingIndex.value = index
-    editedComment.value = getSortedComments.value[index].comment
-  }
-
   const deleteComment = async (index) => {
     try {
       await axios.delete(
@@ -417,6 +396,51 @@
       if (i !== -1) students.value[i].commentHistory = [...newHistory]
     } catch (err) {
       console.error('❌ Failed to delete comment', err)
+    }
+  }
+  const canDelete = (entry) => {
+    return (
+      entry.author?.toString() === currentUser.value?.name ||
+      roleRank[currentUser.value?.role] >= roleRank['admin']
+    )
+  }
+
+  const confirmDelete = (index) => {
+    if (confirm('Är du säker på att du vill ta bort denna kommentar?')) {
+      console.log('🗑️ Comment deleted by:', currentUser.value?.name || currentUserId.value)
+      deleteComment(index)
+    }
+  }
+  const editComment = (index) => {
+    editingIndex.value = index
+    editedComment.value = getSortedComments.value[index].comment
+  }
+
+  const cancelEdit = () => {
+    editingIndex.value = null
+    editedComment.value = ''
+  }
+
+  const saveEditedComment = async (index) => {
+    try {
+      const updatedEntry = {
+        ...getSortedComments.value[index],
+        comment: editedComment.value,
+      }
+      await axios.put(
+        `${import.meta.env.VITE_API_URL}/api/students/${selectedStudent.value._id}/comment`,
+        { index, updatedEntry },
+        { withCredentials: true }
+      )
+      selectedStudent.value.commentHistory[index].comment = editedComment.value
+      const i = students.value.findIndex((s) => s._id === selectedStudent.value._id)
+      if (i !== -1) {
+        students.value[i].commentHistory[index].comment = editedComment.value
+      }
+      editingIndex.value = null
+      editedComment.value = ''
+    } catch (err) {
+      console.error('❌ Failed to update comment', err)
     }
   }
 </script>

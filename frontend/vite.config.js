@@ -3,23 +3,27 @@ import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [vue()], // ✅ Ensures Vue is correctly processed
+  plugins: [vue()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'), // ✅ Ensures alias resolution
+      '@': path.resolve(__dirname, './src'),
     },
   },
   test: {
-    environment: 'jsdom', // ✅ Use JSDOM for Vue component testing
+    environment: 'jsdom',
     globals: true,
-    setupFiles: './tests/setup.js', // ✅ Ensure test setup is correct
+    setupFiles: './tests/setup.js',
     transformMode: {
-      web: [/\.vue$/], // ✅ Ensure Vite processes Vue files
+      web: [/\.vue$/],
     },
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:5001',
+      '/api': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 })

@@ -10,7 +10,7 @@ router.get('/programs', async (req, res) => {
   try {
     const programs = await Program.find()
       .populate({
-        path: 'programCourses.courseId',
+        path: 'programCourses',
         model: 'Course',
         select: 'courseName courseCode coursePoints courseExtent'
       })
@@ -27,10 +27,15 @@ router.get('/programs', async (req, res) => {
     const formattedPrograms = programs.map(program => ({
       _id: program._id,
       programName: program.programName,
-      programCourses: program.programCourses.map(pc => ({
-        ...pc.courseId?._doc,
-        order: pc.order
+
+      programCourses: program.programCourses.map(course => ({
+        _id: course._id,
+        courseName: course.courseName || 'N/A',
+        courseCode: course.courseCode || 'N/A',
+        coursePoints: course.coursePoints || 'N/A',
+        courseExtent: course.courseExtent || 'N/A'
       })),
+
       programCoursePackages: program.programCoursePackages.map(pkg => ({
         _id: pkg._id,
         coursePackageName: pkg.coursePackageName,
@@ -64,12 +69,12 @@ router.get("/program/:programId/courses", async (req, res) => {
       return res.status(404).json({ error: "Program not found" })
     }
 
-    const courses = program.programCourses.map((pc) => ({
-      _id: pc.courseId?._id,
-      courseName: pc.courseId?.courseName,
-      courseCode: pc.courseId?.courseCode,
-      coursePoints: pc.courseId?.coursePoints,
-      courseExtent: pc.courseId?.courseExtent,
+    const courses = program.programCourses.map(course => ({
+      _id: course._id,
+      courseName: course.courseName,
+      courseCode: course.courseCode,
+      coursePoints: course.coursePoints,
+      courseExtent: course.courseExtent
     }))
 
     res.json(courses)

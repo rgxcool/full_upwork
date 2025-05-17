@@ -26,7 +26,7 @@ router.use("/api", authRoutes);
 router.use("/api", studentRoutes);
 router.use("/api", userRoutes);
 router.use("/api", teacherRoutes);
-router.use("/api", uploadRoutes);
+router.use("/api/uploads", uploadRoutes);
 router.use("/api", programRoutes);
 router.use("/api", gradeRoutes);
 router.use("/api", courseRoutes);
