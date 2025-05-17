@@ -33,6 +33,14 @@
             <td>
               <button class="btn btn-primary" v-if="!row.grade" @click="setGrade(row)">Sätt betyg</button>
               <button v-if="row.grade && !row.locked" class="btn btn-success" @click="lockGrade(row)" :disabled="row.locked">Lås betyg</button>
+              <button
+                v-if="row.grade === 'F' && row.locked === true"
+                class="btn btn-warning"
+                @click="goToActionPlan(row)"
+              >
+                Skapa handlingsplan
+              </button>
+
 
             </td>
           </tr>
@@ -65,25 +73,37 @@
   
   <script setup>
   import { ref, computed, onMounted } from 'vue'
+  import { useRouter } from 'vue-router'
+
   import axios from 'axios'
   
   const students = ref([])
   const loading = ref(true)
   const showGradeModal = ref(false)
   const gradeData = ref({ studentId: '', courseId: '', grade: '', comments: '' })
+
+  const router = useRouter()
+
+  const goToActionPlan = (row) => {
+    router.push(`/detaljer/Elev/${row.studentId}?showActionPlan=true`)
+  }
+
   
   const flatRows = computed(() =>
-    students.value.flatMap(student =>
-      student.ungradedEducation.map(edu => ({
-        ...edu,
-        studentId: student.studentId,
-        name: student.name,
-        personalNumber: student.personalNumber,
-        email: student.email,
-      }))
-    )
+  students.value.flatMap(student =>
+    [
+      ...student.ungradedEducation,
+      ...(student.lockedF || [])  // bara om det finns
+    ].map(edu => ({
+      ...edu,
+      studentId: student.studentId,
+      name: student.name,
+      personalNumber: student.personalNumber,
+      email: student.email,
+    }))
   )
-  
+)
+
   const fetchUngraded = async () => {
 
 

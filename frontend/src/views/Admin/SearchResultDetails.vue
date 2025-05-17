@@ -30,6 +30,8 @@ import axios from "axios";
 import AccountTab from "@/views/Admin/SearchTabs/AccountTab.vue";
 import StudyPlan from "@/views/Admin/SearchTabs/StudyPlan.vue";
 import DocumentSection from "@/views/Admin/SearchTabs/DocumentSection.vue";
+import ActionPlanTab from "@/views/Admin/SearchTabs/ActionPlanTab.vue";
+
 
 export default {
   components: { AccountTab, StudyPlan, DocumentSection },
@@ -39,8 +41,18 @@ export default {
     const data = ref(null);
     const activeTab = ref("Användare");
 
-    const tabs = ["Användare", "Studieplan", "Dokument"];
+    const tabs = computed(() => {
+      const baseTabs = ["Användare", "Studieplan", "Dokument"];
+      const hasLockedF = data.value?.education?.some(
+        edu => edu.grade === 'F' && edu.locked === true
+      );
 
+      if (hasLockedF) {
+        baseTabs.push("Handlingsplan");
+      }
+
+      return baseTabs;
+    });
     const fetchData = async () => {
       const { type, id } = route.params;
       console.log("🔍 Requesting details for:", type, id);
@@ -54,7 +66,13 @@ export default {
       }
     };
 
-    onMounted(fetchData);
+    onMounted(() => {
+      fetchData().then(() => {
+        if (route.query.showActionPlan === 'true') {
+          activeTab.value = "Handlingsplan"
+        }
+      });
+    });
 
     // Watch för att uppdatera datan när route ändras
     watch(() => route.params, fetchData, { deep: true });
@@ -65,9 +83,11 @@ export default {
       switch (activeTab.value) {
         case "Studieplan": return StudyPlan;
         case "Dokument": return DocumentSection;
+        case "Handlingsplan": return ActionPlanTab;
         default: return AccountTab;
       }
     });
+
 
     return { data, activeTab, tabs, currentComponent, type: route.params.type };
   },

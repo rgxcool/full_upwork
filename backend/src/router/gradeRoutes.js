@@ -6,12 +6,29 @@ import Notification from "../models/Notification.js";
 import Course from "../models/Course.js";
 import Program from "../models/Program.js";
 import CoursePackage from "../models/CoursePackage.js";
-import { createFailingStudentNotification } from "../utils/createFailingNotification.js";  // Lägg överst
+
+
+export async function createFailingStudentNotification(studentId, courseId) {
+  const existing = await Notification.findOne({
+    studentId,
+    courseId,
+    type: "action_plan_required",
+    resolved: false,
+  });
+
+  if (!existing) {
+    await Notification.create({
+      studentId,
+      courseId,
+      type: "action_plan_required",
+      message: "Handlingsplan krävs pga elever med F i betyg",
+      resolved: false,
+    });
+  }
+}
 
 
 router.get("/students/ungraded", async (req, res) => {
-
-  console.log('Cookies:', req.cookies);
 
   try {
     const students = await Student.find({
@@ -21,7 +38,8 @@ router.get("/students/ungraded", async (req, res) => {
           $or: [
             { grade: null },
             { grade: "" },
-            { locked: false }
+            { locked: false },
+            { grade: "F", locked: true}
           ]
         }
       }
@@ -31,9 +49,26 @@ router.get("/students/ungraded", async (req, res) => {
       students.map(async (student) => {
         const relevantEducation = await Promise.all(
           student.education
-            .filter((edu) => 
-              !edu.removedAt && (!edu.locked || !edu.grade || edu.grade === "")
-            )
+            .filter(async (edu) => {
+
+              if (edu.removedAt) return false;
+
+              const isUngraded = !edu.grade || edu.grade === "";
+              const isFAndLocked = edu.grade === "F" && edu.locked;
+
+              if (isFAndLocked) {
+                const pendingPlan = await Notification.findOne({
+                  studentId: student._id,
+                  courseId: edu.redId,
+                  type: "action_plan_required",
+                  resolved: false
+                })
+
+                return !!pendingPlan;
+              }
+              
+              return isUngraded;
+          })
             .map(async (edu) => {
               let populated = { ...edu };
 
@@ -43,7 +78,7 @@ router.get("/students/ungraded", async (req, res) => {
                   if (course) {
                     populated.details = course;
                     populated.displayName = course.courseName;
-                    populated.scriveLink = `https://app.scrive.com/template/${course._id}`; // Anpassa efter behov
+                    populated.scriveLink = "https://scrive.com/new/login?lang=sv"; // Anpassa efter behov
                   }
                 } else if (edu.type === "Program") {
                   const program = await Program.findById(edu.refId).lean();
@@ -63,6 +98,9 @@ router.get("/students/ungraded", async (req, res) => {
               }
 
               populated.isGraded = !!populated.grade;
+
+              populated.requireActionPlan = edu.grade === "F" && edu.locked;
+              
               return populated;
             })
         );
@@ -86,6 +124,7 @@ router.get("/students/ungraded", async (req, res) => {
 
 
 
+/*
 router.get('/students-to-grade', authenticateUser, async (req, res) => {
   const user = req.user;
   const isTeacher = user.role === 'teacher';
@@ -122,7 +161,7 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
     res.status(500).send('Server error');
   }
 });
-
+*/
 
 router.post('/teacher/save-grade', authenticateUser, async (req, res) => {
   const { studentId, courseId, grade, reason, comments, npScore, type } = req.body;
@@ -177,11 +216,11 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
     const education = student.education[courseIndex];
 
     // Kontrollera om betyg och anledning finns
-    if (!education.grade || !education.reason) {
-      return res.status(400).send("Betyg eller motivering saknas.");
+    if (!education.grade) {
+      return res.status(400).send("Betyg saknas.");
     }
 
-    // Uppdatera locked till true
+   // Uppdatera locked till true
     const result = await Student.updateOne(
       { _id: studentId, "education.refId": courseId },
       { $set: { "education.$.locked": true } }
@@ -191,7 +230,13 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
       return res.status(400).send("Det gick inte att låsa betyget.");
     }
 
+    // 🔔 Skapa notis om betyget är F
+    if (education.grade === 'F') {
+      await createFailingStudentNotification(studentId, courseId);
+    }
+
     res.send("Betyg har låsts!");
+
   } catch (err) {
     console.error("Fel vid låsning av betyg:", err);
     res.status(500).send("Internt serverfel.");

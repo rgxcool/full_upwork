@@ -20,6 +20,7 @@
     "axios": "^1.7.9",
     "dayjs": "^1.11.13",
     "fullcalendar": "^6.1.15",
+    "html2pdf.js": "^0.10.3",
     "pdfjs-dist": "^4.10.38",
     "v-calendar": "^3.1.2",
     "vue": "^3.5.13",
