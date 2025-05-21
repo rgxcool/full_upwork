@@ -125,34 +125,43 @@
                   small
                   @click="saveEditedComment(index)"
                 >
-                  <v-icon left>mdi-content-save</v-icon> Spara
+                  <v-icon size="x-small" left>mdi-content-save</v-icon> Spara
                 </v-btn>
                 <v-btn v-if="editingIndex === index" color="grey" small @click="cancelEdit">
-                  <v-icon left>mdi-cancel</v-icon> Avbryt
+                  <v-icon size="x-small" left>mdi-cancel</v-icon> Avbryt
                 </v-btn>
                 <v-btn
                   v-if="editingIndex !== index"
+                  class="ml-1"
                   color="yellow darken-2"
                   icon
+                  size="22"
                   @click="editComment(index)"
                 >
-                  <v-icon>mdi-comment-edit</v-icon>
+                  <v-icon size="12">mdi-comment-edit</v-icon>
                 </v-btn>
-                <v-btn color="red" icon @click="confirmDelete(index)" v-if="canDelete(entry)">
-                  <v-icon>mdi-delete</v-icon>
+                <v-btn
+                  color="red"
+                  class="mr-1 mb-2"
+                  size="22"
+                  icon
+                  @click="confirmDelete(index)"
+                  v-if="canDelete(entry)"
+                >
+                  <v-icon size="16">mdi-delete</v-icon>
                 </v-btn>
               </div>
             </div>
           </template>
 
-          <div v-if="canComment" class="mt-4">
+          <div v-if="canComment">
             <v-textarea v-model="newComment" label="Lägg till kommentar" rows="3" auto-grow />
           </div>
         </div>
 
         <div class="button-row">
-          <v-btn class="ml-3" small color="green" @click="submitComment">Spara</v-btn>
-          <v-btn class="mr-3" small color="primary" @click="closeDialog">Stäng</v-btn>
+          <v-btn class="ml-3 mb-2" small color="green" @click="submitComment">Spara</v-btn>
+          <v-btn class="mr-3 mb-2" small color="primary" @click="closeDialog">Stäng</v-btn>
         </div>
       </v-card>
     </v-dialog>

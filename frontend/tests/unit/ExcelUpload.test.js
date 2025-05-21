@@ -58,7 +58,7 @@ vi.mock('axios', () => {
       }),
 
       post: vi.fn((url) => {
-        if (url.includes('/api/upload/xlsxupload')) {
+        if (url.includes('/api/uploads/upload/xlsxupload')) {
           return Promise.resolve({ data: 'Upload successful' })
         }
         return Promise.resolve({ data: { success: true } })
@@ -117,7 +117,7 @@ describe('ExcelUpload.vue', () => {
 
     // ✅ No `.default`, just `axios.post`
     expect(axios.post).toHaveBeenCalledWith(
-      `${import.meta.env.VITE_API_URL}/api/upload/xlsxupload`,
+      `${import.meta.env.VITE_API_URL}/api/uploads/upload/xlsxupload`,
       expect.any(FormData),
       { headers: { 'Content-Type': 'multipart/form-data' } }
     )
