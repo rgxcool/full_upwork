@@ -121,34 +121,20 @@ async function uploadXlsx(req, res) {
             });
 
             const rawMunicipality = student.municipality;
+            const raw =
+                typeof rawMunicipality === "string"
+                    ? rawMunicipality
+                    : rawMunicipality?.type || "";
 
-            // Normalize to array of strings
-            const inputMunicipalities = Array.isArray(rawMunicipality)
-                ? rawMunicipality.map((m) =>
-                      typeof m === "string" ? m : m?.type
-                  )
-                : [
-                      typeof rawMunicipality === "string"
-                          ? rawMunicipality
-                          : rawMunicipality?.type,
-                  ];
-
-            // Fuzzy match each to valid values
-            const correctedMunicipalities = inputMunicipalities
-                .map((m) => {
-                    const closest = getClosestMunicipality(m);
-                    if (!closest) {
-                        console.warn(`⚠️ Unknown municipality: ${m}`);
-                        return null;
-                    }
-                    return { type: closest };
-                })
-                .filter(Boolean);
+            const correctedMunicipality = getClosestMunicipality(raw);
+            if (!correctedMunicipality) {
+                console.warn(`⚠️ Unknown municipality: "${raw}"`);
+            }
 
             return {
                 ...student,
                 education,
-                municipality: correctedMunicipalities,
+                municipality: correctedMunicipality || null,
                 aplStatus: existing ? existing.aplStatus : "GRAY",
                 createdAt: existing?.createdAt || now,
                 updatedAt: now,
