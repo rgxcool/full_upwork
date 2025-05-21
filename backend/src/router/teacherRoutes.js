@@ -9,6 +9,18 @@ function generateRandomColor() {
         .padStart(6, "0")}`;
 }
 
+
+// Get all teachers
+router.get("/teachers", async (req, res) => {
+    try {
+        const teachers = await Teacher.find();
+        res.status(200).json(teachers);
+    } catch (error) {
+        console.error("Error fetching teachers:", error.message);
+        res.status(500).json({ error: "Failed to fetch teachers." });
+    }
+});
+
 //Post Teacher
 router.post("/teacher", async (req, res) => {
     console.log("Incoming request body:", req.body);

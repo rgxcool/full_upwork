@@ -28,6 +28,7 @@ const ProfilePage = () => import('@/views/Teacher/ProfilePage.vue')
 import StudentDetails from '@/views/Student/StudentDetails.vue'
 import APLView from '@/views/APLView.vue'
 import GradeStudent from '../views/Admin/gradeStudent.vue'
+import ExamForm from '../views/Exams/ExamOverview.vue'
 
 const routes = [
   // Public Routes
@@ -117,6 +118,13 @@ const routes = [
     component: StudentDetails,
     props: true,
     meta: { title: 'Student Details', role: 'student' },
+  },
+
+  {
+    path: '/provningar',
+    name: 'ExamForm',
+    component: ExamForm,
+    meta: { title: 'Exam Form', role: 'student'}
   },
 
   // Utility Routes (General Access)

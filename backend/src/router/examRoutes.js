@@ -2,8 +2,99 @@ import express from "express";
 const router = express.Router();
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
+import Exam from "../models/Provning.js"
 
-//import Exam from "../models/Final.js";
+import Notification from "../models/Notification.js";
+
+
+
+router.post('/exams', async (req, res) => {
+  try {
+
+    const exam = new Exam(req.body);
+    const savedExam = await exam.save();
+    res.status(201).json(savedExam)
+
+  } catch (err) {
+    console.error('Error saving exam:', err.message);
+    res.status(500).json({ error: 'Failed to register exam.' });
+  }
+});
+
+
+router.get('/exams', async (req, res) => {
+  try {
+    const exams = await Exam.find().populate('teacherId', 'name');
+
+    // 🔔 Skapa notiser för kommande prövningar (3-4 veckor före månadsslut)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+
+    const months = [
+      'Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni',
+      'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December'
+    ];
+
+    for (const exam of exams) {
+      if (!exam.requestedMonth || !exam.teacherId || exam.status !== 'intresse') continue;
+
+      const monthIndex = months.indexOf(exam.requestedMonth);
+      if (monthIndex === -1) continue;
+
+      const endOfMonth = new Date(currentYear, monthIndex + 1, 0); // sista dagen i månaden
+      const diffDays = Math.ceil((endOfMonth - now) / (1000 * 60 * 60 * 24));
+
+      if (diffDays >= 21 && diffDays <= 30) {
+        const exists = await Notification.findOne({ teacher: exam.teacherId._id, examId: exam._id });
+        if (!exists) {
+          const message = `Ny prövningselev: ${exam.name} (${exam.course}) önskar skriva i ${exam.requestedMonth}`;
+          await Notification.create({
+            teacher: exam.teacherId._id,
+            message,
+            examId: exam._id,
+          });
+        }
+      }
+    }
+
+    res.json(exams);
+
+  } catch (err) {
+    console.error('Error fetching exams:', err.message);
+    res.status(500).json({ error: 'Failed to fetch exams.' });
+  }
+});
+
+
+// PATCH /api/exams/:id/decision
+router.patch('/exams/:id/decision', async (req, res) => {
+  try {
+    const { decision, comment } = req.body;
+
+    let status = "";
+    if (decision === "accept") status = "scheduled";
+    else if (decision === "move") status = "moved";
+    else if (decision === "deny") status = "denied";
+
+    const updatedExam = await Exam.findByIdAndUpdate(
+      req.params.id,
+      {
+        decision,
+        comment,
+        status,
+      },
+      { new: true }
+    );
+
+    res.json(updatedExam);
+  } catch (err) {
+    console.error('Fel vid uppdatering av beslut:', err.message);
+    res.status(500).json({ error: 'Kunde inte spara beslut.' });
+  }
+});
+
+
+
 router.get('/calendar-color', async (req, res) => {
     try {
         const students = await Student.find().populate("coursePackages.coursePackageId");
