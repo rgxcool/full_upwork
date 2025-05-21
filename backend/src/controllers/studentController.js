@@ -1,9 +1,51 @@
-// ✅ studentController.js (education[] aware)
+// ✅ studentController.js (education[] aware + Levenshtein fuzzy matching)
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
 import CoursePackage from "../models/CoursePackage.js";
 import { parseStudentExcel } from "../utils/parseStudentExcel.js";
+import { distance } from "fastest-levenshtein";
+
+const VALID_MUNICIPALITIES = [
+    "Botkyrka",
+    "Danderyd",
+    "Huddinge",
+    "Järfälla",
+    "KCNO",
+    "Lidingö",
+    "Norrtälje",
+    "Nykvarn",
+    "Privat kunder",
+    "Salem",
+    "Sigtuna",
+    "Sollentuna",
+    "Solna",
+    "Sundbyberg",
+    "Södertälje",
+    "Täby",
+    "Upplands Bro",
+    "Upplands Väsby",
+    "Vallentuna",
+    "Vaxholm",
+    "Växjö",
+    "Österåker",
+];
+
+function getClosestMunicipality(input) {
+    if (!input) return null;
+    let bestMatch = null;
+    let minDistance = Infinity;
+
+    for (const m of VALID_MUNICIPALITIES) {
+        const d = distance(input.toLowerCase(), m.toLowerCase());
+        if (d < minDistance) {
+            minDistance = d;
+            bestMatch = m;
+        }
+    }
+
+    return minDistance <= 4 ? bestMatch : null; // threshold can be adjusted
+}
 
 async function uploadXlsx(req, res) {
     console.log("🟢 Received XLSX file upload request");
@@ -26,7 +68,6 @@ async function uploadXlsx(req, res) {
         const existingStudents = await Student.find({ email: { $in: emails } });
         const existingMap = new Map(existingStudents.map((s) => [s.email, s]));
 
-        // 🧠 Gather all unique names from education[]
         const educationEntries = parsedStudents.flatMap((s) => s.education);
         const allNames = [...new Set(educationEntries.map((e) => e.name))];
 
@@ -79,9 +120,35 @@ async function uploadXlsx(req, res) {
                 };
             });
 
+            const rawMunicipality = student.municipality;
+
+            // Normalize to array of strings
+            const inputMunicipalities = Array.isArray(rawMunicipality)
+                ? rawMunicipality.map((m) =>
+                      typeof m === "string" ? m : m?.type
+                  )
+                : [
+                      typeof rawMunicipality === "string"
+                          ? rawMunicipality
+                          : rawMunicipality?.type,
+                  ];
+
+            // Fuzzy match each to valid values
+            const correctedMunicipalities = inputMunicipalities
+                .map((m) => {
+                    const closest = getClosestMunicipality(m);
+                    if (!closest) {
+                        console.warn(`⚠️ Unknown municipality: ${m}`);
+                        return null;
+                    }
+                    return { type: closest };
+                })
+                .filter(Boolean);
+
             return {
                 ...student,
                 education,
+                municipality: correctedMunicipalities,
                 aplStatus: existing ? existing.aplStatus : "GRAY",
                 createdAt: existing?.createdAt || now,
                 updatedAt: now,

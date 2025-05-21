@@ -167,7 +167,7 @@
             <td>{{ formatDate(student.startDate) }}</td>
             <td>{{ formatDate(student.endDate) }}</td>
             <td>{{ formatDate(student.finalExamDate) }}</td>
-            <td>{{ student.municipality }}</td>
+            <td>{{ formatMunicipality(student.municipality) }}</td>
             <td>{{ student.phone }}</td>
             <td>{{ student.email }}</td>
             <td>{{ student.additionalInfo }}</td>
@@ -231,6 +231,15 @@
     },
 
     methods: {
+      formatMunicipality(municipality) {
+        if (Array.isArray(municipality)) {
+          return municipality.map((m) => m.type).join(', ')
+        } else if (typeof municipality === 'object' && municipality !== null) {
+          return municipality.type || ''
+        } else {
+          return municipality || ''
+        }
+      },
       async saveGrade(studentId, courseId, grade) {
         try {
           const response = await axios.put(
@@ -285,7 +294,7 @@
 
         try {
           // ✅ Use api instance so cookies (JWT) are sent!
-          const response = await api.post('/upload/xlsxupload', formData, {
+          const response = await api.post('uploads/upload/xlsxupload', formData, {
             headers: {
               'Content-Type': 'multipart/form-data',
             },
