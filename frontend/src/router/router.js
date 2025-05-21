@@ -18,6 +18,7 @@ const EditStudent = () => import('@/views/Admin/EditStudent.vue')
 const PdfView = () => import('@/views/Admin/PdfView.vue')
 const SearchUser = () => import('@/views/Admin/SearchUser.vue')
 const SearchResultDetails = () => import('@/views/Admin/SearchResultDetails.vue')
+const EarningsOverview = () => import('@/views/Admin/EarningsOverview.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
@@ -137,7 +138,13 @@ const routes = [
     name: 'Grades',
     component: GradeStudent,
     meta: { title: 'Grade Student', role: 'admin' },
-  }
+  },
+  {
+    path: '/earnings',
+    name: 'Earnings',
+    component: EarningsOverview,
+    meta: { title: 'Earnings Overview', role: 'admin' },
+  },
 ]
 
 const router = createRouter({

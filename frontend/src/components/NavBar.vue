@@ -336,6 +336,7 @@
         { name: 'Elever', link: '/students', role: 'admin' },
         { name: 'PDF', link: '/pdf', role: 'admin' },
         { name: 'Grades', link: '/grades', role: 'teacher' },
+        { name: 'Earnings', link: '/earnings', role: 'admin' },
       ]
 
       const filteredMenuItems = computed(() => {

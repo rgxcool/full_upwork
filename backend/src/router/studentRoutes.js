@@ -11,46 +11,55 @@ import User from "../models/User.js";
 
 const router = Router();
 
-router.put('/students/:studentId/education/:educationId/status', async (req, res) => {
-    console.log("📥 ROUTE HIT", req.params);
+router.put(
+    "/students/:studentId/education/:educationId/status",
+    async (req, res) => {
+        console.log("📥 ROUTE HIT", req.params);
 
-      const { studentId, educationId } = req.params;
-      const { status } = req.body;
+        const { studentId, educationId } = req.params;
+        const { status } = req.body;
 
-      try {
+        try {
             const student = await Student.findById(studentId);
-            if (!student) return res.status(404).json({ message: 'Student not found' });
+            if (!student)
+                return res.status(404).json({ message: "Student not found" });
 
-        const education = student.education.find(e => e._id.toString() === educationId);
-        if (!education) return res.status(404).json({ message: 'Education not found for student' });
-
-        education.status = status; // Uppdatera statusen för education
-
-        if (status === "Avbrott") {
-            const notification = await sendNotificationToTeacherAndAdmin(
-              student,         // ✅ Fullt objekt med name
-              student.teacher, // ✅ Lärar-id
-              education        // ✅ Utbildningsobjekt
+            const education = student.education.find(
+                (e) => e._id.toString() === educationId
             );
-          
-            await student.save();
-          
-            return res.status(200).json({
-              message: 'Status updated successfully',
-              notification
-            });
-          }
-          
-        
-    } catch (error) {
-        console.error("Error updating status:", error);
-        res.status(500).json({ message: 'Server error' });
+            if (!education)
+                return res
+                    .status(404)
+                    .json({ message: "Education not found for student" });
+
+            education.status = status; // Uppdatera statusen för education
+
+            if (status === "Avbrott") {
+                const notification = await sendNotificationToTeacherAndAdmin(
+                    student, // ✅ Fullt objekt med name
+                    student.teacher, // ✅ Lärar-id
+                    education // ✅ Utbildningsobjekt
+                );
+
+                await student.save();
+
+                return res.status(200).json({
+                    message: "Status updated successfully",
+                    notification,
+                });
+            }
+        } catch (error) {
+            console.error("Error updating status:", error);
+            res.status(500).json({ message: "Server error" });
+        }
     }
-});
+);
 
-
-const sendNotificationToTeacherAndAdmin = async (student, teacher, education) => {
-
+const sendNotificationToTeacherAndAdmin = async (
+    student,
+    teacher,
+    education
+) => {
     console.log("DEBUG student.name:", student.name);
     console.log("DEBUG student objekt:", student);
 
@@ -59,32 +68,29 @@ const sendNotificationToTeacherAndAdmin = async (student, teacher, education) =>
         "meta.studentId": student._id,
         "meta.educationId": education._id,
     });
-    
+
     if (existing) {
         console.log("🔁 Notis redan finns, ingen ny sparas.");
         return existing; // Skicka tillbaka befintlig
     }
 
     const notification = new Notification({
-      type: "dropout",
-      message: `Studenten ${student.name} har avbrutit utbildningen ${education?.name || 'okänd utbildning'}`,
-      meta: {
-        teacherId: teacher || null,
-        studentId: student._id || null,
-        educationId: education?._id || null,
-        courseId: education?.refId || null,
-        url: `/students/${student._id}/education`
-      }
+        type: "dropout",
+        message: `Studenten ${student.name} har avbrutit utbildningen ${
+            education?.name || "okänd utbildning"
+        }`,
+        meta: {
+            teacherId: teacher || null,
+            studentId: student._id || null,
+            educationId: education?._id || null,
+            courseId: education?.refId || null,
+            url: `/students/${student._id}/education`,
+        },
     });
-  
+
     await notification.save();
     return notification;
-  };
-  
-
-  
-  
-  
+};
 
 router.get("/students", authenticateUser, async (req, res) => {
     try {
@@ -137,7 +143,7 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
         );
 
         if (alreadyExists) {
-            return res.status(400).json({ error: "Course already exists" })
+            return res.status(400).json({ error: "Course already exists" });
         }
 
         student.courses.push({ courseId: course._id });
@@ -182,17 +188,13 @@ router.post("/student/:studentId/addcoursepackage", async (req, res) => {
     try {
         const student = await Student.findById(studentId);
 
-
         if (!student)
-
             return res.status(404).json({ error: "Student not found" });
 
         student.coursePackages.push({ coursePackageId, grade: null });
         await student.save();
 
         res.status(200).json(student);
-
-
     } catch (error) {
         console.error("❌ Error:", error);
         res.status(500).json({ error: "Server error" });
@@ -498,6 +500,22 @@ router.put("/student/:id/education/:courseId/grade", async (req, res) => {
     } catch (err) {
         console.error("❌ Error updating grade:", err);
         res.status(500).json({ error: "Failed to update grade" });
+    }
+});
+
+router.get("/students/earnings", async (req, res) => {
+    try {
+        const students = await Student.find(
+            { "education.grade": { $ne: null } }, // only students with grades
+            {
+                municipality: 1,
+                education: 1,
+            }
+        );
+        res.json(students);
+    } catch (err) {
+        console.error("❌ Failed to fetch earnings students", err);
+        res.status(500).json({ error: "Server error" });
     }
 });
 
