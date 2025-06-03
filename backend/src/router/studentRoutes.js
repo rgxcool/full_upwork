@@ -372,6 +372,7 @@ router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
 });
 // ✅ Update student fully (not just dropout)
 router.put("/student/:id", async (req, res) => {
+    console.log("📥 Received payload:", req.body);
     const allowedFields = [
         "name",
         "personalNumber",
@@ -388,6 +389,7 @@ router.put("/student/:id", async (req, res) => {
         "examLocation",
         "examTime",
         "aplStatus",
+        "education",
     ];
 
     const updates = {};

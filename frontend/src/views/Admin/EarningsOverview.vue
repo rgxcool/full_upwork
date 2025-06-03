@@ -40,7 +40,8 @@
   // Calculate total earnings
   const totalEarnings = computed(() => {
     return students.value.reduce((sum, s) => {
-      const pricing = municipalityPricing[s.municipality]
+      const pricing = municipalityPricing[s.municipality?.type]
+
       if (!pricing) return sum
 
       for (const edu of s.education || []) {
@@ -64,8 +65,9 @@
   const earningsByMunicipality = computed(() => {
     const map = {}
     for (const s of students.value) {
-      const komm = s.municipality
+      const komm = s.municipality?.type
       const pricing = municipalityPricing[komm]
+
       if (!komm || !pricing) continue
 
       for (const edu of s.education || []) {

@@ -63,41 +63,44 @@
             <td>{{ student.personalNumber }}</td>
 
             <!-- <td class="coursepackage-cell">
-              <div class="coursepackage-list">
-                <ul>
-                  <li
-                    v-for="(coursePackage, index) in student.coursePackages"
-                    :key="'package-' + index"
-                  >
-                    {{
-                      coursePackage.coursePackageId?.coursePackageName || 'No course package name'
-                    }}
-                  </li>
-                </ul>
-              </div>
-            </td> -->
+                <div class="coursepackage-list">
+                  <ul>
+                    <li
+                      v-for="(coursePackage, index) in student.coursePackages"
+                      :key="'package-' + index"
+                    >
+                      {{
+                        coursePackage.coursePackageId?.coursePackageName || 'No course package name'
+                      }}
+                    </li>
+                  </ul>
+                </div>
+              </td> -->
 
             <td class="course-cell">
               <div class="course-list">
                 <ul v-if="student.education && student.education.length">
                   <li v-for="(edu, index) in student.education" :key="'edu-' + index">
-                    <strong>{{ edu.type }}:</strong> {{ edu.name }}
-                    <span v-if="edu.grade"
-                      ><strong>({{ edu.grade }})</strong></span
-                    >
+                    <strong>{{ edu.type }}:</strong>
+                    {{ edu.name }}
+                    <span v-if="edu.grade">
+                      <strong>({{ edu.grade }})</strong>
+                    </span>
                   </li>
                 </ul>
 
                 <ul v-if="student.program && student.program.programId">
                   <li>
-                    <strong>Program:</strong> {{ student.program.programId.programName }}
+                    <strong>Program:</strong>
+                    {{ student.program.programId.programName }}
                     <span v-if="student.program.grade">({{ student.program.grade }})</span>
                   </li>
                 </ul>
 
                 <ul v-if="student.coursePackages && student.coursePackages.length">
                   <li v-for="(pkg, index) in student.coursePackages" :key="'pkg-' + index">
-                    <strong>Package:</strong> {{ pkg.coursePackageId.coursePackageName }}
+                    <strong>Package:</strong>
+                    {{ pkg.coursePackageId.coursePackageName }}
                     <span v-if="pkg.grade">({{ pkg.grade }})</span>
                   </li>
                 </ul>
@@ -117,26 +120,34 @@
               </button>
             </td>
             <dialog v-if="editingStudent" class="edit-dialog" open>
-              <h3>Edit Student</h3>
               <form @submit.prevent="saveEditedStudent">
-                <input v-model="editingStudent.name" placeholder="Name" required />
-                <input v-model="editingStudent.email" placeholder="Email" required />
-                <input v-model="editingStudent.phone" placeholder="Phone" />
-                <input v-model="editingStudent.municipality" placeholder="Municipality" />
+                <div class="student-info-box">
+                  <p>
+                    <strong>{{ editingStudent.name }}</strong>
+                  </p>
+                  <p>{{ editingStudent.email }}</p>
+                  <p>{{ editingStudent.phone }}</p>
+                  <input v-model="editingStudent.municipality.type" placeholder="Municipality" />
+                </div>
+
                 <h4>Utbildning</h4>
-                <div v-for="(edu, index) in editingStudent.education" :key="index" class="mb-2">
+                <div
+                  v-for="(edu, index) in editingStudent.education"
+                  :key="index"
+                  class="education-box mb-2"
+                >
                   <v-autocomplete
-                    v-model="editingStudent.education[index]"
+                    v-model="educationSelections[index]"
                     :items="educationOptions"
                     item-title="name"
                     return-object
                     label="Add or edit education"
                     class="mb-2"
+                    @update:modelValue="(val) => updateEducationEntry(val, index)"
                   />
 
-                  <!-- Grade dropdown for courses -->
                   <v-select
-                    v-if="edu.type === 'Course'"
+                    v-if="edu && edu.type === 'Course'"
                     v-model="edu.grade"
                     :items="['A', 'B', 'C', 'D', 'E', 'F']"
                     label="Select grade"
@@ -148,15 +159,41 @@
                   </button>
                 </div>
 
-                <button class="btn btn-sm btn-secondary mt-2" @click="addEducation">
+                <button
+                  class="btn btn-sm btn-secondary mt-2"
+                  @click.prevent="addEducation"
+                  type="button"
+                >
                   + Lägg till utbildning
                 </button>
 
+                <!-- Conditional Education Selector -->
+                <div v-if="showEducationSelector" class="mt-2">
+                  <v-autocomplete
+                    v-model="selectedEducation"
+                    :items="educationOptions"
+                    item-title="name"
+                    return-object
+                    label="Välj utbildning"
+                  />
+                  <button
+                    class="btn btn-success btn-xs mt-1"
+                    @click.prevent="confirmAddEducation"
+                    type="button"
+                  >
+                    Lägg till
+                  </button>
+                </div>
+
+                <label for="additionalInfo" class="form-label">Kommentarer</label>
+
                 <textarea
+                  id="additionalInfo"
                   v-model="editingStudent.additionalInfo"
-                  placeholder="Info"
+                  placeholder="Skriv kommentarer här..."
                   rows="3"
-                ></textarea>
+                  class="highlighted-textarea"
+                />
 
                 <!-- Add more fields as needed -->
 
@@ -211,6 +248,9 @@
         uploadSuccess: false,
         editingStudent: null,
         educationOptions: [],
+        educationSelections: [],
+        selectedEducation: null,
+        showEducationSelector: false,
       }
     },
 
@@ -242,13 +282,47 @@
           console.error('❌ Error updating grade:', error)
         }
       },
+      updateEducationSelection(val, index) {
+        const current = this.editingStudent.education[index]
+        this.editingStudent.education[index] = {
+          ...current,
+          type: val.type,
+          name: val.name,
+          refId: val.refId,
+        }
+      },
+      updateEducationEntry(val, index) {
+        const old = this.editingStudent.education[index]
+        this.educationSelections.splice(index, 1, val)
+
+        this.editingStudent.education[index] = {
+          ...old,
+          type: val.type,
+          name: val.name,
+          refId: val.refId,
+        }
+      },
       openEditStudent(student) {
-        this.editingStudent = { ...student } // clone so editing doesn't mutate directly
+        const clone = JSON.parse(JSON.stringify(student))
+        // Ensure municipality is always an object
+        if (typeof clone.municipality === 'string') {
+          clone.municipality = { type: clone.municipality }
+        } else if (!clone.municipality) {
+          clone.municipality = { type: '' }
+        }
+        this.editingStudent = clone
+
+        this.educationSelections = clone.education.map((edu) => ({
+          type: edu.type,
+          name: edu.name,
+          refId: edu.refId,
+        }))
       },
       cancelEdit() {
         this.editingStudent = null
       },
       async saveEditedStudent() {
+        console.log('📤 Sending payload:', this.editingStudent)
         try {
           const { data } = await axios.put(
             `${import.meta.env.VITE_API_URL}/api/student/${this.editingStudent._id}`,
@@ -420,19 +494,40 @@
         return value
       },
       addEducation() {
-        if (!this.editingStudent.education) this.editingStudent.education = []
+        this.showEducationSelector = true
+      },
+
+      confirmAddEducation() {
+        if (!this.selectedEducation) return
+
+        const { type, name, refId } = this.selectedEducation
+
         this.editingStudent.education.push({
-          type: '',
-          name: '',
-          refId: null,
+          type,
+          name,
+          refId,
           addedAt: new Date(),
           addedBy: this.$store.state.user?.name || 'unknown',
           grade: null,
           removedAt: null,
         })
+
+        this.educationSelections.push({ type, name, refId })
+
+        // Reset UI
+        this.selectedEducation = null
+        this.showEducationSelector = false
       },
       removeEducation(index) {
-        this.editingStudent.education.splice(index, 1)
+        if (
+          Array.isArray(this.editingStudent.education) &&
+          Array.isArray(this.educationSelections)
+        ) {
+          this.editingStudent.education = this.editingStudent.education.filter(
+            (_, i) => i !== index
+          )
+          this.educationSelections = this.educationSelections.filter((_, i) => i !== index)
+        }
       },
     },
 
@@ -615,5 +710,52 @@
     display: block;
     width: 100%;
     margin-bottom: 10px;
+  }
+
+  .highlighted-textarea {
+    border: 2px solid #007bff;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 14px;
+    background-color: #f9fcff;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .highlighted-textarea:focus {
+    border-color: #0056b3;
+    outline: none;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.4);
+  }
+
+  .form-label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    display: block;
+  }
+
+  .section-heading {
+    font-size: 16px;
+    font-weight: bold;
+    margin: 15px 0 5px 0;
+  }
+
+  .student-info-box {
+    border: 1px solid #ccc;
+    padding: 12px;
+    border-radius: 8px;
+    background-color: #f7f9fa;
+    margin-bottom: 3px;
+  }
+
+  .student-info-box p {
+    margin: 0;
+  }
+
+  .education-box {
+    border: 1px solid #d2e3fc;
+    border-left: 4px solid #4285f4;
+    padding: 12px;
+    border-radius: 6px;
+    background-color: #f8fbff;
   }
 </style>
