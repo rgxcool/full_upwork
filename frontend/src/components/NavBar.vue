@@ -338,6 +338,7 @@
         { name: 'Grades', link: '/grades', role: 'teacher' },
         { name: 'ExamForm', link: '/provningar', role: 'student' },
         { name: 'Earnings', link: '/earnings', role: 'admin' },
+        { name: 'Stats', link: '/stats/courses', role: 'admin' },
       ]
 
       const filteredMenuItems = computed(() => {

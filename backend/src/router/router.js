@@ -1,5 +1,5 @@
 import { Router } from "express";
-import taskRoutes from "./taskRoutes.js"; 
+import taskRoutes from "./taskRoutes.js";
 import authRoutes from "./authRoutes.js";
 import studentRoutes from "./studentRoutes.js";
 import userRoutes from "./userRoutes.js";
@@ -9,11 +9,12 @@ import programRoutes from "./programRoutes.js";
 import gradeRoutes from "./gradeRoutes.js";
 import courseRoutes from "./courseRoutes.js";
 import coursePackageRoutes from "./coursePackageRoutes.js";
-import searchRoutes from "./searchRoutes.js"; 
-import examRoutes from "./examRoutes.js"
-import meetingroutes from "./meetingroutes.js"; 
-import notificationRoutes from "./notificationRoutes.js"; 
-import documentRoutes from "./documentRoutes.js"; 
+import searchRoutes from "./searchRoutes.js";
+import examRoutes from "./examRoutes.js";
+import meetingroutes from "./meetingroutes.js";
+import notificationRoutes from "./notificationRoutes.js";
+import documentRoutes from "./documentRoutes.js";
+import statsRoutes from "./statsRoutes.js";
 
 const router = Router();
 
@@ -33,7 +34,8 @@ router.use("/api", courseRoutes);
 router.use("/api", coursePackageRoutes);
 router.use("/api", searchRoutes);
 router.use("/api", meetingroutes);
-router.use("/api", notificationRoutes)
+router.use("/api", notificationRoutes);
 router.use("/api", documentRoutes);
+router.use("/api/stats", statsRoutes);
 
 export default router;
