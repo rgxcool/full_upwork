@@ -76,9 +76,8 @@ const sendNotificationToTeacherAndAdmin = async (
 
     const notification = new Notification({
         type: "dropout",
-        message: `Studenten ${student.name} har avbrutit utbildningen ${
-            education?.name || "okänd utbildning"
-        }`,
+        message: `Studenten ${student.name} har avbrutit utbildningen ${education?.name || "okänd utbildning"
+            }`,
         meta: {
             teacherId: teacher || null,
             studentId: student._id || null,
@@ -274,24 +273,30 @@ router.patch("/students/:id", authenticateUser, async (req, res) => {
 
     try {
         const student = await Student.findById(req.params.id);
-        if (!student)
+        if (!student) {
             return res.status(404).json({ error: "Student not found" });
+        }
 
-        student.aplStatus = aplStatus;
-        student.aplStatusHistory.push({
-            status: aplStatus,
-            changedAt: new Date(),
-            changedBy: userId,
-        });
+        // 🔒 Only allow aplStatus to be changed
+        if (typeof aplStatus === "string") {
+            student.aplStatus = aplStatus;
+            student.aplStatusHistory.push({
+                status: aplStatus,
+                changedAt: new Date(),
+                changedBy: userId,
+            });
 
-        await student.save();
-
-        res.json(student);
+            await student.save();
+            return res.json(student);
+        } else {
+            return res.status(400).json({ error: "Invalid APL status update" });
+        }
     } catch (err) {
         console.error("❌ Failed to update APL status:", err);
-        res.status(500).json({ error: "Failed to update APL status" });
+        return res.status(500).json({ error: "Failed to update APL status" });
     }
 });
+
 
 // ✅ Add comment
 router.post("/students/:id/comment", authenticateUser, async (req, res) => {
@@ -367,10 +372,44 @@ router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
 });
 // ✅ Update student fully (not just dropout)
 router.put("/student/:id", async (req, res) => {
+    const allowedFields = [
+        "name",
+        "personalNumber",
+        "phone",
+        "email",
+        "exam",
+        "additionalInfo",
+        "teacher",
+        "dropout",
+        "startDate",
+        "endDate",
+        "finalExamDate",
+        "examMunicipality",
+        "examLocation",
+        "examTime",
+        "aplStatus",
+    ];
+
+    const updates = {};
+    for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+            updates[field] = req.body[field];
+        }
+    }
+
+    // 🛡️ Special handling for municipality
+    if (
+        req.body.municipality &&
+        typeof req.body.municipality === "object" &&
+        typeof req.body.municipality.type === "string"
+    ) {
+        updates["municipality"] = { type: req.body.municipality.type };
+    }
+
     try {
         const updatedStudent = await Student.findByIdAndUpdate(
             req.params.id,
-            req.body,
+            { $set: updates },
             { new: true }
         )
             .populate("courses.courseId", "courseName courseCode")
@@ -387,6 +426,7 @@ router.put("/student/:id", async (req, res) => {
         res.status(500).json({ error: "Failed to update student" });
     }
 });
+
 
 // ✅ Mark comments as seen (🛠 FIXED)
 router.post(

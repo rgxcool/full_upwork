@@ -102,7 +102,7 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             startDate: parseExcelDate(rowObject["START"]),
             endDate: parseExcelDate(rowObject["SLUT"]),
             finalExamDate: parseExcelDate(rowObject["PREL. DATUM SLUTPROV"]),
-            municipality: rowObject["KOMMUN/PRIVAT"],
+            municipality: { type: rowObject["KOMMUN/PRIVAT"]?.toString().trim() || "" },
             phone: rowObject["TELEFON"] || "",
             email: extractMail(rowObject["MAIL"]),
             exam: rowObject["PROV"] || "",
@@ -112,6 +112,7 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             aplStatus: "GRAY",
             education,
         });
+
     }
 
     return studentsToSave;
