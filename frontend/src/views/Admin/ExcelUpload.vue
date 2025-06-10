@@ -204,7 +204,7 @@
             <td>{{ formatDate(student.startDate) }}</td>
             <td>{{ formatDate(student.endDate) }}</td>
             <td>{{ formatDate(student.finalExamDate) }}</td>
-            <td>{{ student.municipality }}</td>
+            <td>{{ student.municipality?.type || student.municipality }}</td>
             <td>{{ student.phone }}</td>
             <td>{{ student.email }}</td>
             <td>{{ student.additionalInfo }}</td>

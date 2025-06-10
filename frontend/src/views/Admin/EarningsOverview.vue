@@ -1,6 +1,6 @@
 <template>
   <div class="earnings-container">
-    <h2>💰 Total Earnings: {{ totalEarnings }} kr</h2>
+    <h2>Total Earnings: {{ totalEarnings }} kr</h2>
 
     <h3>Earnings per Municipality</h3>
     <table>
