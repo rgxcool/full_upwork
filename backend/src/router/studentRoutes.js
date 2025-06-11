@@ -45,43 +45,6 @@ router.put('/students/:studentId/education/:educationId/status', async (req, res
 });
 
 
-
-const sendNotificationToTeacherAndAdmin = async (
-    student,
-    teacher,
-    education
-) => {
-    console.log("DEBUG student.name:", student.name);
-    console.log("DEBUG student objekt:", student);
-
-    const existing = await Notification.findOne({
-        type: "dropout",
-        "meta.studentId": student._id,
-        "meta.educationId": education._id,
-    });
-
-    if (existing) {
-        console.log("🔁 Notis redan finns, ingen ny sparas.");
-        return existing; // Skicka tillbaka befintlig
-    }
-
-    const notification = new Notification({
-        type: "dropout",
-        message: `Studenten ${student.name} har avbrutit utbildningen ${education?.name || "okänd utbildning"
-            }`,
-        meta: {
-            teacherId: teacher || null,
-            studentId: student._id || null,
-            educationId: education?._id || null,
-            courseId: education?.refId || null,
-            url: `/students/${student._id}/education`,
-        },
-    });
-
-    await notification.save();
-    return notification;
-};
-
 router.get("/students", authenticateUser, async (req, res) => {
     try {
         const students = await Student.find()
