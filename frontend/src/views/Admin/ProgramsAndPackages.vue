@@ -74,8 +74,8 @@
     },
     async mounted() {
       try {
-        console.log('Calling URL: ', `${import.meta.env.VITE_API_URL}/api/all-programs`)
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/all-programs`)
+        console.log('Calling URL: ', `${import.meta.env.VITE_API_URL}/api/programs`)
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`)
 
         console.log('API response:', response)
         let fetchedPrograms = response.data

@@ -11,7 +11,7 @@
 
   const fetchPrograms = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/all-programs`)
+      const response = await axios.get(`${API_BASE_URL}/api/programs`)
       programs.value = response.data
       console.log('✅ Populated programs:', programs.value)
     } catch (err) {
@@ -138,8 +138,8 @@
 
   /* 7️⃣ Fixed Table Layout */
   .fixed-table {
-    width: 100%;
-    max-width: 900px;
+    width: auto;
+    min-width: 100%;
     margin: 0 auto;
     table-layout: fixed;
     border-collapse: collapse;
