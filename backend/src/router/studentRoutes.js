@@ -8,40 +8,36 @@ import CoursePackage from "../models/CoursePackage.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasCommentPermission } from "../utils/roles.js";
 import User from "../models/User.js";
+import { sendDropoutNotification } from "../controllers/notificationController.js";
+
 
 const router = Router();
 
 router.put('/students/:studentId/education/:educationId/status', async (req, res) => {
-    console.log("📥 ROUTE HIT", req.params);
+    const { studentId, educationId } = req.params;
+    const { status } = req.body;
 
-      const { studentId, educationId } = req.params;
-      const { status } = req.body;
-
-      try {
-            const student = await Student.findById(studentId);
-            if (!student) return res.status(404).json({ message: 'Student not found' });
+    try {
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
 
         const education = student.education.find(e => e._id.toString() === educationId);
         if (!education) return res.status(404).json({ message: 'Education not found for student' });
 
-        education.status = status; // Uppdatera statusen för education
+        education.status = status;
 
         if (status === "Avbrott") {
-            const notification = await sendNotificationToTeacherAndAdmin(
-              student,         // ✅ Fullt objekt med name
-              student.teacher, // ✅ Lärar-id
-              education        // ✅ Utbildningsobjekt
-            );
-          
+            const notification = await sendDropoutNotification({ student, education });
+            console.log("Notification sent:", notification);
             await student.save();
-          
             return res.status(200).json({
-              message: 'Status updated successfully',
-              notification
+                message: 'Status updated and notification sent',
+                notification
             });
-          }
-          
-        
+        } else {
+            await student.save();
+            return res.status(200).json({ message: 'Status updated successfully' });
+        }
     } catch (error) {
         console.error("Error updating status:", error);
         res.status(500).json({ message: 'Server error' });

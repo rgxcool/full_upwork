@@ -101,7 +101,7 @@ const StudentSchema = new mongoose.Schema(
                     "Växjö",
                     "Österåker",
                 ],
-                required: true,
+                default: "Choose municipality",
             },
         },
         phone: String,
