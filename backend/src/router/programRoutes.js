@@ -1,87 +1,108 @@
-import express from "express"
-import Program from "../models/Program.js"
+import express from "express";
+import Program from "../models/Program.js";
 
-const router = express.Router()
+const router = express.Router();
 
-// ✅ Get all programs + their courses populated
-// backend router example: src/router/programRoutes.js
-// GET all programs with populated course packages and their courses
-router.get('/programs', async (req, res) => {
-  try {
-    const programs = await Program.find()
-      .populate({
-        path: 'programCourses',
-        model: 'Course',
-        select: 'courseName courseCode coursePoints courseExtent'
-      })
-      .populate({
-        path: 'programCoursePackages',
-        model: 'CoursePackage',
-        populate: {
-          path: 'coursePackageCourses',
-          model: 'Course',
-          select: 'courseName courseCode courseExtent'
-        }
-      });
+// ✅ Get all programs with populated courses and course packages
+router.get("/programs", async (req, res) => {
+    try {
+        const programs = await Program.find()
+            .populate({
+                path: "programCourses.courseId",
+                select: "courseName courseCode coursePoints courseExtent",
+            })
+            .populate({
+                path: "programCoursePackages",
+                model: "CoursePackage",
+                populate: {
+                    path: "coursePackageCourses",
+                    model: "Course",
+                    select: "courseName courseCode courseExtent",
+                },
+            })
+            .lean();
 
-    const formattedPrograms = programs.map(program => ({
-      _id: program._id,
-      programName: program.programName,
+        // Optional: Sort by order if present
+        programs.forEach((p) => {
+            if (Array.isArray(p.programCourses)) {
+                p.programCourses.sort(
+                    (a, b) => (a.order ?? 0) - (b.order ?? 0)
+                );
+            }
+        });
 
-      programCourses: program.programCourses.map(course => ({
-        _id: course._id,
-        courseName: course.courseName || 'N/A',
-        courseCode: course.courseCode || 'N/A',
-        coursePoints: course.coursePoints || 'N/A',
-        courseExtent: course.courseExtent || 'N/A'
-      })),
+        const formattedPrograms = programs.map((program) => ({
+            _id: program._id,
+            programName: program.programName,
 
-      programCoursePackages: program.programCoursePackages.map(pkg => ({
-        _id: pkg._id,
-        coursePackageName: pkg.coursePackageName,
-        coursePackageCode: pkg.coursePackageCode,
-        coursePackageExtent: pkg.coursePackageExtent,
-        coursePackageCourses: (pkg.coursePackageCourses || []).map(course => ({
-          _id: course._id,
-          courseName: course.courseName,
-          courseCode: course.courseCode,
-          courseExtent: course.courseExtent
-        }))
-      }))
-    }));
+            programCourses: (program.programCourses || []).map((pc) => {
+                const c = pc.courseId || {};
+                return {
+                    _id: c._id,
+                    courseName: c.courseName || "N/A",
+                    courseCode: c.courseCode || "N/A",
+                    coursePoints: c.coursePoints || "N/A",
+                    courseExtent: c.courseExtent || "N/A",
+                    order: pc.order ?? null,
+                };
+            }),
 
-    console.dir(formattedPrograms, { depth: null });
+            programCoursePackages: (program.programCoursePackages || []).map(
+                (pkg) => ({
+                    _id: pkg._id,
+                    coursePackageName: pkg.coursePackageName,
+                    coursePackageCode: pkg.coursePackageCode,
+                    coursePackageExtent: pkg.coursePackageExtent,
+                    coursePackageCourses: (pkg.coursePackageCourses || []).map(
+                        (course) => ({
+                            _id: course._id,
+                            courseName: course.courseName,
+                            courseCode: course.courseCode,
+                            courseExtent: course.courseExtent,
+                        })
+                    ),
+                })
+            ),
+        }));
 
-    res.json(formattedPrograms);
-  } catch (error) {
-    console.error('❌ Error fetching programs:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
+        res.json(formattedPrograms);
+    } catch (error) {
+        console.error("❌ Error fetching programs:", error);
+        res.status(500).json({ error: "Server error" });
+    }
 });
 
-
-// ✅ Get all courses by programId (raw, unflattened)
+// ✅ Get only the programCourses for a given program ID
 router.get("/program/:programId/courses", async (req, res) => {
-  try {
-    const program = await Program.findById(req.params.programId).populate("programCourses.courseId")
+    try {
+        const program = await Program.findById(req.params.programId)
+            .populate({
+                path: "programCourses.courseId",
+                select: "courseName courseCode coursePoints courseExtent",
+            })
+            .lean();
 
-    if (!program) {
-      return res.status(404).json({ error: "Program not found" })
+        if (!program) {
+            return res.status(404).json({ error: "Program not found" });
+        }
+
+        const courses = (program.programCourses || []).map((pc) => {
+            const c = pc.courseId || {};
+            return {
+                _id: c._id,
+                courseName: c.courseName || "N/A",
+                courseCode: c.courseCode || "N/A",
+                coursePoints: c.coursePoints || "N/A",
+                courseExtent: c.courseExtent || "N/A",
+                order: pc.order ?? null,
+            };
+        });
+
+        res.json(courses);
+    } catch (error) {
+        console.error("Error fetching program courses:", error);
+        res.status(500).json({ error: "Server error" });
     }
+});
 
-    const courses = program.programCourses.map(course => ({
-      _id: course._id,
-      courseName: course.courseName,
-      courseCode: course.courseCode,
-      coursePoints: course.coursePoints,
-      courseExtent: course.courseExtent
-    }))
-
-    res.json(courses)
-  } catch (error) {
-    console.error("Error fetching program courses:", error)
-    res.status(500).json({ error: "Server error" })
-  }
-})
-
-export default router
+export default router;

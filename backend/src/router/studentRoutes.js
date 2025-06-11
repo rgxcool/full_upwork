@@ -45,8 +45,12 @@ router.put('/students/:studentId/education/:educationId/status', async (req, res
 });
 
 
-const sendNotificationToTeacherAndAdmin = async (student, teacher, education) => {
 
+const sendNotificationToTeacherAndAdmin = async (
+    student,
+    teacher,
+    education
+) => {
     console.log("DEBUG student.name:", student.name);
     console.log("DEBUG student objekt:", student);
 
@@ -55,32 +59,28 @@ const sendNotificationToTeacherAndAdmin = async (student, teacher, education) =>
         "meta.studentId": student._id,
         "meta.educationId": education._id,
     });
-    
+
     if (existing) {
         console.log("🔁 Notis redan finns, ingen ny sparas.");
         return existing; // Skicka tillbaka befintlig
     }
 
     const notification = new Notification({
-      type: "dropout",
-      message: `Studenten ${student.name} har avbrutit utbildningen ${education?.name || 'okänd utbildning'}`,
-      meta: {
-        teacherId: teacher || null,
-        studentId: student._id || null,
-        educationId: education?._id || null,
-        courseId: education?.refId || null,
-        url: `/students/${student._id}/education`
-      }
+        type: "dropout",
+        message: `Studenten ${student.name} har avbrutit utbildningen ${education?.name || "okänd utbildning"
+            }`,
+        meta: {
+            teacherId: teacher || null,
+            studentId: student._id || null,
+            educationId: education?._id || null,
+            courseId: education?.refId || null,
+            url: `/students/${student._id}/education`,
+        },
     });
-  
+
     await notification.save();
     return notification;
-  };
-  
-
-  
-  
-  
+};
 
 router.get("/students", authenticateUser, async (req, res) => {
     try {
@@ -133,7 +133,7 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
         );
 
         if (alreadyExists) {
-            return res.status(400).json({ error: "Course already exists" })
+            return res.status(400).json({ error: "Course already exists" });
         }
 
         student.courses.push({ courseId: course._id });
@@ -178,17 +178,13 @@ router.post("/student/:studentId/addcoursepackage", async (req, res) => {
     try {
         const student = await Student.findById(studentId);
 
-
         if (!student)
-
             return res.status(404).json({ error: "Student not found" });
 
         student.coursePackages.push({ coursePackageId, grade: null });
         await student.save();
 
         res.status(200).json(student);
-
-
     } catch (error) {
         console.error("❌ Error:", error);
         res.status(500).json({ error: "Server error" });
@@ -268,24 +264,30 @@ router.patch("/students/:id", authenticateUser, async (req, res) => {
 
     try {
         const student = await Student.findById(req.params.id);
-        if (!student)
+        if (!student) {
             return res.status(404).json({ error: "Student not found" });
+        }
 
-        student.aplStatus = aplStatus;
-        student.aplStatusHistory.push({
-            status: aplStatus,
-            changedAt: new Date(),
-            changedBy: userId,
-        });
+        // 🔒 Only allow aplStatus to be changed
+        if (typeof aplStatus === "string") {
+            student.aplStatus = aplStatus;
+            student.aplStatusHistory.push({
+                status: aplStatus,
+                changedAt: new Date(),
+                changedBy: userId,
+            });
 
-        await student.save();
-
-        res.json(student);
+            await student.save();
+            return res.json(student);
+        } else {
+            return res.status(400).json({ error: "Invalid APL status update" });
+        }
     } catch (err) {
         console.error("❌ Failed to update APL status:", err);
-        res.status(500).json({ error: "Failed to update APL status" });
+        return res.status(500).json({ error: "Failed to update APL status" });
     }
 });
+
 
 // ✅ Add comment
 router.post("/students/:id/comment", authenticateUser, async (req, res) => {
@@ -361,10 +363,46 @@ router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
 });
 // ✅ Update student fully (not just dropout)
 router.put("/student/:id", async (req, res) => {
+    console.log("📥 Received payload:", req.body);
+    const allowedFields = [
+        "name",
+        "personalNumber",
+        "phone",
+        "email",
+        "exam",
+        "additionalInfo",
+        "teacher",
+        "dropout",
+        "startDate",
+        "endDate",
+        "finalExamDate",
+        "examMunicipality",
+        "examLocation",
+        "examTime",
+        "aplStatus",
+        "education",
+    ];
+
+    const updates = {};
+    for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+            updates[field] = req.body[field];
+        }
+    }
+
+    // 🛡️ Special handling for municipality
+    if (
+        req.body.municipality &&
+        typeof req.body.municipality === "object" &&
+        typeof req.body.municipality.type === "string"
+    ) {
+        updates["municipality"] = { type: req.body.municipality.type };
+    }
+
     try {
         const updatedStudent = await Student.findByIdAndUpdate(
             req.params.id,
-            req.body,
+            { $set: updates },
             { new: true }
         )
             .populate("courses.courseId", "courseName courseCode")
@@ -381,6 +419,7 @@ router.put("/student/:id", async (req, res) => {
         res.status(500).json({ error: "Failed to update student" });
     }
 });
+
 
 // ✅ Mark comments as seen (🛠 FIXED)
 router.post(
@@ -494,6 +533,22 @@ router.put("/student/:id/education/:courseId/grade", async (req, res) => {
     } catch (err) {
         console.error("❌ Error updating grade:", err);
         res.status(500).json({ error: "Failed to update grade" });
+    }
+});
+
+router.get("/students/earnings", async (req, res) => {
+    try {
+        const students = await Student.find(
+            { "education.grade": { $ne: null } }, // only students with grades
+            {
+                municipality: 1,
+                education: 1,
+            }
+        );
+        res.json(students);
+    } catch (err) {
+        console.error("❌ Failed to fetch earnings students", err);
+        res.status(500).json({ error: "Server error" });
     }
 });
 

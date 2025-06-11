@@ -1,0 +1,48 @@
+import express from "express";
+import Student from "../models/Student.js";
+
+const router = express.Router();
+
+router.get("/courses-per-month", async (req, res) => {
+  try {
+    const students = await Student.find();
+
+    const stats = {};
+
+    for (const student of students) {
+      const municipality = student.municipality?.type || "UNKNOWN";
+
+      for (const edu of student.education || []) {
+        if (edu.type !== "Course" || !edu.addedAt || !edu.name) continue;
+
+        const date = new Date(edu.addedAt);
+        const month = `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, "0")}`;
+
+        const course = edu.name;
+        const grade = (edu.grade || "UNKNOWN").toUpperCase();
+
+        stats[month] ??= {};
+        stats[month][course] ??= {};
+
+        // Add grade count
+        stats[month][course][grade] ??= 0;
+        stats[month][course][grade]++;
+
+        // Add municipality info
+        stats[month][course]._municipality ??= [];
+        if (!stats[month][course]._municipality.includes(municipality)) {
+          stats[month][course]._municipality.push(municipality);
+        }
+      }
+    }
+
+    res.json(stats);
+  } catch (err) {
+    console.error("❌ Error generating course stats:", err);
+    res.status(500).json({ error: "Failed to generate stats" });
+  }
+});
+
+export default router;

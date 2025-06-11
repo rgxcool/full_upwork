@@ -128,18 +128,21 @@ async function uploadXlsx(req, res) {
 
             const correctedMunicipality = getClosestMunicipality(raw);
             if (!correctedMunicipality) {
-                console.warn(`⚠️ Unknown municipality: "${raw}"`);
+                throw new Error(`❌ Could not match municipality: "${raw}"`);
             }
 
             return {
                 ...student,
                 education,
-                municipality: correctedMunicipality || null,
+                municipality: correctedMunicipality
+                    ? { type: correctedMunicipality }
+                    : { type: "" }, // fallback still satisfies schema
                 aplStatus: existing ? existing.aplStatus : "GRAY",
                 createdAt: existing?.createdAt || now,
                 updatedAt: now,
                 uploadedBy: teacherName,
             };
+
         });
 
         const bulkOps = studentsToSave.map((student) => ({

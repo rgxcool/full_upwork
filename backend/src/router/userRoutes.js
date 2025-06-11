@@ -2,7 +2,7 @@ import express from "express";
 import User from "../models/User.js";
 import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
-import jtw from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
@@ -54,7 +54,7 @@ router.post("/reset-password", async (req, res) => {
                 .send({ message: "Token och nytt lösenord krävs" });
         }
 
-        const decoded = jwt.verify(token, import.meta.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
         await User.findByIdAndUpdate(decoded.id, {

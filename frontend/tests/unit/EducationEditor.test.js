@@ -28,7 +28,7 @@ vi.mock('axios', () => ({
           ],
         })
       }
-      if (url.includes('/api/programs')) {
+      if (url.includes('/api/all-programs')) {
         return Promise.resolve({
           data: [{ _id: '1', programName: 'Test Program' }],
         })
@@ -80,7 +80,7 @@ describe('EducationEditor.vue', () => {
     // ✅ Set axios mocks to return preloaded data
     axios.get.mockImplementation((url) => {
       if (url.includes('/api/students')) return Promise.resolve({ data: mockStudents })
-      if (url.includes('/api/programs')) return Promise.resolve({ data: mockPrograms })
+      if (url.includes('/api/all-programs')) return Promise.resolve({ data: mockPrograms })
       if (url.includes('/api/program/1/courses')) return Promise.resolve({ data: mockCourses })
       return Promise.reject(new Error(`404 Not Found: ${url}`))
     })

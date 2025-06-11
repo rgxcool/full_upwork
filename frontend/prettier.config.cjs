@@ -1,12 +1,19 @@
+// .prettierrc.js or prettier.config.js
 module.exports = {
-  semi: false, // Remove semicolons
+  semi: false, // No semicolons
   singleQuote: true, // Use single quotes
-  trailingComma: 'es5', // Use trailing commas where valid in ES5
-  printWidth: 100, // Set max line length before wrapping
-  tabWidth: 2, // Use 2 spaces for indentation
-  bracketSpacing: true, // Add spaces inside object brackets
-  arrowParens: 'always', // Always include parentheses in arrow functions
-  vueIndentScriptAndStyle: true, // Indent inside <script> and <style> in Vue files
+  trailingComma: 'es5', // Commas where valid in ES5 (e.g., object/array literals)
+  printWidth: 100, // Line wrap at 100 chars
+  tabWidth: 2, // Indent size
+  useTabs: false, // Use spaces, not tabs
+  bracketSpacing: true, // { foo: bar } instead of {foo:bar}
+  arrowParens: 'always', // (x) => instead of x =>
+
+  vueIndentScriptAndStyle: true, // Indent inside <script> and <style>
+
+  htmlWhitespaceSensitivity: 'ignore', // Keeps Vue templates clean and unbroken
+  embeddedLanguageFormatting: 'auto',
+
   overrides: [
     {
       files: '*.vue',
