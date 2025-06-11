@@ -1,7 +1,8 @@
 <template>
   <div class="hierarchy-manager">
     <h1>Add Individual Course to Student</h1>
-    <br /><br />
+    <br />
+    <br />
 
     <!-- Bootstrap Flash Alert -->
     <div
@@ -26,7 +27,8 @@
         class="styled-select"
       />
     </div>
-    <br /><br />
+    <br />
+    <br />
 
     <!-- Add Individual Course to Student -->
     <div>
@@ -58,7 +60,8 @@
           />
         </v-form>
       </v-container>
-      <br /><br />
+      <br />
+      <br />
 
       <button class="btn btn-primary" @click="handleAddCourse">Add Course to Student</button>
     </div>
@@ -92,7 +95,7 @@
             await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
               withCredentials: true,
             }),
-            await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`, {
+            await axios.get(`${import.meta.env.VITE_API_URL}/api/all-programs`, {
               withCredentials: true,
             }),
           ])

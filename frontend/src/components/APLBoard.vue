@@ -172,7 +172,7 @@
   import { ref, computed, onMounted, nextTick } from 'vue'
   import axios from 'axios'
   import { useStore } from 'vuex'
-  import FileUploaderDownloader from '../components/FileUploaderDownloder.vue'
+  import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
 
   const store = useStore()
   const currentUser = computed(() => store.state.user)

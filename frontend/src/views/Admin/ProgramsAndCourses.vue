@@ -1,33 +1,32 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import axios from 'axios'
+  import { ref, onMounted } from 'vue'
+  import axios from 'axios'
 
-const programs = ref([])
-const isLoading = ref(true)
-const error = ref(null)
+  const programs = ref([])
+  const isLoading = ref(true)
+  const error = ref(null)
 
-// API Base URL - Change this if necessary
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+  // API Base URL - Change this if necessary
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'
 
-const fetchPrograms = async () => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/api/programs`)
-    programs.value = response.data
-    console.log("✅ Populated programs:", programs.value);
-
-  } catch (err) {
-    console.error('Error fetching programs:', err)
-    error.value = 'Failed to load programs. Please try again.'
-  } finally {
-    isLoading.value = false
+  const fetchPrograms = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/programs`)
+      programs.value = response.data
+      console.log('✅ Populated programs:', programs.value)
+    } catch (err) {
+      console.error('Error fetching programs:', err)
+      error.value = 'Failed to load programs. Please try again.'
+    } finally {
+      isLoading.value = false
+    }
   }
-}
 
-//onMounted(fetchPrograms)
-onMounted(async () => {
-  await fetchPrograms()
-  window.programs = programs // ← now you can type `programs.value` in devtools
-})
+  //onMounted(fetchPrograms)
+  onMounted(async () => {
+    await fetchPrograms()
+    window.programs = programs // ← now you can type `programs.value` in devtools
+  })
 </script>
 
 <template>
@@ -62,8 +61,11 @@ onMounted(async () => {
                 <template v-if="program.programCourses.length">
                   <tr v-for="(course, index) in program.programCourses" :key="course._id">
                     <!-- Display Program Name only once per program using rowspan -->
-                    <td v-if="index === 0" :rowspan="program.programCourses.length"
-                      class="program-name-column align-top">
+                    <td
+                      v-if="index === 0"
+                      :rowspan="program.programCourses.length"
+                      class="program-name-column align-top"
+                    >
                       <strong>{{ program.programName }}</strong>
                     </td>
                     <td class="course-name-column">
@@ -84,99 +86,99 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* 1️⃣ Completely Remove Horizontal Scrolling */
-html,
-body {
-  overflow-x: hidden !important;
-  /* 🔥 Enforce no horizontal scroll */
-  margin: 0;
-  padding: 0;
-  width: 100vw;
-}
+  /* 1️⃣ Completely Remove Horizontal Scrolling */
+  html,
+  body {
+    overflow-x: hidden !important;
+    /* 🔥 Enforce no horizontal scroll */
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+  }
 
-/* 2️⃣ Prevent Any Element from Extending Past Viewport */
-.no-scroll {
-  overflow-x: hidden !important;
-  max-width: 100vw;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
+  /* 2️⃣ Prevent Any Element from Extending Past Viewport */
+  .no-scroll {
+    overflow-x: hidden !important;
+    max-width: 100vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
 
-/* 3️⃣ Center Card & Table */
-.card-centered {
-  max-width: 80%;
-  margin: 20px auto;
-  text-align: center;
-}
+  /* 3️⃣ Center Card & Table */
+  .card-centered {
+    max-width: 80%;
+    margin: 20px auto;
+    text-align: center;
+  }
 
-/* 4️⃣ Center Title */
-.title-center {
-  text-align: center;
-  padding: 16px;
-}
+  /* 4️⃣ Center Title */
+  .title-center {
+    text-align: center;
+    padding: 16px;
+  }
 
-/* 5️⃣ Table Container Ensuring No Overflow */
-.table-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-}
+  /* 5️⃣ Table Container Ensuring No Overflow */
+  .table-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
 
-/* 6️⃣ Ensure Table Doesn't Cause Scrolling */
-.table-wrapper {
-  width: 100%;
-  max-width: 100vw;
-  overflow-x: hidden !important;
-  /* 🔥 Force No Scroll */
-  display: flex;
-  justify-content: center;
-}
+  /* 6️⃣ Ensure Table Doesn't Cause Scrolling */
+  .table-wrapper {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden !important;
+    /* 🔥 Force No Scroll */
+    display: flex;
+    justify-content: center;
+  }
 
-/* 7️⃣ Fixed Table Layout */
-.fixed-table {
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  table-layout: fixed;
-  border-collapse: collapse;
-}
+  /* 7️⃣ Fixed Table Layout */
+  .fixed-table {
+    width: auto;
+    min-width: 100%;
+    margin: 0 auto;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
 
-/* 8️⃣ Program Name Column - Align to Top */
-.program-name-column {
-  width: 250px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: bold;
-  vertical-align: top !important;
-  /* 🔥 Align Top */
-}
+  /* 8️⃣ Program Name Column - Align to Top */
+  .program-name-column {
+    width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: bold;
+    vertical-align: top !important;
+    /* 🔥 Align Top */
+  }
 
-/* 9️⃣ Course Name Column */
-.course-name-column {
-  width: 300px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+  /* 9️⃣ Course Name Column */
+  .course-name-column {
+    width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
-/* 🔟 Fixed-Width Columns */
-.fixed-width {
-  width: 100px;
-  text-align: left;
-}
+  /* 🔟 Fixed-Width Columns */
+  .fixed-width {
+    width: 100px;
+    text-align: left;
+  }
 
-/* 🔥 Ensure Programs Stack Vertically */
-.program-container {
-  display: block;
-  width: 100%;
-  margin-bottom: 20px;
-}
+  /* 🔥 Ensure Programs Stack Vertically */
+  .program-container {
+    display: block;
+    width: 100%;
+    margin-bottom: 20px;
+  }
 
-/* 🔥 Alternating Row Colors */
-tbody tr:nth-child(even) {
-  background: #f9f9f9;
-}
+  /* 🔥 Alternating Row Colors */
+  tbody tr:nth-child(even) {
+    background: #f9f9f9;
+  }
 </style>
