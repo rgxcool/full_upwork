@@ -1,54 +1,31 @@
 <template>
-    <div>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Kursnamn</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="education in student.education" :key="education._id">
-            <td>{{ education.name || 'Ingen kursdata' }}</td>
-            <td>
-              <div v-if="!savedEducations.has(education._id)">
-                <select v-model="education.status">
-                  <option disabled value="">Choose here</option>
-                  <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-                </select>
-              </div>
-              <div v-else>
-                {{ education.status }}
-                <br>
-                <button
-                  class="btn btn-success"
-                  v-if="!education.status"
-                  @click="updateStatus(education)"
-                >
-                  Spara studieplan
-                </button>
-              </div>
-            </td>
-            <td>
-            <button
-              class="btn btn-success"
-              v-if="!education.status"
-              @click="updateStatus(education)"
-            >
-              Spara studieplan
-            </button>
-          </td>
-          </tr>
-        </tbody>
-      </table>
+  <div>
+    <div v-for="education in student.education" :key="education._id" class="education-item">
+      <div class="info">
+        <strong>Kurs:</strong> {{ education.name || 'Ingen kursdata' }}
+      </div>
+      <div class="info">
+        <strong>Status:</strong>
+        <div v-if="!savedEducations.has(education._id)">
+          <select v-model="education.status">
+            <option disabled value="">Välj här</option>
+            <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
+          </select>
+        </div>
+        <div v-else>{{ education.status }}</div>
+      </div>
+      <div class="actions" v-if="!savedEducations.has(education._id)">
+        <button class="btn btn-success" @click="updateStatus(education)">Spara studieplan</button>
+      </div>
     </div>
-  </template>
+  </div>
+</template>
+
 <script setup>
 import { computed, reactive } from 'vue';
 import axios from 'axios';
 
-
-const savedEducations = reactive(new Set()); // innehåller _id för redan sparade
+const savedEducations = reactive(new Set());
 
 const props = defineProps({
   userData: Object
@@ -56,59 +33,37 @@ const props = defineProps({
 
 const student = computed(() => props.userData || { education: [] });
 
-console.log("📦 userData:", props.userData);
-
-
 const statuses = ["Antagen", "Betygsatt", "Avbrott", "Ej påbörjad", "Reviderad"];
 
-const hasUnsaved = computed(() => {
-  return student.value.education.some(e => !savedEducations.has(e._id));
-});
-
 const updateStatus = async (education) => {
-  const rawEducationId = education._id;
-
   try {
-    const response = await axios.put(
-      `http://localhost:5001/api/students/${student.value._id}/education/${rawEducationId}/status`,
+    const res = await axios.put(
+      `http://localhost:5001/api/students/${student.value._id}/education/${education._id}/status`,
       { status: education.status }
     );
-    console.log("✅ Status uppdaterad:", response.data);
-
-    savedEducations.add(rawEducationId); // markera som sparad
+    console.log("✅ Uppdaterad:", res.data);
+    savedEducations.add(education._id);
   } catch (err) {
-    console.error("❌ Error updating status:", err.response?.data || err.message);
+    console.error("❌ Fel vid uppdatering:", err.response?.data || err.message);
     alert("Kunde inte uppdatera kursstatus.");
   }
 };
-
-
-
-console.log("👤 Student data received:", student.value);
-
-
-
-
 </script>
 
-  
-  <style scoped>
-  .table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .table th, .table td {
-    border: 1px solid #ccc;
-    padding: 0.5rem;
-  }
+<style scoped>
+.education-item {
+  border: 1px solid #ccc;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+}
 
-  button, input, select, textarea, option {
-  font: inherit;
-  color: inherit;
-  background: none;
-  padding: 0;
-  margin: 0;
-  box-sizing: border-box;
+.info {
+  margin-bottom: 0.5rem;
+}
+
+.actions {
+  margin-top: 0.5rem;
 }
 
 select {
@@ -116,5 +71,4 @@ select {
   width: 100%;
   box-sizing: border-box;
 }
-  </style>
-  
+</style>
