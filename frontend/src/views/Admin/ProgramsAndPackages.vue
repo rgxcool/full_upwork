@@ -132,7 +132,10 @@
           }
         }
 
-        this.programs = fetchedPrograms
+        this.programs = fetchedPrograms.filter(
+          (program) =>
+            Array.isArray(program.programCoursePackages) && program.programCoursePackages.length > 0
+        )
 
         console.log('Programs after filtering:', this.programs)
       } catch (error) {
