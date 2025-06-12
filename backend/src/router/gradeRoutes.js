@@ -7,30 +7,23 @@ import Course from "../models/Course.js";
 import Program from "../models/Program.js";
 import CoursePackage from "../models/CoursePackage.js";
 
+import {  
+          createNotification, 
+          resolveNotification, 
+          evaluateGradingStatusAndNotify, 
+          evaluateActionPlanStatusAndNotify,
+          checkPendingGradesAndNotify 
+        } 
+        from "../controllers/notificationController.js";
 
-export async function createFailingStudentNotification(studentId, courseId) {
-  const existing = await Notification.findOne({
-    studentId,
-    courseId,
-    type: "action_plan_required",
-    resolved: false,
-  });
-
-  if (!existing) {
-    await Notification.create({
-      studentId,
-      courseId,
-      type: "action_plan_required",
-      message: "Handlingsplan krävs pga elever med F i betyg",
-      resolved: false,
-    });
-  }
-}
 
 
 router.get("/students/ungraded", async (req, res) => {
 
   try {
+
+    await evaluateGradingStatusAndNotify();
+
     const students = await Student.find({
       education: {
         $elemMatch: {
@@ -163,6 +156,7 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
 });
 */
 
+
 router.post('/teacher/save-grade', authenticateUser, async (req, res) => {
   const { studentId, courseId, grade, reason, comments, npScore, type } = req.body;
 
@@ -183,10 +177,24 @@ router.post('/teacher/save-grade', authenticateUser, async (req, res) => {
       }
     );
 
-    // 🔔 Skapa notis om betyg är F
     if (grade === 'F') {
-      await createFailingStudentNotification(studentId, courseId);
+      await createNotification({
+        studentId,
+        courseId,
+        type: "action_plan_required",
+        message: "Handlingsplan krävs pga elever med F i betyg",
+      });
+    } else {
+      await resolveNotification({
+        studentId,
+        courseId,
+        type: "action_plan_required"
+      });
     }
+
+    // 🔁 Kontrollera global notisstatus
+    await evaluateGradingStatusAndNotify();
+    await evaluateActionPlanStatusAndNotify();
 
     res.send('✅ Betyg sparat!');
   } catch (err) {
@@ -194,6 +202,7 @@ router.post('/teacher/save-grade', authenticateUser, async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
 
 
 router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
@@ -207,11 +216,12 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
       return res.status(404).send("Studenten hittades inte.");
     }
 
-    // Hitta kursen i studentens utbildningar
-    const courseIndex = student.education.findIndex(edu => edu.refId.toString() === courseId);
-    if (courseIndex === -1) {
-      return res.status(404).send("Kursen är inte kopplad till studenten.");
-    }
+      const courseIndex = student.education.findIndex(
+        edu => edu.refId && edu.refId.toString() === courseId
+      );
+      if (courseIndex === -1) {
+        return res.status(404).send("Kursen är inte kopplad till studenten.");
+      }
 
     const education = student.education[courseIndex];
 
@@ -232,8 +242,23 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
 
     // 🔔 Skapa notis om betyget är F
     if (education.grade === 'F') {
-      await createFailingStudentNotification(studentId, courseId);
+      await createNotification({
+        studentId,
+        courseId,
+        type: "action_plan_required",
+        message: "Handlingsplan krävs pga elever med F i betyg",
+      });    
+    } else {
+      await resolveNotification({
+        studentId,
+        courseId,
+        type: "action_plan_required"
+      });
     }
+
+        // 🔁 Kontrollera global notisstatus
+        await evaluateGradingStatusAndNotify();
+        await evaluateActionPlanStatusAndNotify();
 
     res.send("Betyg har låsts!");
 

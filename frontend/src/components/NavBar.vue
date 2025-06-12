@@ -327,7 +327,6 @@
 
       const menuItems = [
         { name: 'APL', link: '/apl', role: 'admin' },
-        { name: 'Användare', link: '/anvandare', role: 'admin' },
         { name: 'Kalender', link: '/kalender', role: 'teacher' },
         { name: 'Utbildning', link: '/education', role: 'admin' },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
