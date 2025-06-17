@@ -8,6 +8,100 @@ import Notification from "../models/Notification.js";
 
 
 
+router.put('/exams/:id/decision', async (req, res) => {
+  try {
+    const { decision, comment } = req.body;
+    const examId = req.params.id;
+
+    console.log(`Hantera beslut: ${decision} för examId: ${examId}`);
+
+    // Hämta den befintliga prövningen
+    const exam = await Exam.findById(examId).populate('teacherId');
+    if (!exam) {
+      return res.status(404).json({ error: 'Prövning hittades inte.' });
+    }
+
+    const updateData = { decision, comment };
+
+    switch (decision) {
+      case "accept":
+        const finalExamDate = calculateExamDate(exam.requestedMonth);
+        if (!finalExamDate) {
+          return res.status(400).json({ error: 'Ogiltigt datum för accept' });
+        }
+
+        const student = await Student.findOneAndUpdate(
+          { personalNumber: exam.personalNumber },
+          {
+            ...exam.toObject(),
+            finalExamDate
+          },
+          { upsert: true, new: true }
+        );
+
+        updateData.status = 'scheduled';
+        updateData.studentId = student._id;
+        break;
+
+      case "move":
+        const newRequestedMonth = getNextMonth(exam.requestedMonth);
+        if (!newRequestedMonth) {
+          return res.status(400).json({ error: 'Ogiltigt månad för flytt' });
+        }
+        updateData.status = 'moved';
+        updateData.requestedMonth = newRequestedMonth;
+        break;
+
+      case "deny":
+        updateData.status = 'denied';
+        break;
+
+      default:
+        return res.status(400).json({ error: 'Ogiltigt beslut.' });
+    }
+
+    const updatedExam = await Exam.findByIdAndUpdate(examId, updateData, { new: true });
+
+    res.json(updatedExam);
+  } catch (err) {
+    console.error('Fel vid uppdatering av beslut:', err);
+    res.status(500).json({ error: 'Kunde inte spara beslut.' });
+  }
+});
+
+function calculateExamDate(requestedMonth) {
+  const months = {
+    'Januari': 0, 'Februari': 1, 'Mars': 2, 'April': 3, 'Maj': 4, 'Juni': 5,
+    'Juli': 6, 'Augusti': 7, 'September': 8, 'Oktober': 9, 'November': 10, 'December': 11
+  };
+
+  const month = months[requestedMonth];
+  const year = new Date().getFullYear();
+
+  if (month === undefined) {
+    console.error('Ogiltigt månad:', requestedMonth);
+    return null;
+  }
+
+  return new Date(Date.UTC(year, month, 15));
+}
+
+function getNextMonth(currentMonth) {
+  const months = {
+    'Januari': 0, 'Februari': 1, 'Mars': 2, 'April': 3, 'Maj': 4, 'Juni': 5,
+    'Juli': 6, 'Augusti': 7, 'September': 8, 'Oktober': 9, 'November': 10, 'December': 11
+  };
+
+  const monthIndex = months[currentMonth];
+  if (monthIndex === undefined) return null;
+
+  const newMonth = (monthIndex + 1) % 12;
+  const yearAdjustment = newMonth === 0 ? 1 : 0;
+  const newYear = new Date().getFullYear() + yearAdjustment;
+
+  return `${newYear}-${(newMonth + 1).toString().padStart(2, '0')}`;
+}
+
 router.post('/exams', async (req, res) => {
   try {
 
@@ -66,87 +160,65 @@ router.get('/exams', async (req, res) => {
 });
 
 
-// PATCH /api/exams/:id/decision
-router.patch('/exams/:id/decision', async (req, res) => {
+
+router.get('/calendar-color', async (req, res) => {
   try {
-    const { decision, comment } = req.body;
+    const students = await Student.find().populate("coursePackages.coursePackageId");
+    const teachers = await Teacher.find();
 
-    let status = "";
-    if (decision === "accept") status = "scheduled";
-    else if (decision === "move") status = "moved";
-    else if (decision === "deny") status = "denied";
+    // Hämta endast schemalagda (accepterade) prövningar
+    const acceptedExams = await Exam.find({ status: 'scheduled' });
 
-    const updatedExam = await Exam.findByIdAndUpdate(
-      req.params.id,
-      {
-        decision,
-        comment,
-        status,
-      },
-      { new: true }
-    );
+    const groupedEvents = {};
 
-    res.json(updatedExam);
-  } catch (err) {
-    console.error('Fel vid uppdatering av beslut:', err.message);
-    res.status(500).json({ error: 'Kunde inte spara beslut.' });
+    // Lägg till studenter från acceptera prövningar
+    acceptedExams.forEach(exam => {
+      const student = students.find(s => s.personalNumber === exam.personalNumber);
+      if (!student) return; // Om student inte finns, ignorera
+
+      const teacher = teachers.find(t => t.name === student.teacher);
+      const teacherName = teacher?.name || 'Unknown teacher';
+
+      const examDate = new Date(student.finalExamDate || calculateExamDate(exam.requestedMonth));
+      examDate.setHours(examDate.getHours() + 1); // Justera för CET
+
+      const formattedDate = examDate.toISOString().split("T")[0];
+      const key = `${teacherName}-${formattedDate}`;
+
+      if (!groupedEvents[key]) {
+        groupedEvents[key] = {
+          _id: student._id.toString(),
+          title: `${teacherName}`,
+          start: formattedDate,
+          color: teacher?.colorCode || '#cccccc',
+          extendedProps: {
+            teacher: teacherName,
+            examMunicipality: student.examMunicipality || "Unknown",
+            examLocation: student.examLocation || "Unknown",
+            examTime: student.examTime || "No exam time",
+            students: []
+          },
+        };
+      }
+
+      groupedEvents[key].extendedProps.students.push({
+        _id: student._id.toString(),
+        name: student.name || "Unknown student",
+        personalNumber: student.personalNumber || "No personal number",
+        attended: student.attendedExam || false,
+        additionalInfo: student.additionalInfo || "",
+      });
+    });
+
+    res.json(Object.values(groupedEvents));
+
+  } catch (error) {
+    console.error("❌ Error in /calendar-color:", error.message);
+    res.status(500).send("Server error");
   }
 });
 
 
-
-router.get('/calendar-color', async (req, res) => {
-    try {
-        const students = await Student.find().populate("coursePackages.coursePackageId");
-        const teachers = await Teacher.find();
-
-        const groupedEvents = {};
-
-        students
-            .filter(student => !student.dropout && student.finalExamDate)
-            .forEach(student => {
-                const teacher = teachers.find(t => t.name === student.teacher);
-
-                // 🟢 Konvertera till svensk tid (CET/CEST)
-                const date = new Date(student.finalExamDate);
-                date.setHours(date.getHours() + 1);  // 🕐 Justera +1 timme till CET
-                const formattedDate = date.toISOString().split("T")[0];
-
-                const teacherName = teacher?.name || 'Unknown teacher';
-                const key = `${teacherName}-${formattedDate}`;
-
-                if (!groupedEvents[key]) {
-                    groupedEvents[key] = {
-                        _id: student._id.toString(),
-                        title: `${teacherName}`,
-                        start: formattedDate,
-                        color: teacher?.colorCode || '#cccccc',
-                        extendedProps: {
-                            teacher: teacherName,
-                            examMunicipality: student.examMunicipality || "Unknown",
-                            examLocation: student.examLocation || "Unknown",
-                            examTime: student.examTime || "No exam time",
-                            students: [],
-                        },
-                    };
-                }
-
-                groupedEvents[key].extendedProps.students.push({
-                    _id: student._id.toString(),
-                    name: student.name || "Unknown student",
-                    personalNumber: student.personalNumber || "No personal number",
-                    attended: student.attendedExam || false,
-                    additionalInfo: student.additionalInfo || "",
-                });
-            });
-
-        res.json(Object.values(groupedEvents));
-
-    } catch (error) {
-        console.error("❌ Error in /calendar-color:", error.message);
-        res.status(500).send("Server error");
-    }
-});
 
 
 

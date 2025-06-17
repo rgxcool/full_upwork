@@ -27,6 +27,8 @@ router.put('/students/:studentId/education/:educationId/status', async (req, res
         education.status = status;
 
         if (status === "Avbrott") {
+            student.dropout = true; 
+
             const notification = await sendDropoutNotification({ student, education });
             console.log("Notification sent:", notification);
             await student.save();
@@ -35,6 +37,7 @@ router.put('/students/:studentId/education/:educationId/status', async (req, res
                 notification
             });
         } else {
+            student.dropout = false; // (om du vill nollställa annars)
             await student.save();
             return res.status(200).json({ message: 'Status updated successfully' });
         }

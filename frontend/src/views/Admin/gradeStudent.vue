@@ -48,27 +48,45 @@
       </table>
     </section>
   
-    <div v-if="showGradeModal" class="modal">
-    <div class="modal-content">
-      <h3>Sätt betyg</h3>
-      <form @submit.prevent="saveGrade">
-        <label for="grade">Betyg</label>
-        <select v-model="gradeData.grade" required>
-          <option value="" disabled>Välj betyg</option>
-          <option>A</option>
-          <option>B</option>
-          <option>C</option>
-          <option>D</option>
-          <option>E</option>
-          <option>F</option>
-        </select>
-        <label for="comments">Kommentar</label>
-        <textarea v-model="gradeData.comments"></textarea>
-        <button type="submit">Spara betyg</button>
-        <button type="button" @click="showGradeModal = false">Avbryt</button>
-      </form>
+    <div v-if="showGradeModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+      <div class="modal-dialog">
+      <div  class="modal-content">
+
+        <div class="modal-header">
+        <h5 class="modal-title">Sätt betyg</h5>
+        <button type="button" class="btn-close" @click="showGradeModal = false"></button>
+      </div>
+        <form @submit.prevent="saveGrade">
+          <div class="modal-body">
+          <label>Betyg *</label>
+          <select v-model="gradeData.grade" required>
+            <option value="" disabled>Välj betyg</option>
+            <option v-for="g in ['A','B','C','D','E','F']" :key="g">{{g}}</option>
+          </select>
+
+          <label>Motivering *</label>
+          <textarea v-model="gradeData.reason" required></textarea>
+
+          <label>Kommentar</label>
+          <textarea v-model="gradeData.comments"></textarea>
+
+          <!-- NP-fält visas bara om kursen är SVE, ENG, MA -->
+          <div v-if="isNationalCourse(gradeData.courseCode)">
+            <label>Nationella prov-poäng *</label>
+            <input v-model.number="gradeData.npScore" required type="number" min="0" />
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showGradeModal = false">Avbryt</button>
+          <button type="submit" class="btn btn-primary" :disabled="!canSaveGrade()">Spara betyg</button>
+        </div>
+
+        </form>      
+      </div>
     </div>
-  </div>
+    </div>
   </template>
   
   <script setup>
@@ -117,13 +135,27 @@
     }
   }
   
-  const setGrade = (row) => {
-    gradeData.value.studentId = row.studentId
-    gradeData.value.courseId = row.refId
-    gradeData.value.grade = ''
-    gradeData.value.comments = ''
-    showGradeModal.value = true
-  }
+  function isNationalCourse(courseCode) {
+  return ['SVE', 'ENG', 'MA'].some(sub => courseCode && courseCode.startsWith(sub));
+}
+
+function canSaveGrade() {
+  const isNational = isNationalCourse(gradeData.value.courseCode);
+  return gradeData.value.grade && gradeData.value.reason &&
+    (!isNational || (typeof gradeData.value.npScore === 'number' && gradeData.value.npScore >= 0));
+}
+
+// När du öppnar modalen, sätt även courseCode!
+const setGrade = (row) => {
+  gradeData.value.studentId = row.studentId
+  gradeData.value.courseId = row.refId
+  gradeData.value.courseCode = row.details?.courseCode ?? '' // <-- Ta med kurskoden!
+  gradeData.value.grade = ''
+  gradeData.value.reason = ''
+  gradeData.value.comments = ''
+  gradeData.value.npScore = null
+  showGradeModal.value = true
+}
   
   const saveGrade = async () => {
     try {
