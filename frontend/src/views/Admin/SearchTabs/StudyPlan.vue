@@ -14,9 +14,16 @@
         </div>
         <div v-else>{{ education.status }}</div>
       </div>
-      <div class="actions" v-if="!savedEducations.has(education._id)">
-        <button class="btn btn-success" @click="updateStatus(education)">Spara studieplan</button>
+      <div class="actions" >
+        <button
+          class="btn btn-success"
+          @click="updateStatus(education)"
+        >
+          Spara studieplan
+        </button> 
       </div>
+
+
     </div>
   </div>
 </template>

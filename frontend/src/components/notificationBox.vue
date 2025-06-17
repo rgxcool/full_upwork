@@ -28,18 +28,14 @@
     },
     methods: {
       async fetchNotifications() {
-          try {
+        try {
           const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/notifications`);
-          // Ren JavaScript, filtera efter unikt ID:
-          this.notifications = res.data.filter(n => !n.resolved);
-
-          const seenIds = new Set();
-          this.notifications = this.notifications.filter(n => {
-            if (seenIds.has(n._id)) return false;
-            seenIds.add(n._id);
-            return true;
-          });
-          
+          // Visa EN per typ:
+          const byType = new Map();
+          for(const n of res.data.filter(n => !n.resolved)) {
+            if(!byType.has(n.type)) byType.set(n.type, n);
+          }
+          this.notifications = Array.from(byType.values());
         } catch (err) {
           this.error = 'Kunde inte hämta notiser.';
         } finally {

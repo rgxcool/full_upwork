@@ -1,19 +1,17 @@
 <template>
     <div>
-      <!-- Student-vy -->
 
       <div v-if="userRole === 'student'">
 
         <StudentExamForm />
-
       </div>
-      <!-- Lärare/Admin-vy -->
+
+
       <div v-if="userRole === 'teacher' || userRole === 'systemadmin' || userRole === 'admin'">
         <ExamAdminTable />
       </div>
-  
       <!-- Om ingen giltig roll -->
-      <div v-else>
+      <div >
         <p>Du har inte behörighet att visa denna sida.</p>
       </div>
     </div>

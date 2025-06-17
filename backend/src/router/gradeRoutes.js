@@ -116,6 +116,48 @@ router.get("/students/ungraded", async (req, res) => {
 });
 
 
+router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
+  // Anta att req.user finns
+  const user = req.user;
+  if (!(user.role === "admin" || user.role === "systemadmin")) {
+    return res.status(403).json({ error: "Endast admin/systemadmin kan låsa upp." });
+  }
+  const { studentId, courseId } = req.body;
+
+  try {
+    const result = await Student.updateOne(
+      {
+        _id: studentId,
+        "education.refId": courseId,
+        "education.type": "Course",
+        "education.removedAt": null
+      },
+      {
+        $set: {
+          "education.$.locked": false
+        }
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send("Kurs hittades inte");
+    }
+
+    // (Skicka adminnotis om du vill!)
+    await Notification.create({
+      type: "grade_unlocked",
+      message: `Admin ${user.name||user.username} låste upp en betygsrad.`,
+      meta: { studentId, courseId },
+      resolved: false,
+    });
+
+    res.send("Betyg upplåst");
+  } catch (err) {
+    console.error("Upplåsning misslyckades:", err);
+    res.status(500).send("Internt serverfel");
+  }
+});
+
 
 /*
 router.get('/students-to-grade', authenticateUser, async (req, res) => {

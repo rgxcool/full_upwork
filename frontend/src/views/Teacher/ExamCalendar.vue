@@ -98,14 +98,19 @@ export default {
     async fetchEvents() {
       try {
         const response = await axios.get('http://localhost:5001/api/calendar-color');
-        this.calendarOptions.events = response.data.map(event => ({
-          id: event._id,
-          title: event.title,
-          start: event.start.split("T")[0],
-          allDay: true,
-          color: event.color || "#007bff",
-          extendedProps: { ...event.extendedProps }
-        }));
+        const eventsData = response.data;
+
+          // Strukturera händelserna för kalendern
+          this.calendarOptions.events = eventsData.map(event => ({
+            id: event._id,
+            title: event.title,
+            start: event.start,
+            allDay: true,
+            color: event.color,
+            extendedProps: event.extendedProps
+          }));
+
+        console.log("📅 Händelser hämtade:", this.calendarOptions.events);
       } catch (error) {
         console.error("Fel vid hämtning av event:", error);
       }
