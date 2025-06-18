@@ -247,63 +247,17 @@ router.post('/teacher/save-grade', authenticateUser, async (req, res) => {
 
 
 
-router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
+router.post('/teacher/lock-grade', authenticateUser, async (req, res) => {
   const { studentId, courseId } = req.body;
-  console.log('Received studentId:', studentId, 'courseId:', courseId); // Logga mottagna värden
-
+  // courseId = refId på education!
   try {
-    // Hitta student
-    const student = await Student.findById(studentId).lean();
-    if (!student) {
-      return res.status(404).send("Studenten hittades inte.");
-    }
-
-      const courseIndex = student.education.findIndex(
-        edu => edu.refId && edu.refId.toString() === courseId
-      );
-      if (courseIndex === -1) {
-        return res.status(404).send("Kursen är inte kopplad till studenten.");
-      }
-
-    const education = student.education[courseIndex];
-
-    // Kontrollera om betyg och anledning finns
-    if (!education.grade) {
-      return res.status(400).send("Betyg saknas.");
-    }
-
-   // Uppdatera locked till true
     const result = await Student.updateOne(
-      { _id: studentId, "education.refId": courseId },
-      { $set: { "education.$.locked": true } }
+      { _id: studentId, 'education.refId': courseId },
+      { $set: { 'education.$.locked': true } }
     );
-
-    if (result.modifiedCount === 0) {
-      return res.status(400).send("Det gick inte att låsa betyget.");
-    }
-
-    // 🔔 Skapa notis om betyget är F
-    if (education.grade === 'F') {
-      await createNotification({
-        studentId,
-        courseId,
-        type: "action_plan_required",
-        message: "Handlingsplan krävs pga elever med F i betyg",
-      });    
-    } else {
-      await resolveNotification({
-        studentId,
-        courseId,
-        type: "action_plan_required"
-      });
-    }
-
-        // 🔁 Kontrollera global notisstatus
-        await evaluateGradingStatusAndNotify();
-        await evaluateActionPlanStatusAndNotify();
+    if (result.modifiedCount === 0) return res.status(400).send('Det gick inte att låsa betyget.');
 
     res.send("Betyg har låsts!");
-
   } catch (err) {
     console.error("Fel vid låsning av betyg:", err);
     res.status(500).send("Internt serverfel.");

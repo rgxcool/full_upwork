@@ -1,8 +1,9 @@
 <template>
-    <section class="action-plan-container">
-      <h2 class="title">Handlingsplan</h2>
-  
+    <section class="action-plan-container">  
       <form @submit.prevent="submitPlan" ref="formRef" class="form-card">
+
+        <h2 class="title">Handlingsplan</h2>
+
         <div class="form-group">
           <label>Ansvarig lärare</label>
           <input v-model="plan.teacherName" type="text" required />
@@ -49,16 +50,28 @@
           <label><input type="checkbox" value="Skriftligt" v-model="plan.notified" /> Skriftligt</label>
           <label><input type="checkbox" value="Muntligt" v-model="plan.notified" /> Muntligt</label>
         </div>
-  
+
         <button class="btn btn-primary" type="submit">Spara & Ladda ner PDF</button>
+
       </form>
+
     </section>
   </template>
   
   <script setup>
-  import { ref } from 'vue'
+  import { ref, computed } from 'vue'
   import html2pdf from 'html2pdf.js'
+  import axios from 'axios'
   
+  const props = defineProps(['userData']);
+
+  const fEducationArray = computed(() =>
+    props.userData.education.filter(edu => edu.grade === 'F' && edu.locked === true)
+  );
+
+  const selectedEducation = computed(() => fEducationArray.value[0]);
+
+
   const plan = ref({
     teacherName: '',
     date: '',
@@ -94,10 +107,24 @@
   
   const formRef = ref(null)
   
-  const submitPlan = () => {
+  const submitPlan = async () => {
     // Här kan du lägga till axios.post för att spara till servern
   
     // Generera PDF
+
+    try {
+
+      await axios.post(
+      `${import.meta.env.VITE_API_URL}/api/save-actionplan`,
+      {
+        ...plan.value,
+        studentId: props.userData._id,
+        educationId: selectedEducation.value._id, // om du har unikt id på education
+        refId: selectedEducation.value.refId,
+        type: selectedEducation.value.type, 
+      }
+    );
+
     const options = {
       margin: 10,
       filename: `handlingsplan-${plan.value.teacherName || 'elev'}.pdf`,
@@ -107,6 +134,9 @@
     }
   
     html2pdf().set(options).from(formRef.value).save()
+      } catch (error) {
+          console.error('Error generating PDF:', error)
+      }
   }
   </script>
   
@@ -172,5 +202,7 @@
     cursor: pointer;
     margin-top: 1rem;
   }
+
+
   </style>
   

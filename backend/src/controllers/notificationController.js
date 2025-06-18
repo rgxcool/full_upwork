@@ -25,7 +25,7 @@ export const checkPendingGradesAndNotify = async () => {
   
     const existing = await Notification.findOne({ type: "grades_pending", resolved: false });
   
-    if (ungradedStudents > 0) {
+    if (unGradedStudents > 0) {
       // Skapa notis om den inte redan finns
       if (!existing) {
         await Notification.create({
@@ -124,12 +124,7 @@ export async function evaluateActionPlanStatusAndNotify() {
   
       const ungradedStudents = students.filter(student => {
         const courses = (student.education || []).filter(edu => !edu.removedAt);
-        return courses.some(edu => {
-          const noGrade = !edu.grade || edu.grade === "";
-          const notLocked = edu.locked === false;
-          const fAndLocked = edu.grade === "F" && edu.locked === true;
-          return noGrade || notLocked || fAndLocked;
-        });
+        return courses.some(edu => (!edu.grade || edu.grade === "" || edu.locked === false));
       });
   
       if (ungradedStudents.length > 0) {

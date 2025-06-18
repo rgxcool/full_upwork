@@ -15,6 +15,7 @@ import meetingroutes from "./meetingroutes.js";
 import notificationRoutes from "./notificationRoutes.js";
 import documentRoutes from "./documentRoutes.js";
 import statsRoutes from "./statsRoutes.js";
+import actionPlanRoutes from "./actionPlanRoutes.js";
 
 const router = Router();
 
@@ -37,5 +38,6 @@ router.use("/api", meetingroutes);
 router.use("/api", notificationRoutes);
 router.use("/api", documentRoutes);
 router.use("/api/stats", statsRoutes);
+router.use("/api", actionPlanRoutes);
 
 export default router;
