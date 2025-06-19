@@ -1,6 +1,11 @@
 import dotenv from "dotenv";
 import path from "path";
 
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename)
+
 const envFile =
     process.env.NODE_ENV === "production"
         ? ".env.production"
@@ -49,7 +54,9 @@ console.log("Router successfully mounted!");
 // Ensure preflight (OPTIONS) requests are handled
 app.options("*", cors());
 
-app.use("/api/uploads", express.static("public/uploads"));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
+
 
 // MongoDB Connection
 mongoose

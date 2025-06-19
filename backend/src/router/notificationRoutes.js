@@ -3,23 +3,45 @@ import Student from "../models/Student.js";
 import Notification from "../models/Notification.js";
 const router = express.Router();
 
-// === backend/routes/notificationRoutes.js ===
-// === routes/notificationRoutes.js ===
+import { evaluateActionPlanStatusAndNotify } from "../controllers/notificationController.js";
 
-// routes/notificationRoutes.js
+
+
 router.get("/notifications", async (req, res) => {
   try {
     const notes = await Notification.find({ resolved: false });
-    res.json(notes);
+
+    const uniqueNotes = [];
+    const seenTypes = new Set();
+    const seenDropouts = new Set();
+
+    for (const note of notes) {
+      if (['action_plan_required', 'grades_pending'].includes(note.type)) {
+
+        if (!seenTypes.has(note.type)) {
+          uniqueNotes.push(note);
+          seenTypes.add(note.type);
+        }
+      } else if (note.type === 'dropout') {
+        const studentId = note.meta.studentId.toString();
+        if (!seenDropouts.has(studentId)) {
+          uniqueNotes.push(note);
+          seenDropouts.add(studentId);
+        }
+      } else {
+        uniqueNotes.push(note);
+      }
+    }
+
+    res.json(uniqueNotes);
   } catch (err) {
-    console.error('Fel vid hämtning av notiser:', err);
-    res.status(500).json({ message: 'Serverfel' });
+    console.error('Error fetching notifications:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
+/*
 
   
-  
-// Markera individuellt åtgärdsnotis som klar
 router.put("/notifications/:id/resolve", async (req, res) => {
   const note = await Notification.findById(req.params.id);
   if (!note) return res.status(404).send("Notis hittades inte");
@@ -33,6 +55,39 @@ router.put("/notifications/:id/resolve", async (req, res) => {
 
   res.json({ message: "Notis markerad som hanterad", note });
 });
+*/
+
+
+router.put("/notifications/:id/resolve", async (req, res) => {
+  try {
+    const note = await Notification.findById(req.params.id);
+    
+    if (!note) {
+      return res.status(404).send("Notis hittades inte");
+    }
+
+    // Uppdatera notisen
+    note.resolved = true;
+    note.resolvedBy = req.body.userId; // valfritt
+    note.resolvedAt = new Date();
+    await note.save();
+
+    // Utvärdera och uppdatera global status
+    await evaluateActionPlanStatusAndNotify(note.studentId, note.courseId);
+
+    res.json({ 
+      message: "Notis markerad som hanterad", 
+      note 
+    });
+  } catch (error) {
+    console.error('Fel vid lösning av notifikation:', error)
+    res.status(500).json({ 
+      message: 'Serverfel vid lösning av notifikation', 
+      error: error.message 
+    });
+  }
+});
+
 
 
 router.put("/notifications/:id/reset", async (req, res) => {
