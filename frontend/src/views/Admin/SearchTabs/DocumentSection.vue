@@ -8,7 +8,7 @@
   
       <ul v-if="documents.length">
         <li v-for="doc in documents" :key="doc._id">
-          <a :href="`/uploads/${doc.filename}`" target="_blank">{{ doc.originalName }}</a>
+          <a :href="`${baseURL}/uploads/${doc.filename}`" target="_blank">{{ doc.filename }}</a>
           <button @click="deleteFile(doc._id)">🗑️</button>
         </li>
       </ul>
@@ -26,10 +26,13 @@
     setup(props) {
       const documents = ref([]);
       const selectedFile = ref(null);
+      const baseURL = import.meta.env.VITE_API_URL;
+
   
       const fetchDocuments = async () => {
         const res = await axios.get(`/api/documents/${props.userData._id}`);
         documents.value = res.data;
+        console.log('Fetched documents:', documents.value);
       };
   
       const handleFileChange = (e) => {
@@ -54,7 +57,7 @@
       onMounted(fetchDocuments);
       watch(() => props.userData._id, fetchDocuments);
   
-      return { documents, selectedFile, handleFileChange, uploadFile, deleteFile };
+      return { documents, selectedFile, handleFileChange, uploadFile, deleteFile, baseURL };
     }
   };
   </script>

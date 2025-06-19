@@ -11,7 +11,8 @@ const schema = new mongoose.Schema({
   studyTime: String,
   meetings: [String],
   notified: [String],
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  locked: { type: Boolean, default: false }
 });
 
 const ActionPlan = mongoose.model("ActionPlan", schema);
