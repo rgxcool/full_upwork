@@ -37,9 +37,7 @@
       <br />
 
       <div>
-        <center>
-          <p>Välj utbildning:</p>
-        </center>
+        <p>Välj utbildning:</p>
         <!-- Program Selection -->
         <div class="mt-3 ml-3 mr-3 mb-3">
           <v-select
@@ -61,16 +59,15 @@
             placeholder="Select course"
             class="styled-select"
           />
-          <center>
-            <button
-              class="btn"
-              style="background-color: #007dc3ff; color: white"
-              type="button"
-              @click="handleAddCourse"
-            >
-              Add Education
-            </button>
-          </center>
+
+          <button
+            class="btn"
+            style="background-color: #007dc3ff; color: white"
+            type="button"
+            @click="handleAddCourse"
+          >
+            Lägg till
+          </button>
         </div>
       </div>
 
@@ -80,10 +77,10 @@
         <label class="form-label">Tillagda kurser:</label>
         <ul v-if="addedCourses.length">
           <li v-for="course in addedCourses" :key="course._id">
-            {{ course.displayText }}
+            <strong>{{ course.displayText }}</strong>
           </li>
         </ul>
-        <p v-else class="text-muted">Inga kurser tillagda ännu.</p>
+        <p v-else class="font-weight-bold">Inga kurser tillagda ännu.</p>
       </div>
 
       <!-- Startdatum -->
