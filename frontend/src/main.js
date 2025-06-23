@@ -7,15 +7,20 @@ import store from './store/store.js'
 import './assets/styles/global.css'
 import '@mdi/font/css/materialdesignicons.css'
 
-// ✅ Import Vuetify and all components
 import { createVuetify } from 'vuetify'
 import 'vuetify/styles'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
+import { VTimePicker } from 'vuetify/labs/VTimePicker'
 
-// ✅ Ensure all components & directives are included
+document.documentElement.lang = 'sv'
+
+// ✅ Correct Vuetify instance creation
 const vuetify = createVuetify({
-  components,
+  components: {
+    ...components,
+    VTimePicker, // ✅ manually added time picker
+  },
   directives,
   icons: {
     defaultSet: 'mdi',
@@ -26,7 +31,6 @@ console.log('🚀 Initializing Vue App...')
 console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
 console.log('All env variables:', import.meta.env)
 
-// ✅ Set Axios Authorization Token from Vuex
 const token = store.state.auth?.token
 if (token) {
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
@@ -35,10 +39,12 @@ if (token) {
 }
 
 await store.dispatch('fetchUser')
+
+// ✅ Use the Vuetify instance
 const app = createApp(App)
 app.use(router)
 app.use(store)
-app.use(vuetify) // ✅ Attach Vuetify to the app
+app.use(vuetify) // ← ✅ this is now correct
 app.mount('#app')
 
 console.log('✅ Vue App Mounted!')

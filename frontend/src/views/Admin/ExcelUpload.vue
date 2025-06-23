@@ -1,5 +1,6 @@
 <template>
   <div class="container">
+    <!-- Upload success alert -->
     <div
       v-if="uploadSuccess"
       class="alert alert-success alert-dismissible fade show"
@@ -9,7 +10,7 @@
       Students have been uploaded successfully!
     </div>
 
-    <!-- File input and button on the same line -->
+    <!-- File upload -->
     <div class="form-container">
       <form @submit.prevent="uploadFile">
         <div class="file-input-wrapper">
@@ -26,20 +27,18 @@
     <div class="controls">
       <h2>Elever</h2>
       <input type="text" v-model="searchQuery" placeholder="Sök" class="mb-3 search-input" />
-
-      <!-- Delete All Students Button -->
       <button class="btn btn-danger delete-all-btn" @click="deleteAllStudents">
         Delete All Students
       </button>
     </div>
 
+    <!-- Student table -->
     <div class="table-container">
       <table v-if="filteredStudents.length > 0" class="dynamic-table">
         <thead>
           <tr>
             <th>Namn</th>
             <th>Personnummer</th>
-            <!-- <th>Course Packages</th> -->
             <th>Utbildning</th>
             <th>Edit</th>
             <th>Startdatum</th>
@@ -51,6 +50,7 @@
             <th>Övrigt</th>
             <th>Lärare</th>
             <th class="dropout-column">Avhopp</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -61,150 +61,28 @@
           >
             <td>{{ student.name }}</td>
             <td>{{ student.personalNumber }}</td>
-
-            <!-- <td class="coursepackage-cell">
-                <div class="coursepackage-list">
-                  <ul>
-                    <li
-                      v-for="(coursePackage, index) in student.coursePackages"
-                      :key="'package-' + index"
-                    >
-                      {{
-                        coursePackage.coursePackageId?.coursePackageName || 'No course package name'
-                      }}
-                    </li>
-                  </ul>
-                </div>
-              </td> -->
-
             <td class="course-cell">
               <div class="course-list">
-                <ul v-if="student.education && student.education.length">
+                <ul v-if="student.education?.length">
                   <li v-for="(edu, index) in student.education" :key="'edu-' + index">
                     <strong>{{ edu.type }}:</strong>
                     {{ edu.name }}
-                    <span v-if="edu.grade">
+                    <span class="edu.grade">
                       <strong>({{ edu.grade }})</strong>
                     </span>
                   </li>
                 </ul>
-
-                <ul v-if="student.program && student.program.programId">
-                  <li>
-                    <strong>Program:</strong>
-                    {{ student.program.programId.programName }}
-                    <span v-if="student.program.grade">({{ student.program.grade }})</span>
-                  </li>
-                </ul>
-
-                <ul v-if="student.coursePackages && student.coursePackages.length">
-                  <li v-for="(pkg, index) in student.coursePackages" :key="'pkg-' + index">
-                    <strong>Package:</strong>
-                    {{ pkg.coursePackageId.coursePackageName }}
-                    <span v-if="pkg.grade">({{ pkg.grade }})</span>
-                  </li>
-                </ul>
-
-                <ul v-if="student.courses && student.courses.length">
-                  <li v-for="(course, index) in student.courses" :key="'course-' + index">
-                    {{ getCourseName(course) }}
-                    <span v-if="course.grade">({{ course.grade }})</span>
-                  </li>
-                </ul>
               </div>
             </td>
-
             <td>
               <button class="btn btn-secondary btn-xs" @click="openEditStudent(student)">
                 Edit
               </button>
             </td>
-            <dialog v-if="editingStudent" class="edit-dialog" open>
-              <form @submit.prevent="saveEditedStudent">
-                <div class="student-info-box">
-                  <p>
-                    <strong>{{ editingStudent.name }}</strong>
-                  </p>
-                  <p>{{ editingStudent.email }}</p>
-                  <p>{{ editingStudent.phone }}</p>
-                  <input v-model="editingStudent.municipality.type" placeholder="Municipality" />
-                </div>
-
-                <h4>Utbildning</h4>
-                <div
-                  v-for="(edu, index) in editingStudent.education"
-                  :key="index"
-                  class="education-box mb-2"
-                >
-                  <v-autocomplete
-                    v-model="educationSelections[index]"
-                    :items="educationOptions"
-                    item-title="name"
-                    return-object
-                    label="Add or edit education"
-                    class="mb-2"
-                    @update:modelValue="(val) => updateEducationEntry(val, index)"
-                  />
-
-                  <v-select
-                    v-if="edu && edu.type === 'Course'"
-                    v-model="edu.grade"
-                    :items="['A', 'B', 'C', 'D', 'E', 'F']"
-                    label="Select grade"
-                    class="mt-2"
-                  />
-
-                  <button class="btn btn-danger btn-xs" @click="removeEducation(index)">
-                    Ta bort
-                  </button>
-                </div>
-
-                <button
-                  class="btn btn-sm btn-secondary mt-2"
-                  @click.prevent="addEducation"
-                  type="button"
-                >
-                  + Lägg till utbildning
-                </button>
-
-                <!-- Conditional Education Selector -->
-                <div v-if="showEducationSelector" class="mt-2">
-                  <v-autocomplete
-                    v-model="selectedEducation"
-                    :items="educationOptions"
-                    item-title="name"
-                    return-object
-                    label="Välj utbildning"
-                  />
-                  <button
-                    class="btn btn-success btn-xs mt-1"
-                    @click.prevent="confirmAddEducation"
-                    type="button"
-                  >
-                    Lägg till
-                  </button>
-                </div>
-
-                <label for="additionalInfo" class="form-label">Kommentarer</label>
-
-                <textarea
-                  id="additionalInfo"
-                  v-model="editingStudent.additionalInfo"
-                  placeholder="Skriv kommentarer här..."
-                  rows="3"
-                  class="highlighted-textarea"
-                />
-
-                <!-- Add more fields as needed -->
-
-                <button type="submit" class="btn btn-success">Save</button>
-                <button @click="cancelEdit" class="btn btn-secondary" type="button">Cancel</button>
-              </form>
-            </dialog>
             <td>{{ formatDate(student.startDate) }}</td>
             <td>{{ formatDate(student.endDate) }}</td>
             <td>{{ formatDate(student.finalExamDate) }}</td>
-            <td>{{ student.municipality?.type || student.municipality }}</td>
+            <td>{{ student.municipality?.type || 'Ingen kommun' }}</td>
             <td>{{ student.phone }}</td>
             <td>{{ student.email }}</td>
             <td>{{ student.additionalInfo }}</td>
@@ -217,9 +95,7 @@
                 {{ student.dropout ? 'Avhopp' : 'Aktiv' }}
               </button>
             </td>
-
             <td>
-              <!-- Delete Single Student Button -->
               <button
                 class="btn btn-danger btn-xs delete-single-button"
                 @click="deleteStudent(student._id)"
@@ -231,6 +107,128 @@
         </tbody>
       </table>
     </div>
+
+    <!-- ✅ Fixed: Dialog moved OUTSIDE v-for loop -->
+    <v-dialog v-model="editingStudentDialog" max-width="600px" persistent>
+      <template #default>
+        <v-card class="pa-4" v-if="editingStudent">
+          <form @submit.prevent="saveEditedStudent">
+            <div class="student-info-box">
+              <p>
+                <strong>{{ editingStudent.name }}</strong>
+              </p>
+              <p>{{ editingStudent.email }}</p>
+              <p>{{ editingStudent.phone }}</p>
+              <input
+                v-if="editingStudent.municipality"
+                v-model="editingStudent.municipality.type"
+                placeholder="Municipality"
+              />
+            </div>
+
+            <h4>Utbildning</h4>
+            <div
+              v-for="(edu, index) in editingStudent.education"
+              :key="index"
+              class="education-box mb-2"
+            >
+              <v-autocomplete
+                v-model="educationSelections[index]"
+                :items="educationOptions"
+                item-title="name"
+                return-object
+                label="Add or edit education"
+                class="mb-2"
+                @update:modelValue="(val) => updateEducationEntry(val, index)"
+              />
+
+              <v-select
+                v-if="edu && edu.type === 'Course'"
+                v-model="edu.grade"
+                :items="['A', 'B', 'C', 'D', 'E', 'F']"
+                label="Select grade"
+                class="mt-2"
+              />
+
+              <button class="btn btn-danger btn-xs" @click="removeEducation(index)">Ta bort</button>
+            </div>
+            <button
+              class="btn btn-sm mt-2"
+              style="background-color: #007dc3ff; color: white"
+              @click.prevent="addEducation"
+              type="button"
+            >
+              + Lägg till utbildning
+            </button>
+            <br />
+
+            <div v-if="showEducationSelector" class="mt-2">
+              <v-autocomplete
+                v-model="selectedEducation"
+                :items="educationOptions"
+                item-title="name"
+                return-object
+                label="Välj utbildning"
+              />
+              <button
+                class="btn btn-success btn-xs mt-1"
+                @click.prevent="confirmAddEducation"
+                type="button"
+              >
+                Lägg till
+              </button>
+            </div>
+
+            <br />
+
+            <label for="finalExamDate" class="form-label">Slutprovdatum (24h)</label>
+            <v-menu
+              v-model="showFinalExamPicker"
+              :close-on-content-click="false"
+              offset-y
+              transition=""
+            >
+              <template #activator="{ props }">
+                <v-text-field
+                  v-bind="props"
+                  v-model="formattedFinalExamDate"
+                  label="Slutprovdatum"
+                  readonly
+                />
+              </template>
+              <v-card min-width="300px" class="pa-2">
+                <v-date-picker
+                  v-model="finalExamDate.date"
+                  :reactive="false"
+                  show-adjacent-months
+                  color="primary"
+                  class="mb-2"
+                />
+                <v-time-picker v-model="finalExamDate.time" format="24hr" />
+                <v-card-actions>
+                  <v-spacer />
+                  <v-btn color="green" @click="applyFinalExamDate">OK</v-btn>
+                  <br />
+                  <v-btn @click="showFinalExamPicker = false">Cancel</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-menu>
+
+            <label for="additionalInfo" class="form-label">Kommentarer</label>
+            <textarea
+              id="additionalInfo"
+              v-model="editingStudent.additionalInfo"
+              placeholder="Skriv kommentarer här..."
+              rows="3"
+              class="highlighted-textarea"
+            />
+
+            <button type="submit" class="btn btn-success">Save</button>
+            <button @click="cancelEdit" class="btn btn-secondary" type="button">Cancel</button>
+          </form>
+        </v-card>
+      </template>
+    </v-dialog>
   </div>
 </template>
 
@@ -247,10 +245,14 @@
         selectedFileName: '',
         uploadSuccess: false,
         editingStudent: null,
+        editingStudentDialog: false,
         educationOptions: [],
         educationSelections: [],
         selectedEducation: null,
         showEducationSelector: false,
+        showFinalExamPicker: false,
+        finalExamDate: { date: null, time: null },
+        formattedFinalExamDate: '',
       }
     },
 
@@ -259,7 +261,7 @@
         return this.students
           .map((student) => ({
             ...student,
-            courses: student.courses || [], // Ensure courses array is always iterable
+            courses: student.courses || [],
           }))
           .filter((student) => {
             const query = this.searchQuery.toLowerCase()
@@ -282,6 +284,7 @@
           console.error('❌ Error updating grade:', error)
         }
       },
+
       updateEducationSelection(val, index) {
         const current = this.editingStudent.education[index]
         this.editingStudent.education[index] = {
@@ -291,6 +294,7 @@
           refId: val.refId,
         }
       },
+
       updateEducationEntry(val, index) {
         const old = this.editingStudent.education[index]
         this.educationSelections.splice(index, 1, val)
@@ -302,25 +306,77 @@
           refId: val.refId,
         }
       },
+
+      applyFinalExamDate() {
+        const { date, time } = this.finalExamDate
+
+        if (!date || !time) {
+          alert('Vänligen välj både datum och tid för slutprov.')
+          return
+        }
+
+        // Convert raw `date` to ISO yyyy-mm-dd
+        const parsedDate = new Date(date)
+        if (isNaN(parsedDate.getTime())) {
+          alert('❌ Ogiltigt datum.')
+          return
+        }
+
+        const isoDatePart = parsedDate.toISOString().split('T')[0] // e.g., "2025-06-30"
+        const isoString = `${isoDatePart}T${time}` // e.g., "2025-06-30T12:00"
+
+        const finalDate = new Date(isoString)
+        if (isNaN(finalDate.getTime())) {
+          alert('❌ Ogiltigt kombinerat datum/tid.')
+          return
+        }
+
+        this.editingStudent.finalExamDate = finalDate.toISOString()
+        this.formattedFinalExamDate = `${isoDatePart} ${time}`
+        this.showFinalExamPicker = false
+
+        console.log('✅ Final ISO:', this.editingStudent.finalExamDate)
+      },
       openEditStudent(student) {
         const clone = JSON.parse(JSON.stringify(student))
-        // Ensure municipality is always an object
+
         if (typeof clone.municipality === 'string') {
           clone.municipality = { type: clone.municipality }
         } else if (!clone.municipality) {
           clone.municipality = { type: '' }
         }
+
         this.editingStudent = clone
+        console.log(this.editingStudent, 'Current cloned student')
+        this.editingStudentDialog = true // ✅ open the dialog
 
         this.educationSelections = clone.education.map((edu) => ({
           type: edu.type,
           name: edu.name,
           refId: edu.refId,
         }))
+
+        if (clone.finalExamDate) {
+          const dt = new Date(clone.finalExamDate)
+          const date = dt.toISOString().slice(0, 10)
+          const time = dt.toTimeString().slice(0, 5)
+          const dateTimeString = `${date} ${time}`
+          console.log('📅 Debug:', dateTimeString)
+
+          this.finalExamDate.date = date
+          this.finalExamDate.time = time
+          this.formattedFinalExamDate = dateTimeString
+          if (typeof clone.municipality === 'string') {
+            clone.municipality = { type: clone.municipality }
+          } else if (!clone.municipality) {
+            clone.municipality = { type: '' }
+          }
+        } else {
+          this.finalExamDate = { date: null, time: null }
+          this.formattedFinalExamDate = ''
+        }
       },
-      cancelEdit() {
-        this.editingStudent = null
-      },
+
       async saveEditedStudent() {
         console.log('📤 Sending payload:', this.editingStudent)
         try {
@@ -330,12 +386,16 @@
           )
           const index = this.students.findIndex((s) => s._id === data._id)
           if (index !== -1) this.students.splice(index, 1, data)
-          this.editingStudent = null
         } catch (err) {
           console.error('❌ Failed to update student:', err)
           alert('Could not save student.')
+        } finally {
+          // ✅ Close dialog and clear editing data
+          this.editingStudentDialog = false
+          this.editingStudent = null
         }
       },
+
       getCourseName(course) {
         if (!course || !course.courseId) return 'No course data'
         return course.courseId.courseName || 'Unnamed Course'
@@ -435,6 +495,7 @@
           alert('Failed to delete all students.')
         }
       },
+
       async fetchStudents() {
         console.log('📡 fetchStudents called')
 
@@ -444,15 +505,19 @@
           })
           console.log('✅ Students fetched:', response.data)
 
+          // Get student data and populate this.students
           this.students = response.data.map((student) => ({
             ...student,
-            courses: student.courses ? [...student.courses] : [],
+            municipality: student.municipality || { type: '' },
+            education: Array.isArray(student.education) ? student.education : [],
+            courses: Array.isArray(student.courses) ? student.courses : [],
           }))
         } catch (error) {
           console.error('❌ Failed to fetch students:', error.response?.data || error)
           alert('Failed to fetch students.')
         }
       },
+
       async fetchEducationOptions() {
         try {
           const [programsRes, packagesRes, coursesRes] = await Promise.all([
@@ -488,11 +553,13 @@
           console.error('❌ Failed to load education options:', err)
         }
       },
+
       formatDate(value) {
         if (!value) return ''
         if (typeof value === 'string' && value.includes('T')) return value.split('T')[0]
         return value
       },
+
       addEducation() {
         this.showEducationSelector = true
       },
@@ -508,16 +575,26 @@
           refId,
           addedAt: new Date(),
           addedBy: this.$store.state.user?.name || 'unknown',
-          grade: null,
+          grade,
+          municipality: this.editingStudent?.municipality || { type: '' },
           removedAt: null,
         })
 
         this.educationSelections.push({ type, name, refId })
 
-        // Reset UI
         this.selectedEducation = null
         this.showEducationSelector = false
       },
+
+      cancelEdit() {
+        this.editingStudentDialog = false
+        this.editingStudent = null
+        this.selectedEducation = null
+        this.educationSelections = []
+        this.finalExamDate = { date: null, time: null }
+        this.formattedFinalExamDate = ''
+      },
+
       removeEducation(index) {
         if (
           Array.isArray(this.editingStudent.education) &&
@@ -539,6 +616,12 @@
 </script>
 
 <style scoped>
+  /* Fix dialog clipping */
+  .v-overlay__content {
+    z-index: 3000 !important;
+    position: fixed !important;
+  }
+
   .dropout-row {
     background-color: rgba(255, 0, 0, 0.2);
   }
