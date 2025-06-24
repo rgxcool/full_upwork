@@ -1,7 +1,7 @@
 <template>
   <div class="container my-5">
     <h2 class="mb-4">Prövningselever</h2>
-  
+
     <!-- Sök & Filter -->
     <div class="row g-3 mb-4">
       <div class="col-md-4">
@@ -23,7 +23,7 @@
         </select>
       </div>
     </div>
-  
+
     <!-- Lista -->
     <table class="table table-bordered table-striped align-middle">
       <thead class="table-light">
@@ -59,8 +59,20 @@
                 <option value="deny">Neka</option>
               </select>
             </div>
-            <textarea v-model="decisions[exam._id].comment" rows="2" class="form-control form-control-sm mb-1" placeholder="Kommentar"></textarea>
-            <button class="btn btn-sm btn-primary" @click="submitDecision(exam._id)">Spara</button>
+            <textarea
+              v-model="decisions[exam._id].comment"
+              rows="2"
+              class="form-control form-control-sm mb-1"
+              placeholder="Kommentar"
+            ></textarea>
+            <div class="d-flex justify-content-between align-items-start">
+              <button class="btn btn-sm btn-primary" @click="submitDecision(exam._id)">
+                Spara
+              </button>
+              <button class="btn btn-sm btn-danger ms-2" @click="deleteExam(exam._id)">
+                Ta bort
+              </button>
+            </div>
           </td>
         </tr>
       </tbody>
@@ -69,86 +81,99 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import axios from 'axios'
+  import { ref, onMounted, computed } from 'vue'
+  import axios from 'axios'
 
-const exams = ref([])
-const search = ref('')
-const filterMonth = ref('')
-const filterStatus = ref('')
+  const exams = ref([])
+  const search = ref('')
+  const filterMonth = ref('')
+  const filterStatus = ref('')
 
-const decisions = ref({})
+  const decisions = ref({})
 
-// Generera månader dynamiskt
-const months = computed(() => {
-  const currentYear = new Date().getFullYear();
-  return Array.from({length: 12}, (_, i) => {
-    const month = new Date(currentYear, i, 1);
-    return month.toLocaleString('sv-SE', { month: 'long' });
-  });
-});
-
-const fetchExams = async () => {
-  try {
-    const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/exams`)
-    exams.value = res.data.map(exam => ({
-      ...exam,
-      requestedMonthFormatted: formatRequestedMonth(exam.requestedMonth)
-    }))
-
-    // Initiera beslut-fält
-    res.data.forEach(e => {
-      decisions.value[e._id] = {
-        decision: e.decision || '',
-        comment: e.comment || ''
-      }
+  // Generera månader dynamiskt
+  const months = computed(() => {
+    const currentYear = new Date().getFullYear()
+    return Array.from({ length: 12 }, (_, i) => {
+      const month = new Date(currentYear, i, 1)
+      return month.toLocaleString('sv-SE', { month: 'long' })
     })
-  } catch (err) {
-    console.error('Fel vid hämtning:', err)
-  }
-}
-
-// Formattera månad för visning
-const formatRequestedMonth = (monthYear) => {
-  if (!monthYear) return ''
-  const [year, month] = monthYear.split('-')
-  return new Date(year, month - 1).toLocaleString('sv-SE', { month: 'long', year: 'numeric' })
-}
-
-const formatDate = (date) => {
-  if (!date) return '';
-  return new Date(date).toLocaleDateString('sv-SE');
-}
-
-const submitDecision = async (id) => {
-  const { decision, comment } = decisions.value[id]
-  if (!decision) {
-  alert("Beslut krävs");
-  return;
-  }
-  
-  try {
-    await axios.put(`${import.meta.env.VITE_API_URL}/api/exams/${id}/decision`, {
-      decision,
-      comment
-    })
-    alert('Beslut sparat')
-    fetchExams()
-  } catch (err) {
-    console.error(err)
-    alert('Fel vid beslutssparning')
-  }
-}
-
-onMounted(fetchExams)
-
-const filteredExams = computed(() => {
-  return exams.value.filter(e => {
-    const matchSearch = e.name.toLowerCase().includes(search.value.toLowerCase())
-    const matchMonth = !filterMonth.value || 
-      e.requestedMonthFormatted.toLowerCase().includes(filterMonth.value.toLowerCase())
-    const matchStatus = !filterStatus.value || e.status === filterStatus.value
-    return matchSearch && matchMonth && matchStatus
   })
-})
+
+  const fetchExams = async () => {
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/exams`)
+      exams.value = res.data.map((exam) => ({
+        ...exam,
+        requestedMonthFormatted: formatRequestedMonth(exam.requestedMonth),
+      }))
+
+      // Initiera beslut-fält
+      res.data.forEach((e) => {
+        decisions.value[e._id] = {
+          decision: e.decision || '',
+          comment: e.comment || '',
+        }
+      })
+    } catch (err) {
+      console.error('Fel vid hämtning:', err)
+    }
+  }
+
+  // Formattera månad för visning
+  const formatRequestedMonth = (monthYear) => {
+    if (!monthYear) return ''
+    const [year, month] = monthYear.split('-')
+    return new Date(year, month - 1).toLocaleString('sv-SE', { month: 'long', year: 'numeric' })
+  }
+
+  const formatDate = (date) => {
+    if (!date) return ''
+    return new Date(date).toLocaleDateString('sv-SE')
+  }
+
+  const submitDecision = async (id) => {
+    const { decision, comment } = decisions.value[id]
+    if (!decision) {
+      alert('Beslut krävs')
+      return
+    }
+
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/exams/${id}/decision`, {
+        decision,
+        comment,
+      })
+      alert('Beslut sparat')
+      fetchExams()
+    } catch (err) {
+      console.error(err)
+      alert('Fel vid beslutssparning')
+    }
+  }
+
+  const deleteExam = async (id) => {
+    if (!confirm('Är du säker på att du vill ta bort denna prövning?')) return
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/exams/${id}`)
+      alert('Prövning borttagen')
+      fetchExams()
+    } catch (err) {
+      console.error('Fel vid borttagning:', err)
+      alert('Kunde inte ta bort prövningen.')
+    }
+  }
+
+  onMounted(fetchExams)
+
+  const filteredExams = computed(() => {
+    return exams.value.filter((e) => {
+      const matchSearch = e.name.toLowerCase().includes(search.value.toLowerCase())
+      const matchMonth =
+        !filterMonth.value ||
+        e.requestedMonthFormatted.toLowerCase().includes(filterMonth.value.toLowerCase())
+      const matchStatus = !filterStatus.value || e.status === filterStatus.value
+      return matchSearch && matchMonth && matchStatus
+    })
+  })
 </script>
