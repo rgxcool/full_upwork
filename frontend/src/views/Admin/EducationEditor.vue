@@ -171,6 +171,8 @@
             'Unknown Course'
           }".`
 
+          selectedIndividualCourse.value = null
+
           // ✅ Auto-hide the alert after 3 seconds
           setTimeout(() => {
             successMessage.value = ''

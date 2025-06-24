@@ -129,7 +129,7 @@ const routes = [
   },
 
   {
-    path: '/provningar',
+    path: '/examform',
     name: 'ExamForm',
     component: ExamForm,
     meta: { title: 'Exam Form', role: 'student' },

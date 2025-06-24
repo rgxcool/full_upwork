@@ -66,7 +66,7 @@
                 <ul v-if="student.education?.length">
                   <li v-for="(edu, index) in student.education" :key="'edu-' + index">
                     <strong>{{ edu.type }}:</strong>
-                    {{ edu.name }}
+                    {{ edu.refId?.courseName || '(unnamed)' }}
                     <span class="edu.grade">
                       <strong>({{ edu.grade }})</strong>
                     </span>
@@ -85,7 +85,26 @@
             <td>{{ student.municipality?.type || 'Ingen kommun' }}</td>
             <td>{{ student.phone }}</td>
             <td>{{ student.email }}</td>
-            <td>{{ student.additionalInfo }}</td>
+            <td>
+              <div class="comment-container" @click="toggleComment(student._id)">
+                <span
+                  class="comment-text"
+                  :class="{ truncated: !expandedComments.includes(student._id) }"
+                  v-html="
+                    formatComment(student.additionalInfo, expandedComments.includes(student._id))
+                  "
+                ></span>
+                <span
+                  v-if="
+                    !expandedComments.includes(student._id) && student.additionalInfo?.length > 100
+                  "
+                  class="dots"
+                >
+                  ⋯⋯⋯
+                </span>
+              </div>
+            </td>
+
             <td>{{ student.teacher }}</td>
             <td class="dropout-column">
               <button
@@ -109,7 +128,7 @@
     </div>
 
     <!-- ✅ Fixed: Dialog moved OUTSIDE v-for loop -->
-    <v-dialog v-model="editingStudentDialog" max-width="600px" persistent>
+    <v-dialog v-model="editingStudentDialog" max-width="600px">
       <template #default>
         <v-card class="pa-4" v-if="editingStudent">
           <form @submit.prevent="saveEditedStudent">
@@ -130,48 +149,65 @@
             <div
               v-for="(edu, index) in editingStudent.education"
               :key="index"
-              class="education-box mb-2"
+              class="education-box mb-1"
             >
               <v-autocomplete
                 v-model="educationSelections[index]"
-                :items="educationOptions"
+                :items="educationOptions.filter((item) => item.type === 'Course')"
                 item-title="name"
                 return-object
-                label="Add or edit education"
-                class="mb-2"
+                label="Välj utbildning"
+                class="mb-1"
                 @update:modelValue="(val) => updateEducationEntry(val, index)"
               />
-
               <v-select
-                v-if="edu && edu.type === 'Course'"
+                v-if="edu && edu.type === 'Course' && showGradeIndex === index"
                 v-model="edu.grade"
                 :items="['A', 'B', 'C', 'D', 'E', 'F']"
                 label="Select grade"
-                class="mt-2"
               />
+              <div class="education-controls">
+                <button
+                  type="button"
+                  class="btn btn-danger btn-xs left"
+                  @click="removeEducation(index)"
+                >
+                  Ta bort
+                </button>
 
-              <button class="btn btn-danger btn-xs" @click="removeEducation(index)">Ta bort</button>
+                <button
+                  type="button"
+                  style="background-color: #007dc3ff; color: white"
+                  class="btn btn-xs betyg-btn right"
+                  @click="showGradeIndex = showGradeIndex === index ? null : index"
+                >
+                  Betyg
+                </button>
+              </div>
             </div>
             <button
-              class="btn btn-sm mt-2"
-              style="background-color: #007dc3ff; color: white"
+              v-if="!showEducationSelector"
+              class="btn betyg-btn mt-1"
+              style="width: 100%; background-color: #007dc3ff; color: white"
               @click.prevent="addEducation"
               type="button"
             >
               + Lägg till utbildning
             </button>
+
             <br />
 
             <div v-if="showEducationSelector" class="mt-2">
               <v-autocomplete
                 v-model="selectedEducation"
-                :items="educationOptions"
+                :items="educationOptions.filter((item) => item.type === 'Course')"
                 item-title="name"
                 return-object
                 label="Välj utbildning"
               />
+
               <button
-                class="btn btn-success btn-xs mt-1"
+                class="btn btn-success btn-xs"
                 @click.prevent="confirmAddEducation"
                 type="button"
               >
@@ -202,7 +238,7 @@
                   :reactive="false"
                   show-adjacent-months
                   color="primary"
-                  class="mb-2"
+                  class="mb-1"
                 />
                 <v-time-picker v-model="finalExamDate.time" format="24hr" />
                 <v-card-actions>
@@ -220,11 +256,15 @@
               v-model="editingStudent.additionalInfo"
               placeholder="Skriv kommentarer här..."
               rows="3"
-              class="highlighted-textarea"
+              class="highlighted-textarea; mb-5"
+              style="width: 100%"
             />
-
-            <button type="submit" class="btn btn-success">Save</button>
-            <button @click="cancelEdit" class="btn btn-secondary" type="button">Cancel</button>
+            <div class="education-controls">
+              <button @click="cancelEdit" class="btn btn-secondary left" type="button">
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-success right">Save</button>
+            </div>
           </form>
         </v-card>
       </template>
@@ -253,6 +293,8 @@
         showFinalExamPicker: false,
         finalExamDate: { date: null, time: null },
         formattedFinalExamDate: '',
+        showGradeIndex: null,
+        expandedComments: [],
       }
     },
 
@@ -273,6 +315,24 @@
     },
 
     methods: {
+      formatComment(text) {
+        if (!text) return ''
+        return text.replace(/\n/g, '<br />')
+      },
+      toggleComment(studentId) {
+        if (this.expandedComments.includes(studentId)) {
+          this.expandedComments = this.expandedComments.filter((id) => id !== studentId)
+        } else {
+          this.expandedComments.push(studentId)
+        }
+      },
+      formatComment(text, expanded) {
+        if (!text) return ''
+        const safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        const display = expanded ? safeText : safeText.slice(0, 100)
+        return display.replace(/\n/g, '<br />')
+      },
+
       async saveGrade(studentId, courseId, grade) {
         try {
           const response = await axios.put(
@@ -302,7 +362,7 @@
         this.editingStudent.education[index] = {
           ...old,
           type: val.type,
-          name: val.name,
+          name: val.name, // name should already be a string
           refId: val.refId,
         }
       },
@@ -352,8 +412,8 @@
 
         this.educationSelections = clone.education.map((edu) => ({
           type: edu.type,
-          name: edu.name,
-          refId: edu.refId,
+          name: edu.refId?.courseName || edu.name || '(unnamed)',
+          refId: typeof edu.refId === 'object' ? edu.refId._id : edu.refId,
         }))
 
         if (clone.finalExamDate) {
@@ -378,21 +438,31 @@
       },
 
       async saveEditedStudent() {
-        console.log('📤 Sending payload:', this.editingStudent)
         try {
-          const { data } = await axios.put(
+          console.log('📤 Sending payload:', this.editingStudent)
+
+          // 1. Save the edited student
+          await axios.put(
             `${import.meta.env.VITE_API_URL}/api/student/${this.editingStudent._id}`,
             this.editingStudent
           )
-          const index = this.students.findIndex((s) => s._id === data._id)
-          if (index !== -1) this.students.splice(index, 1, data)
+
+          // 2. Re-fetch updated student (with populated refId)
+          const { data: updatedStudent } = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/student/${this.editingStudent._id}`,
+            { withCredentials: true }
+          )
+
+          // 3. Update frontend state
+          const index = this.students.findIndex((s) => s._id === updatedStudent._id)
+          if (index !== -1) this.students.splice(index, 1, updatedStudent)
         } catch (err) {
           console.error('❌ Failed to update student:', err)
           alert('Could not save student.')
         } finally {
-          // ✅ Close dialog and clear editing data
           this.editingStudentDialog = false
           this.editingStudent = null
+          this.showGradeIndex = null // 🔁 Reset
         }
       },
 
@@ -543,7 +613,7 @@
             })),
             ...coursesRes.data.map((c) => ({
               type: 'Course',
-              name: c.courseName,
+              name: `${c.courseName}${c.courseCode ? ` (${c.courseCode})` : ''}`,
               refId: c._id,
             })),
           ]
@@ -575,7 +645,7 @@
           refId,
           addedAt: new Date(),
           addedBy: this.$store.state.user?.name || 'unknown',
-          grade,
+          grade: '', // ✅ Explicit default
           municipality: this.editingStudent?.municipality || { type: '' },
           removedAt: null,
         })
@@ -593,6 +663,7 @@
         this.educationSelections = []
         this.finalExamDate = { date: null, time: null }
         this.formattedFinalExamDate = ''
+        this.showGradeIndex = null // 🔁 Reset grade toggles
       },
 
       removeEducation(index) {
@@ -620,6 +691,59 @@
   .v-overlay__content {
     z-index: 3000 !important;
     position: fixed !important;
+  }
+
+  .betyg-btn {
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  .betyg-btn:hover {
+    background-color: #0056b3 !important;
+    color: white !important;
+  }
+
+  .comment-display {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: inherit;
+  }
+
+  .comment-container {
+    max-width: 200px;
+    cursor: pointer;
+    position: relative;
+    color: #333;
+  }
+
+  .comment-text.truncated {
+    display: inline;
+  }
+
+  .dots {
+    color: green;
+    font-weight: bold;
+    margin-left: 4px;
+  }
+
+  .education-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+  }
+
+  .education-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .education-controls .left {
+    margin-right: auto;
+  }
+
+  .education-controls .right {
+    margin-left: auto;
   }
 
   .dropout-row {

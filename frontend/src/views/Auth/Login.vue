@@ -20,7 +20,9 @@
           required
           autocomplete="current-password"
         />
-        <button type="submit" class="login-btn">LOGGA IN</button>
+        <button class="btn btn-primary" style="width: 100%; color: white" type="submit">
+          LOGGA IN
+        </button>
       </form>
       <p v-if="message" class="error-message">{{ message }}</p>
     </div>
@@ -28,7 +30,7 @@
 </template>
 
 <script>
-  import { ref, computed } from 'vue'
+  import { ref } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
 
@@ -40,14 +42,14 @@
       const email = ref('')
       const password = ref('')
       const message = ref('')
-
-      const isVuexWorking = computed(() => typeof store.dispatch === 'function')
+      const showLoginDialog = ref(true) // ✅ must be here
 
       const handleLogin = async () => {
         const result = await store.dispatch('login', {
           email: email.value,
           password: password.value,
         })
+
         console.log('🎯 Login result:', result)
 
         if (result.success) {
@@ -56,12 +58,12 @@
           message.value = result.message
         }
       }
-
       return {
         email,
         password,
         message,
         handleLogin,
+        showLoginDialog,
       }
     },
   }
@@ -79,19 +81,30 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-top: 20px;
-    padding: 20px;
-    background-color: #ffffff;
+    justify-content: center; /* vertical center of login box */
+    height: 100vh;
+    padding-top: 80px; /* gives space for logo */
+    position: relative;
+  }
+
+  .logo-container {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .logo {
+    margin-top: 30px;
+    height: 122px; /* or whatever size you want */
   }
 
   /* Login Box */
   .login-box {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    text-align: center;
-    width: 350px;
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translate(-50%, -50%);
   }
 
   /* Input Fields */

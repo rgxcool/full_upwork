@@ -58,6 +58,31 @@ router.put(
   }
 );
 
+/**
+ * @route   GET /students
+ * @desc    ✅ Fetch all students with populated fields
+ *
+ * Retrieves all student documents from the database along with their:
+ * - Courses (`courseName`, `courseCode`, `coursePoints`, `courseExtent`)
+ * - Course Packages (`coursePackageName`, `coursePackageCode`)
+ * - Programs (`programName`)
+ * - Comment history (with `seenBy` field for permission tracking)
+ *
+ * @access  Protected
+ * Middleware:
+ * - `authenticateUser`: Ensures the requester is authenticated.
+ * - `hasCommentPermission` (utility): Used internally to control access
+ *   to comment history based on user roles.
+ *
+ * @returns {Object[]} List of students with populated course, package, program, and comment metadata.
+ *
+ * @errors
+ * - 500 Server Error: Logs the error and returns a generic message if the fetch fails.
+ *
+ * @usage
+ * Used by admins and teachers to view student data in a structured, comprehensive format.
+ */
+
 router.get("/students", authenticateUser, async (req, res) => {
   try {
     const students = await Student.find()
@@ -70,6 +95,12 @@ router.get("/students", authenticateUser, async (req, res) => {
         "coursePackageName coursePackageCode"
       )
       .populate("program.programId", "programName")
+      .populate({
+        path: "education.refId",
+        match: {}, // optional filter
+        select: "courseName courseCode",
+        model: "Course", // 👈 this is the key
+      })
       .select("+commentHistory.seenBy");
 
     res.status(200).json(students);
@@ -103,15 +134,23 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ error: "Course not found" });
 
-    const alreadyExists = student.courses.some(
-      (course) => course.courseId.toString() === courseId
+    const alreadyExists = student.education.some(
+      (entry) =>
+        entry.type === "Course" &&
+        entry.refId &&
+        entry.refId.toString() === courseId
     );
 
     if (alreadyExists) {
       return res.status(400).json({ error: "Course already exists" });
     }
 
-    student.courses.push({ courseId: course._id });
+    student.education.push({
+      type: "Course",
+      refId: course._id,
+      grade: "",
+    });
+
     await student.save();
 
     const updatedStudent = await Student.findById(studentId)
@@ -191,7 +230,12 @@ router.get("/student/:id", async (req, res) => {
         "courseName courseCode coursePoints courseExtent"
       )
       .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("program.programId", "programName");
+      .populate("program.programId", "programName")
+      .populate({
+        path: "education.refId",
+        select: "courseName courseCode",
+        model: "Course", // or "Program" if polymorphic in future
+      });
 
     if (!student) return res.status(404).json({ error: "Student not found" });
 
@@ -465,7 +509,7 @@ router.get("/all-course-packages", async (req, res) => {
   res.json(packages);
 });
 router.get("/all-courses", async (req, res) => {
-  const courses = await Course.find().select("courseName");
+  const courses = await Course.find().select("courseName courseCode");
   res.json(courses);
 });
 
