@@ -4,32 +4,23 @@
     <h1>Lägg till ny elev</h1>
     <br />
 
-    <!-- Form Selection -->
-    <div class="btn-group" role="group" aria-label="Form Selection">
-      <button class="btn btn-primary" @click="formType = 'Kurs'" :disabled="formType === 'Kurs'">
-        Kurs
-      </button>
-      <button
-        class="btn btn-primary"
-        @click="formType = 'Kurspaket'"
-        :disabled="formType === 'Kurspaket'"
-      >
-        Kurspaket
-      </button>
+    <!-- Bootstrap Flash Alert -->
+    <div
+      v-if="successMessage"
+      class="alert alert-success alert-dismissible fade show"
+      role="alert"
+      style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050"
+    >
+      {{ successMessage }}
+      <button type="button" class="btn-close" @click="successMessage = ''"></button>
     </div>
 
-    <br />
-    <br />
     <!-- Kurs Form -->
-    <form
-      v-if="formType === 'Kurs'"
-      @submit.prevent="submitKursForm"
-      @keydown.enter="handleEnterKey"
-    >
+    <form @submit.prevent="submitKursForm" @keydown.enter="handleEnterKey">
       <!-- Name -->
       <div class="mb-3">
         <label for="name" class="form-label">Namn:</label>
-        <input type="text" id="name" v-model="kursForm.namn" class="form-control" required />
+        <input type="text" id="name" v-model="studentForm.namn" class="form-control" required />
       </div>
 
       <!-- Personnummer -->
@@ -38,39 +29,66 @@
         <input
           type="text"
           id="personnummer"
-          v-model="kursForm.personnummer"
+          v-model="studentForm.personnummer"
           class="form-control"
           required
         />
       </div>
+      <br />
 
-      <!-- Kurspaket -->
+      <div>
+        <p>Välj utbildning:</p>
+        <!-- Program Selection -->
+        <div class="mt-3 ml-3 mr-3 mb-3">
+          <v-select
+            v-model="selectedProgram"
+            :items="programs"
+            item-title="programName"
+            item-value="_id"
+            placeholder="Select program"
+            @update:modelValue="fetchAllCourses"
+            class="styled-select"
+          />
+
+          <!-- Add Individual Course to Student -->
+          <v-select
+            v-model="selectedIndividualCourse"
+            :items="allCourses"
+            item-title="displayText"
+            item-value="_id"
+            placeholder="Select course"
+            class="styled-select"
+          />
+
+          <button
+            class="btn"
+            style="background-color: #007dc3ff; color: white"
+            type="button"
+            @click="handleAddCourse"
+          >
+            Lägg till
+          </button>
+        </div>
+      </div>
+
+      <br />
+      <!-- Show Added Courses -->
       <div class="mb-3">
-        <label for="kurspaket" class="form-label">Kurspaket:</label>
-        <input type="text" id="kurspaket" v-model="kursForm.kurspaket" class="form-control" />
+        <label class="form-label">Tillagda kurser:</label>
+        <ul v-if="addedCourses.length">
+          <li v-for="course in addedCourses" :key="course._id">
+            <strong>{{ course.displayText }}</strong>
+          </li>
+        </ul>
+        <p v-else class="font-weight-bold">Inga kurser tillagda ännu.</p>
       </div>
-
-      <!-- Start Date -->
-      <!-- <div class="mb-3">
-        <label for="startDatum" class="form-label">Start Date:</label>
-        <input
-          type="text"
-          id="startDatum"
-          v-model="kursForm.startDatum"
-          placeholder="yyyy-mm-dd"
-          class="form-control"
-          @input="calculateEndDate"
-          required
-        />
-      </div> -->
 
       <!-- Startdatum -->
       <div class="mb-3 position-relative">
         <label for="startDatum" class="form-label">Startdatum:</label>
-
         <div class="datepicker-container">
           <Datepicker
-            v-model="kursForm.startDatum"
+            v-model="studentForm.startDatum"
             :text-input="textInputOptions"
             :format="'yyyy-MM-dd'"
             class="form-control-datepicker"
@@ -82,9 +100,7 @@
             @keydown.enter.prevent="handleDatepickerEnter"
             @input="calculateEndDate"
           />
-
-          <!-- Clickable Calendar Icon -->
-          <span class="calendar-icon" @click="openDatepicker('startDatepickerRef')"> 📅 </span>
+          <span class="calendar-icon" @click="openDatepicker('startDatepickerRef')">🗓️</span>
         </div>
       </div>
 
@@ -95,7 +111,7 @@
           <input
             type="radio"
             value="5"
-            v-model="kursForm.duration"
+            v-model="studentForm.duration"
             class="form-check-input"
             @change="calculateEndDate"
             required
@@ -107,7 +123,7 @@
           <input
             type="radio"
             value="10"
-            v-model="kursForm.duration"
+            v-model="studentForm.duration"
             class="form-check-input"
             @change="calculateEndDate"
             required
@@ -119,7 +135,7 @@
           <input
             type="radio"
             value="20"
-            v-model="kursForm.duration"
+            v-model="studentForm.duration"
             class="form-check-input"
             @change="calculateEndDate"
             required
@@ -130,213 +146,260 @@
 
       <!-- End Date -->
       <div class="mb-3">
-        <p>Slutdatum: {{ kursForm.slutDatum.split('T')[0] }}</p>
+        <p>Slutdatum: {{ studentForm.slutDatum.split('T')[0] }}</p>
       </div>
 
       <!-- Municipality -->
       <div class="mb-3">
         <label for="kommun" class="form-label">Kommun:</label>
-        <input type="text" id="kommun" v-model="kursForm.kommun" class="form-control" required />
+        <v-select
+          v-model="studentForm.kommun"
+          :items="municipalities"
+          placeholder="Välj kommun"
+          class="styled-select"
+          required
+        />
       </div>
 
       <!-- Phone Number -->
       <div class="mb-3">
         <label for="telefon" class="form-label">Tel:</label>
-        <input type="text" id="telefon" v-model="kursForm.telefon" class="form-control" required />
+        <input
+          type="text"
+          id="telefon"
+          v-model="studentForm.telefon"
+          class="form-control"
+          required
+        />
       </div>
 
       <!-- Email -->
       <div class="mb-3">
         <label for="mail" class="form-label">Email:</label>
-        <input type="email" id="mail" v-model="kursForm.mail" class="form-control" required />
-      </div>
-
-      <!-- Final Test Date -->
-      <div class="mb-3 position-relative">
-        <label for="slutprovDatum" class="form-label">Slutprov:</label>
-
-        <div class="datepicker-container">
-          <Datepicker
-            v-model="formattedFinalTestDate"
-            :text-input="textInputOptions"
-            :format="'yyyy-MM-dd HH:mm'"
-            class="form-control-datepicker"
-            placeholder="yyyy-mm-dd HH:MM"
-            :teleport="false"
-            :position="'bottom-start'"
-            time-picker-inline
-            ref="finalTestDatepickerRef"
-            @keydown.enter.prevent="handleDatepickerEnter"
-          />
-
-          <!-- Clickable Calendar Icon -->
-          <span class="calendar-icon" @click="openDatepicker('finalTestDatepickerRef')"> 📅 </span>
-        </div>
+        <input type="email" id="mail" v-model="studentForm.mail" class="form-control" required />
       </div>
 
       <!-- Exam -->
       <div class="mb-3">
         <label for="prov" class="form-label">Prov:</label>
-        <input type="text" id="prov" v-model="kursForm.prov" class="form-control" />
+        <input type="text" id="prov" v-model="studentForm.prov" class="form-control" />
       </div>
 
       <!-- Other Details -->
       <div class="mb-3">
         <label for="ovrigt" class="form-label">Annat:</label>
-        <textarea id="ovrigt" v-model="kursForm.ovrigt" class="form-control"></textarea>
+        <textarea id="ovrigt" v-model="studentForm.ovrigt" class="form-control"></textarea>
       </div>
 
       <!-- Teacher -->
       <div class="mb-3">
         <label for="teacher" class="form-label">Lärare:</label>
-        <input type="text" id="teacher" v-model="kursForm.teacher" class="form-control" />
+        <input type="text" id="teacher" v-model="studentForm.teacher" class="form-control" />
       </div>
 
-      <!-- Dropout -->
-      <!-- <div class="mb-3">
-        <label>
-          <input type="checkbox" v-model="kursForm.dropOut" class="form-check-input" />
-          Drop Out
-        </label>
-      </div> -->
-
       <!-- Submit Button -->
-      <button type="submit" class="btn btn-success">Lägg till elev</button>
+      <button type="submit" class="btn btn-primary" style="width: 100%; background-color: green">
+        Lägg till elev
+      </button>
     </form>
   </div>
 </template>
 
-<script>
+<script setup>
   import axios from 'axios'
   import Datepicker from '@vuepic/vue-datepicker'
   import '@vuepic/vue-datepicker/dist/main.css'
+  import { ref, reactive, watch, onMounted } from 'vue'
 
-  export default {
-    components: {
-      Datepicker,
-    },
-    data() {
-      return {
-        formType: 'Kurs',
-        kursForm: {
-          namn: '',
-          personnummer: '',
-          kurspaket: '',
-          startDatum: '',
-          duration: null,
-          slutDatum: '',
-          kommun: '',
-          telefon: '',
-          mail: '',
-          prov: '',
-          ovrigt: '',
-          slutprovDatum: '',
-          dropout: false,
-          teacher: '',
-        },
-        formattedFinalTestDate: null,
-        textInputOptions: {
-          enterSubmit: true,
-          tabSubmit: true,
-          openMenu: true,
-        },
-      }
-    },
-    watch: {
-      formattedFinalTestDate(newVal) {
-        if (newVal && !isNaN(new Date(newVal).getTime())) {
-          this.kursForm.slutprovDatum = new Date(newVal).toISOString()
-        }
-      },
-    },
-    methods: {
-      handleDatepickerEnter(event) {
-        event.stopPropagation() // Prevent Enter from propagating to the form
-        event.preventDefault() // Prevent default form submission behavior
-      },
-      openDatepicker(refName) {
-        if (this.$refs[refName]) {
-          this.$refs[refName].openMenu() // Opens the correct Datepicker
-        }
-      },
-      handleEnterKey(event) {
-        const insideDatepicker = event.target.closest('.dp__input') !== null
-        if (!insideDatepicker) {
-          event.preventDefault()
-        }
-      },
-      calculateEndDate() {
-        if (!this.kursForm.startDatum || isNaN(new Date(this.kursForm.startDatum).getTime())) {
-          this.kursForm.slutDatum = ''
-          this.kursForm.slutprovDatum = ''
-          return // Stop execution if start date is empty or invalid
-        }
+  const programs = ref([])
+  const allCourses = ref([])
+  const selectedProgram = ref(null)
+  const selectedIndividualCourse = ref(null)
+  const educationCourses = ref([])
+  const addedCourses = ref([])
+  const isLoading = ref(false)
+  const successMessage = ref('')
+  const fetchState = ref(false)
 
-        if (!this.kursForm.duration) {
-          return // Stop execution if study duration is not selected
-        }
+  const startDatepickerRef = ref(null)
 
-        const startDate = new Date(this.kursForm.startDatum)
-        const durationDays = this.kursForm.duration * 7
-        const endDate = new Date(startDate)
-        endDate.setDate(startDate.getDate() + durationDays - 3)
-        this.kursForm.slutDatum = endDate.toISOString()
-      },
-      async submitKursForm() {
-        if (
-          !this.kursForm.namn ||
-          !this.kursForm.personnummer ||
-          !this.kursForm.startDatum ||
-          !this.kursForm.mail
-        ) {
-          alert('Please fill in all required fields!')
-          return
-        }
+  const studentForm = reactive({
+    namn: '',
+    personnummer: '',
+    startDatum: '',
+    duration: null,
+    slutDatum: '',
+    kommun: '',
+    telefon: '',
+    mail: '',
+    prov: '',
+    ovrigt: '',
+    slutprovDatum: '',
+    dropout: false,
+    teacher: '',
+  })
 
-        const payload = {
-          name: this.kursForm.namn,
-          personalNumber: this.kursForm.personnummer,
-          email: this.kursForm.mail,
-          startDate: this.kursForm.startDatum,
-          endDate: this.kursForm.slutDatum,
-          finalExamDate: this.kursForm.slutprovDatum,
-          municipality: this.kursForm.kommun,
-          phone: this.kursForm.telefon,
-          exam: this.kursForm.prov,
-          additionalInfo: this.kursForm.ovrigt,
-          teacher: this.kursForm.teacher,
-          dropout: this.kursForm.dropout || false,
-        }
+  const textInputOptions = { enterSubmit: true, tabSubmit: true, openMenu: true }
 
-        try {
-          await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, payload)
-          alert('Eleven blev tillagd!')
+  const municipalities = [
+    'Botkyrka',
+    'Danderyd',
+    'Huddinge',
+    'Järfälla',
+    'KCNO',
+    'Lidingö',
+    'Norrtälje',
+    'Nykvarn',
+    'Privat kunder',
+    'Salem',
+    'Sigtuna',
+    'Sollentuna',
+    'Solna',
+    'Sundbyberg',
+    'Södertälje',
+    'Täby',
+    'Upplands Bro',
+    'Upplands Väsby',
+    'Vallentuna',
+    'Vaxholm',
+    'Växjö',
+    'Österåker',
+  ]
 
-          // Reset the form
-          this.kursForm = {
-            namn: '',
-            personnummer: '',
-            kurspaket: '',
-            startDatum: '',
-            duration: null,
-            slutDatum: '',
-            kommun: '',
-            telefon: '',
-            mail: '',
-            prov: '',
-            ovrigt: '',
-            slutprovDatum: '',
-            dropout: false,
-            teacher: '',
-          }
-          this.formattedFinalTestDate = null
-        } catch (error) {
-          console.error('❌ Backend error:', error.response?.data || error)
-          alert('Kunde inte lägga till Elev. Något gick fel. Försök igen.')
-        }
-      },
-    },
+  const fetchInitialData = async () => {
+    if (fetchState.value) return
+    fetchState.value = true
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/all-programs`, {
+        withCredentials: true,
+      })
+      programs.value = res.data
+    } catch (e) {
+      console.error('Error fetching programs:', e)
+    } finally {
+      isLoading.value = false
+    }
   }
+
+  const fetchAllCourses = async () => {
+    if (!selectedProgram.value) return
+    try {
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/program/${selectedProgram.value}/courses`
+      )
+      allCourses.value = res.data.map((c) => ({
+        ...c,
+        displayText: `${c.courseName} (${c.courseCode || 'No Code'})`,
+      }))
+    } catch (e) {
+      console.error('Error fetching courses:', e)
+    }
+  }
+
+  function handleAddCourse() {
+    if (!selectedIndividualCourse.value) return alert('Välj en kurs först.')
+    if (educationCourses.value.includes(selectedIndividualCourse.value))
+      return alert('Kursen är redan tillagd.')
+
+    const course = allCourses.value.find((c) => c._id === selectedIndividualCourse.value)
+    if (!course) return alert('Kursinformation hittades inte.')
+
+    educationCourses.value.push(course._id)
+    addedCourses.value.push(course)
+
+    successMessage.value = `✅ Kursen "${course.displayText}" har lagts till.`
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 3000)
+
+    selectedIndividualCourse.value = null
+  }
+
+  async function submitKursForm() {
+    if (
+      !studentForm.namn ||
+      !studentForm.personnummer ||
+      !studentForm.startDatum ||
+      !studentForm.mail
+    ) {
+      return alert('Please fill in all required fields!')
+    }
+    const payload = {
+      name: studentForm.namn,
+      personalNumber: studentForm.personnummer,
+      email: studentForm.mail,
+      startDate: studentForm.startDatum,
+      endDate: studentForm.slutDatum,
+      finalExamDate: studentForm.slutprovDatum,
+      municipality: { type: studentForm.kommun },
+      phone: studentForm.telefon,
+      exam: studentForm.prov,
+      additionalInfo: studentForm.ovrigt,
+      teacher: studentForm.teacher,
+      dropout: studentForm.dropout || false,
+      program: selectedProgram.value,
+      education: addedCourses.value.map((course) => ({
+        type: 'Course',
+        refId: course._id,
+        name: course.courseName,
+      })),
+    }
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, payload)
+      alert('Eleven blev tillagd!')
+      Object.assign(studentForm, {
+        namn: '',
+        personnummer: '',
+        startDatum: '',
+        duration: null,
+        slutDatum: '',
+        kommun: '',
+        telefon: '',
+        mail: '',
+        prov: '',
+        ovrigt: '',
+        slutprovDatum: '',
+        dropout: false,
+        teacher: '',
+      })
+
+      educationCourses.value = []
+      addedCourses.value = []
+    } catch (error) {
+      console.error('❌ Backend error:', error.response?.data || error)
+      alert('Kunde inte lägga till Elev. Något gick fel. Försök igen.')
+    }
+  }
+
+  function calculateEndDate() {
+    if (!studentForm.startDatum || isNaN(new Date(studentForm.startDatum).getTime())) {
+      studentForm.slutDatum = ''
+      return
+    }
+    if (!studentForm.duration) return
+    const startDate = new Date(studentForm.startDatum)
+    const durationDays = studentForm.duration * 7
+    const endDate = new Date(startDate)
+    endDate.setDate(startDate.getDate() + durationDays - 3)
+    studentForm.slutDatum = endDate.toISOString()
+  }
+
+  function openDatepicker(refName) {
+    if (refName === 'startDatepickerRef' && startDatepickerRef.value) {
+      startDatepickerRef.value.openMenu()
+    }
+  }
+
+  function handleEnterKey(e) {
+    if (!e.target.closest('.dp__input')) e.preventDefault()
+  }
+
+  function handleDatepickerEnter(e) {
+    e.stopPropagation()
+    e.preventDefault()
+  }
+
+  onMounted(fetchInitialData)
 </script>
 
 <style scoped>
@@ -344,13 +407,11 @@
     max-width: 400px;
     margin: 0 auto;
   }
-
   .form-control,
   .form-control-datepicker {
     max-width: 400px;
     width: 100%;
   }
-
   .datepicker-container {
     position: relative;
     display: flex;
@@ -358,7 +419,6 @@
     width: 100%;
     max-width: 400px;
   }
-
   .calendar-icon {
     position: absolute;
     right: 10px;
