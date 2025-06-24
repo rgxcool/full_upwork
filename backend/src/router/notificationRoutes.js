@@ -57,6 +57,19 @@ router.put("/notifications/:id/resolve", async (req, res) => {
 });
 */
 
+router.put('/notifications/resolve/:studentId', async (req, res) => {
+  try {
+    const studentId = req.params.studentId;
+    await Notification.updateMany(
+      { studentId: studentId, type: 'action_plan_required', resolved: false },
+      { $set: { resolved: true } }
+    );
+    res.status(200).json({ message: 'Notification resolved' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error resolving notification', error });
+  }
+});
+
 
 router.put("/notifications/:id/resolve", async (req, res) => {
   try {

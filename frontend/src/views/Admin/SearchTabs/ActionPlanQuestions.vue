@@ -134,7 +134,7 @@
             .from(formRef.value)
             .set(options)
             .outputPdf('blob')
-            .then((pdfBlob) => {
+            .then( async (pdfBlob) => {
                 const formData = new FormData();
                 formData.append('file', pdfBlob, 'action_plan.pdf');
                 formData.append('studentId', props.userData._id);
@@ -142,8 +142,13 @@
                 return axios.post('/api/documents/upload', formData);
             })
             .then(() => {
-                alert('Handlingsplan sparad och PDF genererad!');
+                axios.put(`/api/notifications/resolve/${props.userData._id}`)
             })
+            .then(() => {
+                alert('Handlingsplan sparad och PDF skapad!');
+
+            })
+            
             .catch((error) => {
                 console.error('Kunde inte spara handlingsplan:', error);
                 alert('Kunde inte spara handlingsplan.');

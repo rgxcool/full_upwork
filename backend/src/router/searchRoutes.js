@@ -39,85 +39,51 @@ router.get("/courses", async (req, res) => {
 });
 
 router.get("/search", async (req, res) => {
-    const { q, courseId, date } = req.query;
-  
-    try {
-      let students = [];
-      let users = [];
-      let results = [];
-  
-      // 1. Kursfilter
-      if (courseId) {
-        students = await Student.find({ "courses.courseId": courseId }).lean();
-      }
-  
-      // 2. Textfilter
-      if (q) {
-        users = await User.find({
-          $or: [
-            { username: { $regex: q, $options: "i" } },
-            { email: { $regex: q, $options: "i" } },
-          ],
-        }).select("_id username email role");
-  
-        const matchingStudents = await Student.find({
-          name: { $regex: q, $options: "i" },
-        }).select("_id name email");
-  
-        students = students.length ? students : matchingStudents;
-      }
-  
-      // 3. Datumfilter (start/slutdatum exakt match)
-      if (date) {
-        const parsed = new Date(date);
-        const dateMatches = await Student.find({
-          $or: [
-            { startDate: parsed },
-            { endDate: parsed }
-          ]
-        }).select("_id name email startDate endDate");
-  
-        students = students.length ? students.filter(s =>
-          dateMatches.some(m => m._id.toString() === s._id.toString())
-        ) : dateMatches;
-      }
-  
-      // 4. Om inga filter → returnera tom lista
-      if (!q && !courseId && !date) return res.json([]);
-  
-      // 5. Hämta lärare
-      const allTeachers = await User.find({ role: "teacher" }).select("username email");
-  
-      // 6. Bygg resultatlista
-      results = [
-        ...students.map(student => {
-          const teacher = allTeachers.find(t => t.username === student.teacher);
-          return {
-            id: student._id,
-            name: student.name,
-            type: "Elev",
-            extra: teacher ? `Lärare: ${teacher.username}` : "",
-          };
-        }),
-        ...users.map(user => {
-          const type = user.role === "teacher" ? "Lärare" : "Personal";
-          return {
-            id: user._id,
-            name: user.username,
-            type,
-            extra: user.email,
-          };
-        }),
-      ];
-  
-      return res.json(results);
-    } catch (error) {
-      console.error("❌ Search error:", error);
-      res.status(500).json({ message: "Serverfel vid sökning." });
-    }
-  });
-  
+  const { q, date } = req.query;
 
+  try {
+    let results = [];
+
+    if (date) {
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: "Invalid date format." });
+      }
+      const studentsByDate = await Student.find({
+        $or: [
+          { startDate: parsedDate },
+          { endDate: parsedDate },
+        ],
+      }).select("_id name email");
+      results.push(...studentsByDate.map(student => ({
+        id: student._id,
+        name: student.name,
+        type: 'Elev',
+        extra: `Email: ${student.email}`,
+      })));
+    }
+
+    if (q && q.length >= 3) {
+      const studentMatches = await Student.find({
+        name: { $regex: q, $options: "i" } // Added case-insensitivity
+      }).select("_id name email");
+
+      results.push(
+        ...studentMatches.map(student => ({
+          id: student._id,
+          name: student.name,
+          type: 'Elev',
+          extra: `Email: ${student.email}`,
+        }))
+      );
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error("❌ Search error:", error);
+    res.status(500).json({ message: "Server error during search." });
+  }
+});
 
 router.get("/details/:type/:id", async (req, res) => {
     const { type, id } = req.params;

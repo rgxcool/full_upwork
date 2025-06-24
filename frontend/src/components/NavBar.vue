@@ -6,45 +6,30 @@
       <div class="search-container" @click.stop>
         <div class="search-bar">
           <input
+            v-if="selectedSearchType !== 'Datum'"
             type="text"
             v-model="searchQuery"
             @input="handleSearch"
-            @focus="showFilterOptions"
-            placeholder="Sök efter lärare, elev, kurs eller datum..."
+            @focus="handleInputFocus"
+            :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
           />
-          <button @click="toggleSearch">
-            <svg v-if="!showResults" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-              <path
-                fill="currentColor"
-                d="m19.6 21l-6.3-6.3q-.75.6-1.725.95T9.5 16q-2.725 0-4.612-1.888T3 9.5t1.888-4.612T9.5 3t4.613 1.888T16 9.5q0 1.1-.35 2.075T14.7 13.3l6.3 6.3zM9.5 14q1.875 0 3.188-1.312T14 9.5t-1.312-3.187T9.5 5T6.313 6.313T5 9.5t1.313 3.188T9.5 14"
-              />
-            </svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-              <path
-                fill="currentColor"
-                d="M18 6L6 18M6 6l12 12"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-        </div>
-        <!-- Sökresultat Dropdown -->
-        <div v-if="showResults" class="search-results">
-          <!-- Filterknappar -->
-          <div class="filter-buttons">
-            <button :class="{ active: filter === 'all' }" @click="setFilter('all')">Alla</button>
-            <button :class="{ active: filter === 'Elev' }" @click="setFilter('Elev')">
-              Elever
-            </button>
-            <button :class="{ active: filter === 'Lärare' }" @click="setFilter('Lärare')">
-              Lärare
-            </button>
+          <DatePicker
+            v-if="selectedSearchType === 'Datum'"
+            v-model="selectedDate"
+            :format="'yyyy-MM-dd'"
+            @change="handleSearch"
+            :placeholder="'Välj datum'"
+          />
+          <div class="search-type-toggle">
+            <button @click="toggleSearchTypeDropdown">{{ selectedSearchType }}</button>
+            <ul v-if="showSearchTypeDropdown" class="search-type-options">
+              <li @click="selectSearchType('Användare')">Användare</li>
+              <li @click="selectSearchType('Kurs')">Kurs</li>
+              <li @click="selectSearchType('Datum')">Datum</li>
+            </ul>
           </div>
-
-          <!-- Resultatlista -->
+        </div>
+        <div v-if="showResults" class="search-results">
           <ul class="result-list">
             <li
               v-for="result in filteredResults"
@@ -54,6 +39,7 @@
             >
               <div class="result-content">
                 <div class="result-title">{{ result.name }}</div>
+                <div class="result-subtitle">{{ result.extra }}</div>
               </div>
             </li>
           </ul>
@@ -200,6 +186,21 @@
 
       const isMobileMenuOpen = ref(false)
 
+      const selectedSearchType = ref('Användare');
+      const showSearchTypeDropdown = ref(false);
+
+      const toggleSearchTypeDropdown = () => {
+        showSearchTypeDropdown.value = !showSearchTypeDropdown.value;
+      };
+
+      const selectSearchType = (type) => {
+        selectedSearchType.value = type;
+        showSearchTypeDropdown.value = false;
+        handleSearch(); // Trigger search with the new type
+      };
+
+
+
       const toggleMobileMenu = () => {
         isMobileMenuOpen.value = !isMobileMenuOpen.value
       }
@@ -250,13 +251,6 @@
         }
       }
 
-      const checkForNewNotifications = async () => {
-        try {
-          await axios.get('/api/course-end-notifications')
-        } catch (err) {
-          console.error('❌ Kunde inte kontrollera kursslutsnotiser:', err)
-        }
-      }
 
       const toggleNotificationPanel = () => {
         showNotisPanel.value = !showNotisPanel.value
@@ -291,24 +285,30 @@
         router.push('/')
       }
 
-      const handleSearch = async () => {
-        const params = new URLSearchParams()
 
-        if (searchQuery.value) params.append('q', searchQuery.value)
-        if (selectedCourse.value) params.append('courseId', selectedCourse.value)
-        if (selectedDate.value) {
-          const formatted = new Date(selectedDate.value).toISOString().split('T')[0]
-          params.append('date', formatted) // 💡 separat "date"-parameter
-        }
-
-        try {
-          const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`)
-          searchResults.value = response.data
-          showResults.value = true
-        } catch (error) {
-          console.error('❌ Fel vid kombinerad sökning:', error)
-        }
+  const handleSearch = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (selectedSearchType.value === 'Datum') {
+        if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) return;
+        params.append('date', selectedDate.value);
+      } else {
+        if (!searchQuery.value || searchQuery.value.length < 3) return;
+        params.append('q', searchQuery.value);
       }
+
+      const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`);
+
+      console.log("Search Response:", response.data); // Debugging output
+      searchResults.value = response.data;
+      showResults.value = searchResults.value.length > 0;
+    } catch (error) {
+      console.error('Error during search:', error);
+    }
+  };
+
+
+
 
       const fetchCourses = async () => {
         try {
@@ -351,7 +351,6 @@
       }
       onMounted(async () => {
         if (isLoggedIn.value && canSeeNotifications.value) {
-          await checkForNewNotifications() // 👈 se till att detta körs först!
           await fetchNotifications()
         }
       })
@@ -393,6 +392,10 @@
         canResetNotifications,
         showProfileMenu,
         toggleProfileMenu,
+        selectedSearchType,
+        showSearchTypeDropdown,
+        toggleSearchTypeDropdown,
+        selectSearchType,
       }
     },
   }
