@@ -71,7 +71,8 @@ const routes = [
     path: '/detaljer/:type/:id',
     component: SearchResultDetails,
     props: true,
-    meta: { title: 'Search Result Details', role: 'admin' },
+    meta: { title: 'Search Result Details', role: 'teacher' }, // This was admin, and probably should be but making it teacher to broaden access.
+    // That means the teacher can access handlingsplan etc via the search menu, we have to address this.
   },
   {
     path: '/students',
@@ -151,7 +152,7 @@ const routes = [
     path: '/grades',
     name: 'Grades',
     component: GradeStudent,
-    meta: { title: 'Grade Student', role: 'admin' },
+    meta: { title: 'Grade Student', role: 'teacher' },
   },
   {
     path: '/earnings',
