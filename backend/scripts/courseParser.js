@@ -14,6 +14,7 @@ export async function parseCourses(filePath) {
     }
 
     let currentProgram = null;
+    let courseOrder = 1;
 
     for (const row of worksheet._rows) {
         if (!row || row.number === 1) continue; // ✅ Skip header row
@@ -23,7 +24,7 @@ export async function parseCourses(filePath) {
         const courseName =
             row.getCell(2).value?.toString().trim().toUpperCase() || null; // Column B
         const courseCode =
-            row.getCell(3).value?.toString().trim().toUpperCase() || ""; // Column C (Ensure codes are uppercase)
+            row.getCell(3).value?.toString().trim().toUpperCase() || ""; // Column C
         const coursePoints = row.getCell(4).value?.toString().trim() || ""; // Column D
         const courseExtent = row.getCell(5).value?.toString().trim() || ""; // Column E
 
@@ -34,6 +35,7 @@ export async function parseCourses(filePath) {
                 { programName },
                 { new: true, upsert: true }
             );
+            courseOrder = 1; // Reset order when new program starts
         }
 
         if (!currentProgram) {
@@ -51,15 +53,21 @@ export async function parseCourses(filePath) {
             { new: true, upsert: true }
         );
 
+        // Add courseId and order as subdocument
         await Program.findByIdAndUpdate(currentProgram._id, {
             $addToSet: {
-                programCourses: existingCourse._id
+                programCourses: {
+                    courseId: existingCourse._id,
+                    order: courseOrder
+                }
             }
         });
 
         console.log(
             `✅ Added course to program '${currentProgram.programName}': ${courseName} (Points: ${coursePoints})`
         );
+
+        courseOrder++;
     }
 
     console.log("🎉 Courses processed successfully.");
