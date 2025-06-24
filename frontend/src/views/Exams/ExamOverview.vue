@@ -1,7 +1,7 @@
 <template>
     <div>
 
-      <div v-if="userRole === 'student'">
+      <div v-if="userRole === 'student' || userRole === 'systemadmin' || userRole === 'admin'">
 
         <StudentExamForm />
       </div>
@@ -11,7 +11,7 @@
         <ExamAdminTable />
       </div>
       <!-- Om ingen giltig roll -->
-      <div >
+      <div v-else>
         <p>Du har inte behörighet att visa denna sida.</p>
       </div>
     </div>
