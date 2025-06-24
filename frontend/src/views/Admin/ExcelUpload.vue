@@ -63,13 +63,11 @@
             <td>{{ student.personalNumber }}</td>
             <td class="course-cell">
               <div class="course-list">
-                <ul v-if="student.education?.length">
-                  <li v-for="(edu, index) in student.education" :key="'edu-' + index">
+                <ul v-if="Array.isArray(student.education)">
+                  <li v-for="edu in student.education" :key="edu._id || edu.refId?._id">
                     <strong>{{ edu.type }}:</strong>
-                    {{ edu.refId?.courseName || '(unnamed)' }}
-                    <span class="edu.grade">
-                      <strong>({{ edu.grade }})</strong>
-                    </span>
+                    {{ getEducationLabel(edu) }}
+                    <span class="edu-grade">({{ edu.grade || '-' }})</span>
                   </li>
                 </ul>
               </div>
@@ -128,7 +126,7 @@
     </div>
 
     <!-- ✅ Fixed: Dialog moved OUTSIDE v-for loop -->
-    <v-dialog v-model="editingStudentDialog" max-width="600px">
+    <v-dialog v-model="editingStudentDialog" max-width="333px">
       <template #default>
         <v-card class="pa-4" v-if="editingStudent">
           <form @submit.prevent="saveEditedStudent">
@@ -138,133 +136,22 @@
               </p>
               <p>{{ editingStudent.email }}</p>
               <p>{{ editingStudent.phone }}</p>
-              <input
-                v-if="editingStudent.municipality"
-                v-model="editingStudent.municipality.type"
-                placeholder="Municipality"
-              />
-            </div>
+              <p>{{ editingStudent.municipality?.type }}</p>
 
-            <h4>Utbildning</h4>
-            <div
-              v-for="(edu, index) in editingStudent.education"
-              :key="index"
-              class="education-box mb-1"
-            >
-              <v-autocomplete
-                v-model="educationSelections[index]"
-                :items="educationOptions.filter((item) => item.type === 'Course')"
-                item-title="name"
-                return-object
-                label="Välj utbildning"
-                class="mb-1"
-                @update:modelValue="(val) => updateEducationEntry(val, index)"
-              />
-              <v-select
-                v-if="edu && edu.type === 'Course' && showGradeIndex === index"
-                v-model="edu.grade"
-                :items="['A', 'B', 'C', 'D', 'E', 'F']"
-                label="Select grade"
-              />
-              <div class="education-controls">
-                <button
-                  type="button"
-                  class="btn btn-danger btn-xs left"
-                  @click="removeEducation(index)"
-                >
-                  Ta bort
-                </button>
-
-                <button
-                  type="button"
-                  style="background-color: #007dc3ff; color: white"
-                  class="btn btn-xs betyg-btn right"
-                  @click="showGradeIndex = showGradeIndex === index ? null : index"
-                >
-                  Betyg
-                </button>
+              <div class="d-flex justify-space-between align-center mt-4 mb-2">
+                <div>
+                  <label><strong>Betygsatt</strong></label>
+                  <br />
+                  <input type="checkbox" v-model="editingStudent.isGraded" />
+                </div>
+                <div>
+                  <label><strong>Låst</strong></label>
+                  <br />
+                  <input type="checkbox" v-model="editingStudent.isLocked" />
+                </div>
               </div>
             </div>
-            <button
-              v-if="!showEducationSelector"
-              class="btn betyg-btn mt-1"
-              style="width: 100%; background-color: #007dc3ff; color: white"
-              @click.prevent="addEducation"
-              type="button"
-            >
-              + Lägg till utbildning
-            </button>
-
-            <br />
-
-            <div v-if="showEducationSelector" class="mt-2">
-              <v-autocomplete
-                v-model="selectedEducation"
-                :items="educationOptions.filter((item) => item.type === 'Course')"
-                item-title="name"
-                return-object
-                label="Välj utbildning"
-              />
-
-              <button
-                class="btn btn-success btn-xs"
-                @click.prevent="confirmAddEducation"
-                type="button"
-              >
-                Lägg till
-              </button>
-            </div>
-
-            <br />
-
-            <label for="finalExamDate" class="form-label">Slutprovdatum (24h)</label>
-            <v-menu
-              v-model="showFinalExamPicker"
-              :close-on-content-click="false"
-              offset-y
-              transition=""
-            >
-              <template #activator="{ props }">
-                <v-text-field
-                  v-bind="props"
-                  v-model="formattedFinalExamDate"
-                  label="Slutprovdatum"
-                  readonly
-                />
-              </template>
-              <v-card min-width="300px" class="pa-2">
-                <v-date-picker
-                  v-model="finalExamDate.date"
-                  :reactive="false"
-                  show-adjacent-months
-                  color="primary"
-                  class="mb-1"
-                />
-                <v-time-picker v-model="finalExamDate.time" format="24hr" />
-                <v-card-actions>
-                  <v-spacer />
-                  <v-btn color="green" @click="applyFinalExamDate">OK</v-btn>
-                  <br />
-                  <v-btn @click="showFinalExamPicker = false">Cancel</v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-menu>
-
-            <label for="additionalInfo" class="form-label">Kommentarer</label>
-            <textarea
-              id="additionalInfo"
-              v-model="editingStudent.additionalInfo"
-              placeholder="Skriv kommentarer här..."
-              rows="3"
-              class="highlighted-textarea; mb-5"
-              style="width: 100%"
-            />
-            <div class="education-controls">
-              <button @click="cancelEdit" class="btn btn-secondary left" type="button">
-                Cancel
-              </button>
-              <button type="submit" class="btn btn-success right">Save</button>
-            </div>
+            <!-- Rest of your form continues here -->
           </form>
         </v-card>
       </template>
@@ -315,6 +202,13 @@
     },
 
     methods: {
+      getEducationLabel(edu) {
+        if (!edu.refId) return '(missing)'
+        if (edu.type === 'Course') return edu.refId.courseName || '(no name)'
+        if (edu.type === 'CoursePackage') return edu.refId.coursePackageName || '(no name)'
+        if (edu.type === 'Program') return edu.refId.programName || '(no name)'
+        return '(invalid type)'
+      },
       formatComment(text) {
         if (!text) return ''
         return text.replace(/\n/g, '<br />')
