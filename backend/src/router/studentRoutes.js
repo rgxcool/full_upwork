@@ -145,28 +145,31 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ error: "Course not found" });
 
+    // Check if the course already exists in the student's education
     const alreadyExists = student.education.some(
-      (entry) =>
-        entry.type === "Course" &&
-        entry.refId &&
-        entry.refId.toString() === courseId
+      (entry) => entry.type === "Course" && entry.refId.toString() === courseId
     );
 
     if (alreadyExists) {
       return res.status(400).json({ error: "Course already exists" });
     }
 
+    // Add course to the student's education
     student.education.push({
       type: "Course",
       refId: course._id,
-      grade: "",
+      grade: "", // Default grade if needed
     });
 
+    // Save the updated student document
     await student.save();
 
-    const updatedStudent = await Student.findById(studentId)
-      .populate("courses.courseId", "courseName courseCode")
-      .populate("coursePackages.coursePackageId", "coursePackageName");
+    // Return the updated student with populated education references
+    const updatedStudent = await Student.findById(studentId).populate({
+      path: "education.refId",
+      model: "Course", // populate the course details
+      select: "courseName courseCode coursePoints courseExtent",
+    });
 
     res.status(200).json(updatedStudent);
   } catch (error) {
@@ -252,17 +255,18 @@ router.delete("/student/:id/courses/:courseId", async (req, res) => {
 router.get("/student/:id", async (req, res) => {
   try {
     const student = await Student.findById(req.params.id)
-      .populate(
-        "courses.courseId",
-        "courseName courseCode coursePoints courseExtent"
-      )
-      .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("program.programId", "programName")
       .populate({
         path: "education.refId",
-        select: "courseName courseCode",
-        model: "Course", // or "Program" if polymorphic in future
-      });
+        model: function (doc) {
+          if (doc.type === "Course") return "Course"; // populate Course model
+          if (doc.type === "CoursePackage") return "CoursePackage"; // populate CoursePackage model
+          if (doc.type === "Program") return "Program"; // populate Program model
+          return null; // In case of an invalid type, we don’t populate anything
+        },
+        select:
+          "courseName courseCode coursePackageName coursePackageCode programName", // Adjust selection based on type
+      })
+      .select("+commentHistory.seenBy");
 
     if (!student) return res.status(404).json({ error: "Student not found" });
 
@@ -433,6 +437,7 @@ router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
  */
 router.put("/student/:id", async (req, res) => {
   console.log("📥 Received payload:", req.body);
+
   const allowedFields = [
     "name",
     "personalNumber",
@@ -449,11 +454,12 @@ router.put("/student/:id", async (req, res) => {
     "examMunicipality",
     "examLocation",
     "examTime",
-
-    "education",
+    "education", // This will now be processed separately for course, coursePackage, program
   ];
 
   const updates = {};
+
+  // Process the allowed fields and populate the updates object
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) {
       updates[field] = req.body[field];
@@ -470,14 +476,47 @@ router.put("/student/:id", async (req, res) => {
   }
 
   try {
+    const student = await Student.findById(req.params.id);
+
+    if (!student) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    // Special handling for education field
+    if (req.body.education) {
+      // We need to process each education entry separately based on type
+      const updatedEducation = student.education.map((edu) => {
+        const updateData = req.body.education.find(
+          (newEdu) => newEdu.refId.toString() === edu.refId.toString()
+        );
+
+        if (updateData) {
+          if (updateData.type === "Course") {
+            edu.grade = updateData.grade || edu.grade;
+            edu.locked = updateData.locked || edu.locked;
+            edu.comments = updateData.comments || edu.comments;
+          }
+
+          // Apply other potential changes from the request
+          edu.status = updateData.status || edu.status;
+          edu.addedBy = updateData.addedBy || edu.addedBy;
+        }
+
+        return edu;
+      });
+
+      updates.education = updatedEducation;
+    }
+
+    // Perform the update operation
     const updatedStudent = await Student.findByIdAndUpdate(
       req.params.id,
       { $set: updates },
       { new: true }
-    )
-      .populate("courses.courseId", "courseName courseCode")
-      .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("program.programId", "programName");
+    ).populate(
+      "education.refId",
+      "courseName courseCode coursePackageName coursePackageCode programName"
+    );
 
     if (!updatedStudent) {
       return res.status(404).json({ error: "Student not found" });
@@ -541,30 +580,55 @@ router.post(
 );
 
 /**
- * @route   PATCH /student/:studentId/course/:courseId/grade
- * @desc    Updates a course grade in student's legacy courses[]
+ * @route   PATCH /student/:studentId/education/:educationId/grade
+ * @desc    Updates a course grade in a student's education array.
  * @access  Public
  */
-router.patch("/student/:studentId/course/:courseId/grade", async (req, res) => {
-  const { studentId, courseId } = req.params;
-  const { grade } = req.body;
+router.patch(
+  "/student/:studentId/education/:educationId/grade",
+  async (req, res) => {
+    const { studentId, educationId } = req.params;
+    const { grade } = req.body;
 
-  if (!["A", "B", "C", "D", "E", "F"].includes(grade))
-    return res.status(400).json({ error: "Invalid grade." });
+    if (!["A", "B", "C", "D", "E", "F"].includes(grade)) {
+      return res.status(400).json({ error: "Invalid grade." });
+    }
 
-  try {
-    const student = await Student.findOneAndUpdate(
-      { _id: studentId, "courses.courseId": courseId },
-      { $set: { "courses.$.grade": grade } },
-      { new: true }
-    ).populate("courses.courseId", "courseName courseCode");
+    try {
+      const student = await Student.findById(studentId);
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
 
-    res.json(student);
-  } catch (error) {
-    console.error("❌ Error updating grade:", error);
-    res.status(500).json({ error: "Server error" });
+      // Find the education entry to update based on educationId
+      const education = student.education.find(
+        (edu) => edu._id.toString() === educationId
+      );
+
+      if (!education) {
+        return res.status(404).json({ error: "Education entry not found" });
+      }
+
+      // Only update the grade if the type is "Course"
+      if (education.type === "Course") {
+        education.grade = grade;
+      }
+
+      await student.save();
+
+      // Fetch the updated student and populate education data
+      const updatedStudent = await Student.findById(studentId).populate(
+        "education.refId",
+        "courseName courseCode coursePackageName coursePackageCode programName"
+      );
+
+      res.status(200).json(updatedStudent);
+    } catch (error) {
+      console.error("❌ Error updating grade:", error);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
+);
 
 /**
  * @route   GET /all-programs

@@ -167,37 +167,57 @@
 
   const saveGrade = async () => {
     try {
-      axios.post('http://localhost:5001/api/teacher/save-grade', gradeData.value, {
+      const { studentId, courseId, grade, reason, comments, npScore } = gradeData.value
+
+      // Sending the grade data to the backend
+      await axios.post('http://localhost:5001/api/teacher/save-grade', gradeData.value, {
         withCredentials: true,
       })
-      showGradeModal.value = false
-      fetchUngraded() // Refresh the list after saving the grade
+
+      // ✅ Update only the affected entry in the frontend's student data
+      const student = students.value.find((s) => s.studentId === studentId)
+      if (student) {
+        // Find the education entry that matches the courseId
+        const edu = [...(student.ungradedEducation || []), ...(student.lockedF || [])].find(
+          (e) => e.refId === courseId
+        )
+
+        // If the course is found, update its grade and other details
+        if (edu) {
+          edu.grade = grade
+          edu.reason = reason
+          edu.comments = comments
+          edu.npScore = npScore
+        }
+      }
+
+      showGradeModal.value = false // Close the grade modal after the update
     } catch (error) {
-      console.error('Fel vid sparande av betyg:', error)
+      console.error('❌ Error saving grade:', error)
+      // Optionally, add user-facing error handling, e.g., alert or UI feedback
     }
   }
 
   const lockGrade = async (row) => {
-    // Logga för att kontrollera om du har rätt data
     console.log('Row:', row)
 
     try {
-      // Skicka POST-begäran med endast studentId och refId
-      await axios.post(
+      // Send request to lock the grade
+      const response = await axios.post(
         'http://localhost:5001/api/teacher/lock-grade',
         {
-          studentId: row.studentId, // studentId från row
-          courseId: row.refId, // refId från row
+          studentId: row.studentId, // studentId from row
+          courseId: row.refId, // refId from row
         },
-        {
-          withCredentials: true, // Skicka med cookies
-        }
+        { withCredentials: true }
       )
 
-      // Uppdatera låsstatus direkt i din data utan att använda flatRows
-      row.locked = true // Sätt locked till true för den specifika raden
+      // Update the locked status in the frontend immediately
+      row.locked = true // Set locked to true for the specific row
+
+      console.log(response.data.message)
     } catch (error) {
-      console.error(error)
+      console.error('❌ Error locking grade:', error)
     }
   }
 

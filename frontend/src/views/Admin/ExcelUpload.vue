@@ -137,21 +137,135 @@
               <p>{{ editingStudent.email }}</p>
               <p>{{ editingStudent.phone }}</p>
               <p>{{ editingStudent.municipality?.type }}</p>
+            </div>
 
-              <div class="d-flex justify-space-between align-center mt-4 mb-2">
-                <div>
-                  <label><strong>Betygsatt</strong></label>
-                  <br />
-                  <input type="checkbox" v-model="editingStudent.isGraded" />
-                </div>
+            <h4>Utbildning</h4>
+            <div
+              v-for="(edu, index) in editingStudent.education.filter((e) => !e.removedAt)"
+              :key="index"
+              class="education-box"
+            >
+              <v-autocomplete
+                v-model="educationSelections[index]"
+                :items="educationOptions.filter((item) => item.type === 'Course')"
+                item-title="name"
+                return-object
+                label="Välj utbildning"
+                @update:modelValue="(val) => updateEducationEntry(val, index)"
+              />
+
+              <v-select
+                v-if="edu && edu.type === 'Course' && showGradeIndex === index"
+                v-model="edu.grade"
+                :items="['A', 'B', 'C', 'D', 'E', 'F']"
+                label="Select grade"
+              />
+
+              <div class="d-flex justify-center">
                 <div>
                   <label><strong>Låst</strong></label>
-                  <br />
-                  <input type="checkbox" v-model="editingStudent.isLocked" />
+                  <input type="checkbox" v-model="edu.locked" />
                 </div>
               </div>
+
+              <div class="education-controls">
+                <button
+                  type="button"
+                  class="btn btn-danger btn-xs left"
+                  @click="confirmRemoveEducation(index)"
+                >
+                  Ta bort
+                </button>
+                <button
+                  type="button"
+                  style="background-color: #007dc3ff; color: white"
+                  class="btn btn-xs betyg-btn right"
+                  @click="showGradeIndex = showGradeIndex === index ? null : index"
+                >
+                  Betyg
+                </button>
+              </div>
             </div>
-            <!-- Rest of your form continues here -->
+
+            <!-- Handle adding a new education item -->
+            <button
+              v-if="!showEducationSelector"
+              class="btn betyg-btn"
+              style="width: 100%; background-color: #007dc3ff; color: white"
+              @click.prevent="addEducation"
+              type="button"
+            >
+              + Lägg till utbildning
+            </button>
+
+            <!-- Handle education selector -->
+            <div v-if="showEducationSelector">
+              <v-autocomplete
+                v-model="selectedEducation"
+                :items="educationOptions.filter((item) => item.type === 'Course')"
+                item-title="name"
+                return-object
+                label="Välj utbildning"
+              />
+
+              <button
+                class="btn btn-success btn-xs"
+                @click.prevent="confirmAddEducation"
+                type="button"
+              >
+                Lägg till
+              </button>
+            </div>
+
+            <!-- Other fields for final exam date, additional info -->
+            <label for="finalExamDate" class="form-label">Slutprovdatum (24h)</label>
+            <v-menu
+              v-model="showFinalExamPicker"
+              :close-on-content-click="false"
+              offset-y
+              transition=""
+            >
+              <template #activator="{ props }">
+                <v-text-field
+                  v-bind="props"
+                  v-model="formattedFinalExamDate"
+                  label="Slutprovdatum"
+                  readonly
+                />
+              </template>
+              <v-card min-width="300px" class="pa-2">
+                <v-date-picker
+                  v-model="finalExamDate.date"
+                  :reactive="false"
+                  show-adjacent-months
+                  color="primary"
+                />
+                <v-time-picker v-model="finalExamDate.time" format="24hr" />
+                <v-card-actions>
+                  <v-spacer />
+                  <v-btn color="green" @click="applyFinalExamDate">OK</v-btn>
+                  <br />
+                  <v-btn @click="showFinalExamPicker = false">Cancel</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-menu>
+
+            <label for="additionalInfo" class="form-label">Kommentarer</label>
+            <textarea
+              id="additionalInfo"
+              v-model="editingStudent.additionalInfo"
+              placeholder="Skriv kommentarer här..."
+              rows="3"
+              class="highlighted-textarea"
+              style="width: 100%"
+            />
+
+            <div class="education-controls">
+              <button @click="cancelEdit" class="btn btn-secondary left" type="button">
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-success right">Save</button>
+            </div>
           </form>
         </v-card>
       </template>
@@ -202,6 +316,14 @@
     },
 
     methods: {
+      confirmRemoveEducation(index) {
+        const confirmText = 'Är du säker på att du vill ta bort denna utbildning från eleven?'
+        if (confirm(confirmText)) {
+          this.removeEducation(index)
+          this.saveEditedStudent() // 💾 Save immediately after removing
+        }
+      },
+
       getEducationLabel(edu) {
         if (!edu.refId) return '(missing)'
         if (edu.type === 'Course') return edu.refId.courseName || '(no name)'
@@ -291,6 +413,7 @@
 
         console.log('✅ Final ISO:', this.editingStudent.finalExamDate)
       },
+
       openEditStudent(student) {
         const clone = JSON.parse(JSON.stringify(student))
 
@@ -331,32 +454,34 @@
         }
       },
 
-      async saveEditedStudent() {
+      // Save student after editing
+      saveEditedStudent() {
         try {
           console.log('📤 Sending payload:', this.editingStudent)
 
           // 1. Save the edited student
-          await axios.put(
+          axios.put(
             `${import.meta.env.VITE_API_URL}/api/student/${this.editingStudent._id}`,
             this.editingStudent
           )
 
-          // 2. Re-fetch updated student (with populated refId)
-          const { data: updatedStudent } = await axios.get(
-            `${import.meta.env.VITE_API_URL}/api/student/${this.editingStudent._id}`,
-            { withCredentials: true }
-          )
+          // 2. Update frontend state immediately to reflect changes
+          const updatedStudent = { ...this.editingStudent }
 
-          // 3. Update frontend state
-          const index = this.students.findIndex((s) => s._id === updatedStudent._id)
-          if (index !== -1) this.students.splice(index, 1, updatedStudent)
-        } catch (err) {
-          console.error('❌ Failed to update student:', err)
-          alert('Could not save student.')
-        } finally {
+          // Find the student in the local list of students
+          const index = this.students.findIndex((student) => student._id === updatedStudent._id)
+
+          if (index !== -1) {
+            // Replace the student data with the updated one
+            this.students.splice(index, 1, updatedStudent)
+          }
+
+          // Close the dialog and reset the editingStudent data
           this.editingStudentDialog = false
           this.editingStudent = null
-          this.showGradeIndex = null // 🔁 Reset
+        } catch (error) {
+          console.error('❌ Failed to update student:', error)
+          alert('Could not save student.')
         }
       },
 
@@ -415,6 +540,7 @@
           this.$refs.fileInput.value = ''
         }
       },
+
       async updateDropOut(student) {
         try {
           const response = await axios.put(
@@ -561,18 +687,12 @@
       },
 
       removeEducation(index) {
-        if (
-          Array.isArray(this.editingStudent.education) &&
-          Array.isArray(this.educationSelections)
-        ) {
-          this.editingStudent.education = this.editingStudent.education.filter(
-            (_, i) => i !== index
-          )
-          this.educationSelections = this.educationSelections.filter((_, i) => i !== index)
+        const edu = this.editingStudent.education[index]
+        if (edu) {
+          edu.removedAt = new Date().toISOString() // 🕒 Soft delete marker
         }
       },
     },
-
     mounted() {
       this.fetchStudents()
       this.fetchEducationOptions()
@@ -581,6 +701,18 @@
 </script>
 
 <style scoped>
+  .align-right {
+    margin-left: auto; /* Pushes the content to the right */
+  }
+
+  .justify-center {
+    justify-content: center; /* Centers the checkbox horizontally */
+  }
+
+  .align-center {
+    align-items: center; /* Centers the checkbox vertically */
+  }
+
   /* Fix dialog clipping */
   .v-overlay__content {
     z-index: 3000 !important;
