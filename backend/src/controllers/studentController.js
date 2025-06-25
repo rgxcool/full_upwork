@@ -47,6 +47,21 @@ function getClosestMunicipality(input) {
   return minDistance <= 4 ? bestMatch : null; // threshold can be adjusted
 }
 
+function getBestFuzzyMatch(target, candidates, threshold = 3) {
+  let best = null;
+  let minDistance = Infinity;
+
+  for (const candidate of candidates) {
+    const d = distance(target.toUpperCase(), candidate.toUpperCase());
+    if (d < minDistance && d <= threshold) {
+      best = candidate;
+      minDistance = d;
+    }
+  }
+
+  return best;
+}
+
 async function uploadXlsx(req, res) {
   console.log("🟢 Received XLSX file upload request");
 
@@ -97,17 +112,41 @@ async function uploadXlsx(req, res) {
             let refId = null;
             let type = entry.type;
 
-            if (programMap[entry.name]) {
-              refId = programMap[entry.name];
+            const allProgramNames = Object.keys(programMap);
+            const allPackageNames = Object.keys(packageMap);
+            const allCourseNames = Object.keys(courseMap);
+
+            const matchedProgram = getBestFuzzyMatch(
+              entry.name,
+              allProgramNames,
+              2
+            );
+            const matchedPackage = getBestFuzzyMatch(
+              entry.name,
+              allPackageNames,
+              2
+            );
+            const matchedCourse = getBestFuzzyMatch(
+              entry.name,
+              allCourseNames,
+              2
+            );
+
+            if (matchedProgram) {
+              refId = programMap[matchedProgram];
               type = "Program";
-            } else if (packageMap[entry.name]) {
-              refId = packageMap[entry.name];
+            } else if (matchedPackage) {
+              refId = packageMap[matchedPackage];
               type = "CoursePackage";
-            } else if (courseMap[entry.name]) {
-              refId = courseMap[entry.name];
+            } else if (matchedCourse) {
+              refId = courseMap[matchedCourse];
               type = "Course";
             } else {
               type = entry.type !== "Auto" ? entry.type : "Course";
+            }
+
+            if (entry.name && !refId) {
+              console.warn(`🟡 Fuzzy match failed for: "${entry.name}"`);
             }
 
             return {
