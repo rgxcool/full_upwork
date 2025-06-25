@@ -101,37 +101,26 @@ router.get("/details/:type/:id", async (req, res) => {
             path: "education.refId",
             select:
               "programName coursePackageName courseName courseCode coursePoints courseExtent",
-            model: function (doc) {
-              // Mongoose doesn't know which model to use by default
-              // We return the correct model depending on `type`
-              switch (doc.type) {
-                case "Program":
-                  return "Program";
-                case "CoursePackage":
-                  return "CoursePackage";
-                case "Course":
-                  return "Course";
-                default:
-                  return null;
-              }
-            },
+            // 👇 No need for `model` if you use refPath in schema
           })
           .populate("teacher", "name email")
           .select("-__v");
         break;
 
       case "Lärare":
-        result = await User.findById(id)
-          .select("username email role")
-          .where("role")
-          .equals("teacher");
+        result = await User.findOne({
+          _id: id,
+          role: "teacher",
+        }).select("username email role");
         break;
 
       case "Personal":
-        result = await User.findById(id)
-          .select("username email role")
-          .where("role")
-          .in(["admin", "systemadmin", "syv", "specped", "coordinator"]);
+        result = await User.findOne({
+          _id: id,
+          role: {
+            $in: ["admin", "systemadmin", "syv", "specped", "coordinator"],
+          },
+        }).select("username email role");
         break;
 
       default:
