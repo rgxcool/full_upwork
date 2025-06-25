@@ -31,7 +31,8 @@ router.put("/exams/:id/decision", async (req, res) => {
         const student = await Student.findOneAndUpdate(
           { personalNumber: exam.personalNumber },
           {
-            ...exam.toObject(),
+            personalNumber: exam.personalNumber,
+            name: exam.name, // or whatever fields are relevant
             finalExamDate,
           },
           { upsert: true, new: true }
@@ -191,9 +192,7 @@ router.get("/exams", async (req, res) => {
 
 router.get("/calendar-color", async (req, res) => {
   try {
-    const students = await Student.find().populate(
-      "coursePackages.coursePackageId"
-    );
+    const students = await Student.find().populate("education.refId");
     const teachers = await Teacher.find();
 
     // Hämta endast schemalagda (accepterade) prövningar
@@ -292,12 +291,10 @@ router.post("/add-exam", async (req, res) => {
       !examMunicipality ||
       !examLocation
     ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Student IDs, exam time, municipality, and location are required",
-        });
+      return res.status(400).json({
+        message:
+          "Student IDs, exam time, municipality, and location are required",
+      });
     }
 
     // ✅ Lägg till $set för att säkerställa att vi uppdaterar rätt fält
@@ -326,12 +323,16 @@ router.post("/add-exam", async (req, res) => {
 });
 
 router.put("/mark-attendance/:personalNumber", async (req, res) => {
+  console.log("📌 API /mark-attendance anropad! Data mottagen:", req.body);
   try {
     const { personalNumber } = req.params;
 
-    // 🔍 Hitta studenten baserat på personnumret
-    const student = await Student.findOne({ personalNumber });
+    // Trim whitespace/newlines
+    const normalizedPN = personalNumber.trim();
 
+    const student = await Student.findOne({ personalNumber: normalizedPN });
+
+    console.log("🔍 Hittade student:", student);
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -368,12 +369,10 @@ router.post("/examtime-location", async (req, res) => {
     );
 
     console.log("✅ Uppdaterade studenter:", result.modifiedCount);
-    res
-      .status(200)
-      .json({
-        message: "Provinfo uppdaterad",
-        updatedCount: result.modifiedCount,
-      });
+    res.status(200).json({
+      message: "Provinfo uppdaterad",
+      updatedCount: result.modifiedCount,
+    });
   } catch (error) {
     console.error("❌ Fel vid uppdatering av exam:", error.message);
     res.status(500).json({ message: "Serverfel", error: error.message });
