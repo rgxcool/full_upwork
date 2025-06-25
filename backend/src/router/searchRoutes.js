@@ -39,34 +39,38 @@ router.get("/courses", async (req, res) => {
 });
 
 router.get("/search", async (req, res) => {
-  const { q, date } = req.query;
+  const { q, date, type } = req.query;
 
   try {
     let results = [];
 
-    if (date) {
+    if (type === 'Datum' && date) {
       const parsedDate = new Date(date);
-      if (isNaN(parsedDate.getTime())) {
-        return res.status(400).json({ message: "Invalid date format." });
-      }
       const studentsByDate = await Student.find({
         $or: [
           { startDate: parsedDate },
           { endDate: parsedDate },
         ],
       }).select("_id name email");
+
       results.push(...studentsByDate.map(student => ({
         id: student._id,
         name: student.name,
         type: 'Elev',
         extra: `Email: ${student.email}`,
       })));
-    }
-
-    if (q && q.length >= 3) {
+      
+    } else if (type === 'Användare' && q && q.length >= 3) {
       const studentMatches = await Student.find({
-        name: { $regex: q, $options: "i" } // Added case-insensitivity
+        name: { $regex: q, $options: "i" },
       }).select("_id name email");
+
+      const userMatches = await User.find({
+        $or: [
+          { username: { $regex: q, $options: "i" } },
+          { email: { $regex: q, $options: "i" } },
+        ],
+      }).select("_id username email role");
 
       results.push(
         ...studentMatches.map(student => ({
@@ -74,8 +78,41 @@ router.get("/search", async (req, res) => {
           name: student.name,
           type: 'Elev',
           extra: `Email: ${student.email}`,
+        })),
+        ...userMatches.map(user => ({
+          id: user._id,
+          name: user.username,
+          type: user.role,
+          extra: `Email: ${user.email}`,
         }))
       );
+
+    } else if (type === 'Kurs' && q && q.length >= 3) {
+      const courseMatches = await Student.find({
+        'education.name': { $regex: q, $options: "i" },
+      }).populate({
+        path: 'education.refId',
+        populate: { path: 'teacher', model: 'Teacher', select: 'name' }, // Ensure proper path to populate teacher
+      }).lean();
+
+      const uniqueCourses = new Map();
+
+      courseMatches.forEach(student => {
+        student.education.forEach(course => {
+          if (course.name.match(new RegExp(q, "i"))) {
+            if (!uniqueCourses.has(course.name)) {
+              uniqueCourses.set(course.name, {
+                id: student._id,
+                name: course.name,
+                type: 'Kurs',
+                extra: `Lärare: ${course.refId?.teacher?.name || "Unknown"}`, // Correct path for teacher name
+              });
+            }
+          }
+        });
+      });
+
+      results.push(...Array.from(uniqueCourses.values()));
     }
 
     res.json(results);
