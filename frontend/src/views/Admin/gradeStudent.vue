@@ -199,21 +199,31 @@
   }
 
   const lockGrade = async (row) => {
-    console.log('Row:', row)
-
     try {
-      // Send request to lock the grade
       const response = await axios.post(
         'http://localhost:5001/api/teacher/lock-grade',
         {
-          studentId: row.studentId, // studentId from row
-          courseId: row.refId, // refId from row
+          studentId: row.studentId,
+          courseId: row.refId,
         },
         { withCredentials: true }
       )
 
-      // Update the locked status in the frontend immediately
-      row.locked = true // Set locked to true for the specific row
+      // 🔁 Force reactive update
+      const student = students.value.find((s) => s.studentId === row.studentId)
+      if (student) {
+        const educationList = [...(student.ungradedEducation || []), ...(student.lockedF || [])]
+        const eduIndex = educationList.findIndex((e) => e.refId === row.refId)
+        if (eduIndex !== -1) {
+          educationList[eduIndex].locked = true
+          // 🔄 Reassign the updated list to trigger reactivity
+          if (student.ungradedEducation?.some((e) => e.refId === row.refId)) {
+            student.ungradedEducation = [...educationList]
+          } else if (student.lockedF?.some((e) => e.refId === row.refId)) {
+            student.lockedF = [...educationList]
+          }
+        }
+      }
 
       console.log(response.data.message)
     } catch (error) {
