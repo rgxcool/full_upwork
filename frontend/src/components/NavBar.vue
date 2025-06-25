@@ -20,6 +20,11 @@
             @change="handleSearch"
             :placeholder="'Välj datum'"
           />
+
+          <div class="clear-search" @click="clearSearch">x</div>
+
+
+
           <div class="search-type-toggle">
             <button @click="toggleSearchTypeDropdown">{{ selectedSearchType }}</button>
             <ul v-if="showSearchTypeDropdown" class="search-type-options">
@@ -285,6 +290,7 @@
       const handleSearch = async () => {
         try {
           const params = new URLSearchParams()
+      params.append('type', selectedSearchType.value);
           if (selectedSearchType.value === 'Datum') {
             if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) return
             params.append('date', selectedDate.value)
@@ -293,15 +299,28 @@
             params.append('q', searchQuery.value)
           }
 
-          const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`)
+      const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`);
 
-          console.log('Search Response:', response.data) // Debugging output
-          searchResults.value = response.data
-          showResults.value = searchResults.value.length > 0
-        } catch (error) {
-          console.error('Error during search:', error)
-        }
-      }
+      console.log("Search Response:", response.data); // Debugging output
+      searchResults.value = response.data;
+      showResults.value = searchResults.value.length > 0;
+    } catch (error) {
+      console.error('Error during search:', error);
+    }
+  };
+
+
+
+      const clearSearch = () => {
+      searchQuery.value = '';
+      selectedDate.value = null;
+      searchResults.value = [];
+      showResults.value = false;
+    };
+
+
+
+
 
       const fetchCourses = async () => {
         try {
@@ -389,6 +408,7 @@
         showSearchTypeDropdown,
         toggleSearchTypeDropdown,
         selectSearchType,
+        clearSearch,
       }
     },
   }
@@ -396,6 +416,23 @@
 
 <style scoped>
   /* Navbar */
+
+  .search-bar {
+  /* Improved styles for search bar */
+  display: flex;
+  align-items: center;
+  background: #ecf0f1;
+  padding: 10px 15px;
+  border-radius: 20px;
+}
+
+.search-type-options {
+  list-style: none;
+  padding: 10px;
+  margin: 0;
+  background-color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
 
   .logo-container {
     display: flex;
