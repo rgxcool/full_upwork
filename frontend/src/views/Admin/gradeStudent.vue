@@ -1,105 +1,132 @@
 <template>
   <section class="ungraded-section">
-    <h2>Elever med obetygsatta utbildningar</h2>
+    <v-card class="pa-5">
+      <v-card-title class="text-h5">📋 Elever med obetygsatta utbildningar</v-card-title>
 
-    <a href="scrive.com" target="_blank" class="btn btn-primary">Scrive</a>
-    Signera betyg på Scrive och lås betyget efter signering.
+      <v-alert type="info" class="mb-4" border="start" prominent>
+        <v-icon class="me-2">mdi-file-document-edit-outline</v-icon>
+        Signera betyg på
+        <a href="https://scrive.com" target="_blank" class="text-primary text-decoration-underline">
+          Scrive
+        </a>
+        och lås betyget efter signering.
+      </v-alert>
 
-    <div v-if="loading">Laddar...</div>
-    <div v-else-if="students.length === 0">Inga obetygsatta elever hittades.</div>
-    <table v-else class="ungraded-table">
-      <thead>
-        <tr>
-          <th>Elevnamn</th>
-          <th>Personnummer</th>
-          <th>Utbildningstyp</th>
-          <th>Utbildningsnamn</th>
-          <th>Betyg</th>
-          <th>Datum tillagd</th>
-          <th>Åtgärder</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="row in flatRows" :key="`${row.studentId}-${row.refId}`">
-          <td>{{ row.name }}</td>
-          <td>{{ row.personalNumber }}</td>
-          <td>{{ row.type }}</td>
-          <td>{{ row.displayName }}</td>
-          <td>
-            <span v-if="!row.grade">Ej betygsatt</span>
-            <span v-else>{{ row.grade }}</span>
-          </td>
-          <td>{{ formatDate(row.addedAt) }}</td>
-          <td>
-            <button class="btn btn-primary" v-if="!row.grade" @click="setGrade(row)">
-              Sätt betyg
-            </button>
-            <button
-              v-if="row.grade && !row.locked"
-              class="btn btn-success"
-              @click="lockGrade(row)"
-              :disabled="row.locked"
-            >
-              Lås betyg
-            </button>
-            <button
-              v-if="row.grade === 'F' && row.locked === true"
-              class="btn btn-warning"
-              @click="goToActionPlan(row)"
-            >
-              Skapa handlingsplan
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+      <div v-if="loading">Laddar...</div>
+      <div v-else-if="students.length === 0">Inga obetygsatta elever hittades.</div>
+      <v-data-table
+        v-if="!loading && flatRows.length"
+        :headers="headers"
+        :items="flatRows"
+        class="elevation-1"
+        item-value="refId"
+        disable-sort
+        dense
+      >
+        <template #item.grade="{ item }">
+          <v-chip v-if="item.grade" color="primary" text-color="white">{{ item.grade }}</v-chip>
+          <span v-else class="text-muted">Ej betygsatt</span>
+        </template>
+
+        <template #item.actions="{ item }">
+          <v-btn
+            v-if="!item.grade"
+            color="primary"
+            size="small"
+            @click="setGrade(item)"
+            class="me-2"
+          >
+            Sätt betyg
+          </v-btn>
+          <v-btn
+            v-if="item.grade && !item.locked"
+            color="success"
+            size="small"
+            @click="lockGrade(item)"
+            class="me-2"
+          >
+            Lås betyg
+          </v-btn>
+          <v-btn
+            v-if="item.grade === 'F' && item.locked"
+            color="warning"
+            size="small"
+            @click="goToActionPlan(item)"
+          >
+            Skapa handlingsplan
+          </v-btn>
+        </template>
+      </v-data-table>
+
+      <v-alert v-else-if="!loading && !flatRows.length" type="info">
+        Inga obetygsatta elever hittades.
+      </v-alert>
+
+      <v-progress-circular v-else indeterminate color="primary" size="32" />
+    </v-card>
   </section>
 
-  <div v-if="showGradeModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.5)">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Sätt betyg</h5>
-          <button type="button" class="btn-close" @click="showGradeModal = false"></button>
-        </div>
-        <form @submit.prevent="saveGrade">
-          <div class="modal-body">
-            <label>Betyg *</label>
-            <select v-model="gradeData.grade" required>
-              <option value="" disabled>Välj betyg</option>
-              <option v-for="g in ['A', 'B', 'C', 'D', 'E', 'F']" :key="g">{{ g }}</option>
-            </select>
+  <v-dialog v-model="showGradeModal" max-width="600px">
+    <v-card>
+      <v-card-title>Sätt betyg</v-card-title>
+      <v-card-text>
+        <v-form @submit.prevent="saveGrade">
+          <v-select
+            v-model="gradeData.grade"
+            :items="['A', 'B', 'C', 'D', 'E', 'F']"
+            label="Betyg *"
+            required
+            color="primary"
+            variant="outlined"
+          />
+          <v-textarea
+            color="primary"
+            variant="outlined"
+            v-model="gradeData.reason"
+            label="Motivering *"
+            required
+          />
+          <v-textarea
+            color="primary"
+            variant="outlined"
+            v-model="gradeData.comments"
+            label="Kommentar"
+          />
 
-            <label>Motivering *</label>
-            <textarea v-model="gradeData.reason" required></textarea>
-
-            <label>Kommentar</label>
-            <textarea v-model="gradeData.comments"></textarea>
-
-            <!-- NP-fält visas bara om kursen är SVE, ENG, MA -->
-            <div v-if="isNationalCourse(gradeData.courseCode)">
-              <label>Nationella prov-poäng *</label>
-              <input v-model.number="gradeData.npScore" required type="number" min="0" />
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showGradeModal = false">
-              Avbryt
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="!canSaveGrade()">
-              Spara betyg
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
+          <v-text-field
+            v-if="isNationalCourse(gradeData.courseCode)"
+            v-model.number="gradeData.npScore"
+            label="Nationella prov-poäng *"
+            type="number"
+            min="0"
+            required
+            color="primary"
+            variant="outlined"
+          />
+        </v-form>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn text @click="showGradeModal = false">Avbryt</v-btn>
+        <v-btn color="primary" :disabled="!canSaveGrade()" @click="saveGrade">Spara betyg</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup>
   import { ref, computed, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
+
+  const headers = ref([
+    { title: 'Namn', key: 'name' },
+    { title: 'Personnummer', key: 'personalNumber' },
+    { title: 'E-post', key: 'email' },
+    { title: 'Kurs', key: 'courseName' },
+    { title: 'Betyg', key: 'grade' },
+    { title: 'Datum', key: 'examDate' },
+    { title: 'Åtgärder', key: 'actions', sortable: false },
+  ])
 
   import axios from 'axios'
 
@@ -200,7 +227,7 @@
 
   const lockGrade = async (row) => {
     try {
-      const response = await axios.post(
+      await axios.post(
         'http://localhost:5001/api/teacher/lock-grade',
         {
           studentId: row.studentId,
@@ -209,23 +236,27 @@
         { withCredentials: true }
       )
 
-      // 🔁 Force reactive update
       const student = students.value.find((s) => s.studentId === row.studentId)
-      if (student) {
-        const educationList = [...(student.ungradedEducation || []), ...(student.lockedF || [])]
-        const eduIndex = educationList.findIndex((e) => e.refId === row.refId)
-        if (eduIndex !== -1) {
-          educationList[eduIndex].locked = true
-          // 🔄 Reassign the updated list to trigger reactivity
-          if (student.ungradedEducation?.some((e) => e.refId === row.refId)) {
-            student.ungradedEducation = [...educationList]
-          } else if (student.lockedF?.some((e) => e.refId === row.refId)) {
-            student.lockedF = [...educationList]
-          }
+      if (!student) return
+
+      // 🔍 Save original before removing
+      const original = [...(student.ungradedEducation || []), ...(student.lockedF || [])].find(
+        (e) => e.refId === row.refId
+      )
+
+      // 🗑 Remove from ungradedEducation
+      student.ungradedEducation = student.ungradedEducation?.filter((e) => e.refId !== row.refId)
+
+      // ✅ Add to lockedF if needed
+      if (original && original.grade === 'F') {
+        if (!student.lockedF) student.lockedF = []
+        const alreadyExists = student.lockedF.find((e) => e.refId === row.refId)
+        if (!alreadyExists) {
+          student.lockedF.push({ ...original, locked: true })
         }
       }
 
-      console.log(response.data.message)
+      students.value = [...students.value]
     } catch (error) {
       console.error('❌ Error locking grade:', error)
     }
@@ -246,7 +277,7 @@
 
 <style scoped>
   .ungraded-section {
-    padding: 30px;
+    padding: 32px;
   }
 
   .ungraded-table {
@@ -279,9 +310,6 @@
   }
 
   .modal-content {
-    background: white;
-    padding: 20px;
-    border-radius: 5px;
     width: 400px;
   }
 
