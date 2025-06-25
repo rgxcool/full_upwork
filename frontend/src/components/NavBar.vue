@@ -191,20 +191,18 @@
 
       const isMobileMenuOpen = ref(false)
 
-      const selectedSearchType = ref('Användare');
-      const showSearchTypeDropdown = ref(false);
+      const selectedSearchType = ref('Användare')
+      const showSearchTypeDropdown = ref(false)
 
       const toggleSearchTypeDropdown = () => {
-        showSearchTypeDropdown.value = !showSearchTypeDropdown.value;
-      };
+        showSearchTypeDropdown.value = !showSearchTypeDropdown.value
+      }
 
       const selectSearchType = (type) => {
-        selectedSearchType.value = type;
-        showSearchTypeDropdown.value = false;
-        handleSearch(); // Trigger search with the new type
-      };
-
-
+        selectedSearchType.value = type
+        showSearchTypeDropdown.value = false
+        handleSearch() // Trigger search with the new type
+      }
 
       const toggleMobileMenu = () => {
         isMobileMenuOpen.value = !isMobileMenuOpen.value
@@ -256,7 +254,6 @@
         }
       }
 
-
       const toggleNotificationPanel = () => {
         showNotisPanel.value = !showNotisPanel.value
       }
@@ -290,18 +287,17 @@
         router.push('/')
       }
 
-
-  const handleSearch = async () => {
-    try {
-      const params = new URLSearchParams();
+      const handleSearch = async () => {
+        try {
+          const params = new URLSearchParams()
       params.append('type', selectedSearchType.value);
-      if (selectedSearchType.value === 'Datum') {
-        if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) return;
-        params.append('date', selectedDate.value);
-      } else {
-        if (!searchQuery.value || searchQuery.value.length < 3) return;
-        params.append('q', searchQuery.value);
-      }
+          if (selectedSearchType.value === 'Datum') {
+            if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) return
+            params.append('date', selectedDate.value)
+          } else {
+            if (!searchQuery.value || searchQuery.value.length < 3) return
+            params.append('q', searchQuery.value)
+          }
 
       const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`);
 
@@ -351,7 +347,7 @@
         { name: 'Elever', link: '/students', role: 'admin' },
         { name: 'PDF', link: '/pdf', role: 'admin' },
         { name: 'Grades', link: '/grades', role: 'teacher' },
-        { name: 'ExamForm', link: '/provningar', role: 'student' },
+        { name: 'Prövningar', link: '/examform', role: 'student' },
         { name: 'Earnings', link: '/earnings', role: 'admin' },
         { name: 'Stats', link: '/stats/courses', role: 'admin' },
       ]

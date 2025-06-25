@@ -1,3 +1,10 @@
+/**
+ * @file studentRoutes.js
+ * @description Contains all student-related routes for CRUD operations, grading,
+ * comment handling, education assignment, dropout notifications, and APL tracking.
+ * Uses Mongoose models and Express routing.
+ */
+
 import { Router } from "express";
 import mongoose from "mongoose";
 import Student from "../models/Student.js";
@@ -12,6 +19,11 @@ import { sendDropoutNotification } from "../controllers/notificationController.j
 
 const router = Router();
 
+/**
+ * @route   PUT /students/:studentId/education/:educationId/status
+ * @desc    Updates the status of a student's education entry. Sends a notification if status is 'Avbrott'.
+ * @access  Public
+ */
 router.put(
   "/students/:studentId/education/:educationId/status",
   async (req, res) => {
@@ -58,19 +70,41 @@ router.put(
   }
 );
 
+/**
+ * @route   GET /students
+ * @desc    Fetch all students with populated education references and comment visibility info.
+ * @access  Protected
+ */
 router.get("/students", authenticateUser, async (req, res) => {
   try {
-    const students = await Student.find()
-      .populate(
-        "courses.courseId",
-        "courseName courseCode coursePoints courseExtent"
-      )
-      .populate(
-        "coursePackages.coursePackageId",
-        "coursePackageName coursePackageCode"
-      )
-      .populate("program.programId", "programName")
-      .select("+commentHistory.seenBy");
+    const students = await Student.find().lean();
+
+    for (const student of students) {
+      for (const edu of student.education) {
+        if (!edu.refId) continue;
+
+        const Model =
+          edu.type === "Course"
+            ? Course
+            : edu.type === "CoursePackage"
+            ? CoursePackage
+            : edu.type === "Program"
+            ? Program
+            : null;
+
+        if (Model) {
+          edu.refId = await Model.findById(edu.refId)
+            .lean()
+            .select(
+              edu.type === "Course"
+                ? "courseName courseCode"
+                : edu.type === "CoursePackage"
+                ? "coursePackageName coursePackageCode"
+                : "programName"
+            );
+        }
+      }
+    }
 
     res.status(200).json(students);
   } catch (error) {
@@ -79,7 +113,11 @@ router.get("/students", authenticateUser, async (req, res) => {
   }
 });
 
-// ✅ Add a new student
+/**
+ * @route   POST /student
+ * @desc    Adds a new student to the database.
+ * @access  Public
+ */
 router.post("/student", async (req, res) => {
   try {
     const student = new Student(req.body);
@@ -91,7 +129,11 @@ router.post("/student", async (req, res) => {
   }
 });
 
-// Add a course to student with default grade
+/**
+ * @route   POST /student/:studentId/addcourse
+ * @desc    Adds a course to a student's education array.
+ * @access  Public
+ */
 router.post("/student/:studentId/addcourse", async (req, res) => {
   const { studentId } = req.params;
   const { courseId } = req.body;
@@ -103,20 +145,31 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ error: "Course not found" });
 
-    const alreadyExists = student.courses.some(
-      (course) => course.courseId.toString() === courseId
+    // Check if the course already exists in the student's education
+    const alreadyExists = student.education.some(
+      (entry) => entry.type === "Course" && entry.refId.toString() === courseId
     );
 
     if (alreadyExists) {
       return res.status(400).json({ error: "Course already exists" });
     }
 
-    student.courses.push({ courseId: course._id });
+    // Add course to the student's education
+    student.education.push({
+      type: "Course",
+      refId: course._id,
+      grade: "", // Default grade if needed
+    });
+
+    // Save the updated student document
     await student.save();
 
-    const updatedStudent = await Student.findById(studentId)
-      .populate("courses.courseId", "courseName courseCode")
-      .populate("coursePackages.coursePackageId", "coursePackageName");
+    // Return the updated student with populated education references
+    const updatedStudent = await Student.findById(studentId).populate({
+      path: "education.refId",
+      model: "Course", // populate the course details
+      select: "courseName courseCode coursePoints courseExtent",
+    });
 
     res.status(200).json(updatedStudent);
   } catch (error) {
@@ -125,7 +178,11 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
   }
 });
 
-// Similarly, add a program with default grade
+/**
+ * @route   POST /student/:studentId/setprogram
+ * @desc    Assigns a program to a student.
+ * @access  Public
+ */
 router.post("/student/:studentId/setprogram", async (req, res) => {
   const { studentId } = req.params;
   const { programId } = req.body;
@@ -144,7 +201,11 @@ router.post("/student/:studentId/setprogram", async (req, res) => {
   }
 });
 
-// Adding course package similarly
+/**
+ * @route   POST /student/:studentId/addcoursepackage
+ * @desc    Adds a course package to a student.
+ * @access  Public
+ */
 router.post("/student/:studentId/addcoursepackage", async (req, res) => {
   const { studentId } = req.params;
   const { coursePackageId } = req.body;
@@ -164,7 +225,11 @@ router.post("/student/:studentId/addcoursepackage", async (req, res) => {
   }
 });
 
-// ✅ Remove course from student
+/**
+ * @route   DELETE /student/:id/courses/:courseId
+ * @desc    Removes a course from a student's courses array.
+ * @access  Public
+ */
 router.delete("/student/:id/courses/:courseId", async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
@@ -182,16 +247,26 @@ router.delete("/student/:id/courses/:courseId", async (req, res) => {
   }
 });
 
-// ✅ Get single student by ID
+/**
+ * @route   GET /student/:id
+ * @desc    Fetches a single student with populated fields.
+ * @access  Public
+ */
 router.get("/student/:id", async (req, res) => {
   try {
     const student = await Student.findById(req.params.id)
-      .populate(
-        "courses.courseId",
-        "courseName courseCode coursePoints courseExtent"
-      )
-      .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("program.programId", "programName");
+      .populate({
+        path: "education.refId",
+        model: function (doc) {
+          if (doc.type === "Course") return "Course"; // populate Course model
+          if (doc.type === "CoursePackage") return "CoursePackage"; // populate CoursePackage model
+          if (doc.type === "Program") return "Program"; // populate Program model
+          return null; // In case of an invalid type, we don’t populate anything
+        },
+        select:
+          "courseName courseCode coursePackageName coursePackageCode programName", // Adjust selection based on type
+      })
+      .select("+commentHistory.seenBy");
 
     if (!student) return res.status(404).json({ error: "Student not found" });
 
@@ -202,7 +277,11 @@ router.get("/student/:id", async (req, res) => {
   }
 });
 
-// ✅ Delete single student
+/**
+ * @route   DELETE /student/:id
+ * @desc    Deletes a specific student.
+ * @access  Public
+ */
 router.delete("/student/:id", async (req, res) => {
   try {
     const deletedStudent = await Student.findByIdAndDelete(req.params.id);
@@ -217,7 +296,11 @@ router.delete("/student/:id", async (req, res) => {
   }
 });
 
-// ✅ Delete all students
+/**
+ * @route   DELETE /students
+ * @desc    Deletes all student records.
+ * @access  Public
+ */
 router.delete("/students", async (req, res) => {
   try {
     await Student.deleteMany({});
@@ -228,7 +311,11 @@ router.delete("/students", async (req, res) => {
   }
 });
 
-// ✅ Update APL status
+/**
+ * @route   PATCH /students/:id
+ * @desc    Updates APL status and tracks changes.
+ * @access  Protected
+ */
 router.patch("/students/:id", authenticateUser, async (req, res) => {
   const { aplStatus } = req.body;
   const userId = req.user?.userId;
@@ -259,7 +346,11 @@ router.patch("/students/:id", authenticateUser, async (req, res) => {
   }
 });
 
-// ✅ Add comment
+/**
+ * @route   POST /students/:id/comment
+ * @desc    Adds a comment to a student's commentHistory.
+ * @access  Protected
+ */
 router.post("/students/:id/comment", authenticateUser, async (req, res) => {
   const { comment } = req.body;
   const { userId, role, name } = req.user;
@@ -289,7 +380,11 @@ router.post("/students/:id/comment", authenticateUser, async (req, res) => {
   }
 });
 
-// ✅ Edit comment
+/**
+ * @route   PUT /students/:id/comment
+ * @desc    Edits a comment in a student's commentHistory.
+ * @access  Protected (admin/systemadmin only)
+ */
 router.put("/students/:id/comment", authenticateUser, async (req, res) => {
   const { index, updatedEntry } = req.body;
   const { role } = req.user;
@@ -310,7 +405,11 @@ router.put("/students/:id/comment", authenticateUser, async (req, res) => {
   res.json({ success: true });
 });
 
-// ✅ Delete comment
+/**
+ * @route   DELETE /students/:id/comment
+ * @desc    Deletes a comment from a student's commentHistory.
+ * @access  Protected (admin/systemadmin only)
+ */
 router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
   const { index } = req.body;
   const { role } = req.user;
@@ -330,9 +429,15 @@ router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
   await student.save();
   res.json({ success: true });
 });
-// ✅ Update student fully (not just dropout)
+
+/**
+ * @route   PUT /student/:id
+ * @desc    Updates full student object (excluding Mongo ID).
+ * @access  Public
+ */
 router.put("/student/:id", async (req, res) => {
   console.log("📥 Received payload:", req.body);
+
   const allowedFields = [
     "name",
     "personalNumber",
@@ -349,11 +454,12 @@ router.put("/student/:id", async (req, res) => {
     "examMunicipality",
     "examLocation",
     "examTime",
-
-    "education",
+    "education", // This will now be processed separately for course, coursePackage, program
   ];
 
   const updates = {};
+
+  // Process the allowed fields and populate the updates object
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) {
       updates[field] = req.body[field];
@@ -370,14 +476,47 @@ router.put("/student/:id", async (req, res) => {
   }
 
   try {
+    const student = await Student.findById(req.params.id);
+
+    if (!student) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    // Special handling for education field
+    if (req.body.education) {
+      // We need to process each education entry separately based on type
+      const updatedEducation = student.education.map((edu) => {
+        const updateData = req.body.education.find(
+          (newEdu) => newEdu.refId.toString() === edu.refId.toString()
+        );
+
+        if (updateData) {
+          if (updateData.type === "Course") {
+            edu.grade = updateData.grade || edu.grade;
+            edu.locked = updateData.locked || edu.locked;
+            edu.comments = updateData.comments || edu.comments;
+          }
+
+          // Apply other potential changes from the request
+          edu.status = updateData.status || edu.status;
+          edu.addedBy = updateData.addedBy || edu.addedBy;
+        }
+
+        return edu;
+      });
+
+      updates.education = updatedEducation;
+    }
+
+    // Perform the update operation
     const updatedStudent = await Student.findByIdAndUpdate(
       req.params.id,
       { $set: updates },
       { new: true }
-    )
-      .populate("courses.courseId", "courseName courseCode")
-      .populate("coursePackages.coursePackageId", "coursePackageName")
-      .populate("program.programId", "programName");
+    ).populate(
+      "education.refId",
+      "courseName courseCode coursePackageName coursePackageCode programName"
+    );
 
     if (!updatedStudent) {
       return res.status(404).json({ error: "Student not found" });
@@ -390,7 +529,11 @@ router.put("/student/:id", async (req, res) => {
   }
 });
 
-// ✅ Mark comments as seen (🛠 FIXED)
+/**
+ * @route   POST /students/:id/mark-comments-seen
+ * @desc    Marks all comments as seen by the current user.
+ * @access  Protected
+ */
 router.post(
   "/students/:id/mark-comments-seen",
   authenticateUser,
@@ -435,40 +578,91 @@ router.post(
     }
   }
 );
-router.patch("/student/:studentId/course/:courseId/grade", async (req, res) => {
-  const { studentId, courseId } = req.params;
-  const { grade } = req.body;
 
-  if (!["A", "B", "C", "D", "E", "F"].includes(grade))
-    return res.status(400).json({ error: "Invalid grade." });
+/**
+ * @route   PATCH /student/:studentId/education/:educationId/grade
+ * @desc    Updates a course grade in a student's education array.
+ * @access  Public
+ */
+router.patch(
+  "/student/:studentId/education/:educationId/grade",
+  async (req, res) => {
+    const { studentId, educationId } = req.params;
+    const { grade } = req.body;
 
-  try {
-    const student = await Student.findOneAndUpdate(
-      { _id: studentId, "courses.courseId": courseId },
-      { $set: { "courses.$.grade": grade } },
-      { new: true }
-    ).populate("courses.courseId", "courseName courseCode");
+    if (!["A", "B", "C", "D", "E", "F"].includes(grade)) {
+      return res.status(400).json({ error: "Invalid grade." });
+    }
 
-    res.json(student);
-  } catch (error) {
-    console.error("❌ Error updating grade:", error);
-    res.status(500).json({ error: "Server error" });
+    try {
+      const student = await Student.findById(studentId);
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      // Find the education entry to update based on educationId
+      const education = student.education.find(
+        (edu) => edu._id.toString() === educationId
+      );
+
+      if (!education) {
+        return res.status(404).json({ error: "Education entry not found" });
+      }
+
+      // Only update the grade if the type is "Course"
+      if (education.type === "Course") {
+        education.grade = grade;
+      }
+
+      await student.save();
+
+      // Fetch the updated student and populate education data
+      const updatedStudent = await Student.findById(studentId).populate(
+        "education.refId",
+        "courseName courseCode coursePackageName coursePackageCode programName"
+      );
+
+      res.status(200).json(updatedStudent);
+    } catch (error) {
+      console.error("❌ Error updating grade:", error);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
+);
 
+/**
+ * @route   GET /all-programs
+ * @desc    Fetches all available programs.
+ * @access  Public
+ */
 router.get("/all-programs", async (req, res) => {
   const programs = await Program.find().select("programName");
   res.json(programs);
 });
+/**
+ * @route   GET /all-course-packages
+ * @desc    Fetches all available course packages.
+ * @access  Public
+ */
 router.get("/all-course-packages", async (req, res) => {
   const packages = await CoursePackage.find().select("coursePackageName");
   res.json(packages);
 });
+/**
+ * @route   GET /all-courses
+ * @desc    Fetches all available courses.
+ * @access  Public
+ */
 router.get("/all-courses", async (req, res) => {
-  const courses = await Course.find().select("courseName");
+  const courses = await Course.find().select("courseName courseCode");
   res.json(courses);
 });
 
+/**
+ * @route   PUT /student/:id/education/:courseId/grade
+ * @desc    Updates the grade of a course in the student's education array.
+ * @access  Public
+ */
 router.put("/student/:id/education/:courseId/grade", async (req, res) => {
   const { id, courseId } = req.params;
   const { grade } = req.body;
@@ -504,6 +698,11 @@ router.put("/student/:id/education/:courseId/grade", async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /students/earnings
+ * @desc    Returns students with non-null education grades (for analytics).
+ * @access  Public
+ */
 router.get("/students/earnings", async (req, res) => {
   try {
     const students = await Student.find(
