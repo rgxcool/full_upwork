@@ -10,6 +10,7 @@ const EducationEntrySchema = new mongoose.Schema(
     refId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
+      refPath: "education.type",
     },
 
     // Grading fields only relevant when type === 'Course'

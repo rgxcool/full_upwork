@@ -71,15 +71,18 @@
           <input v-model="form.municipality" type="text" class="form-control" />
         </div>
 
-        <!-- Lärare -->
         <div class="col-md-6">
-          <label class="form-label">Ansvarig lärare</label>
-          <select v-model="form.teacherId" class="form-select" required>
-            <option disabled value="">Välj lärare</option>
-            <option v-for="teacher in teachers" :key="teacher._id" :value="teacher._id">
-              {{ teacher.userId?.username || 'Okänd lärare' }}
-            </option>
-          </select>
+          <v-autocomplete
+            v-model="form.teacherId"
+            :items="teachers"
+            item-title="userId.username"
+            item-value="_id"
+            label="Ansvarig lärare"
+            outlined
+            clearable
+            :no-data-text="'Inga lärare tillgängliga'"
+            :menu-props="{ maxHeight: '300px' }"
+          />
         </div>
 
         <!-- Material / Betalning -->
@@ -215,6 +218,14 @@
     try {
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`)
       teachers.value = res.data
+        .filter((t) => t.userId && t.userId.username) // skip malformed ones
+        .map((t) => ({
+          ...t,
+          userId: {
+            username: t.userId.username,
+          },
+          _id: t._id,
+        }))
 
       console.log('👨‍🏫 Teachers fetched:', teachers.value)
     } catch (err) {
