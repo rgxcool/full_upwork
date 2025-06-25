@@ -1,69 +1,65 @@
 <template>
-  <div class="hierarchy-manager">
-    <h1>Add Individual Course to Student</h1>
-    <br />
-    <br />
+  <div class="hierarchy-wrapper">
+    <div class="hierarchy-manager">
+      <h3 class="title">Education Editor</h3>
 
-    <!-- Bootstrap Flash Alert -->
-    <div
-      v-if="successMessage"
-      class="alert alert-success alert-dismissible fade show"
-      role="alert"
-      style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050"
-    >
-      {{ successMessage }}
-      <button type="button" class="btn-close" @click="successMessage = ''"></button>
-    </div>
+      <!-- Flash message -->
+      <div
+        v-if="successMessage"
+        class="alert alert-success alert-dismissible fade show"
+        role="alert"
+      >
+        {{ successMessage }}
+        <button type="button" class="btn-close" @click="successMessage = ''"></button>
+      </div>
 
-    <!-- Program Selection -->
-    <div>
-      <v-select
-        v-model="selectedProgram"
-        :items="programs"
-        item-title="programName"
-        item-value="_id"
-        placeholder="Select program"
-        @update:modelValue="fetchAllCourses"
-        class="styled-select"
-      />
-    </div>
-    <br />
-    <br />
+      <!-- All form fields -->
+      <div class="form-row">
+        <v-select
+          v-model="selectedProgram"
+          :items="programs"
+          item-title="programName"
+          item-value="_id"
+          placeholder="Select program"
+          class="styled-select"
+          @update:modelValue="fetchAllCourses"
+        />
+      </div>
 
-    <!-- Add Individual Course to Student -->
-    <div>
-      <v-select
-        v-model="selectedIndividualCourse"
-        :items="allCourses"
-        item-title="displayText"
-        item-value="_id"
-        placeholder="Select course"
-        class="styled-select"
-      />
-      <br />
+      <div class="form-row">
+        <v-select
+          v-model="selectedIndividualCourse"
+          :items="allCourses"
+          item-title="displayText"
+          item-value="_id"
+          placeholder="Select course"
+          class="styled-select"
+        />
+      </div>
 
-      <v-container>
-        <v-form>
-          <v-autocomplete
-            v-model="selectedStudent"
-            :items="filteredStudents"
-            :search="searchQuery"
-            item-title="name"
-            item-value="_id"
-            label="Select a student"
-            return-object
-            outlined
-            :menu-props="{ closeOnContentClick: false }"
-            attach
-            :no-data-text="'Please write student name'"
-            @update:search="searchQuery = $event"
-          />
-        </v-form>
-      </v-container>
-      <br />
-      <br />
+      <div class="form-row">
+        <v-autocomplete
+          v-model="selectedStudent"
+          :items="filteredStudents"
+          :search="searchQuery"
+          item-title="name"
+          item-value="_id"
+          label="Select a student"
+          return-object
+          outlined
+          :menu-props="{ closeOnContentClick: false }"
+          attach
+          :no-data-text="'Please write student name'"
+          @update:search="searchQuery = $event"
+          class="styled-select"
+        />
+      </div>
 
-      <button class="btn btn-primary" @click="handleAddCourse">Add Course to Student</button>
+      <div class="form-row">
+        <button class="btn btn-primary styled-button" @click="handleAddCourse">
+          Add Course to Student
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -171,6 +167,8 @@
             'Unknown Course'
           }".`
 
+          selectedIndividualCourse.value = null
+
           // ✅ Auto-hide the alert after 3 seconds
           setTimeout(() => {
             successMessage.value = ''
@@ -183,7 +181,11 @@
       // ✅ Computed property for filtering students
       const filteredStudents = computed(() => {
         if (!searchQuery.value.trim()) {
-          return []
+          // Show top 5 alphabetically when no query is typed
+          return students.value
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .slice(0, 5)
         }
         return students.value
           .filter((student) => student.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
@@ -212,23 +214,35 @@
 </script>
 
 <style scoped>
+  .hierarchy-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding-top: 60px;
+  }
+
   .hierarchy-manager {
-    min-height: 500px;
+    text-align: center;
+    width: 100%;
+    max-width: 600px;
   }
 
-  .styled-select {
-    border: 2px solid #333;
-    border-radius: 4px;
-    padding: 8px;
-    width: 50%;
-    font-size: 16px;
+  .title {
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 40px;
   }
 
-  .styled-input {
-    border: 2px solid #333;
-    border-radius: 4px;
-    padding: 8px;
-    width: 300px;
-    font-size: 16px;
+  .form-row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  .styled-select,
+  .styled-button {
+    width: 100%;
+    max-width: 500px;
   }
 </style>
