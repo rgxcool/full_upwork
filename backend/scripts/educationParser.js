@@ -11,7 +11,7 @@ async function parseEducationData(filePath) {
 
     try {
         await parseCourses(filePath);
-        await parseCoursePackages(filePath); // ✅ Ensure course packages are processed before closing connection
+        await parseCoursePackages(filePath);
 
         console.log("✅ All data parsed successfully.");
     } catch (error) {

@@ -180,7 +180,7 @@
   /* Styling for Table Headers */
   .v-table thead {
     background: #1e1e1e;
-    color: white;
+    color: black;
   }
 
   /* Ensure Inner Tables Fit */

@@ -159,7 +159,7 @@
   /* 9️⃣ Course Name Column */
   .course-name-column {
     width: 300px;
-    white-space: nowrap;
+    white-space: wrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
