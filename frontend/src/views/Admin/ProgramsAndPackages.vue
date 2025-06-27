@@ -22,10 +22,10 @@
           <v-table dense class="unified-table">
             <thead>
               <tr>
-                <th class="text-left w-25">Course Package</th>
-                <th class="text-left w-15">Code</th>
-                <th class="text-left w-15">Extent</th>
-                <th class="text-left w-45">Courses</th>
+                <th class="text-left w-30">Course Package</th>
+                <th class="text-left w-10">Code</th>
+                <th class="text-left w-5">Extent</th>
+                <th class="text-left w-65">Courses</th>
               </tr>
             </thead>
             <tbody>
@@ -161,20 +161,17 @@
   }
 
   /* Column Width Consistency */
-  .w-25 {
-    width: 25%;
+  .w-10 {
+    width: 10%;
   }
-
-  .w-15 {
-    width: 15%;
+  .w-5 {
+    width: 5%;
   }
-
-  .w-45 {
-    width: 45%;
+  .w-30 {
+    width: 30%;
   }
-
-  .w-50 {
-    width: 50%;
+  .w-65 {
+    width: 65%;
   }
 
   /* Styling for Table Headers */
