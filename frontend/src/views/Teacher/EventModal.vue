@@ -15,9 +15,12 @@
 
         <div class="modal-body">
           <p>
-            <strong>Provdetaljer:</strong><br />
-            Tid: {{ examTime || 'Ej vald' }}<br />
-            Kommun: {{ examMunicipality || 'Ej vald' }}<br />
+            <strong>Provdetaljer:</strong>
+            <br />
+            Tid: {{ examTime || 'Ej vald' }}
+            <br />
+            Kommun: {{ examMunicipality || 'Ej vald' }}
+            <br />
             Plats: {{ examLocation || 'Ej vald' }}
           </p>
 
@@ -118,6 +121,11 @@
       },
       async markAttendance(studentId, attended) {
         try {
+          console.log(
+            `Uppdaterar närvaro för student ${studentId}: ${
+              attended ? 'Närvarande' : 'Ej närvarande'
+            }`
+          )
           await axios.put(
             `${import.meta.env.VITE_API_URL}/api/mark-attendance/${studentId}`,
             { attended },

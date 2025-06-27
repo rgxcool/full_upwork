@@ -122,14 +122,17 @@
               d="M12 2C10.3 2 9 3.3 9 5v1.1c-2.8.5-5 3-5 5.9v4l-1 1v1h16v-1l-1-1v-4c0-2.9-2.2-5.4-5-5.9V5c0-1.7-1.3-3-3-3zm0 18c1.1 0 2-.9 2-2H10c0 1.1.9 2 2 2z"
             />
           </svg>
-          <span v-if="totalNotifications > 0" class="notis-badge">{{ totalNotifications }}</span>
-
           <span v-if="notifications.length" class="notis-badge">{{ notifications.length }}</span>
         </div>
 
         <!-- Notispanel -->
         <div v-if="showNotisPanel" class="notis-panel">
-          <NotificationBox />
+          <NotificationBox
+            :notifications="notifications"
+            @notification-dismissed="
+              (id) => (notifications = notifications.filter((n) => n._id !== id))
+            "
+          />
         </div>
 
         <!-- Hamburgermenyn syns bara på mobil -->
@@ -215,6 +218,7 @@
       )
 
       const notifications = ref([])
+
       const showNotisPanel = ref(false)
       // Fix missing properties
       const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
@@ -251,12 +255,7 @@
         isMobileMenuOpen.value = !isMobileMenuOpen.value
       }
 
-      const totalNotifications = computed(
-        () =>
-          (showNotification.value ? 1 : 0) +
-          (endDateNotifications.value?.length || 0) +
-          (missingGradeNotifications.value?.length || 0)
-      )
+      const totalNotifications = computed(() => notifications.value.length)
 
       const fetchNotifications = async () => {
         const res = await axios.get('/api/notifications')
@@ -361,15 +360,11 @@
 
 
       const clearSearch = () => {
-      searchQuery.value = '';
-      selectedDate.value = null;
-      searchResults.value = [];
-      showResults.value = false;
-    };
-
-
-
-
+        searchQuery.value = ''
+        selectedDate.value = null
+        searchResults.value = []
+        showResults.value = false
+      }
 
       const fetchCourses = async () => {
         try {
@@ -467,13 +462,13 @@
   /* Navbar */
 
   .search-bar {
-  /* Improved styles for search bar */
-  display: flex;
-  align-items: center;
-  background: #ecf0f1;
-  padding: 10px 15px;
-  border-radius: 20px;
-}
+    /* Improved styles for search bar */
+    display: flex;
+    align-items: center;
+    background: #ecf0f1;
+    padding: 10px 15px;
+    border-radius: 20px;
+  }
 
 .search-type-options {
   list-style: none;

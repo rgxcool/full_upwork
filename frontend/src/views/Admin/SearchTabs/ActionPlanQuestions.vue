@@ -1,79 +1,109 @@
 <template>
-  <div>
-    <form ref="formRef" class="p-3 bg-light rounded shadow-sm" @submit.prevent="submitPlan">
-      <div v-for="(question, index) in questions" :key="index" class="mb-3">
-        <label class="form-label">{{ question.label }}</label>
-        <div v-if="question.type === 'radio'">
-          <div v-for="option in question.options" :key="option" class="form-check">
-            <input
-              class="form-check-input"
-              type="radio"
-              :name="question.key"
-              :value="option"
-              v-model="answers[question.key]"
-            />
-            <label class="form-check-label">{{ option }}</label>
-          </div>
-        </div>
-
-        <div v-else-if="question.type === 'checkbox'">
-          <div v-for="option in question.options" :key="option" class="form-check">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              :value="option"
-              v-model="answers[question.key]"
-            />
-            <label class="form-check-label">{{ option }}</label>
-          </div>
-        </div>
-
-        <select
-          v-else-if="question.type === 'select'"
-          class="form-select"
-          v-model="answers[question.key]"
+  <v-card class="pa-6" elevation="2" rounded="lg">
+    <v-form ref="formRef" @submit.prevent="submitPlan">
+      <v-container fluid>
+        <v-row
+          v-for="(question, index) in questions"
+          :key="index"
+          class="mb-4 outlined"
+          color="primary"
         >
-          <option v-for="option in question.options" :key="option" :value="option">
-            {{ option }}
-          </option>
-        </select>
+          <v-col cols="12">
+            <h4 class="text-subtitle-1 mb-2">{{ question.label }}</h4>
 
-        <!-- Teacher dropdown -->
-        <v-autocomplete
-          v-else-if="question.key === 'teacherName'"
-          v-model="answers[question.key]"
-          :items="teachers"
-          item-title="label"
-          item-value="_id"
-          label="Välj ansvarig lärare"
-          outlined
-          clearable
-          :menu-props="{ maxHeight: '300px' }"
-        />
+            <!-- Radio buttons -->
+            <v-radio-group
+              v-if="question.type === 'radio'"
+              v-model="answers[question.key]"
+              :inline="true"
+              density="comfortable"
+            >
+              <v-radio
+                v-for="option in question.options"
+                :key="option"
+                :label="option"
+                :value="option"
+                :color="primary"
+                :class="outlined"
+              />
+            </v-radio-group>
 
-        <input
-          class="form-control"
-          v-else-if="question.type === 'text'"
-          type="text"
-          v-model="answers[question.key]"
-        />
+            <!-- Checkboxes -->
+            <div v-else-if="question.type === 'checkbox'">
+              <v-checkbox
+                v-for="option in question.options"
+                :key="option"
+                :label="option"
+                :value="option"
+                color="primary"
+                class="outlined"
+                v-model="answers[question.key]"
+                density="comfortable"
+              />
+            </div>
 
-        <input
-          class="form-control"
-          v-else-if="question.type === 'date'"
-          type="date"
-          v-model="answers[question.key]"
-        />
+            <!-- Select dropdown -->
+            <v-select
+              v-else-if="question.type === 'select'"
+              :items="question.options"
+              v-model="answers[question.key]"
+              label="Välj ett alternativ"
+              variant="outlined"
+            />
 
-        <textarea
-          class="form-control"
-          v-else-if="question.type === 'textarea'"
-          v-model="answers[question.key]"
-        ></textarea>
-      </div>
-      <button type="submit" class="btn btn-primary">Spara</button>
-    </form>
-  </div>
+            <!-- Teacher autocomplete -->
+            <v-autocomplete
+              v-else-if="question.key === 'teacherName'"
+              v-model="answers[question.key]"
+              :items="teachers"
+              item-title="label"
+              item-value="_id"
+              label="Välj ansvarig lärare"
+              variant="outlined"
+              color="primary"
+              clearable
+              :menu-props="{ maxHeight: '300px' }"
+            />
+
+            <!-- Text input -->
+            <v-text-field
+              v-else-if="question.type === 'text'"
+              v-model="answers[question.key]"
+              variant="outlined"
+              label="Svar"
+            />
+
+            <!-- Date picker -->
+            <v-text-field
+              v-else-if="question.type === 'date'"
+              type="date"
+              v-model="answers[question.key]"
+              variant="outlined"
+              label="Datum"
+              color="primary"
+            />
+
+            <!-- Textarea -->
+            <v-textarea
+              v-else-if="question.type === 'textarea'"
+              v-model="answers[question.key]"
+              variant="outlined"
+              label="Kommentar"
+              auto-grow
+            />
+          </v-col>
+        </v-row>
+
+        <v-row>
+          <v-col cols="12" class="text-end">
+            <v-btn type="submit" color="primary" size="large" elevation="1">
+              💾 Spara Handlingsplan
+            </v-btn>
+          </v-col>
+        </v-row>
+      </v-container>
+    </v-form>
+  </v-card>
 </template>
 
 <script setup>
