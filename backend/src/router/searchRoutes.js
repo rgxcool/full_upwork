@@ -51,7 +51,9 @@ router.get("/search", async (req, res) => {
     if (type === 'Datum' && date) {
       const parsedDate = new Date(date);
       const studentsByDate = await Student.find({
-        $or: [{ startDate: parsedDate }, { endDate: parsedDate }],
+        $or: [
+          { startDate: { $lte: parsedDate }, endDate: { $gte: parsedDate } }, // Kurs pågår under datumet
+        ],
       }).select("_id name email");
 
       results.push(...studentsByDate.map(student => ({
@@ -60,7 +62,7 @@ router.get("/search", async (req, res) => {
         type: 'Elev',
         extra: `Email: ${student.email}`,
       })));
-      
+
     } else if (type === 'Användare' && q && q.length >= 3) {
       const studentMatches = await Student.find({
         name: { $regex: q, $options: "i" },
@@ -88,31 +90,49 @@ router.get("/search", async (req, res) => {
         }))
       );
 
-    } else if (type === 'Kurs' && q && q.length >= 3) {
-      const courseMatches = await Student.find({
-        'education.name': { $regex: q, $options: "i" },
-      }).populate({
-        path: 'education.refId',
-        populate: { path: 'teacher', model: 'Teacher', select: 'name' }, // Ensure proper path to populate teacher
-      }).lean();
+    } else    if (type === 'Kurs' && q && q.length >= 3) {
+      const studentMatches = await Student.find({
+        'education.refId': { $ne: null }
+      }).populate('education.refId').lean();
 
       const uniqueCourses = new Map();
 
-      courseMatches.forEach(student => {
+      studentMatches.forEach(student => {
         student.education.forEach(course => {
-          if (course.name.match(new RegExp(q, "i"))) {
-            if (!uniqueCourses.has(course.name)) {
-              uniqueCourses.set(course.name, {
-                id: student._id,
-                name: course.name,
-                type: 'Kurs',
-                extra: `Lärare: ${course.refId?.teacher?.name || "Unknown"}`, // Correct path for teacher name
+          let courseName = '';
+      
+          switch (course.type) {
+            case 'Course':
+              courseName = course.refId.courseName;
+              break;
+            case 'Program':
+              courseName = course.refId.programName;
+              break;
+            case 'CoursePackage':
+              courseName = course.refId.coursePackageName;
+              break;
+          }
+      
+          if (courseName && courseName.match(new RegExp(q, "i"))) {
+            const courseId = course.refId._id.toString();
+      
+            if (!uniqueCourses.has(courseId)) {
+              uniqueCourses.set(courseId, {
+                id: course.refId._id,
+                name: courseName,
+                type: course.type,
+                students: []
               });
             }
+      
+            uniqueCourses.get(courseId).students.push({
+              id: student._id,
+              name: student.name,
+            });
           }
         });
       });
-
+      
       results.push(...Array.from(uniqueCourses.values()));
     }
 
@@ -158,6 +178,12 @@ router.get("/details/:type/:id", async (req, res) => {
         }).select("username email role");
         break;
 
+
+      case "Kurs":
+        result = await Student.findOne({
+          "education.refId":id,
+        })
+        break;
       default:
         return res.status(400).json({ message: "Ogiltig typ av objekt" });
     }
