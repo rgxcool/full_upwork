@@ -43,35 +43,8 @@
 
 <style scoped>
   .notification-box {
-    border: 3px solid black;
+    border: 2px solid #007dc3ff;
+
     border-radius: 3px;
-    padding: 8px; /* remove padding around the box */
-    margin: 0;
-    box-sizing: border-box;
-  }
-
-  .notification-box ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  .notification-box li {
-    border: 3px solid #007dc3ff;
-    border-radius: 6px;
-    padding: 8px 12px;
-    margin-bottom: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background-color: #f9f9f9;
-  }
-
-  .notification-box button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-    margin-left: 8px;
   }
 </style>
