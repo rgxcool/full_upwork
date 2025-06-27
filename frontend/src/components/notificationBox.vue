@@ -43,8 +43,8 @@
 
 <style scoped>
   .notification-box {
-    border: 1px solid black;
-    border-radius: 6px;
+    border: 3px solid black;
+    border-radius: 3px;
     padding: 8px; /* remove padding around the box */
     margin: 0;
     box-sizing: border-box;
@@ -57,7 +57,7 @@
   }
 
   .notification-box li {
-    border: 2px solid #007dc3ff;
+    border: 3px solid #007dc3ff;
     border-radius: 6px;
     padding: 8px 12px;
     margin-bottom: 8px;
