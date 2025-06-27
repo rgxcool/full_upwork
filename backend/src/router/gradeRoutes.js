@@ -8,170 +8,152 @@ import Program from "../models/Program.js";
 import CoursePackage from "../models/CoursePackage.js";
 
 import {
-    createNotification,
-    resolveNotification,
-    evaluateGradingStatusAndNotify,
-    evaluateActionPlanStatusAndNotify,
-    checkPendingGradesAndNotify,
+  createNotification,
+  resolveNotification,
+  evaluateGradingStatusAndNotify,
+  evaluateActionPlanStatusAndNotify,
+  checkPendingGradesAndNotify,
 } from "../controllers/notificationController.js";
 
 router.get("/students/ungraded", async (req, res) => {
-    try {
-        await evaluateGradingStatusAndNotify();
+  try {
+    await evaluateGradingStatusAndNotify();
 
-        const students = await Student.find({
-            education: {
-                $elemMatch: {
-                    removedAt: null,
-                    $or: [
-                        { grade: null },
-                        { grade: "" },
-                        { locked: false },
-                        { grade: "F", locked: true },
-                    ],
-                },
-            },
-        }).lean();
+    const students = await Student.find({
+      education: {
+        $elemMatch: {
+          removedAt: null,
+          $or: [
+            { grade: null },
+            { grade: "" },
+            { locked: false },
+            { grade: "F", locked: true },
+          ],
+        },
+      },
+    }).lean();
 
-        const enrichedStudents = (
-            await Promise.all(
-                students.map(async (student) => {
-                    const relevantEducation = await Promise.all(
-                        student.education
-                            .filter(async (edu) => {
-                                if (edu.removedAt) return false;
+    const enrichedStudents = (
+      await Promise.all(
+        students.map(async (student) => {
+          const relevantEducation = await Promise.all(
+            student.education
+              .filter(async (edu) => {
+                if (edu.removedAt) return false;
 
-                                const isUngraded =
-                                    !edu.grade || edu.grade === "";
-                                const isFAndLocked =
-                                    edu.grade === "F" && edu.locked;
+                const isUngraded = !edu.grade || edu.grade === "";
+                const isFAndLocked = edu.grade === "F" && edu.locked;
 
-                                if (isFAndLocked) {
-                                    const pendingPlan =
-                                        await Notification.findOne({
-                                            studentId: student._id,
-                                            courseId: edu.redId,
-                                            type: "action_plan_required",
-                                            resolved: false,
-                                        });
+                if (isFAndLocked) {
+                  const pendingPlan = await Notification.findOne({
+                    studentId: student._id,
+                    courseId: edu.redId,
+                    type: "action_plan_required",
+                    resolved: false,
+                  });
 
-                                    return !!pendingPlan;
-                                }
+                  return !!pendingPlan;
+                }
 
-                                return isUngraded;
-                            })
-                            .map(async (edu) => {
-                                let populated = { ...edu };
+                return isUngraded;
+              })
+              .map(async (edu) => {
+                let populated = { ...edu };
 
-                                try {
-                                    if (edu.type === "Course") {
-                                        const course = await Course.findById(
-                                            edu.refId
-                                        ).lean();
-                                        if (course) {
-                                            populated.details = course;
-                                            populated.displayName =
-                                                course.courseName;
-                                            populated.scriveLink =
-                                                "https://scrive.com/new/login?lang=sv"; // Anpassa efter behov
-                                        }
-                                    } else if (edu.type === "Program") {
-                                        const program = await Program.findById(
-                                            edu.refId
-                                        ).lean();
-                                        if (program) {
-                                            populated.details = program;
-                                            populated.displayName =
-                                                program.programName;
-                                        }
-                                    } else if (edu.type === "CoursePackage") {
-                                        const cp = await CoursePackage.findById(
-                                            edu.refId
-                                        ).lean();
-                                        if (cp) {
-                                            populated.details = cp;
-                                            populated.displayName =
-                                                cp.coursePackageName;
-                                        }
-                                    }
-                                } catch (err) {
-                                    console.error(
-                                        "Fel vid hämtning av utbildningsdata:",
-                                        err
-                                    );
-                                }
+                try {
+                  if (edu.type === "Course") {
+                    const course = await Course.findById(edu.refId).lean();
+                    if (course) {
+                      populated.details = course;
+                      populated.displayName = course.courseName;
+                      populated.scriveLink =
+                        "https://scrive.com/new/login?lang=sv"; // Anpassa efter behov
+                    }
+                  } else if (edu.type === "Program") {
+                    const program = await Program.findById(edu.refId).lean();
+                    if (program) {
+                      populated.details = program;
+                      populated.displayName = program.programName;
+                    }
+                  } else if (edu.type === "CoursePackage") {
+                    const cp = await CoursePackage.findById(edu.refId).lean();
+                    if (cp) {
+                      populated.details = cp;
+                      populated.displayName = cp.coursePackageName;
+                    }
+                  }
+                } catch (err) {
+                  console.error("Fel vid hämtning av utbildningsdata:", err);
+                }
 
-                                populated.isGraded = !!populated.grade;
+                populated.isGraded = !!populated.grade;
 
-                                populated.requireActionPlan =
-                                    edu.grade === "F" && edu.locked;
+                populated.requireActionPlan = edu.grade === "F" && edu.locked;
 
-                                return populated;
-                            })
-                    );
+                return populated;
+              })
+          );
 
-                    return {
-                        studentId: student._id,
-                        name: student.name,
-                        personalNumber: student.personalNumber,
-                        email: student.email,
-                        ungradedEducation: relevantEducation,
-                    };
-                })
-            )
-        ).filter((s) => s.ungradedEducation.length > 0);
+          return {
+            studentId: student._id,
+            name: student.name,
+            personalNumber: student.personalNumber,
+            email: student.email,
+            ungradedEducation: relevantEducation,
+          };
+        })
+      )
+    ).filter((s) => s.ungradedEducation.length > 0);
 
-        res.json(enrichedStudents);
-    } catch (error) {
-        console.error("❌ Fel vid hämtning av obetygsatta elever:", error);
-        res.status(500).json({ message: "Serverfel vid hämtning av elever" });
-    }
+    res.json(enrichedStudents);
+  } catch (error) {
+    console.error("❌ Fel vid hämtning av obetygsatta elever:", error);
+    res.status(500).json({ message: "Serverfel vid hämtning av elever" });
+  }
 });
 
 router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
-    // Anta att req.user finns
-    const user = req.user;
-    if (!(user.role === "admin" || user.role === "systemadmin")) {
-        return res
-            .status(403)
-            .json({ error: "Endast admin/systemadmin kan låsa upp." });
+  // Anta att req.user finns
+  const user = req.user;
+  if (!(user.role === "admin" || user.role === "systemadmin")) {
+    return res
+      .status(403)
+      .json({ error: "Endast admin/systemadmin kan låsa upp." });
+  }
+  const { studentId, courseId } = req.body;
+
+  try {
+    const result = await Student.updateOne(
+      {
+        _id: studentId,
+        "education.refId": courseId,
+        "education.type": "Course",
+        "education.removedAt": null,
+      },
+      {
+        $set: {
+          "education.$.locked": false,
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send("Kurs hittades inte");
     }
-    const { studentId, courseId } = req.body;
 
-    try {
-        const result = await Student.updateOne(
-            {
-                _id: studentId,
-                "education.refId": courseId,
-                "education.type": "Course",
-                "education.removedAt": null,
-            },
-            {
-                $set: {
-                    "education.$.locked": false,
-                },
-            }
-        );
+    // (Skicka adminnotis om du vill!)
+    await Notification.create({
+      type: "grade_unlocked",
+      message: `Admin ${user.name || user.username} låste upp en betygsrad.`,
+      meta: { studentId, courseId },
+      resolved: false,
+    });
 
-        if (result.matchedCount === 0) {
-            return res.status(404).send("Kurs hittades inte");
-        }
-
-        // (Skicka adminnotis om du vill!)
-        await Notification.create({
-            type: "grade_unlocked",
-            message: `Admin ${
-                user.name || user.username
-            } låste upp en betygsrad.`,
-            meta: { studentId, courseId },
-            resolved: false,
-        });
-
-        res.send("Betyg upplåst");
-    } catch (err) {
-        console.error("Upplåsning misslyckades:", err);
-        res.status(500).send("Internt serverfel");
-    }
+    res.send("Betyg upplåst");
+  } catch (err) {
+    console.error("Upplåsning misslyckades:", err);
+    res.status(500).send("Internt serverfel");
+  }
 });
 
 /*
@@ -214,28 +196,27 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
 */
 
 router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
-    const { studentId, courseId, grade, reason, comments, npScore, type } =
-        req.body;
+  const { studentId, courseId, grade, reason, comments, npScore, type } =
+    req.body;
 
-    try {
-        const result = await Student.updateOne(
-            {
-                _id: studentId,
-                "education.refId": courseId,
-            },
-            {
-                $set: {
-                    "education.$.grade": grade,
-                    "education.$.reason": reason,
-                    "education.$.comments": comments,
-                    "education.$.npScore": npScore,
-                    "education.$.type": type,
-                },
-            }
-        );
+  try {
+    const result = await Student.updateOne(
+      {
+        _id: studentId,
+        "education.refId": courseId,
+      },
+      {
+        $set: {
+          "education.$.grade": grade,
+          "education.$.reason": reason,
+          "education.$.comments": comments,
+          "education.$.npScore": npScore,
+          "education.$.type": type,
+        },
+      }
+    );
 
-        // This is handled by notificatonController now
-        /*     if (grade === "F") {
+    if (grade === "F") {
       await createNotification({
         studentId,
         courseId,
@@ -249,74 +230,73 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
         type: "action_plan_required",
       });
     }
- */
-        // 🔁 Kontrollera global notisstatus
-        await evaluateGradingStatusAndNotify();
-        await evaluateActionPlanStatusAndNotify();
 
-        res.send("✅ Betyg sparat!");
-    } catch (err) {
-        console.error("Error saving grade:", err);
-        res.status(500).send("Server error");
-    }
+    // 🔁 Kontrollera global notisstatus
+    await evaluateGradingStatusAndNotify();
+    await evaluateActionPlanStatusAndNotify();
+
+    res.send("✅ Betyg sparat!");
+  } catch (err) {
+    console.error("Error saving grade:", err);
+    res.status(500).send("Server error");
+  }
 });
 
 router.post("/teacher/lock-grade", async (req, res) => {
-    const { studentId, courseId } = req.body;
+  const { studentId, courseId } = req.body;
 
-    try {
-        const student = await Student.findById(studentId);
-        if (!student)
-            return res.status(404).json({ error: "Student not found" });
+  try {
+    const student = await Student.findById(studentId);
+    if (!student) return res.status(404).json({ error: "Student not found" });
 
-        // Find the course in the education array and lock it
-        const educationEntry = student.education.find(
-            (edu) => edu.refId.toString() === courseId
-        );
+    // Find the course in the education array and lock it
+    const educationEntry = student.education.find(
+      (edu) => edu.refId.toString() === courseId
+    );
 
-        if (educationEntry) {
-            educationEntry.locked = true; // Lock the grade for the specific course
-            await student.save(); // Persist the change to the database
+    if (educationEntry) {
+      educationEntry.locked = true; // Lock the grade for the specific course
+      await student.save(); // Persist the change to the database
 
-            return res.status(200).json({ message: "Grade locked", student });
-        }
-
-        return res
-            .status(404)
-            .json({ error: "Course not found in student's education" });
-    } catch (error) {
-        console.error("❌ Error locking grade:", error);
-        res.status(500).json({ error: "Server error" });
+      return res.status(200).json({ message: "Grade locked", student });
     }
+
+    return res
+      .status(404)
+      .json({ error: "Course not found in student's education" });
+  } catch (error) {
+    console.error("❌ Error locking grade:", error);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
-    const { studentId, courseId } = req.body;
+  const { studentId, courseId } = req.body;
 
-    try {
-        const result = await Student.updateOne(
-            {
-                _id: studentId,
-                "education.refId": courseId,
-                "education.type": "Course",
-                "education.removedAt": null,
-            },
-            {
-                $set: {
-                    "education.$.locked": false,
-                },
-            }
-        );
+  try {
+    const result = await Student.updateOne(
+      {
+        _id: studentId,
+        "education.refId": courseId,
+        "education.type": "Course",
+        "education.removedAt": null,
+      },
+      {
+        $set: {
+          "education.$.locked": false,
+        },
+      }
+    );
 
-        if (result.matchedCount === 0) {
-            return res.status(404).send("Kurs hittades inte");
-        }
-
-        res.send("Betyg upplåst");
-    } catch (err) {
-        console.error("Upplåsning misslyckades:", err);
-        res.status(500).send("Internt serverfel");
+    if (result.matchedCount === 0) {
+      return res.status(404).send("Kurs hittades inte");
     }
+
+    res.send("Betyg upplåst");
+  } catch (err) {
+    console.error("Upplåsning misslyckades:", err);
+    res.status(500).send("Internt serverfel");
+  }
 });
 
 export default router;
