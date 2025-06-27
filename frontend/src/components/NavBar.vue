@@ -3,96 +3,90 @@
     <div v-if="canSeeSearch" class="top-nav">
       <div class="build-counter">v. {{ buildVersion }}</div>
 
-        <div
-          class="search-container position-relative"
-          @click.stop
-          style="max-width: 500px;"
-        >
-    
+      <div class="search-container position-relative" @click.stop style="max-width: 500px">
         <div class="search-bar position-relative">
+          <!-- Textinput -->
+          <input
+            v-if="selectedSearchType !== 'Datum'"
+            class="form-control rounded-pill pe-5"
+            type="text"
+            v-model="searchQuery"
+            @input="handleSearch"
+            @focus="handleInputFocus"
+            :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
+          />
 
-        <!-- Textinput -->
-        <input
-          v-if="selectedSearchType !== 'Datum'"
-          class="form-control rounded-pill pe-5"
-          type="text"
-          v-model="searchQuery"
-          @input="handleSearch"
-          @focus="handleInputFocus"
-          :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
-        />
+          <!-- Datepicker -->
+          <DatePicker
+            v-if="selectedSearchType === 'Datum'"
+            v-model="selectedDate"
+            :format="'yyyy-MM-dd'"
+            @change="handleSearch"
+            :placeholder="'Välj datum'"
+          />
 
-        <!-- Datepicker -->
-        <DatePicker
-          v-if="selectedSearchType === 'Datum'"
-          v-model="selectedDate"
-          :format="'yyyy-MM-dd'"
-          @change="handleSearch"
-          :placeholder="'Välj datum'"
-        />
-        
-    <div
-          v-if="selectedSearchType !== 'Datum'"
-        class="clear-search position-absolute top-50 translate-middle-y end-0 ms-5"
-        style="cursor: pointer;"
-        @click="clearSearch"
-      >
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M20 20L4 4m16 0L4 20"/></svg>
-      </div>
-
-      <!-- 'x'-ikon för att rensa -->
-
-
-      <!-- Söktyp-knappen (Användare/Kurs/Datum) -->
-      <div
-        class="search-type-toggle position-absolute top-50 translate-middle-y end-0 me-5"
-        style="z-index: 1000;"
-      >
-        <button
-          @click="toggleSearchTypeDropdown"
-          class="btn btn-link text-dark fw-medium p-0"
-          style="text-decoration: none;"
-        >
-          {{ selectedSearchType }}
-        </button>
-
-        <!-- Dropdown-alternativ -->
-        <ul
-          v-if="showSearchTypeDropdown"
-          class="position-absolute bg-white shadow rounded py-2 px-2 mt-1"
-          style="right: 0;"
-        >
-          <li @click="selectSearchType('Användare')" class="dropdown-item">Användare</li>
-          <li @click="selectSearchType('Kurs')" class="dropdown-item">Kurs</li>
-          <li @click="selectSearchType('Datum')" class="dropdown-item">Datum</li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- Resultat -->
-    <div v-if="showResults" class="search-results me-3
-    ">
-      <ul class="result-list">
-        <li
-          v-for="result in filteredResults"
-          :key="result.id"
-          @click="navigateToDetails(result)"
-          class="result-item"
-        >
-          <div class="result-content">
-            <div class="result-title">{{ result.name }}</div>
-            <div class="result-subtitle">{{ result.extra }}</div>
+          <div
+            v-if="selectedSearchType !== 'Datum'"
+            class="clear-search position-absolute top-50 translate-middle-y end-0 ms-5"
+            style="cursor: pointer"
+            @click="clearSearch"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="2"
+                d="M20 20L4 4m16 0L4 20"
+              />
+            </svg>
           </div>
-        </li>
-      </ul>
-    </div>
 
+          <!-- 'x'-ikon för att rensa -->
 
-  </div>
+          <!-- Söktyp-knappen (Användare/Kurs/Datum) -->
+          <div
+            class="search-type-toggle position-absolute top-50 translate-middle-y end-0 me-5"
+            style="z-index: 1000"
+          >
+            <button
+              @click="toggleSearchTypeDropdown"
+              class="btn btn-link text-dark fw-medium p-0"
+              style="text-decoration: none"
+            >
+              {{ selectedSearchType }}
+            </button>
 
+            <!-- Dropdown-alternativ -->
+            <ul
+              v-if="showSearchTypeDropdown"
+              class="position-absolute bg-white shadow rounded py-2 px-2 mt-1"
+              style="right: 0"
+            >
+              <li @click="selectSearchType('Användare')" class="dropdown-item">Användare</li>
+              <li @click="selectSearchType('Kurs')" class="dropdown-item">Kurs</li>
+              <li @click="selectSearchType('Datum')" class="dropdown-item">Datum</li>
+            </ul>
+          </div>
+        </div>
 
-
-
+        <!-- Resultat -->
+        <div v-if="showResults" class="search-results me-3">
+          <ul class="result-list">
+            <li
+              v-for="result in filteredResults"
+              :key="result.id"
+              @click="navigateToDetails(result)"
+              class="result-item"
+            >
+              <div class="result-content">
+                <div class="result-title">{{ result.name }}</div>
+                <div class="result-subtitle">{{ result.extra }}</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
     <!-- Left Section: Logo & Build Version -->
     <div class="logo-container">
@@ -269,8 +263,6 @@
         await fetchNotifications() // uppdatera listan
       }
 
-
-
       const canResetNotifications = computed(() =>
         ['admin', 'systemadmin'].includes(userRole.value)
       )
@@ -318,46 +310,44 @@
       }
 
       const handleSearch = async () => {
-
-        if (selectedSearchType.value !== 'Datum' && (!searchQuery.value || searchQuery.value.length < 3)) {
-        searchResults.value = [];
-        showResults.value = false;
-        return; // Avsluta funktionen här
-    }
-
-    try {
-        const params = new URLSearchParams();
-        params.append('type', selectedSearchType.value);
-        
-        if (selectedSearchType.value === 'Datum') {
-            if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) {
-                // Om datumet är ogiltigt eller rensat, dölj resultaten
-                showResults.value = false; 
-                return;
-            }
-            // Formatera datumet till YYYY-MM-DD för att matcha backend
-            const date = new Date(selectedDate.value);
-            const formattedDate = date.toISOString().split('T')[0];
-            params.append('date', formattedDate);
-
-        } else {
-            // Sökfrågan har redan validerats i början av funktionen
-            params.append('q', searchQuery.value);
+        if (
+          selectedSearchType.value !== 'Datum' &&
+          (!searchQuery.value || searchQuery.value.length < 3)
+        ) {
+          searchResults.value = []
+          showResults.value = false
+          return // Avsluta funktionen här
         }
 
-        const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`);
-        console.log("Search Response:", response.data);
-        searchResults.value = response.data;
-        showResults.value = searchResults.value.length > 0;
+        try {
+          const params = new URLSearchParams()
+          params.append('type', selectedSearchType.value)
 
-    } catch (error) {
-        console.error('Error during search:', error);
-        searchResults.value = [];
-        showResults.value = false; // Dölj även resultaten vid ett fel
-    }
-};
+          if (selectedSearchType.value === 'Datum') {
+            if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) {
+              // Om datumet är ogiltigt eller rensat, dölj resultaten
+              showResults.value = false
+              return
+            }
+            // Formatera datumet till YYYY-MM-DD för att matcha backend
+            const date = new Date(selectedDate.value)
+            const formattedDate = date.toISOString().split('T')[0]
+            params.append('date', formattedDate)
+          } else {
+            // Sökfrågan har redan validerats i början av funktionen
+            params.append('q', searchQuery.value)
+          }
 
-
+          const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`)
+          console.log('Search Response:', response.data)
+          searchResults.value = response.data
+          showResults.value = searchResults.value.length > 0
+        } catch (error) {
+          console.error('Error during search:', error)
+          searchResults.value = []
+          showResults.value = false // Dölj även resultaten vid ett fel
+        }
+      }
 
       const clearSearch = () => {
         searchQuery.value = ''
@@ -470,17 +460,17 @@
     border-radius: 20px;
   }
 
-.search-type-options {
-  list-style: none;
-  padding: 10px;
-  margin: 0;
-  background-color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+  .search-type-options {
+    list-style: none;
+    padding: 10px;
+    margin: 0;
+    background-color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
 
-.search-bar {
-  width: clamp(280px, 50%, 500px);
-}
+  .search-bar {
+    width: clamp(280px, 50%, 500px);
+  }
 
   .logo-container {
     display: flex;
@@ -702,7 +692,7 @@
     background: #fff;
     border-radius: 12px;
     width: 300px;
-    padding: 16px;
+    padding: 0px;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
     z-index: 1000;
     font-family: 'Inter', sans-serif;
