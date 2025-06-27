@@ -1,55 +1,76 @@
 <template>
-  <nav class="navbar px-5" @click="handleGlobalClick">
-    <!-- Search bar -->
+  <nav class="navbar px-5" @click.self="closeSearch">
     <div v-if="canSeeSearch" class="top-nav">
       <div class="build-counter">v. {{ buildVersion }}</div>
 
-      <div class="search-container position-relative" @click.stop>
-        <div class="search-bar d-flex align-items-center gap-2">
-          <div class="input-wrapper">
-            <input
-              v-model="searchQuery"
-              v-show="selectedSearchType !== 'Datum'"
-              class="form-control rounded-pill pe-5"
-              type="text"
-              @input="handleSearch"
-              :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
-            />
-            <DatePicker
-              v-model="selectedDate"
-              v-show="selectedSearchType === 'Datum'"
-              :format="'yyyy-MM-dd'"
-              @change="handleSearch"
-              :placeholder="'Välj datum'"
-            />
+      <div class="search-container position-relative" @click.stop style="max-width: 500px">
+        <div class="search-bar position-relative">
+          <!-- Textinput -->
+          <input
+            v-if="selectedSearchType !== 'Datum'"
+            class="form-control rounded-pill pe-5"
+            type="text"
+            v-model="searchQuery"
+            @input="handleSearch"
+            @focus="handleInputFocus"
+            :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
+          />
+
+          <!-- Datepicker -->
+          <DatePicker
+            v-if="selectedSearchType === 'Datum'"
+            v-model="selectedDate"
+            :format="'yyyy-MM-dd'"
+            @change="handleSearch"
+            :placeholder="'Välj datum'"
+          />
+
+          <div
+            v-if="selectedSearchType !== 'Datum'"
+            class="clear-search position-absolute top-50 translate-middle-y end-0 ms-5"
+            style="cursor: pointer"
+            @click="clearSearch"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="2"
+                d="M20 20L4 4m16 0L4 20"
+              />
+            </svg>
           </div>
 
-          <div class="search-type-toggle position-relative ms-auto" @click.stop>
+          <!-- 'x'-ikon för att rensa -->
+
+          <!-- Söktyp-knappen (Användare/Kurs/Datum) -->
+          <div
+            class="search-type-toggle position-absolute top-50 translate-middle-y end-0 me-5"
+            style="z-index: 1000"
+          >
             <button
-              @click.stop="toggleSearchTypeDropdown"
-              class="search-type-button"
-              aria-haspopup="listbox"
-              :aria-expanded="showSearchTypeDropdown.toString()"
+              @click="toggleSearchTypeDropdown"
+              class="btn btn-link text-dark fw-medium p-0"
+              style="text-decoration: none"
             >
               {{ selectedSearchType }}
             </button>
 
-            <ul v-if="showSearchTypeDropdown" class="dropdown-menu" role="listbox">
-              <li
-                v-for="type in ['Användare', 'Kurs', 'Datum']"
-                :key="type"
-                @click="selectSearchType(type)"
-                :class="{ active: selectedSearchType === type }"
-                class="dropdown-item"
-                role="option"
-                :aria-selected="(selectedSearchType === type).toString()"
-              >
-                {{ type }}
-              </li>
+            <!-- Dropdown-alternativ -->
+            <ul
+              v-if="showSearchTypeDropdown"
+              class="position-absolute bg-white shadow rounded py-2 px-2 mt-1"
+              style="right: 0"
+            >
+              <li @click="selectSearchType('Användare')" class="dropdown-item">Användare</li>
+              <li @click="selectSearchType('Kurs')" class="dropdown-item">Kurs</li>
+              <li @click="selectSearchType('Datum')" class="dropdown-item">Datum</li>
             </ul>
           </div>
         </div>
 
+        <!-- Resultat -->
         <div v-if="showResults" class="search-results me-3">
           <ul class="result-list">
             <li
@@ -58,58 +79,78 @@
               @click="navigateToDetails(result)"
               class="result-item"
             >
-              <div class="result-title">{{ result.name }}</div>
-              <div class="result-subtitle">{{ result.extra }}</div>
+              <div class="result-content">
+                <div class="result-title">{{ result.name }}</div>
+                <div class="result-subtitle">{{ result.extra }}</div>
+              </div>
             </li>
           </ul>
         </div>
       </div>
     </div>
-
-    <!-- Logo -->
+    <!-- Left Section: Logo & Build Version -->
     <div class="logo-container">
       <router-link class="navbar-brand" to="/">
         <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
       </router-link>
     </div>
 
-    <!-- Navigation links -->
+    <!-- Center Section: Navigation Links -->
     <ul class="nav-links">
       <li v-for="item in filteredMenuItems" :key="item.link">
         <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
       </li>
     </ul>
 
-    <!-- User actions -->
+    <!-- Icons -->
     <div class="icon-container">
       <div class="icon-group">
         <div
           v-if="isLoggedIn && canSeeNotifications"
           class="icon notification-icon"
-          @click.stop="toggleNotificationPanel"
-          role="button"
+          @click="toggleNotificationPanel"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
             <path
+              fill="currentColor"
               d="M12 2C10.3 2 9 3.3 9 5v1.1c-2.8.5-5 3-5 5.9v4l-1 1v1h16v-1l-1-1v-4c0-2.9-2.2-5.4-5-5.9V5c0-1.7-1.3-3-3-3zm0 18c1.1 0 2-.9 2-2H10c0 1.1.9 2 2 2z"
             />
           </svg>
           <span v-if="notifications.length" class="notis-badge">{{ notifications.length }}</span>
         </div>
 
-        <div v-if="showNotisPanel" class="notis-panel notification-box">
+        <!-- Notispanel -->
+        <div v-if="showNotisPanel" class="notis-panel">
           <NotificationBox
             :notifications="notifications"
-            @notification-dismissed="handleNotificationDismissed"
+            @notification-dismissed="
+              (id) => (notifications = notifications.filter((n) => n._id !== id))
+            "
           />
         </div>
 
-        <div class="icon profile-icon" @click.stop="toggleProfileMenu" role="button">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor">
+        <!-- Hamburgermenyn syns bara på mobil -->
+
+        <!-- Mobilmenyn visas när togglad -->
+        <div v-if="isMobileMenuOpen" class="mobile-menu">
+          <button @click="logout" class="logout-btn">Logga ut</button>
+
+          <ul class="mobile-nav-links">
+            <li v-for="item in filteredMenuItems" :key="item.link">
+              <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
+            </li>
+          </ul>
+        </div>
+
+        <div class="icon profile-icon" @click="toggleProfileMenu">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
             <path
+              fill="currentColor"
               d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4"
             />
           </svg>
+
+          <!-- Mobilmeny under profilikonen -->
           <div v-if="showProfileMenu" class="profile-dropdown">
             <button v-if="isLoggedIn" @click="logout" class="logout-btn">Logga ut</button>
             <router-link v-else to="/register" class="dropdown-link">Registrera</router-link>
@@ -117,36 +158,40 @@
           </div>
         </div>
 
-        <div class="auth-links" v-if="!isLoggedIn">
-          <router-link to="/register" class="px-4 py-2 text-blue-600 hover:underline">
+        <div class="auth-links">
+          <router-link
+            v-if="!isLoggedIn"
+            to="/register"
+            class="px-4 py-2 text-blue-600 hover:underline"
+          >
             Register
           </router-link>
-          <router-link to="/login" class="px-4 py-2 text-blue-600 hover:underline">
+          <router-link
+            v-if="!isLoggedIn"
+            to="/login"
+            class="px-4 py-2 text-blue-600 hover:underline"
+          >
             Login
           </router-link>
-        </div>
 
-        <button class="burger-menu" @click="toggleMobileMenu" aria-label="Toggle menu">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor">
-            <path
-              d="M3 6h18M3 12h18M3 18h18"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
+          <button class="burger-menu" @click="toggleMobileMenu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+              <path
+                fill="currentColor"
+                d="M3 6h18M3 12h18M3 18h18"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </nav>
 </template>
 
-<script setup>
-  /**
-   * @file src/components/Navbar.vue
-   * @description Navigation bar with search, notifications, profile, and responsive menu support.
-   */
-
+<script>
   import { ref, computed, onMounted } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
@@ -155,349 +200,330 @@
   import '@vuepic/vue-datepicker/dist/main.css'
   import NotificationBox from './notificationBox.vue'
 
-  const store = useStore()
-  const router = useRouter()
+  export default {
+    components: { DatePicker, NotificationBox },
+    setup() {
+      const store = useStore()
+      const router = useRouter()
 
-  /** @type {import('vue').ComputedRef<string>} */
-  const userRole = computed(() => store.getters.userRole || 'guest')
+      const userRole = computed(() => store.getters.userRole || 'guest') // Default to 'guest' if undefined
+      const canSeeNotifications = computed(() =>
+        ['teacher', 'admin', 'systemadmin'].includes(userRole.value)
+      )
 
-  /** @type {import('vue').ComputedRef<boolean>} */
-  const isLoggedIn = computed(() => store.getters.isLoggedIn)
+      const notifications = ref([])
 
-  /** @type {import('vue').ComputedRef<boolean>} */
-  const canSeeNotifications = computed(() =>
-    ['teacher', 'admin', 'systemadmin'].includes(userRole.value)
-  )
+      const showNotisPanel = ref(false)
+      // Fix missing properties
+      const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
+      const searchQuery = ref('')
+      const searchResults = ref([])
+      const showResults = ref(false)
+      const showFilters = ref(false)
+      const filter = ref('all') // Aktivt filter
+      const selectedCourse = ref('')
+      const selectedDate = ref(null)
+      const allCourses = ref([])
+      const showNotification = ref(false)
+      const showProfileMenu = ref(false)
 
-  /** @type {import('vue').ComputedRef<boolean>} */
-  const canSeeSearch = computed(
-    () =>
-      isLoggedIn.value &&
-      ['teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin'].includes(userRole.value)
-  )
+      const endDateNotifications = ref([])
+      const missingGradeNotifications = ref([])
 
-  const notifications = ref([])
-  const showNotisPanel = ref(false)
-  const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
-  const searchQuery = ref('')
-  const searchResults = ref([])
-  const showResults = ref(false)
-  const filter = ref('all')
-  const selectedCourse = ref('')
-  const selectedDate = ref(null)
-  const allCourses = ref([])
-  const showProfileMenu = ref(false)
-  const isMobileMenuOpen = ref(false)
-  const selectedSearchType = ref('Användare')
-  const showSearchTypeDropdown = ref(false)
+      const isMobileMenuOpen = ref(false)
 
-  /**
-   * Closes dropdowns and overlays if user clicks outside interactive elements.
-   * @param {MouseEvent} event
-   */
-  function handleGlobalClick(event) {
-    const ignoreClasses = [
-      'search-type-toggle',
-      'dropdown-menu',
-      'notification-box',
-      'notis-panel',
-      'profile-dropdown',
-    ]
+      const selectedSearchType = ref('Användare')
+      const showSearchTypeDropdown = ref(false)
 
-    if (!ignoreClasses.some((cls) => event.target.closest(`.${cls}`))) {
-      showSearchTypeDropdown.value = false
-      showNotisPanel.value = false
-      showProfileMenu.value = false
-    }
-  }
-  /**
-   * Toggle search type dropdown menu visibility.
-   */
-  function toggleSearchTypeDropdown() {
-    showSearchTypeDropdown.value = !showSearchTypeDropdown.value
-  }
-
-  /**
-   * Selects a new search type and triggers a search.
-   * @param {string} type
-   */
-  function selectSearchType(type) {
-    selectedSearchType.value = type
-    showSearchTypeDropdown.value = false
-    handleSearch()
-  }
-
-  /**
-   * Toggles mobile menu visibility.
-   */
-  function toggleMobileMenu() {
-    isMobileMenuOpen.value = !isMobileMenuOpen.value
-  }
-
-  /**
-   * Total number of unread notifications.
-   * @returns {import('vue').ComputedRef<number>}
-   */
-  const totalNotifications = computed(() => notifications.value.length)
-
-  /**
-   * Fetches user notifications from the backend.
-   */
-  async function fetchNotifications() {
-    const res = await axios.get('/api/notifications')
-    notifications.value = res.data
-  }
-
-  /**
-   * Toggle visibility of the notification panel.
-   */
-  function toggleNotificationPanel() {
-    showNotisPanel.value = !showNotisPanel.value
-  }
-
-  /**
-   * Toggle profile dropdown visibility.
-   */
-  function toggleProfileMenu() {
-    showProfileMenu.value = !showProfileMenu.value
-  }
-
-  /**
-   * Log the user out and redirect to home.
-   */
-  function logout() {
-    store.dispatch('logout')
-    router.push('/')
-  }
-
-  /**
-   * Returns menu items the current user is allowed to see.
-   */
-  const filteredMenuItems = computed(() => {
-    const menuItems = [
-      { name: 'APL', link: '/apl', role: 'admin' },
-      { name: 'Kalender', link: '/kalender', role: 'teacher' },
-      { name: 'Utbildning', link: '/education', role: 'admin' },
-      { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
-      { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
-      { name: 'Elev+', link: '/addstudent', role: 'admin' },
-      { name: 'Elever', link: '/students', role: 'admin' },
-      { name: 'PDF', link: '/pdf', role: 'admin' },
-      { name: 'Grades', link: '/grades', role: 'teacher' },
-      { name: 'Prövningar', link: '/examform', role: 'student' },
-      { name: 'Earnings', link: '/earnings', role: 'admin' },
-      { name: 'Stats', link: '/stats/courses', role: 'admin' },
-    ]
-    return menuItems.filter((item) => !item.role || store.getters.hasPermission(item.role))
-  })
-
-  /**
-   * Navigate to a result from the search results list.
-   * @param {{ id: string, type: string }} result
-   */
-  function navigateToDetails(result) {
-    showResults.value = false
-    searchQuery.value = ''
-    router.push(`/detaljer/${result.type}/${result.id}`)
-  }
-
-  /**
-   * Filters search results based on selected filter.
-   */
-  const filteredResults = computed(() =>
-    filter.value === 'all'
-      ? searchResults.value
-      : searchResults.value.filter((res) => res.type === filter.value)
-  )
-
-  /**
-   * Triggers search request based on input or selected date.
-   */
-  function handleSearch() {
-    if (
-      selectedSearchType.value !== 'Datum' &&
-      (!searchQuery.value || searchQuery.value.length < 3)
-    ) {
-      searchResults.value = []
-      showResults.value = false
-      return
-    }
-
-    const params = new URLSearchParams()
-    params.append('type', selectedSearchType.value)
-
-    if (selectedSearchType.value === 'Datum') {
-      if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) {
-        showResults.value = false
-        return
+      const toggleSearchTypeDropdown = () => {
+        showSearchTypeDropdown.value = !showSearchTypeDropdown.value
       }
-      const date = new Date(selectedDate.value)
-      params.append('date', date.toISOString().split('T')[0])
-    } else {
-      params.append('q', searchQuery.value)
-    }
 
-    axios
-      .get(`/api/search?${params}`)
-      .then((response) => {
-        searchResults.value = response.data
-        showResults.value = searchResults.value.length > 0
+      const selectSearchType = (type) => {
+        selectedSearchType.value = type
+        showSearchTypeDropdown.value = false
+        handleSearch() // Trigger search with the new type
+      }
+
+      const toggleMobileMenu = () => {
+        isMobileMenuOpen.value = !isMobileMenuOpen.value
+      }
+
+      const totalNotifications = computed(() => notifications.value.length)
+
+      const fetchNotifications = async () => {
+        const res = await axios.get('/api/notifications')
+        notifications.value = res.data
+      }
+
+      const resolveNote = async (id) => {
+        await axios.put(`/api/notifications/${id}/resolve`, {
+          userId: store.getters.userId,
+        })
+        await fetchNotifications() // uppdatera listan
+      }
+
+      const canResetNotifications = computed(() =>
+        ['admin', 'systemadmin'].includes(userRole.value)
+      )
+
+      const resetNotification = async (id) => {
+        try {
+          await axios.put(`/api/notifications/${id}/reset`)
+          await fetchNotifications() // hämta igen efter reset
+        } catch (err) {
+          console.error('❌ Kunde inte återställa notis:', err)
+        }
+      }
+
+      const toggleNotificationPanel = () => {
+        showNotisPanel.value = !showNotisPanel.value
+      }
+
+      const filteredResults = computed(() => {
+        if (filter.value === 'all') return searchResults.value
+        return searchResults.value.filter((res) => res.type === filter.value)
       })
-      .catch(() => {
+
+      const navigateToDetails = (result) => {
+        showResults.value = false // Stäng<er sökresultaten
+        searchQuery.value = '' // Nollställer sökfältet
+        router.push(`/detaljer/${result.type}/${result.id}`)
+      }
+
+      const hasPermission = (role) => store.getters.hasPermission(role)
+
+      const isLoggedIn = computed(() => store.getters.isLoggedIn)
+
+      // Check if user role is "teacher" or higher
+      const canSeeSearch = computed(() => {
+        const allowedRoles = ['teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin']
+        return isLoggedIn.value && allowedRoles.includes(userRole.value)
+      })
+
+      console.log('🔹 Navbar: Current User Role ->', userRole.value)
+      console.log('🔹 Search Bar Visibility ->', canSeeSearch.value)
+
+      const logout = () => {
+        store.dispatch('logout')
+        router.push('/')
+      }
+
+      const handleSearch = async () => {
+        if (
+          selectedSearchType.value !== 'Datum' &&
+          (!searchQuery.value || searchQuery.value.length < 3)
+        ) {
+          searchResults.value = []
+          showResults.value = false
+          return // Avsluta funktionen här
+        }
+
+        try {
+          const params = new URLSearchParams()
+          params.append('type', selectedSearchType.value)
+
+          if (selectedSearchType.value === 'Datum') {
+            if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) {
+              // Om datumet är ogiltigt eller rensat, dölj resultaten
+              showResults.value = false
+              return
+            }
+            // Formatera datumet till YYYY-MM-DD för att matcha backend
+            const date = new Date(selectedDate.value)
+            const formattedDate = date.toISOString().split('T')[0]
+            params.append('date', formattedDate)
+          } else {
+            // Sökfrågan har redan validerats i början av funktionen
+            params.append('q', searchQuery.value)
+          }
+
+          const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`)
+          console.log('Search Response:', response.data)
+          searchResults.value = response.data
+          showResults.value = searchResults.value.length > 0
+        } catch (error) {
+          console.error('Error during search:', error)
+          searchResults.value = []
+          showResults.value = false // Dölj även resultaten vid ett fel
+        }
+      }
+
+      const clearSearch = () => {
+        searchQuery.value = ''
+        selectedDate.value = null
         searchResults.value = []
         showResults.value = false
-      })
-  }
-
-  /**
-   * Removes a notification from local state.
-   * @param {string} id
-   */
-  function handleNotificationDismissed(id) {
-    notifications.value = notifications.value.filter((n) => n._id !== id)
-  }
-
-  /**
-   * Add ESC key handler to close dropdowns and overlays.
-   */
-  onMounted(() => {
-    if (isLoggedIn.value && canSeeNotifications.value) fetchNotifications()
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        showSearchTypeDropdown.value = false
-        showNotisPanel.value = false
-        showProfileMenu.value = false
       }
-    })
-  })
+
+      const fetchCourses = async () => {
+        try {
+          const res = await axios.get('http://localhost:5001/api/courses')
+          allCourses.value = res.data
+        } catch (err) {
+          console.error('❌ Kunde inte hämta kurser:', err)
+        }
+      }
+
+      const setFilter = (f) => (filter.value = f)
+      const openSearchPanel = () => {
+        showResults.value = true
+        fetchCourses()
+      }
+
+      const menuItems = [
+        { name: 'APL', link: '/apl', role: 'admin' },
+        { name: 'Kalender', link: '/kalender', role: 'teacher' },
+        { name: 'Utbildning', link: '/education', role: 'admin' },
+        { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
+        { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
+        { name: 'Elev+', link: '/addstudent', role: 'admin' },
+        { name: 'Elever', link: '/students', role: 'admin' },
+        { name: 'PDF', link: '/pdf', role: 'admin' },
+        { name: 'Grades', link: '/grades', role: 'teacher' },
+        { name: 'Prövningar', link: '/examform', role: 'student' },
+        { name: 'Earnings', link: '/earnings', role: 'admin' },
+        { name: 'Stats', link: '/stats/courses', role: 'admin' },
+      ]
+
+      const filteredMenuItems = computed(() => {
+        return menuItems.filter((item) => {
+          if (!item.role) return true // Publicly accessible links
+          return hasPermission(item.role) // Ensure systemadmin has full access
+        })
+      })
+      const toggleProfileMenu = () => {
+        showProfileMenu.value = !showProfileMenu.value
+      }
+      onMounted(async () => {
+        if (isLoggedIn.value && canSeeNotifications.value) {
+          await fetchNotifications()
+        }
+      })
+
+      return {
+        totalNotifications,
+        isMobileMenuOpen,
+        toggleMobileMenu,
+        endDateNotifications,
+        missingGradeNotifications,
+        notifications,
+        showNotisPanel,
+        toggleNotificationPanel,
+        canSeeNotifications,
+        buildVersion,
+        filter,
+        filteredResults,
+        handleSearch,
+        searchQuery,
+        showResults,
+        showFilters,
+        searchResults,
+        isLoggedIn,
+        logout,
+        filteredMenuItems,
+        canSeeSearch,
+        navigateToDetails,
+        setFilter,
+        selectedCourse,
+        allCourses,
+        fetchCourses,
+        selectedDate,
+        showNotification,
+        totalNotifications,
+        resolveNote,
+        notifications,
+        showNotisPanel,
+        resetNotification,
+        canResetNotifications,
+        showProfileMenu,
+        toggleProfileMenu,
+        selectedSearchType,
+        showSearchTypeDropdown,
+        toggleSearchTypeDropdown,
+        selectSearchType,
+        clearSearch,
+      }
+    },
+  }
 </script>
 
 <style scoped>
   /* Navbar */
 
-  /* Search bar container */
+  .search-bar {
+    /* Improved styles for search bar */
+    display: flex;
+    align-items: center;
+    background: #ecf0f1;
+    padding: 10px 15px;
+    border-radius: 20px;
+  }
+
+  .search-type-options {
+    list-style: none;
+    padding: 10px;
+    margin: 0;
+    background-color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .search-bar {
+    width: clamp(280px, 50%, 500px);
+  }
+
+  .logo-container {
+    display: flex;
+    justify-content: flex-start;
+    gap: 15px;
+  }
+  .navbar {
+    background-color: #f8f8f8;
+    font-family: 'Roboto', sans-serif;
+    padding: 20px;
+  }
+
+  /* Top navigation container */
+  .top-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between !important;
+    max-width: 1800px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 15px 20px;
+  }
+
+  /* Sökruta exakt till vänster */
+  .search-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
   .search-bar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 6px 10px;
-    border: 2px solid #007dc3ff;
-    border-radius: 20px;
-    background: #ecf0f1;
-    width: 100%;
-    max-width: 500px;
-    box-sizing: border-box;
+    background: #ece6f0;
+    padding: 10px 15px;
+    border-radius: 30px;
+    width: 500px;
   }
 
-  /* Wrapper that overlays inputs */
-  .input-wrapper {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-    height: 40px;
-  }
-
-  /* Inputs overlap perfectly */
-  .input-wrapper input,
-  .input-wrapper .vue-datepicker {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100% !important;
-    height: 100% !important;
-    padding-left: 10px !important;
-    box-sizing: border-box;
-    border: none !important;
-    background: transparent;
-    outline: none;
-    box-shadow: none;
-    font-size: 16px;
-    font-family: inherit;
-  }
-
-  /* Hide inactive input */
-  .input-wrapper input[v-show='false'],
-  .input-wrapper .vue-datepicker[v-show='false'] {
-    opacity: 0;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* Show active input */
-  .input-wrapper input[v-show='true'],
-  .input-wrapper .vue-datepicker[v-show='true'] {
-    opacity: 1;
-    pointer-events: auto;
-    z-index: 1;
-  }
-
-  /* Search type toggle */
-  .search-type-toggle {
-    position: relative;
-    margin-left: auto;
-  }
-
-  /* Search type button */
-  .search-type-button {
-    background-color: #007dc3;
-    color: white;
-    font-weight: bold;
-    padding: 6px 14px;
+  .search-bar input {
     border: none;
-    border-radius: 20px;
+    outline: none;
+    background: transparent;
+    font-size: 16px;
+    width: 100%;
+  }
+
+  .search-bar button {
+    border: none;
+    background: transparent;
     cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s ease;
-    white-space: nowrap;
   }
 
-  .search-type-button:hover {
-    background-color: #005fa3;
-  }
-
-  /* Dropdown menu */
-  .dropdown-menu {
-    display: block !important;
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 6px;
-    padding: 8px;
-    background-color: #fff;
-    border: 2px solid #007dc3ff;
-    border-radius: 12px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    list-style: none;
-    min-width: 120px;
-    width: max-content;
-    z-index: 1000;
-  }
-
-  /* Dropdown items */
-  .dropdown-item {
-    border: 1px solid #007dc3ff;
-    border-radius: 8px;
-    margin: 6px 0;
-    padding: 4px 8px;
-    text-align: center;
-    cursor: pointer;
-    background-color: white;
-    transition: background-color 0.2s ease;
-    user-select: none;
-  }
-
-  .dropdown-item:hover {
-    background-color: #2370b4;
-    color: white;
-  }
-
-  .dropdown-item.active {
-    background-color: #007dc3ff;
-    color: white;
-    font-weight: bold;
-  }
-
-  /* Search results dropdown */
   .search-results {
     background: white;
     border-radius: 10px;
@@ -511,6 +537,29 @@
     z-index: 1000;
     display: flex;
     flex-direction: column;
+  }
+
+  .filter-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 10px;
+  }
+
+  .filter-buttons button {
+    background: #f0f0f0;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    flex: 1;
+    text-align: center;
+    font-size: 14px;
+  }
+
+  .filter-buttons button.active {
+    background: #6c63ff;
+    color: white;
   }
 
   .result-list {
@@ -542,44 +591,10 @@
     color: gray;
   }
 
-  /* Logo container */
-  .logo-container {
-    display: flex;
-    justify-content: flex-start;
-    gap: 15px;
-  }
-
   .logo {
     height: 50px;
   }
 
-  /* Navbar base */
-  .navbar {
-    background-color: #f8f8f8;
-    font-family: 'Roboto', sans-serif;
-    padding: 20px;
-  }
-
-  /* Top navigation container */
-  .top-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between !important;
-    max-width: 1800px;
-    margin: 0 auto;
-    width: 100%;
-    padding: 15px 20px;
-  }
-
-  /* Search container */
-  .search-container {
-    max-width: 500px;
-    width: 100%;
-    position: relative;
-    box-sizing: border-box;
-  }
-
-  /* Icons */
   .icon-container {
     display: flex;
     align-items: center;
@@ -604,11 +619,6 @@
     align-items: center;
     justify-content: center;
     position: relative;
-    cursor: pointer;
-  }
-
-  .icon:hover {
-    background: #dcd4e6;
   }
 
   .notis-badge {
@@ -624,11 +634,22 @@
     line-height: 1;
     z-index: 10;
   }
+  .icon:hover {
+    background: #dcd4e6;
+  }
 
-  /* Navigation links */
+  /* Separationslinje */
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: #ddd;
+    margin-top: 10px;
+  }
+
+  /* Navigationslänkar exakt justerade */
   .nav-links {
     display: flex;
-    justify-content: center;
+    justify-content: center; /* Centering the links */
     margin: 0 auto;
     gap: 40px;
     list-style: none;
@@ -645,12 +666,13 @@
     text-decoration: underline;
   }
 
-  /* Logout button */
+  /* Logout Button - Styled to Match Links */
   .logout-btn {
     appearance: none;
     border: none;
     background: none;
     font-size: 1rem;
+
     color: blue;
     padding: 4px 8px;
     border-radius: 4px;
@@ -663,7 +685,6 @@
     color: white;
   }
 
-  /* Notification panel */
   .notis-panel {
     position: absolute;
     top: 50px;
@@ -691,6 +712,24 @@
     text-align: center;
   }
 
+  .notis-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #f44336;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 999px;
+    line-height: 1;
+  }
+
+  .icon-container,
+  .icon-wrapper {
+    position: relative;
+  }
+
   .notis-panel ul {
     list-style: none;
     padding: 0;
@@ -711,46 +750,10 @@
     accent-color: #6c63ff;
   }
 
-  /* Profile dropdown */
-  .profile-icon {
-    position: relative;
+  .icon-container {
+    position: relative; /* viktigt! */
   }
 
-  .profile-dropdown {
-    position: absolute;
-    top: 45px;
-    right: 0;
-    background: #fff;
-    border: 1px solid #000000;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    z-index: 1200;
-    width: 150px;
-  }
-
-  .dropdown-link {
-    padding: 10px;
-    text-align: left;
-    text-decoration: none;
-    color: #333;
-    border-radius: 4px;
-  }
-
-  .dropdown-link:hover,
-  .profile-dropdown .logout-btn:hover {
-    background-color: #007dc3ff;
-  }
-
-  .dropdown-item.active {
-    background-color: #007dc3ff;
-    color: white;
-    font-weight: bold;
-  }
-
-  /* Responsive: Mobile menu */
   .burger-menu {
     display: none;
     background: none;
@@ -817,5 +820,37 @@
     .menu-toggle {
       display: block;
     }
+  }
+
+  .profile-icon {
+    position: relative;
+  }
+
+  .profile-dropdown {
+    position: absolute;
+    top: 45px;
+    right: 0;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    z-index: 1200;
+    width: 150px;
+  }
+
+  .dropdown-link {
+    padding: 10px;
+    text-align: left;
+    text-decoration: none;
+    color: #333;
+    border-radius: 4px;
+  }
+
+  .dropdown-link:hover,
+  .profile-dropdown .logout-btn:hover {
+    background-color: #f0f0f0;
   }
 </style>
