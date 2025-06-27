@@ -4,11 +4,12 @@ import App from './App.vue'
 import axios from 'axios'
 import router from './router/router.js'
 import store from './store/store.js'
-import './assets/styles/global.css'
+
 import '@mdi/font/css/materialdesignicons.css'
 
 import { createVuetify } from 'vuetify'
 import 'vuetify/styles'
+import './assets/styles/global.css'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import { VTimePicker } from 'vuetify/labs/VTimePicker'
