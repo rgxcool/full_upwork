@@ -6,6 +6,8 @@ import Exam from "../models/Provning.js";
 
 import Notification from "../models/Notification.js";
 
+
+
 router.put("/exams/:id/decision", async (req, res) => {
   try {
     const { decision, comment } = req.body;
@@ -191,32 +193,26 @@ router.get("/exams", async (req, res) => {
 
 router.get("/calendar-color", async (req, res) => {
   try {
-    const students = await Student.find().populate(
-      "coursePackages.coursePackageId"
-    );
+    const students = await Student.find();
     const teachers = await Teacher.find();
-
-    // Hämta endast schemalagda (accepterade) prövningar
-    const acceptedExams = await Exam.find({ status: "scheduled" });
 
     const groupedEvents = {};
 
-    // Lägg till studenter från acceptera prövningar
-    acceptedExams.forEach((exam) => {
-      const student = students.find(
-        (s) => s.personalNumber === exam.personalNumber
+    students.forEach((student) => {
+      // Kontrollera om studenten har någon kurs med betyg som inte är "F"
+      const hasPassedCourses = student.education.some(
+        (edu) => edu.grade !== "F"
       );
-      if (!student) return; // Om student inte finns, ignorera
+
+      if (!hasPassedCourses || student.dropout === true) return;
 
       const teacher = teachers.find((t) => t.name === student.teacher);
       const teacherName = teacher?.name || "Unknown teacher";
 
-      const examDate = new Date(
-        student.finalExamDate || calculateExamDate(exam.requestedMonth)
-      );
-      examDate.setHours(examDate.getHours() + 1); // Justera för CET
+      const examDate = student.finalExamDate;
+      if (!examDate) return; // Om det inte finns något slutprovsdatum, exkludera
 
-      const formattedDate = examDate.toISOString().split("T")[0];
+      const formattedDate = new Date(examDate).toISOString().split("T")[0];
       const key = `${teacherName}-${formattedDate}`;
 
       if (!groupedEvents[key]) {
@@ -325,7 +321,8 @@ router.post("/add-exam", async (req, res) => {
   }
 });
 
-router.put("/mark-attendance/:personalNumber", async (req, res) => {
+router.put("/mark-attendance/:id"
+  , async (req, res) => {
   try {
     const { personalNumber } = req.params;
 
