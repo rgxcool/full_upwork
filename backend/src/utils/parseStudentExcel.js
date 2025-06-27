@@ -1,4 +1,3 @@
-// ✅ parseStudentExcel.js
 import ExcelJS from "exceljs";
 
 function parseExcelDate(value) {
@@ -10,10 +9,25 @@ function parseExcelDate(value) {
     return null;
 }
 
+function normalizePN(value) {
+    if (!value) return "";
+    return value.toString().replace(/\s/g, "").trim();
+}
+
 function extractMail(value) {
     if (!value) return "";
     if (typeof value === "object" && value.text) return value.text.trim();
     return typeof value === "string" ? value.trim() : "";
+}
+
+// ✅ Clean course-like strings BEFORE fuzzy matching
+function cleanCourseName(name) {
+    return name
+        .replace(/\(.*?\)/g, "") // Remove parentheses, e.g. (REVIDERAD)
+        .replace(/\bmot\b/gi, "") // Remove "mot"
+        .replace(/[,;|]/g, "") // Remove separators
+        .replace(/\s+/g, " ") // Collapse spaces
+        .trim();
 }
 
 export async function parseStudentExcel(fileBuffer, teacherName) {
@@ -62,34 +76,31 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             consecutiveEmptyRows = 0;
         }
 
-        let rawInput = rowObject["KURS/PAKET"];
+        const rawInput = rowObject["KURS/PAKET"];
         let rawNames = [];
+
         if (typeof rawInput === "string") {
-            rawNames = rawInput
-                .split(/[,;|]/)
-                .map((n) => n.trim().toUpperCase())
-                .filter(Boolean);
+            rawNames = [rawInput.trim().toUpperCase()];
         } else if (Array.isArray(rawInput)) {
             rawNames = rawInput
                 .map((n) => n.trim().toUpperCase())
                 .filter(Boolean);
         } else if (rawInput && typeof rawInput.text === "string") {
-            rawNames = rawInput.text
-                .split(/[,;|]/)
-                .map((n) => n.trim().toUpperCase())
-                .filter(Boolean);
+            rawNames = [rawInput.text.trim().toUpperCase()];
         }
 
         const education = [];
-        let programName =
-            rowObject["PROGRAM"]?.toString().trim().toUpperCase() || null;
 
+        let programName = rowObject["PROGRAM"]?.toString().trim();
         if (programName) {
-            education.push({ type: "Program", name: programName });
+            education.push({
+                type: "Program",
+                name: cleanCourseName(programName),
+            });
         }
 
         for (const name of rawNames) {
-            education.push({ type: "Auto", name }); // 'Auto' means not yet resolved
+            education.push({ type: "Auto", name: cleanCourseName(name) });
         }
 
         if (rawNames.length === 0 && !programName) {
@@ -98,11 +109,13 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
 
         studentsToSave.push({
             name: rowObject["NAMN"],
-            personalNumber: rowObject["PERSONNUMMER"],
+            personalNumber: normalizePN(rowObject["PERSONNUMMER"]),
             startDate: parseExcelDate(rowObject["START"]),
             endDate: parseExcelDate(rowObject["SLUT"]),
             finalExamDate: parseExcelDate(rowObject["PREL. DATUM SLUTPROV"]),
-            municipality: { type: rowObject["KOMMUN/PRIVAT"]?.toString().trim() || "" },
+            municipality: {
+                type: rowObject["KOMMUN/PRIVAT"]?.toString().trim() || "",
+            },
             phone: rowObject["TELEFON"] || "",
             email: extractMail(rowObject["MAIL"]),
             exam: rowObject["PROV"] || "",
@@ -112,7 +125,6 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             aplStatus: "GRAY",
             education,
         });
-
     }
 
     return studentsToSave;

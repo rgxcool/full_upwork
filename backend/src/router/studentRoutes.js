@@ -36,7 +36,7 @@ router.put(
         return res.status(404).json({ message: "Student not found" });
 
       const education = student.education.find(
-        (e) => e._id.toString() === educationId
+        (e) => e.refId.toString() === educationId
       );
       if (!education)
         return res
