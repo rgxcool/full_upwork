@@ -1,5 +1,7 @@
+// /routes/statsRoutes.js
 import express from "express";
 import Student from "../models/Student.js";
+import Course from "../models/Course.js";
 
 const router = express.Router();
 
@@ -13,14 +15,16 @@ router.get("/courses-per-month", async (req, res) => {
       const municipality = student.municipality?.type || "UNKNOWN";
 
       for (const edu of student.education || []) {
-        if (edu.type !== "Course" || !edu.addedAt || !edu.name) continue;
+        if (edu.type !== "Course" || !edu.addedAt || !edu.refId) continue;
 
         const date = new Date(edu.addedAt);
-        const month = `${date.getFullYear()}-${String(
-          date.getMonth() + 1
-        ).padStart(2, "0")}`;
+        const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
-        const course = edu.name;
+        // Look up course name by ID
+        const courseDoc = await Course.findById(edu.refId);
+        if (!courseDoc?.courseName) continue;
+
+        const course = courseDoc.courseName;
         const grade = (edu.grade || "UNKNOWN").toUpperCase();
 
         stats[month] ??= {};
