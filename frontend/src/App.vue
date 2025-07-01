@@ -19,9 +19,10 @@
 </script>
 <style>
   #app {
-    width: 100vw;
+    width: 100%;
     min-height: 100vh;
     flex-direction: column;
+    overflow-x: hidden; /* prevent horizontal scroll */
   }
 
   router-view {
