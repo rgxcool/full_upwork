@@ -192,12 +192,49 @@ router.get("/exams", async (req, res) => {
   }
 });
 
+router.post("/calendar-color", async (req, res) => {
+  try {
+    const { start, color, extendedProps } = req.body;
+
+    if (!start || !extendedProps?.teacherId) {
+      return res.status(400).json({ error: "Startdatum och teacherId krävs." });
+    }
+
+    const teacher = await Teacher.findById(extendedProps.teacherId).populate("userId");
+    if (!teacher) {
+      return res.status(404).json({ error: "Läraren hittades inte." });
+    }
+
+    const newEvent = {
+      start: new Date(start),
+      color: color || teacher.colorCode,
+      extendedProps: {
+        teacher: teacher.userId.username,
+        teacherId: teacher._id,
+        type: extendedProps.type || "general",
+      }
+    };
+
+
+    res.status(201).json({ message: "Event mottaget", event: newEvent });
+
+  } catch (error) {
+    console.error("❌ Error in POST /calendar-color:", error.message);
+    res.status(500).json({ error: "Serverfel vid skapande av kalenderhändelse" });
+  }
+});
+
+
 router.get("/calendar-color", async (req, res) => {
   try {
-    const students = await Student.find().populate("education.refId");
-    const teachers = await Teacher.find();
+    const students = await Student.find()
+      .populate("education.refId")
+      .populate({
+        path: "teacherId",
+        populate: { path: "userId", select: "username email" },
+      });
 
-    const groupedEvents = {};
+      const groupedEvents = {};
 
     students.forEach((student) => {
       // Kontrollera om studenten har någon kurs med betyg som inte är "F"
@@ -207,11 +244,12 @@ router.get("/calendar-color", async (req, res) => {
 
       if (!hasPassedCourses || student.dropout === true) return;
 
-      const teacher = teachers.find((t) => t.name === student.teacher);
-      const teacherName = teacher?.name || "Unknown teacher";
+      const teacher = student.teacherId;
+      const teacherName = teacher?.userId?.username || "Okänd lärare";
+      const teacherColor = teacher?.colorCode || "#cccccc";
 
       const examDate = student.finalExamDate;
-      if (!examDate) return; // Om det inte finns något slutprovsdatum, exkludera
+      if (!examDate) return;
 
       const formattedDate = new Date(examDate).toISOString().split("T")[0];
       const key = `${teacherName}-${formattedDate}`;
@@ -221,9 +259,10 @@ router.get("/calendar-color", async (req, res) => {
           _id: student._id.toString(),
           title: `${teacherName}`,
           start: formattedDate,
-          color: teacher?.colorCode || "#cccccc",
+          color: teacherColor,
           extendedProps: {
             teacher: teacherName,
+            teacherId: teacher?._id,
             examMunicipality: student.examMunicipality || "Unknown",
             examLocation: student.examLocation || "Unknown",
             examTime: student.examTime || "No exam time",
