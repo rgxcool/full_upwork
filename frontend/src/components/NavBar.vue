@@ -5,7 +5,7 @@
 
 
 
-      <div class="search-wrapper">
+  <div class="search-wrapper">
   <div class="search-bar-enhanced">
     <div class="search-type" @click="toggleSearchTypeDropdown">
       {{ selectedSearchType }}
@@ -16,17 +16,16 @@
       v-if="selectedSearchType !== 'Datum'"
       class="search-input"
       type="text"
-          v-model="searchQuery"
-          @input="handleSearch"
-          @focus="handleInputFocus"
-          :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
+      v-model="searchQuery"
+      @input="handleSearch"
+      @focus="handleInputFocus"
+      :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
     />
 
     <DatePicker
       v-if="selectedSearchType === 'Datum'"
       v-model="selectedDate"
       :format="'yyyy-MM-dd'"
-      @change="handleSearch"
       :placeholder="'Välj datum'"
     />
 
@@ -168,7 +167,7 @@
 </template>
 
 <script>
-  import { ref, computed, onMounted } from 'vue'
+  import { ref, computed, onMounted, watch } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
   import axios from 'axios'
@@ -208,18 +207,11 @@
 
       const isMobileMenuOpen = ref(false)
 
-      const selectedSearchType = ref('Användare')
+      const selectedSearchType = ref('Alla')
       const showSearchTypeDropdown = ref(false)
 
-      const toggleSearchTypeDropdown = () => {
-        showSearchTypeDropdown.value = !showSearchTypeDropdown.value
-      }
 
-      const selectSearchType = (type) => {
-        selectedSearchType.value = type
-        showSearchTypeDropdown.value = false
-        handleSearch() // Trigger search with the new type
-      }
+
 
       const toggleMobileMenu = () => {
         isMobileMenuOpen.value = !isMobileMenuOpen.value
@@ -258,10 +250,6 @@
         showNotisPanel.value = !showNotisPanel.value
       }
 
-      const filteredResults = computed(() => {
-        if (filter.value === 'all') return searchResults.value
-        return searchResults.value.filter((res) => res.type === filter.value)
-      })
 
       const navigateToDetails = (result) => {
         showResults.value = false // Stäng<er sökresultaten
@@ -287,48 +275,90 @@
         router.push('/')
       }
 
+
+      const selectSearchType = (type) => {
+      selectedSearchType.value = type
+      showSearchTypeDropdown.value = false
+      handleSearch()
+    }
+
+    const toggleSearchTypeDropdown = () => {
+      showSearchTypeDropdown.value = !showSearchTypeDropdown.value
+    }
+
       const handleSearch = async () => {
 
-        if (selectedSearchType.value !== 'Datum' && (!searchQuery.value || searchQuery.value.length < 3)) {
-        searchResults.value = [];
-        showResults.value = false;
-        return; // Avsluta funktionen här
-    }
 
-    try {
-        const params = new URLSearchParams();
-        params.append('type', selectedSearchType.value);
-        
-        if (selectedSearchType.value === 'Datum') {
-            if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) {
-                // Om datumet är ogiltigt eller rensat, dölj resultaten
-                showResults.value = false; 
-                return;
-            }
-            // Formatera datumet till YYYY-MM-DD för att matcha backend
-            const date = new Date(selectedDate.value);
-            const formattedDate = date.toISOString().split('T')[0];
-            params.append('date', formattedDate);
+        console.log('📦 searchResults:', searchResults.value)
+        console.log('📂 filteredResults:', filteredResults.value)
+      try {
+        const params = new URLSearchParams()
+        const isDateSearch = selectedSearchType.value === 'Datum'
 
-        } else if (selectedSearchType.value === 'Alla' && searchQuery.value.length >= 3) {
-          params.append('type', 'Alla');
-          params.append('q', searchQuery.value);
+        if (isDateSearch) {
+          if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) {
+            searchResults.value = []
+            showResults.value = false
+            return
+          }
+          const date = new Date(selectedDate.value)
+          const formattedDate = date.toISOString().split('T')[0]
+          params.append('type', 'Datum')
+          params.append('date', formattedDate)
         } else {
-          params.append('type', selectedSearchType.value);
-          params.append('q', searchQuery.value);
+          if (!searchQuery.value || searchQuery.value.length < 3) {
+            searchResults.value = []
+            showResults.value = false
+            return
+          }
+          params.append('type', selectedSearchType.value)
+          params.append('q', searchQuery.value)
         }
 
-        const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`);
-        console.log("Search Response:", response.data);
-        searchResults.value = response.data;
-        showResults.value = searchResults.value.length > 0;
+        const res = await axios.get(`http://localhost:5001/api/search?${params.toString()}`)
+        searchResults.value = res.data
+        showResults.value = filteredResults.value.length > 0
 
-    } catch (error) {
-        console.error('Error during search:', error);
-        searchResults.value = [];
-        showResults.value = false; // Dölj även resultaten vid ett fel
+      } catch (err) {
+        console.error('Sökfel:', err)
+        searchResults.value = []
+        showResults.value = false
+      }
     }
-};
+
+
+
+    // Reagera på datumändring om "Datum" är aktivt
+    watch(selectedDate, (val) => {
+      if (selectedSearchType.value === 'Datum' && val) {
+        handleSearch()
+      }
+    })
+
+    const filteredResults = computed(() => {
+        const type = selectedSearchType.value
+        if (type === 'Alla') return searchResults.value
+
+        if (type === 'Användare') {
+          return searchResults.value.filter(res =>
+            ['Användare', 'Lärare', 'Personal', 'Elev'].includes(res.type)
+          )
+        }
+
+        if (type === 'Kurs') {
+          return searchResults.value.filter(res =>
+            ['Course', 'Program', 'CoursePackage', 'Kurs'].includes(res.type)
+          )
+        }
+
+        if (type === 'Datum') {
+          return searchResults.value.filter(res =>
+            res.type === 'Elev'
+          )
+        }
+
+        return searchResults.value.filter(res => res.type === type)
+      })
 
 
 
@@ -382,12 +412,15 @@
         if (isLoggedIn.value && canSeeNotifications.value) {
           await fetchNotifications()
         }
+
+
       })
 
       return {
         totalNotifications,
         isMobileMenuOpen,
         toggleMobileMenu,
+        toggleSearchTypeDropdown,
         endDateNotifications,
         missingGradeNotifications,
         notifications,
@@ -423,7 +456,6 @@
         toggleProfileMenu,
         selectedSearchType,
         showSearchTypeDropdown,
-        toggleSearchTypeDropdown,
         selectSearchType,
         clearSearch,
       }
@@ -762,7 +794,7 @@
   border-radius: 10px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
   padding: 8px 0;
-  z-index: 1000;
+  z-index: 1100;
   width: 150px;
   list-style: none;
 }
