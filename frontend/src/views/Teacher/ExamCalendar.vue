@@ -14,7 +14,19 @@
     </aside>
 
     <div class="main-calendar">
+
+      <div v-if="isAdminOrTeacher" class="admin-controls mb-3">
+        <button @click="openAddEventModal">+ Lägg till Event</button>
+      </div>
       <FullCalendar ref="fullCalendar" :options="calendarOptions" />
+
+      <AddEventModal
+        v-if="showAddEventModal"
+        :teachers="teachers"
+        @close="showAddEventModal = false"
+        @event-added="addEventToCalendar"
+      />
+
 
       <EventModal 
         v-if="selectedEvent" 
@@ -39,9 +51,10 @@ import DatePicker from "@vuepic/vue-datepicker";
 import "@vuepic/vue-datepicker/dist/main.css";
 import axios from 'axios';
 import EventModal from './EventModal.vue'; 
+import AddEventModal from './AddEventModal.vue';
 
 export default {
-  components: { FullCalendar, EventModal, DatePicker },
+  components: { FullCalendar, EventModal, DatePicker, AddEventModal },
   setup() {
     const router = useRouter();
     const store = useStore();
@@ -52,6 +65,8 @@ export default {
     return {
       selectedDate: new Date(),
       selectedEvent: null,
+      showAddEventModal: false,
+      teachers: [],
       selectedView: "dayGridWeek", // Standard: Vecka
       calendarOptions: {
         plugins: [dayGridPlugin, interactionPlugin],
@@ -86,6 +101,34 @@ export default {
     }
   },
   methods: {
+    openAddEventModal() {
+      this.showAddEventModal = true;
+      this.fetchTeachers(); // Hämta lärare när modal öppnas
+    },
+     async fetchTeachers() {
+      try {
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`);
+        this.teachers = res.data
+          .filter((t) => t.userId && t.userId.username) // undvik tomma
+          .map((t) => ({
+            id: t._id,
+            name: t.userId?.username || "Okänd",
+            color: t.colorCode,
+            subject: t.subject
+          }));
+        console.log("📚 Lärare hämtade:", this.teachers);
+      } catch (err) {
+        console.error("❌ Kunde inte hämta lärare:", err);
+      }
+    },
+
+    addEventToCalendar(event) {
+      const calendarApi = this.$refs.fullCalendar.getApi();
+      calendarApi.addEvent({
+        ...event,
+        allDay: true,
+      });
+    },
     changeView(view) {
       const calendarApi = this.$refs.fullCalendar.getApi();
       calendarApi.changeView(view);
@@ -97,7 +140,7 @@ export default {
     },
     async fetchEvents() {
       try {
-        const response = await axios.get('http://localhost:5001/api/calendar-color');
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/calendar-color`);
         const eventsData = response.data;
 
           // Strukturera händelserna för kalendern
