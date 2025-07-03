@@ -3,71 +3,47 @@
     <div v-if="canSeeSearch" class="top-nav">
       <div class="build-counter">v. {{ buildVersion }}</div>
 
-        <div
-          class="search-container position-relative"
-          @click.stop
-          style="max-width: 500px;"
-        >
-    
-        <div class="search-bar position-relative">
 
-        <!-- Textinput -->
-        <input
-          v-if="selectedSearchType !== 'Datum'"
-          class="form-control rounded-pill pe-5"
-          type="text"
+
+      <div class="search-wrapper">
+  <div class="search-bar-enhanced">
+    <div class="search-type" @click="toggleSearchTypeDropdown">
+      {{ selectedSearchType }}
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+    </div>
+
+    <input
+      v-if="selectedSearchType !== 'Datum'"
+      class="search-input"
+      type="text"
           v-model="searchQuery"
           @input="handleSearch"
           @focus="handleInputFocus"
           :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
-        />
+    />
 
-        <!-- Datepicker -->
-        <DatePicker
-          v-if="selectedSearchType === 'Datum'"
-          v-model="selectedDate"
-          :format="'yyyy-MM-dd'"
-          @change="handleSearch"
-          :placeholder="'Välj datum'"
-        />
-        
-    <div
-          v-if="selectedSearchType !== 'Datum'"
-        class="clear-search position-absolute top-50 translate-middle-y end-0 ms-5"
-        style="cursor: pointer;"
-        @click="clearSearch"
-      >
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M20 20L4 4m16 0L4 20"/></svg>
-      </div>
+    <DatePicker
+      v-if="selectedSearchType === 'Datum'"
+      v-model="selectedDate"
+      :format="'yyyy-MM-dd'"
+      @change="handleSearch"
+      :placeholder="'Välj datum'"
+    />
 
-      <!-- 'x'-ikon för att rensa -->
+    <div v-if="searchQuery || selectedDate" class="clear-icon" @click="clearSearch">✕</div>
+  </div>
+
+  <ul v-if="showSearchTypeDropdown" class="search-type-dropdown">
+    <li @click="selectSearchType('Alla')">Alla</li>
+    <li @click="selectSearchType('Användare')">Användare</li>
+    <li @click="selectSearchType('Kurs')">Kurs</li>
+    <li @click="selectSearchType('Datum')">Datum</li>
+  </ul>
+</div>
 
 
-      <!-- Söktyp-knappen (Användare/Kurs/Datum) -->
-      <div
-        class="search-type-toggle position-absolute top-50 translate-middle-y end-0 me-5"
-        style="z-index: 1000;"
-      >
-        <button
-          @click="toggleSearchTypeDropdown"
-          class="btn btn-link text-dark fw-medium p-0"
-          style="text-decoration: none;"
-        >
-          {{ selectedSearchType }}
-        </button>
 
-        <!-- Dropdown-alternativ -->
-        <ul
-          v-if="showSearchTypeDropdown"
-          class="position-absolute bg-white shadow rounded py-2 px-2 mt-1"
-          style="right: 0;"
-        >
-          <li @click="selectSearchType('Användare')" class="dropdown-item">Användare</li>
-          <li @click="selectSearchType('Kurs')" class="dropdown-item">Kurs</li>
-          <li @click="selectSearchType('Datum')" class="dropdown-item">Datum</li>
-        </ul>
-      </div>
-    </div>
+
 
     <!-- Resultat -->
     <div v-if="showResults" class="search-results me-3
@@ -86,12 +62,6 @@
         </li>
       </ul>
     </div>
-
-
-  </div>
-
-
-
 
     </div>
     <!-- Left Section: Logo & Build Version -->
@@ -340,9 +310,12 @@
             const formattedDate = date.toISOString().split('T')[0];
             params.append('date', formattedDate);
 
+        } else if (selectedSearchType.value === 'Alla' && searchQuery.value.length >= 3) {
+          params.append('type', 'Alla');
+          params.append('q', searchQuery.value);
         } else {
-            // Sökfrågan har redan validerats i början av funktionen
-            params.append('q', searchQuery.value);
+          params.append('type', selectedSearchType.value);
+          params.append('q', searchQuery.value);
         }
 
         const response = await axios.get(`http://localhost:5001/api/search?${params.toString()}`);
@@ -734,6 +707,100 @@
     border-radius: 999px;
     line-height: 1;
   }
+
+
+  .search-wrapper {
+  position: relative;
+  max-width: 600px;
+  width: 100%;
+  margin: auto;
+}
+
+.search-bar-enhanced {
+  display: flex;
+  align-items: center;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 25px;
+  padding: 8px 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  gap: 10px;
+}
+
+.search-type {
+  background: #f2f2f2;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 15px;
+}
+
+.clear-icon {
+  cursor: pointer;
+  font-size: 18px;
+  color: #aaa;
+}
+
+.search-type-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 5px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  padding: 8px 0;
+  z-index: 1000;
+  width: 150px;
+  list-style: none;
+}
+
+.search-type-dropdown li {
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.search-type-dropdown li:hover {
+  background: #f5f5f5;
+}
+
+
+
+  .search-bar {
+  background: #fff;
+  border: 1px solid #ddd;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
+  border-radius: 30px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-type-toggle button {
+  background-color: #f5f5f5;
+  border-radius: 15px;
+  padding: 6px 12px;
+  border: 1px solid #ccc;
+  transition: background 0.2s ease;
+}
+
+.search-type-toggle button:hover {
+  background-color: #e0e0e0;
+}
 
   .icon-container,
   .icon-wrapper {
