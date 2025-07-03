@@ -46,102 +46,97 @@ router.get("/search", async (req, res) => {
   const { q, date, type } = req.query;
 
   try {
-    let results = [];
+    const results = [];
 
     if (type === 'Datum' && date) {
       const parsedDate = new Date(date);
-      const studentsByDate = await Student.find({
-        $or: [
-          { startDate: { $lte: parsedDate }, endDate: { $gte: parsedDate } }, // Kurs pågår under datumet
-        ],
+      if (isNaN(parsedDate)) {
+        return res.status(400).json({ message: "Ogiltigt datum" });
+      }
+
+      const students = await Student.find({
+        startDate: { $lte: parsedDate },
+        endDate: { $gte: parsedDate },
       }).select("_id name email");
 
-      results.push(...studentsByDate.map(student => ({
+      results.push(...students.map((student) => ({
         id: student._id,
         name: student.name,
-        type: 'Elev',
+        type: "Elev",
         extra: `Email: ${student.email}`,
       })));
+    }
 
-    } else if (type === 'Användare' && q && q.length >= 3) {
-      const studentMatches = await Student.find({
-        name: { $regex: q, $options: "i" },
-      }).select("_id name email");
+    const shouldSearchUsers = ['Användare', 'Alla'].includes(type) && q && q.length >= 3;
+    const shouldSearchCourses = ['Kurs', 'Alla'].includes(type) && q && q.length >= 3;
 
-      const userMatches = await User.find({
-        $or: [
-          { username: { $regex: q, $options: "i" } },
-          { email: { $regex: q, $options: "i" } },
-        ],
-      }).select("_id username email role");
+    if (shouldSearchUsers) {
+      const [students, users] = await Promise.all([
+        Student.find({ name: { $regex: q, $options: "i" } }).select("_id name email"),
+        User.find({
+          $or: [
+            { username: { $regex: q, $options: "i" } },
+            { email: { $regex: q, $options: "i" } },
+          ],
+        }).select("_id username email role")
+      ]);
 
       results.push(
-        ...studentMatches.map((student) => ({
+        ...students.map((student) => ({
           id: student._id,
           name: student.name,
           type: "Elev",
           extra: `Email: ${student.email}`,
         })),
-        ...userMatches.map(user => ({
+        ...users.map((user) => ({
           id: user._id,
           name: user.username,
-          type: user.role,
+          type: user.role || 'Användare',
           extra: `Email: ${user.email}`,
         }))
       );
+    }
 
-    } else    if (type === 'Kurs' && q && q.length >= 3) {
-      const studentMatches = await Student.find({
-        'education.refId': { $ne: null }
-      }).populate('education.refId').lean();
+    if (shouldSearchCourses) {
+      const students = await Student.find({ "education.refId": { $ne: null } })
+        .populate("education.refId")
+        .lean();
 
-      const uniqueCourses = new Map();
+      const courseMap = new Map();
 
-      studentMatches.forEach(student => {
-        student.education.forEach(course => {
-          let courseName = '';
-      
-          switch (course.type) {
-            case 'Course':
-              courseName = course.refId.courseName;
-              break;
-            case 'Program':
-              courseName = course.refId.programName;
-              break;
-            case 'CoursePackage':
-              courseName = course.refId.coursePackageName;
-              break;
-          }
-      
-          if (courseName && courseName.match(new RegExp(q, "i"))) {
-            const courseId = course.refId._id.toString();
-      
-            if (!uniqueCourses.has(courseId)) {
-              uniqueCourses.set(courseId, {
-                id: course.refId._id,
-                name: courseName,
-                type: course.type,
-                students: []
+      for (const student of students) {
+        for (const edu of student.education) {
+          if (!edu.refId) continue;
+
+          let name = '';
+          if (edu.type === 'Course') name = edu.refId.courseName;
+          if (edu.type === 'Program') name = edu.refId.programName;
+          if (edu.type === 'CoursePackage') name = edu.refId.coursePackageName;
+
+          if (name && name.match(new RegExp(q, 'i'))) {
+            const courseId = edu.refId._id.toString();
+            if (!courseMap.has(courseId)) {
+              courseMap.set(courseId, {
+                id: courseId,
+                name,
+                type: edu.type,
+                extra: `Typ: ${edu.type}`,
               });
             }
-      
-            uniqueCourses.get(courseId).students.push({
-              id: student._id,
-              name: student.name,
-            });
           }
-        });
-      });
-      
-      results.push(...Array.from(uniqueCourses.values()));
+        }
+      }
+
+      results.push(...courseMap.values());
     }
 
     res.json(results);
-  } catch (error) {
-    console.error("❌ Search error:", error);
-    res.status(500).json({ message: "Server error during search." });
+  } catch (err) {
+    console.error("❌ Search error:", err);
+    res.status(500).json({ message: "Serverfel under sökning." });
   }
 });
+
 
 router.get("/details/:type/:id", async (req, res) => {
   const { type, id } = req.params;
