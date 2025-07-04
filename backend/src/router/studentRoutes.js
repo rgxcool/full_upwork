@@ -19,6 +19,26 @@ import { sendDropoutNotification } from "../controllers/notificationController.j
 
 const router = Router();
 
+
+router.get("/students/by-teacher/:teacherId", async (req, res) => {
+  try {
+    const students = await Student.find({ teacherId: req.params.teacherId });
+    res.json(
+      students.map((s) => ({
+        _id: s._id,
+        name: s.name,
+        personalNumber: s.personalNumber,
+        attended: s.attendedExam || false,
+        additionalInfo: s.additionalInfo || '',
+      }))
+    );
+  } catch (error) {
+    console.error("❌ Error fetching students by teacher:", error.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
 /**
  * @route   PUT /students/:studentId/education/:educationId/status
  * @desc    Updates the status of a student's education entry. Sends a notification if status is 'Avbrott'.

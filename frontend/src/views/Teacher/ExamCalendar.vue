@@ -25,6 +25,7 @@
         :teachers="teachers"
         @close="showAddEventModal = false"
         @event-added="addEventToCalendar"
+        @update="handleExamUpdate"
       />
 
 
@@ -126,6 +127,7 @@ export default {
       const calendarApi = this.$refs.fullCalendar.getApi();
       calendarApi.addEvent({
         ...event,
+        title: event.extendedProps?.teacher || "Okänd lärare",
         allDay: true,
       });
     },
