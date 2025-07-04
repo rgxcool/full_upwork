@@ -3,6 +3,7 @@ const router = express.Router();
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
 import Exam from "../models/Provning.js";
+import CalendarEvent from "../models/Event.js"
 
 import Notification from "../models/Notification.js";
 
@@ -197,6 +198,7 @@ router.post("/calendar-color", async (req, res) => {
     const { start, color, extendedProps } = req.body;
 
     if (!start || !extendedProps?.teacherId) {
+      console.log("Startdatum och teacherId krävs.")
       return res.status(400).json({ error: "Startdatum och teacherId krävs." });
     }
 
@@ -205,15 +207,25 @@ router.post("/calendar-color", async (req, res) => {
       return res.status(404).json({ error: "Läraren hittades inte." });
     }
 
-    const newEvent = {
+    const newEvent = new CalendarEvent({
+      title: teacher.userId.username,
       start: new Date(start),
       color: color || teacher.colorCode,
       extendedProps: {
         teacher: teacher.userId.username,
         teacherId: teacher._id,
         type: extendedProps.type || "general",
-      }
-    };
+        examMunicipality: extendedProps.examMunicipality || "",
+        examLocation: extendedProps.examLocation || "",
+        examTime: extendedProps.examTime || "",
+        students: extendedProps.students || [],
+      },
+    });
+
+    await newEvent.save();
+
+    console.log("✅ Event sparat i databasen:", newEvent);
+
 
 
     res.status(201).json({ message: "Event mottaget", event: newEvent });
@@ -227,6 +239,10 @@ router.post("/calendar-color", async (req, res) => {
 
 router.get("/calendar-color", async (req, res) => {
   try {
+    // 1. Hämta alla sparade event
+    const savedEvents = await CalendarEvent.find();
+
+    // 2. Fortsätt använda student-baserad generering om du vill (från tidigare kod)
     const students = await Student.find()
       .populate("education.refId")
       .populate({
@@ -234,14 +250,12 @@ router.get("/calendar-color", async (req, res) => {
         populate: { path: "userId", select: "username email" },
       });
 
-      const groupedEvents = {};
+    const groupedEvents = {};
 
     students.forEach((student) => {
-      // Kontrollera om studenten har någon kurs med betyg som inte är "F"
       const hasPassedCourses = student.education.some(
         (edu) => edu.grade !== "F"
       );
-
       if (!hasPassedCourses || student.dropout === true) return;
 
       const teacher = student.teacherId;
@@ -257,7 +271,7 @@ router.get("/calendar-color", async (req, res) => {
       if (!groupedEvents[key]) {
         groupedEvents[key] = {
           _id: student._id.toString(),
-          title: `${teacherName}`,
+          title: teacherName,
           start: formattedDate,
           color: teacherColor,
           extendedProps: {
@@ -280,12 +294,14 @@ router.get("/calendar-color", async (req, res) => {
       });
     });
 
-    res.json(Object.values(groupedEvents));
+    // 3. Returnera både student-genererade och sparade events
+    res.json([...Object.values(groupedEvents), ...savedEvents]);
   } catch (error) {
     console.error("❌ Error in /calendar-color:", error.message);
     res.status(500).send("Server error");
   }
 });
+
 
 router.put("/update-exam/:id", async (req, res) => {
   const { id } = req.params;

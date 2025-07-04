@@ -52,23 +52,34 @@
       };
     },
     methods: {
-      async submitEvent() {
+        async submitEvent() {
+            if (!this.selectedTeacher) {
+                alert("Välj en lärare först.");
+                return;
+            }
 
-        const event = {
-        start: this.date,
-        color: this.selectedTeacher?.color || 'grey',
-        extendedProps: {
-            teacher: this.selectedTeacher?.name,
-            teacherId: this.selectedTeacher?.id,
-            type: this.type,
-        },
+            const { data: students } = await axios.get(
+                `${import.meta.env.VITE_API_URL}/api/students/by-teacher/${this.selectedTeacher.id}`
+            );
+
+            const event = {
+                start: this.date,
+                color: this.selectedTeacher.color || "grey",
+                extendedProps: {
+                teacher: this.selectedTeacher.name,
+                teacherId: this.selectedTeacher.id,
+                type: this.type,
+                students, // 🔥 nu korrekt!
+                },
+            };
+
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/calendar-color`, event);
+
+            this.$emit("event-added", event);
+            this.$emit("close");
+            this.$emit("update"); // så ExamCalendar kan hämta events igen
+
         }
-
-  
-        await axios.post("http://localhost:5001/api/calendar-color", event);
-        this.$emit("event-added", event); // Emit to parent
-        this.$emit("close");
-      },
     },
   };
   </script>
