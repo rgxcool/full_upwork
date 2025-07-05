@@ -2,8 +2,8 @@ import mongoose from "mongoose";
 
 const studentSchema = new mongoose.Schema(
     {
-      _id: mongoose.Schema.Types.ObjectId,
-      name: String,
+        _id: { type: mongoose.Schema.Types.ObjectId, auto: false }, // 👈 ändring
+        name: String,
       personalNumber: String,
       additionalInfo: String,
       attended: Boolean,

@@ -528,6 +528,18 @@ router.put("/student/:id", async (req, res) => {
       updates.education = updatedEducation;
     }
 
+    if (!student.teacherId && student.teacher) {
+      // Försök hitta en Teacher med samma namn
+      const foundTeacher = await Teacher.findOne({ name: student.teacher.trim() });
+      if (foundTeacher) {
+        updates.teacherId = foundTeacher._id;
+        console.log(`🔗 Kopplar ${student.name} till TeacherId: ${foundTeacher._id}`);
+      } else {
+        console.warn(`⚠️ Ingen matchande lärare hittades för namn: ${student.teacher}`);
+      }
+    }
+    
+
     // Perform the update operation
     const updatedStudent = await Student.findByIdAndUpdate(
       req.params.id,

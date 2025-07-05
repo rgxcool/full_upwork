@@ -19,9 +19,6 @@
         return-object
         />
 
-
-
-  
         <label>Typ:</label>
         <select v-model="type">
           <option value="exam">Slutprov</option>
@@ -29,8 +26,8 @@
         </select>
   
         <div class="buttons">
-          <button @click="$emit('close')">Avbryt</button>
-          <button @click="submitEvent">Spara</button>
+          <button type="button" @click="$emit('close')">Avbryt</button>
+          <button type="button" @click="submitEvent">Spara</button>
         </div>
       </div>
     </div>
@@ -53,33 +50,57 @@
     },
     methods: {
         async submitEvent() {
-            if (!this.selectedTeacher) {
-                alert("Välj en lärare först.");
+            try {
+                console.log("🚀 submitEvent körs");
+
+                if (!this.selectedTeacher?.id) {
+                console.warn("⚠️ Ingen lärare vald");
                 return;
+                }
+
+                const { data: students } = await axios.get(
+                `${import.meta.env.VITE_API_URL}/api/students/by-teacher/${this.selectedTeacher.id}`
+                );
+
+                const formattedStudents = students.map((s) => ({
+                _id: s._id,
+                name: s.name,
+                personalNumber: s.personalNumber,
+                additionalInfo: s.additionalInfo || "",
+                attended: false,
+                }));
+
+                const event = {
+                title: this.selectedTeacher?.name || "Okänd lärare",
+                start: this.date,
+                color: this.selectedTeacher?.color || "grey",
+                extendedProps: {
+                    teacher: this.selectedTeacher?.name,
+                    teacherId: this.selectedTeacher?.id,
+                    type: this.type,
+                    examMunicipality: "",
+                    examLocation: "",
+                    examTime: "",
+                    students: formattedStudents,
+                },
+                };
+
+                console.log("📤 Skickar event:", event);
+
+                console.log("🧾 Event att skicka:", JSON.stringify(event, null, 2));
+
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/calendar-events`, event);
+
+                console.log("✅ Event skickat!");
+                this.$emit("event-added", event);
+                this.$emit("close");
+            } catch (err) {
+                console.error("❌ Fel vid sparning av event:", err.response?.data || err.message);
+                alert("Kunde inte spara event. Kontrollera konsolen för mer info.");
+            }
             }
 
-            const { data: students } = await axios.get(
-                `${import.meta.env.VITE_API_URL}/api/students/by-teacher/${this.selectedTeacher.id}`
-            );
 
-            const event = {
-                start: this.date,
-                color: this.selectedTeacher.color || "grey",
-                extendedProps: {
-                teacher: this.selectedTeacher.name,
-                teacherId: this.selectedTeacher.id,
-                type: this.type,
-                students, // 🔥 nu korrekt!
-                },
-            };
-
-            await axios.post(`${import.meta.env.VITE_API_URL}/api/calendar-color`, event);
-
-            this.$emit("event-added", event);
-            this.$emit("close");
-            this.$emit("update"); // så ExamCalendar kan hämta events igen
-
-        }
     },
   };
   </script>
