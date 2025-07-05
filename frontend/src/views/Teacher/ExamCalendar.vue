@@ -142,24 +142,35 @@ export default {
     },
     async fetchEvents() {
       try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/calendar-color`);
-        const eventsData = response.data;
+        const [savedEvents, syncedEvents] = await Promise.all([
+          axios.get(`${import.meta.env.VITE_API_URL}/api/calendar-events`),
+          axios.get(`${import.meta.env.VITE_API_URL}/api/calendar-events/syncable`)
+        ]);
 
-          // Strukturera händelserna för kalendern
-          this.calendarOptions.events = eventsData.map(event => ({
+        this.calendarOptions.events = [
+          ...savedEvents.data.map((event) => ({
             id: event._id,
             title: event.title,
             start: event.start,
             allDay: true,
-            color: event.color,
-            extendedProps: event.extendedProps
-          }));
-
-        console.log("📅 Händelser hämtade:", this.calendarOptions.events);
+            color: event.color || "#999999",
+            extendedProps: event.extendedProps,
+          })),
+          ...syncedEvents.data.map((event) => ({
+            id: `${event.extendedProps.teacherId}_${event.start}`,
+            title: event.title,
+            start: event.start,
+            allDay: true,
+            color: event.color || "#999999",
+            extendedProps: event.extendedProps,
+          })),
+        ];
       } catch (error) {
-        console.error("Fel vid hämtning av event:", error);
+        console.error("❌ Kunde inte ladda kalender-events:", error.message);
       }
     },
+
+
     openEventModal(info) {
       this.selectedEvent = {
         id: info.event.id,

@@ -1,6 +1,8 @@
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
+import User from "../models/User.js";
+import Teacher from "../models/Teacher.js";
 import CoursePackage from "../models/CoursePackage.js";
 import { parseStudentExcel } from "../utils/parseStudentExcel.js";
 import { distance } from "fastest-levenshtein";
@@ -218,15 +220,29 @@ async function uploadXlsx(req, res) {
                     if (!exists) mergedEducation.push(e);
                 }
 
-                const studentDoc = {
-                    ...student,
-                    education: mergedEducation,
-                    municipality: { type: correctedMunicipality },
-                    aplStatus: existing?.aplStatus || "GRAY",
-                    createdAt: existing?.createdAt || now,
-                    updatedAt: now,
-                    uploadedBy: teacherName,
-                };
+            let teacherDoc = null;
+            if (student.teacher) {
+            const rawName = student.teacher.trim();
+            const firstName = rawName.split(",")[0].split(" ")[0];
+            const user = await User.findOne({ username: new RegExp(`^${firstName}`, "i") });
+            if (user) {
+                teacherDoc = await Teacher.findOne({ userId: user._id });
+            }
+            }
+
+                    
+            const studentDoc = {
+                ...student,
+                teacherId: teacherDoc?._id || null,
+                education: mergedEducation,
+                municipality: { type: correctedMunicipality },
+                aplStatus: existing?.aplStatus || "GRAY",
+                createdAt: existing?.createdAt || now,
+                updatedAt: now,
+                uploadedBy: teacherName,
+            };
+
+
 
                 return {
                     updateOne: {
@@ -239,6 +255,7 @@ async function uploadXlsx(req, res) {
         );
 
         await Student.bulkWrite(bulkOps);
+
 
         const sample = await Student.findOne({
             email: mergedStudents[0].email,

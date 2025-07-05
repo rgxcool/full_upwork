@@ -193,114 +193,88 @@ router.get("/exams", async (req, res) => {
   }
 });
 
-router.post("/calendar-color", async (req, res) => {
+
+
+router.post("/calendar-events", async (req, res) => {
   try {
-    const { start, color, extendedProps } = req.body;
-
-    if (!start || !extendedProps?.teacherId) {
-      console.log("Startdatum och teacherId krävs.")
-      return res.status(400).json({ error: "Startdatum och teacherId krävs." });
-    }
-
-    const teacher = await Teacher.findById(extendedProps.teacherId).populate("userId");
-    if (!teacher) {
-      return res.status(404).json({ error: "Läraren hittades inte." });
-    }
-
-    const newEvent = new CalendarEvent({
-      title: teacher.userId.username,
-      start: new Date(start),
-      color: color || teacher.colorCode,
-      extendedProps: {
-        teacher: teacher.userId.username,
-        teacherId: teacher._id,
-        type: extendedProps.type || "general",
-        examMunicipality: extendedProps.examMunicipality || "",
-        examLocation: extendedProps.examLocation || "",
-        examTime: extendedProps.examTime || "",
-        students: extendedProps.students || [],
-      },
-    });
-
-    await newEvent.save();
-
-    console.log("✅ Event sparat i databasen:", newEvent);
-
-
-
-    res.status(201).json({ message: "Event mottaget", event: newEvent });
-
+    const event = new CalendarEvent(req.body);
+    await event.save();
+    res.status(201).json({ message: "Event sparat", event });
   } catch (error) {
-    console.error("❌ Error in POST /calendar-color:", error.message);
-    res.status(500).json({ error: "Serverfel vid skapande av kalenderhändelse" });
+    console.error("❌ Fel vid manuell event-skapning:", error.message);
+    res.status(500).json({ error: "Kunde inte spara event." });
   }
 });
 
 
-router.get("/calendar-color", async (req, res) => {
+router.get("/calendar-events", async (req, res) => {
   try {
-    // 1. Hämta alla sparade event
-    const savedEvents = await CalendarEvent.find();
+    const events = await CalendarEvent.find();
+    res.json(events);
+  } catch (err) {
+    console.error("❌ Fel vid hämtning:", err);
+    res.status(500).json({ error: "Kunde inte hämta sparade event" });
+  }
+});
 
-    // 2. Fortsätt använda student-baserad generering om du vill (från tidigare kod)
-    const students = await Student.find()
-      .populate("education.refId")
-      .populate({
-        path: "teacherId",
-        populate: { path: "userId", select: "username email" },
-      });
+router.get("/calendar-events/syncable", async (req, res) => {
+  try {
+    const students = await Student.find({
+      finalExamDate: { $ne: null },
+      dropout: { $ne: true },
+    }).populate({
+      path: "teacherId",
+      populate: { path: "userId", select: "username" },
+    });
 
-    const groupedEvents = {};
+    const grouped = {};
 
     students.forEach((student) => {
-      const hasPassedCourses = student.education.some(
-        (edu) => edu.grade !== "F"
-      );
-      if (!hasPassedCourses || student.dropout === true) return;
-
+      const dateKey = student.finalExamDate.toISOString().split("T")[0];
       const teacher = student.teacherId;
-      const teacherName = teacher?.userId?.username || "Okänd lärare";
-      const teacherColor = teacher?.colorCode || "#cccccc";
 
-      const examDate = student.finalExamDate;
-      if (!examDate) return;
+      if (!teacher || !teacher.userId) return;
 
-      const formattedDate = new Date(examDate).toISOString().split("T")[0];
-      const key = `${teacherName}-${formattedDate}`;
+      const key = `${teacher._id}_${dateKey}`;
 
-      if (!groupedEvents[key]) {
-        groupedEvents[key] = {
-          _id: student._id.toString(),
-          title: teacherName,
-          start: formattedDate,
-          color: teacherColor,
+      if (!grouped[key]) {
+        grouped[key] = {
+          title: teacher.userId.username,
+          start: new Date(student.finalExamDate),
+          color: teacher.colorCode || "#999999",
           extendedProps: {
-            teacher: teacherName,
-            teacherId: teacher?._id,
-            examMunicipality: student.examMunicipality || "Unknown",
-            examLocation: student.examLocation || "Unknown",
-            examTime: student.examTime || "No exam time",
+            teacher: teacher.userId.username,
+            teacherId: teacher._id,
+            type: "exam",
+            examMunicipality: student.examMunicipality || "",
+            examLocation: student.examLocation || "",
+            examTime: student.examTime || "",
             students: [],
           },
         };
       }
 
-      groupedEvents[key].extendedProps.students.push({
-        _id: student._id.toString(),
-        name: student.name || "Unknown student",
-        personalNumber: student.personalNumber || "No personal number",
-        attended: student.attendedExam || false,
+      grouped[key].extendedProps.students.push({
+        _id: student._id,
+        name: student.name,
+        personalNumber: student.personalNumber,
         additionalInfo: student.additionalInfo || "",
+        attended: student.attendedExam || false,
       });
     });
 
-    // 3. Returnera både student-genererade och sparade events
-    res.json([...Object.values(groupedEvents), ...savedEvents]);
-  } catch (error) {
-    console.error("❌ Error in /calendar-color:", error.message);
-    res.status(500).send("Server error");
+    res.json(Object.values(grouped));
+  } catch (err) {
+    console.error("❌ Fel vid synk:", err.message);
+    res.status(500).json({ error: "Kunde inte hämta synkade events." });
   }
 });
+
+
+
+
+
+
 
 
 router.put("/update-exam/:id", async (req, res) => {
@@ -328,50 +302,6 @@ router.put("/update-exam/:id", async (req, res) => {
   } catch (error) {
     console.error("❌ Fel vid uppdatering av prov:", error.message);
     res.status(500).json({ error: "Serverfel", details: error.message });
-  }
-});
-
-router.post("/add-exam", async (req, res) => {
-  try {
-    console.log("📌 API /add-exam anropad! Data mottagen:", req.body);
-
-    const { studentIds, examTime, examMunicipality, examLocation } = req.body;
-
-    if (
-      !studentIds ||
-      studentIds.length === 0 ||
-      !examTime ||
-      !examMunicipality ||
-      !examLocation
-    ) {
-      return res.status(400).json({
-        message:
-          "Student IDs, exam time, municipality, and location are required",
-      });
-    }
-
-    // ✅ Lägg till $set för att säkerställa att vi uppdaterar rätt fält
-    const result = await Student.updateMany(
-      { _id: { $in: studentIds } },
-      {
-        $set: {
-          examTime,
-          examMunicipality,
-          examLocation,
-        },
-      }
-    );
-
-    console.log("📌 MongoDB Update Result:", result); // 🔥 Logga vad som faktiskt uppdateras
-
-    // ✅ Hämta uppdaterade studenter och logga
-    const updatedStudents = await Student.find({ _id: { $in: studentIds } });
-    console.log("📌 Studenter efter uppdatering:", updatedStudents);
-
-    res.status(201).json({ message: "Exam time and location added" });
-  } catch (error) {
-    console.error("❌ Error adding exam:", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
   }
 });
 
