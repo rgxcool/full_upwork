@@ -22,7 +22,12 @@ const router = Router();
 
 router.get("/students/by-teacher/:teacherId", async (req, res) => {
   try {
-    const students = await Student.find({ teacherId: req.params.teacherId });
+
+    const students = await Student.find({
+      teacherId: req.params.teacherId,
+      dropout: { $ne: true }, // 👈 Lägg till detta filter!
+    });
+
     res.json(
       students.map((s) => ({
         _id: s._id,
