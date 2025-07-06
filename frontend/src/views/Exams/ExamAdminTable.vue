@@ -1,82 +1,92 @@
 <template>
   <div class="container my-5">
-    <h2 class="mb-4">Prövningselever</h2>
+    <h2 class="mb-4 text-center">📋 Prövningselever</h2>
 
-    <!-- Sök & Filter -->
+    <!-- Filterfält -->
     <div class="row g-3 mb-4">
       <div class="col-md-4">
-        <input v-model="search" type="text" class="form-control" placeholder="Sök på namn" />
+        <input v-model="search" type="text" class="form-control shadow-sm" placeholder="🔍 Sök på namn" />
       </div>
       <div class="col-md-4">
-        <select v-model="filterMonth" class="form-select">
-          <option value="">Alla månader</option>
+        <select v-model="filterMonth" class="form-select shadow-sm">
+          <option value="">📅 Alla månader</option>
           <option v-for="month in months" :key="month" :value="month">{{ month }}</option>
         </select>
       </div>
       <div class="col-md-4">
-        <select v-model="filterStatus" class="form-select">
-          <option value="">Alla statusar</option>
+        <select v-model="filterStatus" class="form-select shadow-sm">
+          <option value="">📌 Alla statusar</option>
           <option value="intresse">Intresse</option>
           <option value="scheduled">Godkänd</option>
-          <option value="moved">Flyttad</option>
           <option value="denied">Nekad</option>
         </select>
       </div>
     </div>
 
-    <!-- Lista -->
-    <table class="table table-bordered table-striped align-middle">
-      <thead class="table-light">
-        <tr>
-          <th>Namn</th>
-          <th>Kurs</th>
-          <th>Månad</th>
-          <th>Lärare</th>
-          <th>Status</th>
-          <th>Material</th>
-          <th>Betalning</th>
-          <th>Beslut</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="exam in filteredExams" :key="exam._id">
-          <td>{{ exam.name }}</td>
-          <td>{{ exam.course }}</td>
-          <td>{{ exam.requestedMonthFormatted }}</td>
-          <td>{{ exam.teacherId?.name || '–' }}</td>
-          <td>{{ exam.status }}</td>
-          <td>
-            <span v-if="exam.materialReceived?.status" class="badge bg-success">Ja</span>
-            <span v-else class="badge bg-secondary">Nej</span>
-          </td>
-          <td>{{ formatDate(exam.paymentDate) }}</td>
-          <td>
-            <div class="mb-2">
-              <select v-model="decisions[exam._id].decision" class="form-select form-select-sm">
-                <option value="">Välj</option>
-                <option value="accept">Godkänn</option>
-                <option value="move">Flytta</option>
-                <option value="deny">Neka</option>
-              </select>
-            </div>
-            <textarea
-              v-model="decisions[exam._id].comment"
-              rows="2"
-              class="form-control form-control-sm mb-1"
-              placeholder="Kommentar"
-            ></textarea>
-            <div class="d-flex justify-content-between align-items-start">
-              <button class="btn btn-sm btn-primary" @click="submitDecision(exam._id)">
-                Spara
-              </button>
-              <button class="btn btn-sm btn-danger ms-2" @click="deleteExam(exam._id)">
-                Ta bort
-              </button>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- Scrollbar & tabell -->
+    <div class="table-responsive">
+      <table class="table table-hover table-striped align-middle rounded shadow-sm overflow-hidden" style="min-width: 1200px;">
+        <thead class="table-primary">
+          <tr>
+            <th>Namn</th>
+            <th>Personnummer</th>
+            <th>Telefon</th>
+            <th>Email</th>
+            <th>Kurs</th>
+            <th>Kommun</th>
+            <th>Månad</th>
+            <th>Lärare</th>
+            <th>Status</th>
+            <th>Material</th>
+            <th>Betalning</th>
+            <th>Beslut</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="exam in filteredExams" :key="exam._id">
+            <td><strong>{{ exam.name }}</strong></td>
+            <td>{{ exam.personalNumber || '–' }}</td>
+            <td>{{ exam.phone || '–' }}</td>
+            <td>{{ exam.email || '–' }}</td>
+            <td>{{ exam.course || '–' }}</td>
+            <td>{{ exam.municipality || '–' }}</td>
+            <td>{{ exam.requestedMonthFormatted }}</td>
+            <td>{{ exam.teacherId?.userId?.username || '–' }}</td>
+            <td>
+              <span :class="['badge', statusColor(exam.status)]">{{ exam.status || '–' }}</span>
+            </td>
+            <td>
+              <span v-if="exam.materialReceived?.status" class="badge bg-success">Ja</span>
+              <span v-else class="badge bg-secondary">Nej</span>
+            </td>
+            <td>{{ formatDate(exam.paymentDate) }}</td>
+            <td style="min-width: 200px;">
+              <div class="mb-2">
+                <select v-model="decisions[exam._id].decision" class="form-select form-select-sm">
+                  <option value="">Välj</option>
+                  <option value="accept">Godkänn</option>
+                  <option value="deny">Neka</option>
+                </select>
+              </div>
+              <textarea
+                v-model="decisions[exam._id].comment"
+                rows="2"
+                class="form-control form-control-sm mb-2"
+                placeholder="Kommentar"
+              ></textarea>
+              <div class="d-flex justify-content-start flex-wrap gap-2">
+                <button class="btn btn-sm btn-success" @click="submitDecision(exam._id)">
+                  💾 Spara
+                </button>
+                <button class="btn btn-sm btn-outline-danger" @click="deleteExam(exam._id)">
+                  🗑️ Ta bort
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
@@ -120,24 +130,22 @@
     }
   }
 
-  // Formattera månad för visning
-  const formatRequestedMonth = (monthYear) => {
-    if (!monthYear) return ''
-    const [year, month] = monthYear.split('-')
-    return new Date(year, month - 1).toLocaleString('sv-SE', { month: 'long', year: 'numeric' })
-  }
-
-  const formatDate = (date) => {
-    if (!date) return ''
-    return new Date(date).toLocaleDateString('sv-SE')
-  }
-
-  const submitDecision = async (id) => {
-    const { decision, comment } = decisions.value[id]
-    if (!decision) {
-      alert('Beslut krävs')
-      return
+    const formatRequestedMonth = (month) => {
+      if (!month) return ''
+      return month.charAt(0).toUpperCase() + month.slice(1).toLowerCase()
     }
+
+    const formatDate = (date) => {
+      if (!date) return ''
+      return new Date(date).toLocaleDateString('sv-SE')
+    }
+
+    const submitDecision = async (id) => {
+      const { decision, comment } = decisions.value[id]
+      if (!decision) {
+        alert('Beslut krävs')
+        return
+      }
 
     try {
       await axios.put(`${import.meta.env.VITE_API_URL}/api/exams/${id}/decision`, {
@@ -164,6 +172,16 @@
     }
   }
 
+  const statusColor = (status) => {
+  switch (status) {
+    case 'scheduled': return 'bg-success text-white'
+    case 'denied': return 'bg-danger text-white'
+    case 'intresse': return 'bg-info text-dark'
+    default: return 'bg-secondary'
+  }
+}
+
+
   onMounted(fetchExams)
 
   const filteredExams = computed(() => {
@@ -177,3 +195,16 @@
     })
   })
 </script>
+<style scoped>
+thead th {
+  position: sticky;
+  top: 0;
+  background-color: #f8f9fa;
+  z-index: 2;
+}
+
+tbody tr:hover {
+  background-color: #f1f1f1;
+  transition: background 0.2s ease;
+}
+</style>

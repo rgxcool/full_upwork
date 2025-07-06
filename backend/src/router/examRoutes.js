@@ -5,6 +5,9 @@ import Teacher from "../models/Teacher.js";
 import Exam from "../models/Provning.js";
 import CalendarEvent from "../models/Event.js"
 
+import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
+
+
 import Notification from "../models/Notification.js";
 
 
@@ -43,15 +46,6 @@ router.put("/exams/:id/decision", async (req, res) => {
 
         updateData.status = "scheduled";
         updateData.studentId = student._id;
-        break;
-
-      case "move":
-        const newRequestedMonth = getNextMonth(exam.requestedMonth);
-        if (!newRequestedMonth) {
-          return res.status(400).json({ error: "Ogiltigt månad för flytt" });
-        }
-        updateData.status = "moved";
-        updateData.requestedMonth = newRequestedMonth;
         break;
 
       case "deny":
@@ -126,10 +120,15 @@ function getNextMonth(currentMonth) {
   return `${newYear}-${(newMonth + 1).toString().padStart(2, "0")}`;
 }
 
+
 router.post("/exams", async (req, res) => {
   try {
     const exam = new Exam(req.body);
     const savedExam = await exam.save();
+
+    // 🔔 Skapa global notis till admin
+    await createGlobalNotification("new_exam_registered", `Ny prövning registrerad för ${exam.name} (${exam.course})`);
+
     res.status(201).json(savedExam);
   } catch (err) {
     console.error("Error saving exam:", err.message);
@@ -137,10 +136,16 @@ router.post("/exams", async (req, res) => {
   }
 });
 
+
 router.get("/exams", async (req, res) => {
   try {
-    const exams = await Exam.find().populate("teacherId", "name");
-
+    const exams = await Exam.find().populate({
+      path: "teacherId",
+      populate: {
+        path: "userId",
+        select: "username"
+      }
+    });
     // 🔔 Skapa notiser för kommande prövningar (3-4 veckor före månadsslut)
     const now = new Date();
     const currentYear = now.getFullYear();
