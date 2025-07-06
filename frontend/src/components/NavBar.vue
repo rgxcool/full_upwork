@@ -105,14 +105,15 @@
         </div>
 
         <!-- Hamburgermenyn syns bara på mobil -->
+        <div v-if="isMobileMenuOpen" class="mobile-overlay" @click="toggleMobileMenu"></div>
 
-        <!-- Mobilmenyn visas när togglad -->
-        <div v-if="isMobileMenuOpen" class="mobile-menu">
+        <div :class="['mobile-menu', { open: isMobileMenuOpen }]">
           <button @click="logout" class="logout-btn">Logga ut</button>
-
           <ul class="mobile-nav-links">
             <li v-for="item in filteredMenuItems" :key="item.link">
-              <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
+              <router-link :to="item.link" class="nav-link" @click="toggleMobileMenu">
+                {{ item.name }}
+              </router-link>
             </li>
           </ul>
         </div>
@@ -503,6 +504,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between !important;
+    flex-wrap: wrap; /* gör att burgaren hoppar ner snyggt om det blir trångt */
+    gap: 20px;
     max-width: 1800px;
     margin: 0 auto;
     width: 100%;
@@ -865,7 +868,6 @@
 
   .burger-menu {
     display: none;
-    background: none;
     border: none;
     cursor: pointer;
   }
@@ -873,10 +875,10 @@
   @media (max-width: 768px) {
     .burger-menu {
       display: block;
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      z-index: 1100;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #333; /* ← viktigt för att fyllningen syns */
     }
 
     .nav-links {
@@ -884,14 +886,34 @@
     }
 
     .mobile-menu {
-      position: absolute;
-      top: 70px;
+      position: fixed;
+      top: 0;
       right: 0;
-      width: 100%;
-      background: #f8f8f8;
-      border-top: 1px solid #ddd;
+      height: 100vh;
+      width: 80%;
+      max-width: 300px;
+      background-color: #fff;
+      box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
       padding: 20px;
-      z-index: 1000;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mobile-menu.open {
+      transform: translateX(0); /* Detta visar menyn */
+    }
+
+    .mobile-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 1500;
     }
 
     .mobile-nav-links {
@@ -933,6 +955,17 @@
 
   .profile-icon {
     position: relative;
+  }
+
+  .burger-menu svg {
+    stroke: currentColor;
+    stroke-width: 2;
+    transition: stroke 0.2s;
+    width: 24px;
+    height: 24px;
+  }
+  .burger-menu:hover svg {
+    stroke: #6c63ff;
   }
 
   .profile-dropdown {
