@@ -872,6 +872,13 @@
     cursor: pointer;
   }
 
+  @media (min-width: 769px) {
+  .mobile-menu,
+  .mobile-overlay {
+    display: none !important;
+  }
+}
+
   @media (max-width: 768px) {
     .burger-menu {
       display: block;
