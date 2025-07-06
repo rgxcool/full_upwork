@@ -1,77 +1,75 @@
 <template>
-  <div class="container my-5">
+  <v-container class="my-5">
     <h2 class="mb-4">Anmälan till prövning</h2>
-    <form @submit.prevent="submitForm">
-      <div class="row g-3">
-        <v-container>
-          <v-form>
-            <v-autocomplete
-              v-model="selectedStudent"
-              :items="filteredStudents"
-              :search="searchQuery"
-              item-title="name"
-              item-value="_id"
-              label="Select a student"
-              return-object
-              outlined
-              :menu-props="{ maxHeight: '300px', closeOnContentClick: false }"
-              attach
-              :no-data-text="'Please write student name'"
-              @update:search="searchQuery = $event"
-              :filter="() => true"
-            />
-          </v-form>
-        </v-container>
+    <v-form @submit.prevent="submitForm" class="pa-4" elevation="1">
+      <v-row dense>
+        <!-- Elev -->
+        <v-col cols="12">
+          <v-autocomplete
+            v-model="selectedStudent"
+            :items="filteredStudents"
+            :search="searchQuery"
+            item-title="name"
+            item-value="_id"
+            label="Välj elev"
+            return-object
+            outlined
+            :no-data-text="'Skriv elevnamn'"
+            @update:search="searchQuery = $event"
+          />
+        </v-col>
 
-        <!-- Elevuppgifter 
-        <div class="col-md-6">
-          <label class="form-label">Namn</label>
-          <input v-model="form.name" type="text" class="form-control" required />
-        </div>
-        -->
+        <!-- Personnummer & Telefon -->
+        <v-col cols="12" md="6">
+          <v-text-field
+            :model-value="form.personalNumber"
+            label="Personnummer"
+            readonly
+            outlined
+          />
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-text-field
+            :model-value="form.phone"
+            label="Telefonnummer"
+            readonly
+            outlined
+          />
+        </v-col>
 
-        <div v-if="selectedStudent && selectedStudent.name" class="row g-3 mt-3">
-          <div class="col-md-6">
-            <label class="form-label">Personnummer</label>
-            <input v-model="form.personalNumber" type="text" class="form-control" required />
-          </div>
+        <!-- Email -->
+        <v-col cols="12">
+          <v-text-field
+            :model-value="form.email"
+            label="E-post"
+            readonly
+            outlined
+          />
+        </v-col>
 
-          <div class="col-md-6">
-            <label class="form-label">Telefonnummer</label>
-            <input v-model="form.phone" type="tel" class="form-control" />
-          </div>
+        <!-- Kurs -->
+        <v-col cols="12">
+          <v-autocomplete
+            v-model="selectedCourse"
+            :items="availableCourses"
+            item-title="title"
+            item-value="value"
+            label="Kurs"
+            outlined
+            disabled
+          />
+        </v-col>
 
-          <div class="col-md-6">
-            <label class="form-label">Mejladress</label>
-            <input v-model="form.email" type="email" class="form-control" required />
-          </div>
-        </div>
-        <!-- Kurs & Önskad månad -->
-        <v-autocomplete
-          v-model="selectedCourse"
-          :items="availableCourses"
-          item-title="title"
-          item-value="value"
-          label="Välj kurs"
-          outlined
-          :menu-props="{ maxHeight: '300px' }"
-          :no-data-text="'Ingen kurs tillgänglig'"
-        />
-
-        <div class="col-md-6">
-          <label class="form-label">Önskad månad för prövning</label>
-          <select v-model="form.requestedMonth" class="form-select" required>
-            <option value="">Välj månad</option>
-            <option v-for="month in months" :key="month" :value="month">{{ month }}</option>
-          </select>
-        </div>
-
-        <div class="col-md-6">
-          <label class="form-label">Kommun (för betygsregistrering)</label>
-          <input v-model="form.municipality" type="text" class="form-control" />
-        </div>
-
-        <div class="col-md-6">
+        <!-- Kommun & Lärare -->
+        <v-col cols="12" md="6">
+          <v-text-field
+            v-model="form.municipality"
+            label="Kommun"
+            readonly
+            outlined
+          />
+        </v-col>
+        <v-col cols="12" md="6">
           <v-autocomplete
             v-model="form.teacherId"
             :items="teachers"
@@ -79,36 +77,45 @@
             item-value="_id"
             label="Ansvarig lärare"
             outlined
-            clearable
-            :no-data-text="'Inga lärare tillgängliga'"
-            :menu-props="{ maxHeight: '300px' }"
+            disabled
           />
-        </div>
+        </v-col>
 
-        <!-- Material / Betalning -->
-        <div class="col-md-6 form-check mt-4">
-          <input
-            v-model="form.materialReceived"
-            type="checkbox"
-            class="form-check-input"
-            id="material"
+        <!-- Månad & Betalningsdatum -->
+        <v-col cols="12" md="6">
+          <v-autocomplete
+            v-model="form.requestedMonth"
+            :items="months"
+            label="Önskad månad"
+            outlined
           />
-          <label class="form-check-label" for="material">Material hämtat (SVE/SVA 1 eller 3)</label>
-        </div>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-text-field
+            v-model="form.paymentDate"
+            label="Betalningsdatum"
+            type="date"
+            outlined
+          />
+        </v-col>
 
-        <div class="col-md-6">
-          <label class="form-label">Betalningsdatum</label>
-          <input v-model="form.paymentDate" type="date" class="form-control" />
-        </div>
+        <!-- Material checkbox -->
+        <v-col cols="12" v-if="showMaterialCheckbox">
+          <v-checkbox
+            v-model="form.materialReceived.status"
+            label="Material hämtat (SVE 1 eller 3)"
+          />
+        </v-col>
 
         <!-- Submit -->
-        <div class="col-12 mt-4">
-          <button type="submit" class="btn btn-primary">Registrera</button>
-        </div>
-      </div>
-    </form>
-  </div>
+        <v-col cols="12" class="text-end mt-4">
+          <v-btn type="submit" color="primary">Registrera</v-btn>
+        </v-col>
+      </v-row>
+    </v-form>
+  </v-container>
 </template>
+
 
 <script setup>
   import axios from 'axios'
@@ -131,7 +138,7 @@
     requestedMonth: '',
     municipality: '',
     teacherId: '',
-    materialReceived: false,
+    materialReceived: { status: false, receivedDate: null },
     paymentDate: '',
   })
 
@@ -149,6 +156,17 @@
     'November',
     'December',
   ]
+
+  const showMaterialCheckbox = computed(() => {
+  const selected = availableCourses.value.find(
+    (c) => c.value === selectedCourse.value
+  )
+  const title = selected?.title?.toLowerCase() || ''
+  return title.includes('sve')
+})
+
+
+
 
   const filteredStudents = computed(() => {
     if (!searchQuery.value) return students.value
@@ -186,28 +204,64 @@
 
     // 🧹 Clear related fields when deselected
     if (!newStudent) {
-      selectedCourse.value = null
-      form.value.course = ''
-      return
-    }
+    selectedCourse.value = null
+    form.value.course = ''
+    form.value.teacherId = ''
+    return
+  }
 
-    form.value.name = newStudent.name || ''
-    form.value.personalNumber = newStudent.personalNumber || ''
-    form.value.phone = newStudent.phone || ''
-    form.value.email = newStudent.email || ''
-    form.value.municipality = newStudent.municipality?.type || ''
+
+  // Grundläggande info
+  form.value.name = newStudent.name || ''
+  form.value.personalNumber = newStudent.personalNumber || ''
+  form.value.phone = newStudent.phone || ''
+  form.value.email = newStudent.email || ''
+  form.value.municipality = newStudent.municipality?.type || ''
+
+  form.value.teacherId = newStudent.teacherId || ''
+
+  // Försök välja första utbildning
+  const edu = (newStudent.education || []).find(e => !e.removedAt && ['Course', 'CoursePackage', 'Program'].includes(e.type))
+
+  if (edu) {
+    selectedCourse.value = edu.refId?._id || edu._id
+    if (edu.refId?.courseName) {
+      form.value.course = `${edu.refId.courseName} (${edu.refId.courseCode})`
+    } else {
+      form.value.course = edu.name || ''
+    }
+  } else {
+    selectedCourse.value = null
+    form.value.course = ''
+  }
+
+
   })
 
   const availableCourses = computed(() => {
-    if (!selectedStudent.value?.education) return []
+  if (!selectedStudent.value?.education) return []
 
-    return selectedStudent.value.education
-      .filter((e) => e.type === 'Course' && (e.refId?.courseName || e.name))
-      .map((e) => ({
-        title: e.refId ? `${e.refId.courseName} (${e.refId.courseCode})` : e.name,
-        value: e.refId?._id || e._id, // fallback to education._id if refId missing
-      }))
-  })
+  return selectedStudent.value.education
+    .filter((e) => !e.removedAt)
+    .map((e) => {
+      let title = ''
+      if (e.type === 'Course') {
+        title = e.refId?.courseName
+          ? `${e.refId.courseName} (${e.refId.courseCode})`
+          : e.name
+      } else if (e.type === 'CoursePackage') {
+        title = e.refId?.coursePackageName || e.name
+      } else if (e.type === 'Program') {
+        title = e.refId?.programName || e.name
+      }
+      return {
+        title: title || 'Okänd utbildning',
+        value: e.refId?._id || e._id,
+        type: e.type,
+      }
+    })
+})
+
 
   watch(selectedCourse, (newCourseId) => {
     const selected = availableCourses.value.find((c) => c.value === newCourseId)
@@ -243,6 +297,14 @@
 
   const submitForm = async () => {
     try {
+      
+      if (form.value.materialReceived?.status) {
+      form.value.materialReceived.receivedDate = new Date();
+    } else {
+      form.value.materialReceived = { status: false, receivedDate: null };
+    }
+
+
       console.log('Skickar:', form.value)
       await axios.post(`${import.meta.env.VITE_API_URL}/api/exams`, form.value)
       alert('Registreringen lyckades!')
