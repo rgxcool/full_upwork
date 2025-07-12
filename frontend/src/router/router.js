@@ -31,6 +31,7 @@ import StudentDetails from '@/views/Student/StudentDetails.vue'
 import APLView from '@/views/APLView.vue'
 import GradeStudent from '../views/Admin/gradeStudent.vue'
 import ExamForm from '../views/Exams/ExamOverview.vue'
+import EducationDetails from '../views/Admin/EducationDetails.vue'
 
 const routes = [
   // Public Routes
@@ -72,7 +73,14 @@ const routes = [
     component: SearchResultDetails,
     props: true,
     meta: { title: 'Search Result Details', role: 'teacher' }, // This was admin, and probably should be but making it teacher to broaden access.
-    // That means the teacher can access handlingsplan etc via the search menu, we have to address this.
+  },
+  {
+    path: '/education/:id',
+    name: 'EducationDetials',
+    component: EducationDetails,
+    props: true,
+    meta: { title: 'Education Details', role: 'admin' },
+
   },
   {
     path: '/students',

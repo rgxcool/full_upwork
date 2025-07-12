@@ -252,11 +252,21 @@
       }
 
 
-      const navigateToDetails = (result) => {
-        showResults.value = false // Stäng<er sökresultaten
-        searchQuery.value = '' // Nollställer sökfältet
-        router.push(`/detaljer/${result.type}/${result.id}`)
+    const navigateToDetails = (result) => {
+      showResults.value = false
+      searchQuery.value = ''
+
+      // Gå till special vy om det är kurs eller program eller kurspaket
+      const courseTypes = ['Kurs', 'Course', 'Program', 'CoursePackage']
+
+      if (courseTypes.includes(result.type)) {
+        router.push(`/education/${result.id}`)  // NY ruta för kurser
+      } else {
+        router.push(`/detaljer/${result.type}/${result.id}`) // Vanlig vy
       }
+    }
+
+
 
       const hasPermission = (role) => store.getters.hasPermission(role)
 
