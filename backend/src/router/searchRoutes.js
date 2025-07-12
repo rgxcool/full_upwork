@@ -174,11 +174,38 @@ router.get("/details/:type/:id", async (req, res) => {
         break;
 
 
-      case "Kurs":
-        result = await Student.findOne({
-          "education.refId":id,
-        })
-        break;
+        case "Kurs":
+          const students = await Student.find({ "education.refId": id }).select("name _id")
+          const sampleStudent = await Student.findOne({ "education.refId": id })
+            .populate("education.refId")
+            .populate({
+              path: "teacherId", // ✅ rätt fält i Student.js
+              populate: {
+                path: "userId", // ✅ referens i Teacher.js
+                select: "username email"
+              }
+            })
+
+          if (!sampleStudent) return res.status(404).json({ message: "Kursen har inga elever" })
+
+          const matchingEdu = sampleStudent.education.find(
+            e => e?.refId?._id?.toString() === id
+          )
+
+          let courseName = matchingEdu?.refId?.courseName ||
+                          matchingEdu?.refId?.programName ||
+                          matchingEdu?.refId?.coursePackageName ||
+                          "Okänd kurs"
+
+          result = {
+            courseId: id,
+            courseName,
+            teacher: sampleStudent.teacherId?.userId || null, // ✅ detta är korrekt!
+            students,
+          }
+          break;
+
+
       default:
         return res.status(400).json({ message: "Ogiltig typ av objekt" });
     }
