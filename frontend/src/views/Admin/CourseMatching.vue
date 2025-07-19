@@ -1,0 +1,683 @@
+<template>
+  <div class="course-matching-container">
+    <div class="header-section">
+      <h3 class="page-title">Kursmatchning</h3>
+      <div class="breadcrumb">
+        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+          <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
+        </svg>
+        <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
+      </div>
+    </div>
+
+    <div class="content-grid">
+      <!-- Course Matching Tool -->
+      <div class="card">
+        <div class="card-header">
+          <h5>Testa kursmatchning</h5>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="courseName">Kursnamn att matcha:</label>
+            <input
+              type="text"
+              id="courseName"
+              v-model="searchCourseName"
+              class="form-control"
+              placeholder="Ex. Svenska 1, Matematik A, etc."
+              @input="searchCourse"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="threshold">Matchningströskel:</label>
+            <input
+              type="range"
+              id="threshold"
+              v-model="threshold"
+              min="0.1"
+              max="1.0"
+              step="0.1"
+              class="form-control"
+            />
+            <span class="threshold-value">{{ threshold }}</span>
+          </div>
+
+          <button
+            class="btn btn-primary"
+            @click="searchCourse"
+            :disabled="!searchCourseName.trim()"
+          >
+            Sök matchning
+          </button>
+
+          <div v-if="searchResult" class="search-result">
+            <h6>Matchning:</h6>
+            <div v-if="searchResult.success" class="match-success">
+              <div class="match-info">
+                <strong>Kurs:</strong>
+                {{ searchResult.match.course.courseName }}
+              </div>
+              <div class="match-info">
+                <strong>Kod:</strong>
+                {{ searchResult.match.course.courseCode }}
+              </div>
+              <div class="match-info">
+                <strong>Poäng:</strong>
+                {{ searchResult.match.course.coursePoints }}
+              </div>
+              <div class="match-info">
+                <strong>Matchning:</strong>
+                {{ (searchResult.match.score * 100).toFixed(1) }}%
+              </div>
+            </div>
+            <div v-else class="match-failure">
+              <p>Ingen matchning hittad med denna tröskel.</p>
+              <button class="btn btn-outline-primary btn-sm" @click="lowerThreshold">
+                Sänk tröskel och försök igen
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch Processing -->
+      <div class="card">
+        <div class="card-header">
+          <h5>Batch-bearbetning av studenter</h5>
+        </div>
+        <div class="card-body">
+          <!-- Debug section -->
+          <div
+            class="debug-info"
+            style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px"
+          >
+            <h6>Debug Info:</h6>
+            <p>
+              <strong>Is Logged In:</strong>
+              {{ isLoggedIn }}
+            </p>
+            <p>
+              <strong>User Role:</strong>
+              {{ userRole }}
+            </p>
+            <p>
+              <strong>Is Admin:</strong>
+              {{ isAdmin }}
+            </p>
+            <p>
+              <strong>API Base URL:</strong>
+              {{ api.defaults.baseURL }}
+            </p>
+          </div>
+          <div class="form-group">
+            <label for="studentFile">Excel-fil med studenter:</label>
+            <input
+              type="file"
+              id="studentFile"
+              @change="handleFileUpload"
+              accept=".xlsx,.xls"
+              class="form-control"
+            />
+          </div>
+
+          <div v-if="uploadedStudents.length > 0" class="upload-summary">
+            <h6>Uppladdade studenter ({{ uploadedStudents.length }}):</h6>
+            <div class="student-list">
+              <div
+                v-for="(student, index) in uploadedStudents.slice(0, 5)"
+                :key="index"
+                class="student-item"
+              >
+                {{ student.name }} - {{ student.education?.length || 0 }} kurser
+              </div>
+              <div v-if="uploadedStudents.length > 5" class="more-students">
+                ... och {{ uploadedStudents.length - 5 }} till
+              </div>
+            </div>
+          </div>
+
+          <button
+            class="btn btn-success"
+            @click="processStudents"
+            :disabled="uploadedStudents.length === 0 || isProcessing"
+          >
+            {{ isProcessing ? 'Bearbetar...' : 'Bearbeta studenter' }}
+          </button>
+
+          <div v-if="processingResults" class="processing-results">
+            <h6>Bearbetningsresultat:</h6>
+            <div class="result-stats">
+              <div class="stat-item">
+                <span class="stat-label">Inskrivningar skapade:</span>
+                <span class="stat-value success">{{ processingResults.enrollments.length }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Varningar:</span>
+                <span class="stat-value warning">{{ processingResults.warnings.length }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Fel:</span>
+                <span class="stat-value error">{{ processingResults.errors.length }}</span>
+              </div>
+            </div>
+
+            <div v-if="processingResults.warnings.length > 0" class="warnings-section">
+              <h6>Varningar:</h6>
+              <div class="warning-list">
+                <div
+                  v-for="(warning, index) in processingResults.warnings"
+                  :key="index"
+                  class="warning-item"
+                >
+                  <strong>{{ warning.type }}:</strong>
+                  {{ warning.message }}
+                </div>
+              </div>
+            </div>
+
+            <div v-if="processingResults.errors.length > 0" class="errors-section">
+              <h6>Fel:</h6>
+              <div class="error-list">
+                <div
+                  v-for="(error, index) in processingResults.errors"
+                  :key="index"
+                  class="error-item"
+                >
+                  <strong>{{ error.courseName }}:</strong>
+                  {{ error.error }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Course Statistics -->
+      <div class="card">
+        <div class="card-header">
+          <h5>Kursstatistik</h5>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="statsStartDate">Startdatum:</label>
+            <input
+              type="date"
+              id="statsStartDate"
+              v-model="statsFilters.startDate"
+              class="form-control"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="statsEndDate">Slutdatum:</label>
+            <input
+              type="date"
+              id="statsEndDate"
+              v-model="statsFilters.endDate"
+              class="form-control"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="statsCourseId">Kurs (valfritt):</label>
+            <select id="statsCourseId" v-model="statsFilters.courseId" class="form-control">
+              <option value="">Alla kurser</option>
+              <option v-for="course in courses" :key="course._id" :value="course._id">
+                {{ course.courseName }} ({{ course.courseCode }})
+              </option>
+            </select>
+          </div>
+
+          <button
+            class="btn btn-info"
+            @click="loadStatistics"
+            :disabled="!statsFilters.startDate || !statsFilters.endDate"
+          >
+            Ladda statistik
+          </button>
+
+          <div v-if="statistics.length > 0" class="statistics-section">
+            <h6>Statistik:</h6>
+            <div class="stats-table">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Kurs</th>
+                    <th>Totalt</th>
+                    <th>Slutförda</th>
+                    <th>Avbrutna</th>
+                    <th>Aktiva</th>
+                    <th>Genomsnitt närvaro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="stat in statistics" :key="stat._id">
+                    <td>{{ stat.course.courseName }}</td>
+                    <td>{{ stat.totalEnrollments }}</td>
+                    <td class="text-success">{{ stat.completedEnrollments }}</td>
+                    <td class="text-danger">{{ stat.droppedEnrollments }}</td>
+                    <td class="text-primary">{{ stat.activeEnrollments }}</td>
+                    <td>
+                      {{ stat.averageAttendance ? `${stat.averageAttendance.toFixed(1)}%` : '-' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+  import { ref, onMounted, computed } from 'vue'
+  import { api } from '@/store/store.js'
+  import { useStore } from 'vuex'
+
+  export default {
+    name: 'CourseMatching',
+    setup() {
+      const store = useStore()
+      const searchCourseName = ref('')
+      const threshold = ref(0.7)
+      const searchResult = ref(null)
+      const uploadedStudents = ref([])
+      const isProcessing = ref(false)
+      const processingResults = ref(null)
+      const courses = ref([])
+      const statistics = ref([])
+
+      const statsFilters = ref({
+        startDate: '',
+        endDate: '',
+        courseId: '',
+      })
+
+      const searchCourse = async () => {
+        if (!searchCourseName.value.trim()) return
+
+        try {
+          const response = await api.get(
+            `/course-match?courseName=${encodeURIComponent(searchCourseName.value)}&threshold=${
+              threshold.value
+            }`
+          )
+          searchResult.value = response.data
+        } catch (error) {
+          console.error('Error searching course:', error)
+          searchResult.value = { success: false, message: 'Ett fel uppstod vid sökning' }
+        }
+      }
+
+      const lowerThreshold = () => {
+        threshold.value = Math.max(0.1, threshold.value - 0.1)
+        searchCourse()
+      }
+
+      const handleFileUpload = async (event) => {
+        const file = event.target.files[0]
+        if (!file) return
+
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+
+          const response = await api.post('/upload-students', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+
+          uploadedStudents.value = response.data.results.students || []
+
+          // Store the actual processing results for display
+          if (response.data.results) {
+            processingResults.value = {
+              enrollments: response.data.results.enrollments || [],
+              warnings: response.data.results.warnings || [],
+              errors: response.data.results.errors || [],
+            }
+          }
+        } catch (error) {
+          console.error('Error uploading file:', error)
+          alert('Ett fel uppstod vid uppladdning av filen.')
+        }
+      }
+
+      const processStudents = async () => {
+        if (uploadedStudents.value.length === 0) return
+
+        isProcessing.value = true
+        try {
+          // The upload already processes students, so we just show a success message
+          // The real results are already stored in processingResults.value from the upload
+          console.log('Processing results:', processingResults.value)
+        } catch (error) {
+          console.error('Error processing students:', error)
+          alert('Ett fel uppstod vid bearbetning av studenter.')
+        } finally {
+          isProcessing.value = false
+        }
+      }
+
+      const loadCourses = async () => {
+        try {
+          const response = await api.get('/courses')
+          courses.value = response.data
+        } catch (error) {
+          console.error('Error loading courses:', error)
+        }
+      }
+
+      const loadStatistics = async () => {
+        try {
+          const params = new URLSearchParams({
+            startDate: statsFilters.value.startDate,
+            endDate: statsFilters.value.endDate,
+          })
+
+          if (statsFilters.value.courseId) {
+            params.append('courseId', statsFilters.value.courseId)
+          }
+
+          const response = await api.get(`/course-statistics?${params.toString()}`)
+          statistics.value = response.data.statistics
+        } catch (error) {
+          console.error('Error loading statistics:', error)
+        }
+      }
+
+      onMounted(() => {
+        loadCourses()
+      })
+
+      // Computed properties for authentication status
+      const isLoggedIn = computed(() => store.getters.isLoggedIn)
+      const userRole = computed(() => store.getters.userRole)
+      const isAdmin = computed(() => store.getters.isAdmin)
+
+      return {
+        isLoggedIn,
+        userRole,
+        isAdmin,
+        api,
+        searchCourseName,
+        threshold,
+        searchResult,
+        uploadedStudents,
+        isProcessing,
+        processingResults,
+        courses,
+        statistics,
+        statsFilters,
+        searchCourse,
+        lowerThreshold,
+        handleFileUpload,
+        processStudents,
+        loadStatistics,
+      }
+    },
+  }
+</script>
+
+<style scoped>
+  .course-matching-container {
+    padding: 20px;
+  }
+
+  .header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+  }
+
+  .page-title {
+    margin: 0;
+    color: #2c3e50;
+  }
+
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .breadcrumb-link {
+    color: #2c9316;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .content-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+  }
+
+  .card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+
+  .card-header {
+    background: #f8f9fa;
+    padding: 15px 20px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .card-header h5 {
+    margin: 0;
+    color: #2c3e50;
+  }
+
+  .card-body {
+    padding: 20px;
+  }
+
+  .form-group {
+    margin-bottom: 15px;
+  }
+
+  .form-group label {
+    font-weight: 500;
+    margin-bottom: 5px;
+    display: block;
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .threshold-value {
+    margin-left: 10px;
+    font-weight: bold;
+    color: #2c9316;
+  }
+
+  .search-result {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 4px;
+  }
+
+  .match-success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+  }
+
+  .match-failure {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+  }
+
+  .match-info {
+    margin-bottom: 5px;
+  }
+
+  .upload-summary {
+    margin: 15px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+  }
+
+  .student-list {
+    max-height: 150px;
+    overflow-y: auto;
+  }
+
+  .student-item {
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+  }
+
+  .more-students {
+    font-style: italic;
+    color: #666;
+    padding: 5px 0;
+  }
+
+  .processing-results {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+  }
+
+  .result-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .stat-label {
+    font-weight: 500;
+  }
+
+  .stat-value {
+    font-weight: bold;
+  }
+
+  .stat-value.success {
+    color: #28a745;
+  }
+
+  .stat-value.warning {
+    color: #ffc107;
+  }
+
+  .stat-value.error {
+    color: #dc3545;
+  }
+
+  .warnings-section,
+  .errors-section {
+    margin-top: 15px;
+  }
+
+  .warning-list,
+  .error-list {
+    max-height: 100px;
+    overflow-y: auto;
+  }
+
+  .warning-item,
+  .error-item {
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+  }
+
+  .statistics-section {
+    margin-top: 20px;
+  }
+
+  .stats-table {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .table {
+    font-size: 14px;
+  }
+
+  .table th {
+    background: #f8f9fa;
+    position: sticky;
+    top: 0;
+  }
+
+  .btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    margin-right: 10px;
+  }
+
+  .btn-primary {
+    background: #2c9316;
+    color: white;
+  }
+
+  .btn-success {
+    background: #28a745;
+    color: white;
+  }
+
+  .btn-info {
+    background: #17a2b8;
+    color: white;
+  }
+
+  .btn-outline-primary {
+    background: transparent;
+    color: #2c9316;
+    border: 1px solid #2c9316;
+  }
+
+  .btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .text-success {
+    color: #28a745;
+  }
+
+  .text-danger {
+    color: #dc3545;
+  }
+
+  .text-primary {
+    color: #007bff;
+  }
+
+  @media (max-width: 768px) {
+    .content-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .result-stats {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

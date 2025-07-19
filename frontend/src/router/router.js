@@ -10,6 +10,7 @@ import Register from '@/views/Auth/Register.vue'
 // Lazy-loaded Admin Views
 const ExcelUpload = () => import('@/views/Admin/ExcelUpload.vue')
 const AddStudent = () => import('@/views/Admin/AddStudent.vue')
+const AddTeacher = () => import('@/views/Admin/AddTeacher.vue')
 const EducationEditor = () => import('@/views/Admin/EducationEditor.vue')
 const ProgramsAndCourses = () => import('@/views/Admin/ProgramsAndCourses.vue')
 const ProgramsAndPackages = () => import('@/views/Admin/ProgramsAndPackages.vue')
@@ -20,6 +21,9 @@ const SearchUser = () => import('@/views/Admin/SearchUser.vue')
 const SearchResultDetails = () => import('@/views/Admin/SearchResultDetails.vue')
 const EarningsOverview = () => import('@/views/Admin/EarningsOverview.vue')
 const CoursesStats = () => import('@/views/Admin/CoursesStats.vue')
+const CourseInstances = () => import('@/views/Admin/CourseInstances.vue')
+const CourseMatching = () => import('@/views/Admin/CourseMatching.vue')
+const StudentEnrollments = () => import('@/views/Admin/StudentEnrollments.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
@@ -61,7 +65,13 @@ const routes = [
 
   // Admin Routes (Requires "admin" or higher)
   { path: '/lagg-till-anvandare', component: AddUser, meta: { title: 'Add User', role: 'admin' } },
+  {
+    path: '/lagg-till-larare',
+    component: AddTeacher,
+    meta: { title: 'Add Teacher', role: 'admin' },
+  },
   { path: '/anvandare', component: SearchUser, meta: { title: 'Search Users', role: 'admin' } },
+  { path: '/admin/users', component: SearchUser, meta: { title: 'Admin Users', role: 'admin' } },
   {
     path: '/addstudent',
     name: 'AddStudent',
@@ -80,7 +90,6 @@ const routes = [
     component: EducationDetails,
     props: true,
     meta: { title: 'Education Details', role: 'admin' },
-
   },
   {
     path: '/students',
@@ -167,6 +176,24 @@ const routes = [
     name: 'Earnings',
     component: EarningsOverview,
     meta: { title: 'Earnings Overview', role: 'admin' },
+  },
+  {
+    path: '/course-instances',
+    name: 'CourseInstances',
+    component: CourseInstances,
+    meta: { title: 'Course Instances', role: 'admin' },
+  },
+  {
+    path: '/course-matching',
+    name: 'CourseMatching',
+    component: CourseMatching,
+    meta: { title: 'Course Matching', role: 'admin' },
+  },
+  {
+    path: '/student-enrollments',
+    name: 'StudentEnrollments',
+    component: StudentEnrollments,
+    meta: { title: 'Student Enrollments', role: 'admin' },
   },
 ]
 

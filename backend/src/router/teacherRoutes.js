@@ -1,73 +1,206 @@
 import express from "express";
 const router = express.Router();
 import Teacher from "../models/Teacher.js";
-import User from "../models/User.js"; // Make sure you import the User model
+import User from "../models/User.js";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+import { isAuthenticated, hasRole } from "../middleware/auth.js";
 
 //Generate Random Color for the colorCode in TeacherProfile
 function generateRandomColor() {
-  return `#${Math.floor(Math.random() * 16777215)
-    .toString(16)
-    .padStart(6, "0")}`;
+    return `#${Math.floor(Math.random() * 16777215)
+        .toString(16)
+        .padStart(6, "0")}`;
+}
+
+// Function to generate a strong random password
+function generateStrongPassword(length = 12) {
+    const charset =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
+    let password = "";
+
+    // Ensure at least one character from each category
+    const categories = [
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ", // uppercase
+        "abcdefghijklmnopqrstuvwxyz", // lowercase
+        "0123456789", // numbers
+        "!@#$%^&*()_+-=[]{}|;:,.<>?", // special characters
+    ];
+
+    // Add one character from each category
+    categories.forEach((category) => {
+        password += category[crypto.randomInt(0, category.length)];
+    });
+
+    // Fill the rest with random characters
+    for (let i = password.length; i < length; i++) {
+        password += charset[crypto.randomInt(0, charset.length)];
+    }
+
+    // Shuffle the password to randomize the order
+    return password
+        .split("")
+        .sort(() => crypto.randomInt(0, 3) - 1)
+        .join("");
 }
 
 // Get all teachers
-router.get("/teachers", async (req, res) => {
-  try {
-    const teachers = await Teacher.find().populate("userId", "username email");
-    res.status(200).json(teachers);
-  } catch (error) {
-    console.error("Error fetching teachers:", error.message);
-    res.status(500).json({ error: "Failed to fetch teachers." });
-  }
-});
+router.get(
+    "/teachers",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const teachers = await Teacher.find()
+                .populate("userId", "username email")
+                .sort({ createdAt: -1 });
+            res.status(200).json(teachers);
+        } catch (error) {
+            console.error("Error fetching teachers:", error.message);
+            res.status(500).json({ error: "Failed to fetch teachers." });
+        }
+    }
+);
 
-// POST /teacher - Create a user + teacher profile
+// POST /admin/teacher - Create a user + teacher profile (Admin only)
+router.post(
+    "/admin/teacher",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        console.log("📨 Incoming teacher POST:", req.body);
+
+        try {
+            const { username, email, subject, colorCode, generatePassword } =
+                req.body;
+
+            if (!username || !email || !subject) {
+                return res.status(400).json({
+                    error: "Username, email, and subject are required.",
+                });
+            }
+
+            // Check if user with this email already exists
+            const existingUser = await User.findOne({ email });
+            if (existingUser) {
+                return res
+                    .status(409)
+                    .json({ error: "A user with this email already exists." });
+            }
+
+            // Generate password if requested
+            let plainPassword = null;
+            let hashedPassword = null;
+
+            if (generatePassword) {
+                plainPassword = generateStrongPassword();
+                hashedPassword = await bcrypt.hash(plainPassword, 12);
+            } else {
+                // If no password generation requested, set a default that forces password change
+                plainPassword = "ChangeMe123!";
+                hashedPassword = await bcrypt.hash(plainPassword, 12);
+            }
+
+            // Create new User
+            const user = new User({
+                username,
+                email,
+                password: hashedPassword,
+                role: "teacher",
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+
+            const savedUser = await user.save();
+
+            // Create new Teacher linked to the User
+            const teacher = new Teacher({
+                userId: savedUser._id,
+                colorCode: colorCode || generateRandomColor(),
+                subject: (subject || "").trim(),
+            });
+
+            const savedTeacher = await teacher.save();
+
+            // Return success with password if generated
+            const response = {
+                success: true,
+                message: "Teacher created successfully.",
+                data: {
+                    user: {
+                        id: savedUser._id,
+                        username: savedUser.username,
+                        email: savedUser.email,
+                        role: savedUser.role,
+                    },
+                    teacher: {
+                        id: savedTeacher._id,
+                        subject: savedTeacher.subject,
+                        colorCode: savedTeacher.colorCode,
+                    },
+                },
+            };
+
+            if (generatePassword) {
+                response.password = plainPassword;
+            }
+
+            res.status(201).json(response);
+        } catch (error) {
+            console.error("❌ Error in POST /admin/teacher:", error.message);
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
+// POST /teacher - Create a user + teacher profile (kept for backward compatibility)
 router.post("/teacher", async (req, res) => {
-  console.log("📨 Incoming teacher POST:", req.body);
+    console.log("📨 Incoming teacher POST:", req.body);
 
-  try {
-    const { username, email, colorCode } = req.body;
+    try {
+        const { username, email, colorCode, subject } = req.body;
 
-    if (!username || !email) {
-      return res
-        .status(400)
-        .json({ error: "Username and email are required." });
+        if (!username || !email) {
+            return res
+                .status(400)
+                .json({ error: "Username and email are required." });
+        }
+
+        // Check if user with this email already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res
+                .status(409)
+                .json({ error: "A user with this email already exists." });
+        }
+
+        // Create new User (without password for backward compatibility)
+        const user = new User({
+            username,
+            email,
+            role: "teacher",
+        });
+        const savedUser = await user.save();
+
+        // Create new Teacher linked to the User
+        const teacher = new Teacher({
+            userId: savedUser._id,
+            colorCode: colorCode || generateRandomColor(),
+            subject: subject || "Övrigt", // Default subject if not provided
+        });
+        const savedTeacher = await teacher.save();
+
+        res.status(201).json({
+            message: "Teacher created successfully.",
+            data: {
+                user: savedUser,
+                teacher: savedTeacher,
+            },
+        });
+    } catch (error) {
+        console.error("❌ Error in POST /teacher:", error.message);
+        res.status(500).json({ error: "Internal server error." });
     }
-
-    // Check if user with this email already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res
-        .status(409)
-        .json({ error: "A user with this email already exists." });
-    }
-
-    // Create new User
-    const user = new User({
-      username,
-      email,
-      role: "teacher", // ensure this aligns with your role system
-    });
-    const savedUser = await user.save();
-
-    // Create new Teacher linked to the User
-    const teacher = new Teacher({
-      userId: savedUser._id,
-      colorCode: colorCode || generateRandomColor(),
-    });
-    const savedTeacher = await teacher.save();
-
-    res.status(201).json({
-      message: "Teacher created successfully.",
-      data: {
-        user: savedUser,
-        teacher: savedTeacher,
-      },
-    });
-  } catch (error) {
-    console.error("❌ Error in POST /teacher:", error.message);
-    res.status(500).json({ error: "Internal server error." });
-  }
 });
 
 export default router;
