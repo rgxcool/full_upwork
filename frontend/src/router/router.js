@@ -53,12 +53,7 @@ const routes = [
     component: LoginPage,
     meta: { title: 'Login - Mindful Learning' },
   },
-  {
-    path: '/register',
-    name: 'Register',
-    component: Register,
-    meta: { title: 'Register - Mindful Learning' },
-  },
+  // { path: '/register', name: 'Register', component: Register, meta: { title: 'Register - Mindful Learning' } }, // Registration disabled
   {
     path: '/reset-password',
     component: ResetPassword,
