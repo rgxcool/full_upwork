@@ -6,6 +6,7 @@ import router from './router/router.js'
 import store from './store/store.js'
 
 import '@mdi/font/css/materialdesignicons.css'
+import './assets/main.css'  // Tailwind-stilar
 
 import { createVuetify } from 'vuetify'
 import 'vuetify/styles'
