@@ -31,7 +31,6 @@
           density="compact"
           :disabled="item.course.locked"
           hide-details
-          variant="outlined"
         />
       </template>
 
@@ -42,7 +41,6 @@
           variant="outlined"
           density="compact"
           hide-details
-          variant="outlined"
         />
       </template>
 
@@ -54,7 +52,6 @@
           variant="outlined"
           density="compact"
           hide-details
-          variant="outlined"
         />
       </template>
 

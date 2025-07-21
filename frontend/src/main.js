@@ -33,20 +33,28 @@ console.log('🚀 Initializing Vue App...')
 console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
 console.log('All env variables:', import.meta.env)
 
-const token = store.state.auth?.token
-if (token) {
-  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-} else {
-  console.warn('⚠️ No token found in Vuex state.')
+async function bootstrap() {
+  // Use user from store.state, not store.state.auth
+  const user = store.state.user
+  if (user && user.token) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${user.token}`
+  } else {
+    console.warn('⚠️ No user token found in Vuex state.')
+  }
+
+  try {
+    await store.dispatch('fetchUser')
+  } catch (e) {
+    console.error('Error during fetchUser:', e)
+  }
+
+  const app = createApp(App)
+  app.use(router)
+  app.use(store)
+  app.use(vuetify)
+  app.mount('#app')
+
+  console.log('✅ Vue App Mounted!')
 }
 
-await store.dispatch('fetchUser')
-
-// ✅ Use the Vuetify instance
-const app = createApp(App)
-app.use(router)
-app.use(store)
-app.use(vuetify) // ← ✅ this is now correct
-app.mount('#app')
-
-console.log('✅ Vue App Mounted!')
+bootstrap()

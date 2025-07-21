@@ -1,5 +1,9 @@
 import express from "express";
 import CoursePackage from "../models/CoursePackage.js";
+import {
+    courseDetailRateLimiter,
+    exemptAdminsFromRateLimit,
+} from "../middleware/security.js";
 
 const router = express.Router();
 
@@ -23,20 +27,27 @@ router.get("/coursepackages", async (req, res) => {
  * ✅ GET a single course package by ID (includes courses)
  * Route: GET /api/coursepackages/:id
  */
-router.get("/coursepackages/:id", async (req, res) => {
-    try {
-        const coursePackage = await CoursePackage.findById(req.params.id)
-            .populate("coursePackageCourses")
-            .lean();
-        if (!coursePackage) {
-            return res.status(404).json({ error: "Course Package not found" });
+router.get(
+    "/coursepackages/:id",
+    exemptAdminsFromRateLimit,
+    courseDetailRateLimiter,
+    async (req, res) => {
+        try {
+            const coursePackage = await CoursePackage.findById(req.params.id)
+                .populate("coursePackageCourses")
+                .lean();
+            if (!coursePackage) {
+                return res
+                    .status(404)
+                    .json({ error: "Course Package not found" });
+            }
+            res.json(coursePackage);
+        } catch (error) {
+            console.error("Error fetching course package:", error);
+            res.status(500).json({ error: "Internal Server Error" });
         }
-        res.json(coursePackage);
-    } catch (error) {
-        console.error("Error fetching course package:", error);
-        res.status(500).json({ error: "Internal Server Error" });
     }
-});
+);
 
 /**
  * ✅ GET all courses belonging to a specific course package

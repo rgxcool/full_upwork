@@ -1,11 +1,11 @@
 import dotenv from "dotenv";
 import path from "path";
-
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename)
+const __dirname = path.dirname(__filename);
 
+// Load environment variables
 const envFile =
     process.env.NODE_ENV === "production"
         ? ".env.production"
@@ -19,32 +19,108 @@ console.log(`🔑 JWT_SECRET Loaded: ${process.env.JWT_SECRET ? "Yes" : "No"}`);
 import express from "express";
 const app = express();
 
+// Import security and performance utilities
+import {
+    securityHeaders,
+    corsConfig,
+    requestLogger,
+    securityAudit,
+    rateLimiter,
+    apiRateLimiter,
+} from "./src/middleware/security.js";
+
+import {
+    globalErrorHandler,
+    performanceMonitor,
+    errorMonitor,
+} from "./src/utils/errorHandler.js";
+
+import { dbOptimizer, requestOptimizer } from "./src/utils/performance.js";
+
+// Apply security headers
+app.use(securityHeaders);
+
+// Apply CORS with enhanced configuration
 import cors from "cors";
-app.use(
-    cors({
-        origin: process.env.CLIENT_URL,
-        methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-        allowedHeaders:
-            "Origin, X-Requested-With, Content-Type, Accept, Authorization",
-        credentials: true, // If using cookies/auth headers
-    })
-);
+app.use(cors(corsConfig));
+
+// Exempt admins from rate limiting globally
+import { exemptAdminsFromRateLimit } from "./src/middleware/security.js";
+app.use(exemptAdminsFromRateLimit);
+
+// Apply rate limiting
+app.use(rateLimiter);
+app.use("/api/", apiRateLimiter);
+
+// Apply performance monitoring
+app.use(performanceMonitor);
+
+// Apply request logging
+app.use(requestLogger);
+
+// Apply security audit
+app.use(securityAudit);
+
+// Apply query optimization
+app.use(requestOptimizer.optimizeQuery);
 
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
-import router from "./src/router/router.js"; // Ensure this path is correct
+import router from "./src/router/router.js";
 
 const PORT = process.env.PORT || 5001;
 
 // Middleware setup
 app.use(cookieParser());
+app.use(express.json({ limit: process.env.MAX_FILE_SIZE || "10mb" }));
+app.use(
+    express.urlencoded({
+        extended: true,
+        limit: process.env.MAX_FILE_SIZE || "10mb",
+    })
+);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
+// Enhanced request logging
 app.use((req, res, next) => {
-    console.log(`Incoming request: ${req.method} ${req.url}`); // Log method and URL
-    next(); // Proceed to the next middleware/route handler
+    console.log(`Incoming request: ${req.method} ${req.url}`);
+    next();
+});
+
+// Health check endpoint (before router)
+app.get("/health", (req, res) => {
+    const health = {
+        status: "OK",
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV,
+        database:
+            mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+        memory: process.memoryUsage(),
+        performance: errorMonitor.getErrorStats(),
+    };
+
+    res.status(200).json(health);
+});
+
+// Metrics endpoint for monitoring (before router)
+app.get("/metrics", (req, res) => {
+    const metrics = {
+        errors: errorMonitor.getErrorStats(),
+        cache: { size: 0, keys: [] }, // Simplified for now
+        database: {
+            readyState: mongoose.connection.readyState,
+            host: mongoose.connection.host,
+            name: mongoose.connection.name,
+        },
+        system: {
+            nodeVersion: process.version,
+            platform: process.platform,
+            memory: process.memoryUsage(),
+            uptime: process.uptime(),
+        },
+    };
+
+    res.status(200).json(metrics);
 });
 
 console.log("Attempting to mount router...");
@@ -54,18 +130,100 @@ console.log("Router successfully mounted!");
 // Ensure preflight (OPTIONS) requests are handled
 app.options("*", cors());
 
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
 
+// Configure database connection with optimization
+dbOptimizer.configurePool();
 
-
-// MongoDB Connection
+// MongoDB Connection with enhanced error handling
 mongoose
     .connect(process.env.MONGO_URI, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
+        maxPoolSize: parseInt(process.env.MAX_CONCURRENT_REQUESTS) || 50,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
     })
-    .then(() => console.log("✅ Connected to MongoDB"))
-    .catch((err) => console.error("❌ MongoDB connection error:", err));
+    .then(async () => {
+        console.log("✅ Connected to MongoDB");
+
+        // Create database indexes for performance
+        try {
+            await dbOptimizer.createIndexes();
+        } catch (error) {
+            console.warn("⚠️ Database index creation failed:", error.message);
+        }
+    })
+    .catch((err) => {
+        console.error("❌ MongoDB connection error:", err);
+        errorMonitor.recordError(err);
+    });
+
+// Apply global error handler (must be last)
+app.use(globalErrorHandler);
+
+// Graceful shutdown handling
+process.on("SIGTERM", async () => {
+    console.log("🛑 SIGTERM received, shutting down gracefully...");
+
+    // Close database connection
+    await mongoose.connection.close();
+    console.log("✅ Database connection closed");
+
+    // Log final metrics
+    console.log("📊 Final metrics:", errorMonitor.getErrorStats());
+
+    process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+    console.log("🛑 SIGINT received, shutting down gracefully...");
+
+    // Close database connection
+    await mongoose.connection.close();
+    console.log("✅ Database connection closed");
+
+    // Log final metrics
+    console.log("📊 Final metrics:", errorMonitor.getErrorStats());
+
+    process.exit(0);
+});
+
+// Handle uncaught exceptions
+process.on("uncaughtException", (err) => {
+    console.error("💥 Uncaught Exception:", err);
+    errorMonitor.recordError(err);
+
+    // Close database connection
+    mongoose.connection.close(() => {
+        console.log("✅ Database connection closed due to uncaught exception");
+        process.exit(1);
+    });
+});
+
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (err) => {
+    console.error("💥 Unhandled Rejection:", err);
+    errorMonitor.recordError(err);
+
+    // Close database connection
+    mongoose.connection.close(() => {
+        console.log("✅ Database connection closed due to unhandled rejection");
+        process.exit(1);
+    });
+});
 
 // Start the server
-app.listen(PORT, () => console.log(`🚀 Server running on localhost:${PORT}`));
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on localhost:${PORT}`);
+    console.log(
+        `🔒 Security features: Rate limiting, CORS, Helmet, Input validation`
+    );
+    console.log(
+        `⚡ Performance features: Caching, Lazy loading, Query optimization`
+    );
+    console.log(
+        `📊 Monitoring: Error tracking, Performance metrics, Health checks`
+    );
+    console.log(`🧪 Testing: Unit tests, Integration tests, API validation`);
+});

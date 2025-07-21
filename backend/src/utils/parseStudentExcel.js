@@ -100,7 +100,12 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
         }
 
         for (const name of rawNames) {
-            education.push({ type: "Auto", name: cleanCourseName(name) });
+            education.push({
+                type: "Course",
+                name: cleanCourseName(name),
+                startDate: rowObject["START"],
+                endDate: rowObject["SLUT"],
+            });
         }
 
         if (rawNames.length === 0 && !programName) {
