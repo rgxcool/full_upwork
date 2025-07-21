@@ -5,7 +5,7 @@
         <router-link class="navbar-brand" to="/">
           <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
         </router-link>
-        <span class="build-counter">v. {{ buildVersion }}</span>
+        <span class="build-counter" @click="toggleSecretMenu" ref="versionRef" style="cursor:pointer;">v. {{ buildVersion }}</span>
       </div>
       <div v-if="canSeeSearch" class="search-wrapper">
         <div class="search-bar-enhanced">
@@ -95,7 +95,6 @@
             <!-- Mobilmeny under profilikonen -->
             <div v-if="showProfileMenu" class="profile-dropdown" ref="profileDropdown">
               <button v-if="isLoggedIn" @click="logout" class="logout-btn">Logga ut</button>
-              <router-link v-else to="/register" class="dropdown-link">Registrera</router-link>
               <router-link v-else to="/login" class="dropdown-link">Logga in</router-link>
             </div>
           </div>
@@ -103,10 +102,11 @@
           <!-- Visible login/register buttons when not logged in -->
           <div v-if="!isLoggedIn" class="auth-buttons">
             <router-link to="/login" class="login-btn">Logga in</router-link>
-            <router-link to="/register" class="register-btn">Registrera</router-link>
+            <!-- Register button removed -->
           </div>
         </div>
       </div>
+      <div v-if="!canSeeSearch" style="color: red; font-weight: bold;">[DEBUG] Search bar hidden: canSeeSearch is false. Role: {{ userRole }}</div>
       <!-- Resultat -->
       <div v-if="showResults" class="search-results me-3">
         <ul class="result-list">
@@ -127,11 +127,20 @@
     <!-- Always show login/register buttons at far right if not logged in -->
     <div v-if="!isLoggedIn" class="auth-buttons navbar-auth-buttons">
       <router-link to="/login" class="login-btn">Logga in</router-link>
-      <router-link to="/register" class="register-btn">Registrera</router-link>
+      <!-- Register button removed -->
+    </div>
+    <div style="position: absolute; top: 0; right: 0; color: red; font-size: 12px;">[DEBUG] isLoggedIn: {{ isLoggedIn }}</div>
+    <!-- Secret menu dropdown rendered as sibling to .top-nav and .nav-links -->
+    <div v-if="showSecretMenu" class="secret-menu-dropdown" :style="secretMenuStyle">
+      <ul>
+        <li v-for="item in secretMenuItems" :key="item.link">
+          <router-link v-if="item.link !== '/register'" :to="item.link" class="nav-link">{{ item.name }}</router-link>
+        </li>
+      </ul>
     </div>
     <ul class="nav-links nav-links-row">
       <li v-for="item in filteredMenuItems" :key="item.link">
-        <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
+        <router-link v-if="item.link !== '/register'" :to="item.link" class="nav-link">{{ item.name }}</router-link>
       </li>
     </ul>
   </nav>
@@ -350,33 +359,44 @@
         fetchCourses()
       }
 
+      // Remove these from main nav bar and add to secret menu
+      const secretMenuNames = [
+        'Utbildning',
+        'TEST',
+        'Student Inskrivningar',
+        'Elev+',
+        'PDF',
+        'Prövningar',
+        'Earnings',
+        'Stats',
+      ];
       const menuItems = [
         { name: 'APL', link: '/apl', role: 'admin' },
         { name: 'Kalender', link: '/kalender', role: 'teacher' },
-        { name: 'Utbildning', link: '/education', role: 'admin' },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },
         { name: 'Kursmatchning', link: '/course-matching', role: 'admin' },
-        { name: 'TEST', link: '/test', role: 'admin' },
-        { name: 'Student Inskrivningar', link: '/student-enrollments', role: 'admin' },
-        { name: 'Elev+', link: '/addstudent', role: 'admin' },
         { name: 'Lägg till Lärare', link: '/lagg-till-larare', role: 'admin' },
         { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
         { name: 'Elever', link: '/students', role: 'admin' },
-        { name: 'PDF', link: '/pdf', role: 'admin' },
         { name: 'Grades', link: '/grades', role: 'teacher' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
-        { name: 'Earnings', link: '/earnings', role: 'admin' },
-        { name: 'Stats', link: '/stats/courses', role: 'admin' },
-      ]
-
+      ];
       const filteredMenuItems = computed(() => {
         return menuItems.filter((item) => {
-          if (!item.role) return true // Publicly accessible links
-          return hasPermission(item.role) // Ensure systemadmin has full access
-        })
-      })
+          if (secretMenuNames.includes(item.name)) return false;
+          if (!item.role) return true;
+          return hasPermission(item.role);
+        });
+      });
+      const secretMenuItems = computed(() => {
+        return menuItems.filter((item) => {
+          if (!secretMenuNames.includes(item.name)) return false;
+          if (!item.role) return true;
+          return hasPermission(item.role);
+        });
+      });
       const toggleProfileMenu = () => {
         showProfileMenu.value = !showProfileMenu.value
       }
@@ -411,6 +431,24 @@
         document.removeEventListener('mousedown', handleClickOutside)
       })
 
+      const showSecretMenu = ref(false);
+      const versionRef = ref(null);
+      const secretMenuStyle = computed(() => {
+        if (!showSecretMenu.value || !versionRef.value) return {};
+        // Position dropdown below the version number, relative to nav
+        const navRect = versionRef.value.closest('nav').getBoundingClientRect();
+        const rect = versionRef.value.getBoundingClientRect();
+        return {
+          position: 'absolute',
+          top: `${rect.bottom - navRect.top + 8}px`,
+          left: `${rect.left - navRect.left}px`,
+          zIndex: 3000,
+        };
+      });
+      const toggleSecretMenu = () => {
+        showSecretMenu.value = !showSecretMenu.value;
+      };
+
       return {
         totalNotifications,
         isMobileMenuOpen,
@@ -433,7 +471,9 @@
         isLoggedIn,
         logout,
         filteredMenuItems,
-        canSeeSearch,
+        secretMenuItems,
+        showSecretMenu,
+        toggleSecretMenu,
         navigateToDetails,
         setFilter,
         selectedCourse,
@@ -456,6 +496,10 @@
         clearSearch,
         notisPanel,
         notificationIcon,
+        versionRef,
+        secretMenuStyle,
+        canSeeSearch,
+        userRole,
       }
     },
   }
@@ -489,6 +533,7 @@
     background-color: #f8f8f8;
     font-family: 'Roboto', sans-serif;
     padding: 20px;
+    position: relative;
   }
 
   /* Top navigation container */
@@ -1055,13 +1100,12 @@
     background: #dcd4e6;
   }
   .navbar-auth-buttons {
-    position: absolute;
-    top: 20px;
-    right: 40px;
-    z-index: 2000;
+    /* position: absolute; top: 20px; right: 40px; z-index: 2000; */
+    position: static !important;
     display: flex;
     align-items: center;
     gap: 10px;
+    margin-left: 16px;
   }
   .top-nav {
     display: flex;
@@ -1083,5 +1127,25 @@
     font-size: 1.1rem;
     color: #6c63ff;
     font-weight: 600;
+  }
+  .secret-menu-dropdown {
+    background: #fffbe6 !important; /* debug yellow */
+    border: 1.5px solid #6c63ff;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 10px 20px;
+    min-width: 200px;
+    z-index: 3000;
+  }
+  .secret-menu-dropdown ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .secret-menu-dropdown li {
+    margin-bottom: 8px;
+  }
+  .secret-menu-dropdown li:last-child {
+    margin-bottom: 0;
   }
 </style>
