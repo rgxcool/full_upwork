@@ -358,6 +358,7 @@
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },
         { name: 'Kursmatchning', link: '/course-matching', role: 'admin' },
+        { name: 'TEST', link: '/test', role: 'admin' },
         { name: 'Student Inskrivningar', link: '/student-enrollments', role: 'admin' },
         { name: 'Elev+', link: '/addstudent', role: 'admin' },
         { name: 'Lägg till Lärare', link: '/lagg-till-larare', role: 'admin' },
