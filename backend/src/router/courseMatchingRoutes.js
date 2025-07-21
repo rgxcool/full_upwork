@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { exemptAdminsFromRateLimit } from "../middleware/security.js";
 import {
     uploadStudentsForMatching,
     processStudentEducation,
@@ -21,7 +22,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Course matching routes
-router.get("/course-match", isAuthenticated, findCourseMatch);
+router.get("/course-match", isAuthenticated, exemptAdminsFromRateLimit, findCourseMatch);
 router.post(
     "/upload-students",
     upload.single("file"),
