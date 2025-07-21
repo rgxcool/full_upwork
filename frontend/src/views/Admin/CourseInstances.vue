@@ -78,6 +78,7 @@
             <th>Inskrivningar</th>
             <th>Status</th>
             <th>Skapad av</th>
+            <th>Ansvarig lärare</th>
             <th>Åtgärder</th>
           </tr>
         </thead>
@@ -108,6 +109,7 @@
               </span>
             </td>
             <td>{{ instance.createdBy?.username || 'System' }}</td>
+            <td>{{ instance.responsibleTeacher?.userId?.username || '-' }}</td>
             <td>
               <button
                 class="btn btn-sm btn-outline-secondary me-1"

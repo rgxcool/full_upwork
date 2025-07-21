@@ -1,9 +1,13 @@
 <template>
   <nav class="navbar px-5" @click.self="closeSearch">
-    <div v-if="canSeeSearch" class="top-nav">
-      <div class="build-counter">v. {{ buildVersion }}</div>
-
-      <div class="search-wrapper">
+    <div class="top-nav">
+      <div class="logo-version-group">
+        <router-link class="navbar-brand" to="/">
+          <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
+        </router-link>
+        <span class="build-counter">v. {{ buildVersion }}</span>
+      </div>
+      <div v-if="canSeeSearch" class="search-wrapper">
         <div class="search-bar-enhanced">
           <div class="search-type" @click="toggleSearchTypeDropdown">
             {{ selectedSearchType }}
@@ -33,13 +37,76 @@
         </div>
 
         <ul v-if="showSearchTypeDropdown" class="search-type-dropdown">
-          <li @click="selectSearchType('Alla')">Alla</li>
-          <li @click="selectSearchType('Användare')">Användare</li>
-          <li @click="selectSearchType('Kurs')">Kurs</li>
-          <li @click="selectSearchType('Datum')">Datum</li>
+          <li :class="{ active: selectedSearchType === 'Alla' }" @click="selectSearchType('Alla')">
+            Alla
+          </li>
+          <li
+            :class="{ active: selectedSearchType === 'Användare' }"
+            @click="selectSearchType('Användare')"
+          >
+            Användare
+          </li>
+          <li :class="{ active: selectedSearchType === 'Kurs' }" @click="selectSearchType('Kurs')">
+            Kurs
+          </li>
+          <li
+            :class="{ active: selectedSearchType === 'Datum' }"
+            @click="selectSearchType('Datum')"
+          >
+            Datum
+          </li>
         </ul>
       </div>
+      <div v-if="canSeeSearch" class="icon-container">
+        <div class="icon-group">
+          <div
+            v-if="isLoggedIn && canSeeNotifications"
+            class="icon notification-icon"
+            @click="toggleNotificationPanel"
+            ref="notificationIcon"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+              <path
+                fill="currentColor"
+                d="M12 2C10.3 2 9 3.3 9 5v1.1c-2.8.5-5 3-5 5.9v4l-1 1v1h16v-1l-1-1v-4c0-2.9-2.2-5.4-5-5.9V5c0-1.7-1.3-3-3-3zm0 18c1.1 0 2-.9 2-2H10c0 1.1.9 2 2 2z"
+              />
+            </svg>
+            <span v-if="notifications.length" class="notis-badge">{{ notifications.length }}</span>
+          </div>
 
+          <!-- Notispanel -->
+          <div v-if="showNotisPanel" class="notis-panel" ref="notisPanel">
+            <NotificationBox
+              :notifications="notifications"
+              @notification-dismissed="
+                (id) => (notifications = notifications.filter((n) => n._id !== id))
+              "
+            />
+          </div>
+
+          <div class="icon profile-icon" @click="toggleProfileMenu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+              <path
+                fill="currentColor"
+                d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4"
+              />
+            </svg>
+
+            <!-- Mobilmeny under profilikonen -->
+            <div v-if="showProfileMenu" class="profile-dropdown" ref="profileDropdown">
+              <button v-if="isLoggedIn" @click="logout" class="logout-btn">Logga ut</button>
+              <router-link v-else to="/register" class="dropdown-link">Registrera</router-link>
+              <router-link v-else to="/login" class="dropdown-link">Logga in</router-link>
+            </div>
+          </div>
+
+          <!-- Visible login/register buttons when not logged in -->
+          <div v-if="!isLoggedIn" class="auth-buttons">
+            <router-link to="/login" class="login-btn">Logga in</router-link>
+            <router-link to="/register" class="register-btn">Registrera</router-link>
+          </div>
+        </div>
+      </div>
       <!-- Resultat -->
       <div v-if="showResults" class="search-results me-3">
         <ul class="result-list">
@@ -57,112 +124,21 @@
         </ul>
       </div>
     </div>
-    <!-- Left Section: Logo & Build Version -->
-    <div class="logo-container">
-      <router-link class="navbar-brand" to="/">
-        <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
-      </router-link>
+    <!-- Always show login/register buttons at far right if not logged in -->
+    <div v-if="!isLoggedIn" class="auth-buttons navbar-auth-buttons">
+      <router-link to="/login" class="login-btn">Logga in</router-link>
+      <router-link to="/register" class="register-btn">Registrera</router-link>
     </div>
-
-    <!-- Center Section: Navigation Links -->
-    <ul class="nav-links">
+    <ul class="nav-links nav-links-row">
       <li v-for="item in filteredMenuItems" :key="item.link">
         <router-link :to="item.link" class="nav-link">{{ item.name }}</router-link>
       </li>
     </ul>
-
-    <!-- Icons -->
-    <div class="icon-container">
-      <div class="icon-group">
-        <div
-          v-if="isLoggedIn && canSeeNotifications"
-          class="icon notification-icon"
-          @click="toggleNotificationPanel"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-            <path
-              fill="currentColor"
-              d="M12 2C10.3 2 9 3.3 9 5v1.1c-2.8.5-5 3-5 5.9v4l-1 1v1h16v-1l-1-1v-4c0-2.9-2.2-5.4-5-5.9V5c0-1.7-1.3-3-3-3zm0 18c1.1 0 2-.9 2-2H10c0 1.1.9 2 2 2z"
-            />
-          </svg>
-          <span v-if="notifications.length" class="notis-badge">{{ notifications.length }}</span>
-        </div>
-
-        <!-- Notispanel -->
-        <div v-if="showNotisPanel" class="notis-panel">
-          <NotificationBox
-            :notifications="notifications"
-            @notification-dismissed="
-              (id) => (notifications = notifications.filter((n) => n._id !== id))
-            "
-          />
-        </div>
-
-        <!-- Hamburgermenyn syns bara på mobil -->
-        <div v-if="isMobileMenuOpen" class="mobile-overlay" @click="toggleMobileMenu"></div>
-
-        <div :class="['mobile-menu', { open: isMobileMenuOpen }]">
-          <button @click="logout" class="logout-btn">Logga ut</button>
-          <ul class="mobile-nav-links">
-            <li v-for="item in filteredMenuItems" :key="item.link">
-              <router-link :to="item.link" class="nav-link" @click="toggleMobileMenu">
-                {{ item.name }}
-              </router-link>
-            </li>
-          </ul>
-        </div>
-
-        <div class="icon profile-icon" @click="toggleProfileMenu">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-            <path
-              fill="currentColor"
-              d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4"
-            />
-          </svg>
-
-          <!-- Mobilmeny under profilikonen -->
-          <div v-if="showProfileMenu" class="profile-dropdown">
-            <button v-if="isLoggedIn" @click="logout" class="logout-btn">Logga ut</button>
-            <router-link v-else to="/register" class="dropdown-link">Registrera</router-link>
-            <router-link v-else to="/login" class="dropdown-link">Logga in</router-link>
-          </div>
-        </div>
-
-        <div class="auth-links">
-          <router-link
-            v-if="!isLoggedIn"
-            to="/register"
-            class="px-4 py-2 text-blue-600 hover:underline"
-          >
-            Register
-          </router-link>
-          <router-link
-            v-if="!isLoggedIn"
-            to="/login"
-            class="px-4 py-2 text-blue-600 hover:underline"
-          >
-            Login
-          </router-link>
-
-          <button class="burger-menu" @click="toggleMobileMenu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-              <path
-                fill="currentColor"
-                d="M3 6h18M3 12h18M3 18h18"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
   </nav>
 </template>
 
 <script>
-  import { ref, computed, onMounted, watch } from 'vue'
+  import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
   import axios from 'axios'
@@ -184,6 +160,8 @@
       const notifications = ref([])
 
       const showNotisPanel = ref(false)
+      const notisPanel = ref(null)
+      const notificationIcon = ref(null)
       // Fix missing properties
       const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
       const searchQuery = ref('')
@@ -196,6 +174,7 @@
       const allCourses = ref([])
       const showNotification = ref(false)
       const showProfileMenu = ref(false)
+      const profileDropdown = ref(null)
 
       const endDateNotifications = ref([])
       const missingGradeNotifications = ref([])
@@ -236,7 +215,7 @@
         }
       }
 
-      const toggleNotificationPanel = () => {
+      const toggleNotificationPanel = (event) => {
         showNotisPanel.value = !showNotisPanel.value
       }
 
@@ -382,6 +361,7 @@
         { name: 'Student Inskrivningar', link: '/student-enrollments', role: 'admin' },
         { name: 'Elev+', link: '/addstudent', role: 'admin' },
         { name: 'Lägg till Lärare', link: '/lagg-till-larare', role: 'admin' },
+        { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
         { name: 'Elever', link: '/students', role: 'admin' },
         { name: 'PDF', link: '/pdf', role: 'admin' },
         { name: 'Grades', link: '/grades', role: 'teacher' },
@@ -399,10 +379,35 @@
       const toggleProfileMenu = () => {
         showProfileMenu.value = !showProfileMenu.value
       }
-      onMounted(async () => {
-        if (isLoggedIn.value && canSeeNotifications.value) {
-          await fetchNotifications()
+
+      // Close profile menu and notis panel when clicking outside
+      const handleClickOutside = (event) => {
+        // Profile dropdown
+        if (showProfileMenu.value) {
+          if (
+            profileDropdown.value &&
+            !profileDropdown.value.contains(event.target) &&
+            !event.target.closest('.profile-icon')
+          ) {
+            showProfileMenu.value = false
+          }
         }
+        // Notis panel
+        if (showNotisPanel.value) {
+          if (
+            notisPanel.value &&
+            !notisPanel.value.contains(event.target) &&
+            !event.target.closest('.notification-icon')
+          ) {
+            showNotisPanel.value = false
+          }
+        }
+      }
+      onMounted(() => {
+        document.addEventListener('mousedown', handleClickOutside)
+      })
+      onBeforeUnmount(() => {
+        document.removeEventListener('mousedown', handleClickOutside)
       })
 
       return {
@@ -443,10 +448,13 @@
         canResetNotifications,
         showProfileMenu,
         toggleProfileMenu,
+        profileDropdown,
         selectedSearchType,
         showSearchTypeDropdown,
         selectSearchType,
         clearSearch,
+        notisPanel,
+        notificationIcon,
       }
     },
   }
@@ -455,31 +463,26 @@
 <style scoped>
   /* Navbar */
 
-  .search-bar {
-    /* Improved styles for search bar */
+  .logo-version-group {
     display: flex;
     align-items: center;
-    background: #ecf0f1;
-    padding: 10px 15px;
-    border-radius: 20px;
+    gap: 12px;
   }
 
-  .search-type-options {
-    list-style: none;
-    padding: 10px;
-    margin: 0;
-    background-color: #fff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .search-bar {
-    width: clamp(280px, 50%, 500px);
+  .top-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 0;
+    gap: 24px;
   }
 
   .logo-container {
     display: flex;
-    justify-content: flex-start;
-    gap: 15px;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
   }
   .navbar {
     background-color: #f8f8f8;
@@ -696,11 +699,12 @@
     top: 50px;
     right: 0;
     background: #fff;
-    border-radius: 12px;
+    border: 1.5px solid #6c63ff;
+    border-radius: 10px;
     width: 300px;
-    padding: 16px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
+    padding: 18px 16px 18px 16px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1200;
     font-family: 'Inter', sans-serif;
   }
 
@@ -716,6 +720,10 @@
     font-style: italic;
     font-size: 14px;
     text-align: center;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 10px 0;
   }
 
   .notis-badge {
@@ -732,10 +740,13 @@
   }
 
   .search-wrapper {
-    position: relative;
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    min-width: 200px;
     max-width: 600px;
-    width: 100%;
-    margin: auto;
+    margin: 0 24px;
+    position: relative;
   }
 
   .search-bar-enhanced {
@@ -779,24 +790,36 @@
     position: absolute;
     top: 100%;
     left: 0;
+    width: 100%;
     margin-top: 5px;
     background: white;
     border-radius: 10px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    padding: 8px 0;
+    border: 1px solid #ccc;
+    padding: 0;
     z-index: 1100;
-    width: 150px;
     list-style: none;
   }
 
   .search-type-dropdown li {
-    padding: 8px 14px;
+    padding: 10px 18px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, color 0.2s;
+    border-radius: 8px;
+    margin: 4px 8px;
+    font-size: 15px;
+    color: #222;
+    background: transparent;
   }
 
   .search-type-dropdown li:hover {
-    background: #f5f5f5;
+    background: #ece6f0;
+    color: #6c63ff;
+  }
+
+  .search-type-dropdown li.active {
+    background: #6c63ff;
+    color: #fff;
   }
 
   .search-bar {
@@ -965,7 +988,7 @@
     top: 45px;
     right: 0;
     background: #fff;
-    border: 1px solid #ddd;
+    border: 1.5px solid #6c63ff;
     border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     padding: 10px;
@@ -975,16 +998,89 @@
     width: 150px;
   }
 
-  .dropdown-link {
+  .profile-dropdown .logout-btn,
+  .profile-dropdown .dropdown-link {
+    color: #222;
+    background: transparent;
+    border: none;
+    outline: none;
     padding: 10px;
     text-align: left;
-    text-decoration: none;
-    color: #333;
     border-radius: 4px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    width: 100%;
+    display: block;
   }
 
-  .dropdown-link:hover,
-  .profile-dropdown .logout-btn:hover {
-    background-color: #f0f0f0;
+  .profile-dropdown .logout-btn:hover,
+  .profile-dropdown .logout-btn:focus,
+  .profile-dropdown .dropdown-link:hover,
+  .profile-dropdown .dropdown-link:focus {
+    background: #6c63ff;
+    color: #fff;
+  }
+
+  .auth-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 16px;
+  }
+  .login-btn {
+    background: #6c63ff;
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 20px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: background 0.2s;
+  }
+  .login-btn:hover {
+    background: #5548c8;
+  }
+  .register-btn {
+    background: #ece6f0;
+    color: #6c63ff;
+    padding: 8px 18px;
+    border-radius: 20px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: background 0.2s;
+  }
+  .register-btn:hover {
+    background: #dcd4e6;
+  }
+  .navbar-auth-buttons {
+    position: absolute;
+    top: 20px;
+    right: 40px;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .top-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 0;
+    gap: 24px;
+  }
+  .logo-version-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-version-group .logo {
+    height: 44px;
+  }
+  .logo-version-group .build-counter {
+    font-size: 1.1rem;
+    color: #6c63ff;
+    font-weight: 600;
   }
 </style>

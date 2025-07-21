@@ -11,6 +11,7 @@ import {
     updateEnrollmentStatus,
     getCourseStatistics,
     createCourseInstance,
+    deleteCourseInstance,
 } from "../controllers/courseMatchingController.js";
 
 const router = express.Router();
@@ -41,6 +42,14 @@ router.post(
     isAuthenticated,
     hasRole(["admin", "systemadmin"]),
     createCourseInstance
+);
+
+// Delete a course instance
+router.delete(
+    "/course-instances/:instanceId",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    deleteCourseInstance
 );
 
 // Student enrollment routes

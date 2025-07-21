@@ -24,6 +24,7 @@ const CoursesStats = () => import('@/views/Admin/CoursesStats.vue')
 const CourseInstances = () => import('@/views/Admin/CourseInstances.vue')
 const CourseMatching = () => import('@/views/Admin/CourseMatching.vue')
 const StudentEnrollments = () => import('@/views/Admin/StudentEnrollments.vue')
+const TeacherManagement = () => import('@/views/Admin/TeacherManagement.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
@@ -194,6 +195,12 @@ const routes = [
     name: 'StudentEnrollments',
     component: StudentEnrollments,
     meta: { title: 'Student Enrollments', role: 'admin' },
+  },
+  {
+    path: '/teacher-management',
+    name: 'TeacherManagement',
+    component: TeacherManagement,
+    meta: { title: 'Teacher Management', role: 'admin' },
   },
 ]
 

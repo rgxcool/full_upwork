@@ -43,8 +43,7 @@
 
 <style scoped>
   .notification-box {
-    border: 2px solid #007dc3ff;
-
-    border-radius: 3px;
+    border: none;
+    border-radius: 0;
   }
 </style>
