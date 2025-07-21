@@ -83,17 +83,27 @@ function buildNormalizedMap(originals) {
     return map;
 }
 
-function normalizeMunicipalityName(name) {
+export function normalizeMunicipalityName(name) {
     if (!name) return name;
     const trimmed = name.trim().toLowerCase();
-    // Debug log
-    console.log("Raw municipality:", name, "| Normalized:", trimmed);
-    if (
-        trimmed === "uppl väsby" ||
-        (trimmed.includes("uppl") && trimmed.includes("väsby"))
-    ) {
+
+    // Alias map for common variants
+    const aliasMap = {
+        "uppl väsby": "Upplands Väsby",
+        "uppl. väsby": "Upplands Väsby",
+        "upplands väsby": "Upplands Väsby", // canonical
+        // Add more aliases as needed
+    };
+
+    if (aliasMap[trimmed]) {
+        return aliasMap[trimmed];
+    }
+
+    // Fallback: fuzzy match for anything containing both "uppl" and "väsby"
+    if (trimmed.includes("uppl") && trimmed.includes("väsby")) {
         return "Upplands Väsby";
     }
+
     return name;
 }
 

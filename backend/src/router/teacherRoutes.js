@@ -332,4 +332,22 @@ router.delete(
     }
 );
 
+// Unassign all students from a teacher
+router.put(
+    "/teachers/:id/unassign-all-students",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const Student = (await import("../models/Student.js")).default;
+            const result = await Student.updateMany({ teacherId: id }, { $set: { teacherId: null } });
+            res.json({ success: true, message: `Unassigned ${result.modifiedCount} students from teacher.` });
+        } catch (error) {
+            console.error("Error unassigning students from teacher:", error);
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
 export default router;

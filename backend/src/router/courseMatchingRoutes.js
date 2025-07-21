@@ -12,6 +12,7 @@ import {
     getCourseStatistics,
     createCourseInstance,
     deleteCourseInstance,
+    deleteAllCourseInstances,
 } from "../controllers/courseMatchingController.js";
 
 const router = express.Router();
@@ -44,6 +45,13 @@ router.post(
     createCourseInstance
 );
 
+// Bulk delete all course instances
+router.delete(
+    "/course-instances/all",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    deleteAllCourseInstances
+);
 // Delete a course instance
 router.delete(
     "/course-instances/:instanceId",

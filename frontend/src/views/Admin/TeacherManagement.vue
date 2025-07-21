@@ -133,6 +133,26 @@
               </svg>
             </button>
             <button
+              class="btn btn-sm btn-outline-secondary"
+              @click="unassignAllStudents(teacher)"
+              title="Ta bort alla kopplingar till elever"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M18 6L6 18" />
+                <path d="M6 6l12 12" />
+              </svg>
+            </button>
+            <button
               class="btn btn-sm btn-outline-danger"
               @click="deleteTeacher(teacher)"
               title="Ta bort lärare"
@@ -684,6 +704,20 @@
         } catch (error) {
           console.error('Error deleting teacher:', error)
           alert('Kunde inte ta bort lärare')
+        }
+      },
+
+      async unassignAllStudents(teacher) {
+        if (!confirm(`Vill du ta bort alla kopplingar mellan läraren \"${teacher.userId?.username}\" och elever?`)) {
+          return;
+        }
+        try {
+          const { api } = await import('@/store/store.js');
+          await api.put(`/teachers/${teacher._id}/unassign-all-students`);
+          alert('Alla kopplingar till elever har tagits bort!');
+        } catch (error) {
+          console.error('Error unassigning students:', error);
+          alert('Kunde inte ta bort kopplingar till elever');
         }
       },
 
