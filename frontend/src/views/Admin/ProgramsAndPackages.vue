@@ -80,58 +80,7 @@
         console.log('API response:', response)
         let fetchedPrograms = response.data
 
-        // Populate Course Packages with their courses
-        for (let program of fetchedPrograms) {
-          if (!Array.isArray(program.programCoursePackages)) {
-            program.programCoursePackages = []
-          }
-
-          const packagePromises = program.programCoursePackages.map(async (coursePackage) => {
-            const packageId = typeof coursePackage === 'string' ? coursePackage : coursePackage._id
-            if (!packageId) {
-              console.error('⚠️ Invalid Course Package ID:', coursePackage)
-              return null
-            }
-
-            try {
-              const packageRes = await axios.get(
-                `${import.meta.env.VITE_API_URL}/api/coursepackages/${packageId}`
-              )
-              return packageRes.data
-            } catch (err) {
-              console.error('🚨 Failed to fetch package:', packageId, err)
-              return null
-            }
-          })
-
-          program.programCoursePackages = (await Promise.all(packagePromises)).filter(Boolean)
-
-          // Populate Courses inside Course Packages
-          for (let coursePackage of program.programCoursePackages) {
-            if (!coursePackage || !coursePackage.coursePackageCourses) continue
-
-            const coursePromises = coursePackage.coursePackageCourses.map(async (course) => {
-              const courseId = typeof course === 'string' ? course : course._id
-              if (!courseId) {
-                console.error('⚠️ Invalid Course ID:', course)
-                return null
-              }
-
-              try {
-                const courseRes = await axios.get(
-                  `${import.meta.env.VITE_API_URL}/api/courses/${courseId}`
-                )
-                return courseRes.data
-              } catch (err) {
-                console.error('🚨 Failed to fetch course:', courseId, err)
-                return null
-              }
-            })
-
-            coursePackage.coursePackageCourses = (await Promise.all(coursePromises)).filter(Boolean)
-          }
-        }
-
+        // No need to fetch course packages or courses again; backend already populates them
         this.programs = fetchedPrograms.filter(
           (program) =>
             Array.isArray(program.programCoursePackages) && program.programCoursePackages.length > 0

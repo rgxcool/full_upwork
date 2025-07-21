@@ -6,6 +6,8 @@ import Notification from "../models/Notification.js";
 import Course from "../models/Course.js";
 import Program from "../models/Program.js";
 import CoursePackage from "../models/CoursePackage.js";
+import StudentEnrollment from "../models/StudentEnrollment.js";
+import CourseInstance from "../models/CourseInstance.js";
 
 import {
   createNotification,
@@ -156,44 +158,36 @@ router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
   }
 });
 
-/*
 router.get('/students-to-grade', authenticateUser, async (req, res) => {
-  const user = req.user;
-  const isTeacher = user.role === 'teacher';
-
   try {
-    const students = await Student.find({
-      'education.grade': { $in: [null, ''] },
-      'education.locked': { $ne: true },
-      ...(isTeacher ? { teacher: user._id } : {}),
-    }).populate('education.refId');
-    
+    const now = new Date();
+    const oneWeekFromNow = new Date();
+    oneWeekFromNow.setDate(now.getDate() + 7);
 
-    // Omvandla education till en enklare struktur för frontend
-    const studentsToGrade = students.map(student => ({
-      _id: student._id,
-      name: student.name,
-      coursesToGrade: student.education
-        .filter(course => course.type === 'Course' && !course.removedAt)
-        .map(course => ({
-          refId: course.refId._id,
-          courseCode: course.refId.courseCode,
-          courseName: course.refId.courseName,
-          type: course.type,
-          grade: course.grade,
-          reason: course.reason,
-          comments: course.comments,
-          locked: course.locked,
-        })),
+    // Find enrollments ending within the next week and not graded
+    const enrollments = await StudentEnrollment.find({
+      endDate: { $gte: now, $lte: oneWeekFromNow },
+      $or: [{ grade: null }, { grade: "" }],
+      status: { $in: ["enrolled", "active"] }
+    })
+      .populate("studentId")
+      .populate("courseInstanceId");
+
+    // Format for frontend
+    const studentsToGrade = enrollments.map(enrollment => ({
+      student: enrollment.studentId,
+      courseInstance: enrollment.courseInstanceId,
+      endDate: enrollment.endDate,
+      grade: enrollment.grade,
+      enrollmentId: enrollment._id,
     }));
 
     res.json(studentsToGrade);
   } catch (err) {
-    console.error('Error fetching students:', err);
+    console.error('Error fetching students to grade:', err);
     res.status(500).send('Server error');
   }
 });
-*/
 
 router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
   const { studentId, courseId, grade, reason, comments, npScore, type } =
@@ -296,6 +290,21 @@ router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
   } catch (err) {
     console.error("Upplåsning misslyckades:", err);
     res.status(500).send("Internt serverfel");
+  }
+});
+
+// Delete an enrollment by ID
+router.delete('/enrollments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const enrollment = await StudentEnrollment.findByIdAndDelete(id);
+    if (!enrollment) {
+      return res.status(404).json({ error: 'Enrollment not found' });
+    }
+    res.json({ success: true, message: 'Enrollment deleted' });
+  } catch (err) {
+    console.error('Error deleting enrollment:', err);
+    res.status(500).json({ error: 'Failed to delete enrollment' });
   }
 });
 

@@ -1,7 +1,7 @@
 module.exports = {
     apps: [
         {
-            name: "mindfull",
+            name: "ML-Backend",
             script: "./index.js",
             instances: "max",
             exec_mode: "cluster",

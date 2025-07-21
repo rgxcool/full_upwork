@@ -21,30 +21,15 @@
 
         <!-- Personnummer & Telefon -->
         <v-col cols="12" md="6">
-          <v-text-field
-            :model-value="form.personalNumber"
-            label="Personnummer"
-            readonly
-            outlined
-          />
+          <v-text-field :model-value="form.personalNumber" label="Personnummer" readonly outlined />
         </v-col>
         <v-col cols="12" md="6">
-          <v-text-field
-            :model-value="form.phone"
-            label="Telefonnummer"
-            readonly
-            outlined
-          />
+          <v-text-field :model-value="form.phone" label="Telefonnummer" readonly outlined />
         </v-col>
 
         <!-- Email -->
         <v-col cols="12">
-          <v-text-field
-            :model-value="form.email"
-            label="E-post"
-            readonly
-            outlined
-          />
+          <v-text-field :model-value="form.email" label="E-post" readonly outlined />
         </v-col>
 
         <!-- Kurs -->
@@ -62,12 +47,7 @@
 
         <!-- Kommun & Lärare -->
         <v-col cols="12" md="6">
-          <v-text-field
-            v-model="form.municipality"
-            label="Kommun"
-            readonly
-            outlined
-          />
+          <v-text-field v-model="form.municipality" label="Kommun" readonly outlined />
         </v-col>
         <v-col cols="12" md="6">
           <v-autocomplete
@@ -91,12 +71,7 @@
           />
         </v-col>
         <v-col cols="12" md="6">
-          <v-text-field
-            v-model="form.paymentDate"
-            label="Betalningsdatum"
-            type="date"
-            outlined
-          />
+          <v-text-field v-model="form.paymentDate" label="Betalningsdatum" type="date" outlined />
         </v-col>
 
         <!-- Material checkbox -->
@@ -115,7 +90,6 @@
     </v-form>
   </v-container>
 </template>
-
 
 <script setup>
   import axios from 'axios'
@@ -158,15 +132,10 @@
   ]
 
   const showMaterialCheckbox = computed(() => {
-  const selected = availableCourses.value.find(
-    (c) => c.value === selectedCourse.value
-  )
-  const title = selected?.title?.toLowerCase() || ''
-  return title.includes('sve')
-})
-
-
-
+    const selected = availableCourses.value.find((c) => c.value === selectedCourse.value)
+    const title = selected?.title?.toLowerCase() || ''
+    return title.includes('sve')
+  })
 
   const filteredStudents = computed(() => {
     if (!searchQuery.value) return students.value
@@ -204,64 +173,60 @@
 
     // 🧹 Clear related fields when deselected
     if (!newStudent) {
-    selectedCourse.value = null
-    form.value.course = ''
-    form.value.teacherId = ''
-    return
-  }
-
-
-  // Grundläggande info
-  form.value.name = newStudent.name || ''
-  form.value.personalNumber = newStudent.personalNumber || ''
-  form.value.phone = newStudent.phone || ''
-  form.value.email = newStudent.email || ''
-  form.value.municipality = newStudent.municipality?.type || ''
-
-  form.value.teacherId = newStudent.teacherId || ''
-
-  // Försök välja första utbildning
-  const edu = (newStudent.education || []).find(e => !e.removedAt && ['Course', 'CoursePackage', 'Program'].includes(e.type))
-
-  if (edu) {
-    selectedCourse.value = edu.refId?._id || edu._id
-    if (edu.refId?.courseName) {
-      form.value.course = `${edu.refId.courseName} (${edu.refId.courseCode})`
-    } else {
-      form.value.course = edu.name || ''
+      selectedCourse.value = null
+      form.value.course = ''
+      form.value.teacherId = ''
+      return
     }
-  } else {
-    selectedCourse.value = null
-    form.value.course = ''
-  }
 
+    // Grundläggande info
+    form.value.name = newStudent.name || ''
+    form.value.personalNumber = newStudent.personalNumber || ''
+    form.value.phone = newStudent.phone || ''
+    form.value.email = newStudent.email || ''
+    form.value.municipality = newStudent.municipality?.type || ''
 
+    form.value.teacherId = newStudent.teacherId || ''
+
+    // Försök välja första utbildning
+    const edu = (newStudent.education || []).find(
+      (e) => !e.removedAt && ['Course', 'CoursePackage', 'Program'].includes(e.type)
+    )
+
+    if (edu) {
+      selectedCourse.value = edu.refId?._id || edu._id
+      if (edu.refId?.courseName) {
+        form.value.course = `${edu.refId.courseName} (${edu.refId.courseCode})`
+      } else {
+        form.value.course = edu.name || ''
+      }
+    } else {
+      selectedCourse.value = null
+      form.value.course = ''
+    }
   })
 
   const availableCourses = computed(() => {
-  if (!selectedStudent.value?.education) return []
+    if (!selectedStudent.value?.education) return []
 
-  return selectedStudent.value.education
-    .filter((e) => !e.removedAt)
-    .map((e) => {
-      let title = ''
-      if (e.type === 'Course') {
-        title = e.refId?.courseName
-          ? `${e.refId.courseName} (${e.refId.courseCode})`
-          : e.name
-      } else if (e.type === 'CoursePackage') {
-        title = e.refId?.coursePackageName || e.name
-      } else if (e.type === 'Program') {
-        title = e.refId?.programName || e.name
-      }
-      return {
-        title: title || 'Okänd utbildning',
-        value: e.refId?._id || e._id,
-        type: e.type,
-      }
-    })
-})
-
+    return selectedStudent.value.education
+      .filter((e) => !e.removedAt)
+      .map((e) => {
+        let title = ''
+        if (e.type === 'Course') {
+          title = e.refId?.courseName ? `${e.refId.courseName} (${e.refId.courseCode})` : e.name
+        } else if (e.type === 'CoursePackage') {
+          title = e.refId?.coursePackageName || e.name
+        } else if (e.type === 'Program') {
+          title = e.refId?.programName || e.name
+        }
+        return {
+          title: title || 'Okänd utbildning',
+          value: e.refId?._id || e._id,
+          type: e.type,
+        }
+      })
+  })
 
   watch(selectedCourse, (newCourseId) => {
     const selected = availableCourses.value.find((c) => c.value === newCourseId)
@@ -270,7 +235,9 @@
 
   const fetchTeachers = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`)
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`, {
+        withCredentials: true,
+      })
       teachers.value = res.data
         .filter((t) => t.userId && t.userId.username) // skip malformed ones
         .map((t) => ({
@@ -297,16 +264,29 @@
 
   const submitForm = async () => {
     try {
-      
       if (form.value.materialReceived?.status) {
-      form.value.materialReceived.receivedDate = new Date();
-    } else {
-      form.value.materialReceived = { status: false, receivedDate: null };
-    }
+        form.value.materialReceived.receivedDate = new Date()
+      } else {
+        form.value.materialReceived = { status: false, receivedDate: null }
+      }
 
+      // Clean up the form data before sending
+      const formData = { ...form.value }
 
-      console.log('Skickar:', form.value)
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/exams`, form.value)
+      // Handle empty teacherId - convert empty string to null/undefined
+      if (formData.teacherId === '') {
+        delete formData.teacherId
+      }
+
+      // Handle empty paymentDate
+      if (formData.paymentDate === '') {
+        delete formData.paymentDate
+      }
+
+      console.log('Skickar:', formData)
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/exams`, formData, {
+        withCredentials: true,
+      })
       alert('Registreringen lyckades!')
       Object.keys(form.value).forEach(
         (key) => (form.value[key] = typeof form.value[key] === 'boolean' ? false : '')

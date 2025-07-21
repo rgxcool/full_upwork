@@ -83,6 +83,30 @@ function buildNormalizedMap(originals) {
     return map;
 }
 
+export function normalizeMunicipalityName(name) {
+    if (!name) return name;
+    const trimmed = name.trim().toLowerCase();
+
+    // Alias map for common variants
+    const aliasMap = {
+        "uppl väsby": "Upplands Väsby",
+        "uppl. väsby": "Upplands Väsby",
+        "upplands väsby": "Upplands Väsby", // canonical
+        // Add more aliases as needed
+    };
+
+    if (aliasMap[trimmed]) {
+        return aliasMap[trimmed];
+    }
+
+    // Fallback: fuzzy match for anything containing both "uppl" and "väsby"
+    if (trimmed.includes("uppl") && trimmed.includes("väsby")) {
+        return "Upplands Väsby";
+    }
+
+    return name;
+}
+
 // ✅ Main upload function
 async function uploadXlsx(req, res) {
     console.log("🟢 Received XLSX file upload request");
@@ -150,10 +174,11 @@ async function uploadXlsx(req, res) {
                 const existing = existingMap.get(student.email);
                 const existingEdu = existing?.education || [];
 
-                const rawMunicipality =
+                let rawMunicipality =
                     typeof student.municipality === "string"
                         ? student.municipality
                         : student.municipality?.type || "";
+                rawMunicipality = normalizeMunicipalityName(rawMunicipality);
                 const correctedMunicipality =
                     getClosestMunicipality(rawMunicipality);
                 if (!correctedMunicipality) {
@@ -220,29 +245,41 @@ async function uploadXlsx(req, res) {
                     if (!exists) mergedEducation.push(e);
                 }
 
-            let teacherDoc = null;
-            if (student.teacher) {
-            const rawName = student.teacher.trim();
-            const firstName = rawName.split(",")[0].split(" ")[0];
-            const user = await User.findOne({ username: new RegExp(`^${firstName}`, "i") });
-            if (user) {
-                teacherDoc = await Teacher.findOne({ userId: user._id });
-            }
-            }
+                let teacherDoc = null;
+                if (student.teacher) {
+                    const rawName = student.teacher.trim();
+                    const firstName = rawName.split(",")[0].split(" ")[0];
+                    const user = await User.findOne({
+                        username: new RegExp(`^${firstName}`, "i"),
+                    });
+                    if (user) {
+                        teacherDoc = await Teacher.findOne({
+                            userId: user._id,
+                        });
+                        if (!user.username) {
+                            console.warn("User found without username:", user);
+                        }
+                    } else {
+                        // Auto-create teacher with subject if not found
+                        const { teacher } = await createOrFindTeacher(
+                            rawName,
+                            null,
+                            student.subject || "Övrigt"
+                        );
+                        teacherDoc = teacher;
+                    }
+                }
 
-                    
-            const studentDoc = {
-                ...student,
-                teacherId: teacherDoc?._id || null,
-                education: mergedEducation,
-                municipality: { type: correctedMunicipality },
-                aplStatus: existing?.aplStatus || "GRAY",
-                createdAt: existing?.createdAt || now,
-                updatedAt: now,
-                uploadedBy: teacherName,
-            };
-
-
+                const studentDoc = {
+                    ...student,
+                    teacherId: teacherDoc?._id || null,
+                    education: mergedEducation,
+                    municipality: { type: correctedMunicipality },
+                    aplStatus: existing?.aplStatus || "GRAY",
+                    createdAt: existing?.createdAt || now,
+                    updatedAt: now,
+                    uploadedBy: teacherName,
+                };
 
                 return {
                     updateOne: {
@@ -255,7 +292,6 @@ async function uploadXlsx(req, res) {
         );
 
         await Student.bulkWrite(bulkOps);
-
 
         const sample = await Student.findOne({
             email: mergedStudents[0].email,

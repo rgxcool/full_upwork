@@ -16,6 +16,8 @@ import notificationRoutes from "./notificationRoutes.js";
 import documentRoutes from "./documentRoutes.js";
 import statsRoutes from "./statsRoutes.js";
 import actionPlanRoutes from "./actionPlanRoutes.js";
+import courseMatchingRoutes from "./courseMatchingRoutes.js";
+import studentDetailsRoutes from "./studentDetailsRoutes.js";
 
 const router = Router();
 
@@ -39,5 +41,7 @@ router.use("/api", notificationRoutes);
 router.use("/api", documentRoutes);
 router.use("/api/stats", statsRoutes);
 router.use("/api", actionPlanRoutes);
+router.use("/api", courseMatchingRoutes);
+router.use("/api", studentDetailsRoutes);
 
 export default router;
