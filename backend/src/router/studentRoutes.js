@@ -103,11 +103,10 @@ router.put(
 router.get("/students", authenticateUser, async (req, res) => {
   try {
     const students = await Student.find().lean();
-
     for (const student of students) {
+      // Populate education refs as before
       for (const edu of student.education) {
         if (!edu.refId) continue;
-
         const Model =
           edu.type === "Course"
             ? Course
@@ -116,7 +115,6 @@ router.get("/students", authenticateUser, async (req, res) => {
             : edu.type === "Program"
             ? Program
             : null;
-
         if (Model) {
           edu.refId = await Model.findById(edu.refId)
             .lean()
@@ -129,8 +127,26 @@ router.get("/students", authenticateUser, async (req, res) => {
             );
         }
       }
+      // Fetch enrollments and merge as education entries
+      const enrollments = await mongoose.model('StudentEnrollment').find({ studentId: student._id })
+        .populate('mainCourseId')
+        .lean();
+      const enrollmentEducation = enrollments.map(enrollment => ({
+        _id: enrollment._id,
+        type: "Course",
+        refId: enrollment.mainCourseId,
+        startDate: enrollment.startDate,
+        endDate: enrollment.endDate,
+        status: enrollment.status,
+        grade: enrollment.grade,
+        enrollmentId: enrollment._id,
+        courseInstanceId: enrollment.courseInstanceId,
+        addedAt: enrollment.createdAt,
+        addedBy: enrollment.teacherId || "System",
+        isEnrollment: true,
+      }));
+      student.education = [...student.education, ...enrollmentEducation];
     }
-
     res.status(200).json(students);
   } catch (error) {
     console.error("❌ Error fetching students:", error);
