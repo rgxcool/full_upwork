@@ -42,6 +42,10 @@ const courseInstanceSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
         },
+        responsibleTeacher: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Teacher",
+        },
         notes: String,
 
         // Statistics tracking

@@ -203,4 +203,133 @@ router.post("/teacher", async (req, res) => {
     }
 });
 
+// PUT /teachers/:id - Update teacher information
+router.put(
+    "/teachers/:id",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { username, email, subject, colorCode } = req.body;
+
+            // Find teacher
+            const teacher = await Teacher.findById(id).populate("userId");
+            if (!teacher) {
+                return res.status(404).json({ error: "Teacher not found." });
+            }
+
+            // Update user information
+            if (username || email) {
+                const updateData = {};
+                if (username) updateData.username = username;
+                if (email) updateData.email = email;
+
+                await User.findByIdAndUpdate(teacher.userId._id, updateData);
+            }
+
+            // Update teacher information
+            const teacherUpdateData = {};
+            if (subject) teacherUpdateData.subject = subject;
+            if (colorCode) teacherUpdateData.colorCode = colorCode;
+
+            const updatedTeacher = await Teacher.findByIdAndUpdate(
+                id,
+                teacherUpdateData,
+                { new: true }
+            ).populate("userId", "username email");
+
+            res.json({
+                success: true,
+                message: "Teacher updated successfully",
+                teacher: updatedTeacher,
+            });
+        } catch (error) {
+            console.error("❌ Error updating teacher:", error.message);
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
+// PUT /teachers/:id/password - Change teacher password
+router.put(
+    "/teachers/:id/password",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { password } = req.body;
+
+            if (!password) {
+                return res.status(400).json({ error: "Password is required." });
+            }
+
+            // Find teacher
+            const teacher = await Teacher.findById(id).populate("userId");
+            if (!teacher) {
+                return res.status(404).json({ error: "Teacher not found." });
+            }
+
+            // Hash new password
+            const hashedPassword = await bcrypt.hash(password, 12);
+
+            // Update password
+            await User.findByIdAndUpdate(teacher.userId._id, {
+                password: hashedPassword,
+                updatedAt: new Date(),
+            });
+
+            res.json({
+                success: true,
+                message: "Password updated successfully",
+            });
+        } catch (error) {
+            console.error("❌ Error updating password:", error.message);
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
+// DELETE /teachers/:id - Delete teacher
+router.delete(
+    "/teachers/:id",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            // Find teacher
+            const teacher = await Teacher.findById(id).populate("userId");
+            if (!teacher) {
+                return res.status(404).json({ error: "Teacher not found." });
+            }
+
+            // Check if teacher has assigned students
+            const Student = (await import("../models/Student.js")).default;
+            const studentCount = await Student.countDocuments({
+                teacherId: id,
+            });
+            if (studentCount > 0) {
+                return res.status(400).json({
+                    error: `Cannot delete teacher. ${studentCount} student(s) are assigned to this teacher.`,
+                });
+            }
+
+            // Delete teacher and user
+            await Teacher.findByIdAndDelete(id);
+            await User.findByIdAndDelete(teacher.userId._id);
+
+            res.json({
+                success: true,
+                message: "Teacher deleted successfully",
+            });
+        } catch (error) {
+            console.error("❌ Error deleting teacher:", error.message);
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
 export default router;

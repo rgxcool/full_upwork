@@ -163,6 +163,21 @@ export const apiRateLimiter = createRateLimiter(
     "Too many API requests, please try again later."
 );
 
+// High-volume rate limiter for course and course package details
+export const courseDetailRateLimiter = createRateLimiter(
+    60 * 1000, // 1 minute
+    2000, // 2000 requests per minute
+    "Too many course detail requests, please try again later."
+);
+
+// Middleware to exempt admin/systemadmin users from rate limiting
+export function exemptAdminsFromRateLimit(req, res, next) {
+    if (req.user && ["admin", "systemadmin"].includes(req.user.role)) {
+        return next(); // Skip rate limiting for admins
+    }
+    return undefined; // Continue to rate limiter
+}
+
 // Security headers middleware
 export const securityHeaders = helmet({
     contentSecurityPolicy: {
@@ -450,6 +465,7 @@ export default {
     authRateLimiter,
     uploadRateLimiter,
     apiRateLimiter,
+    courseDetailRateLimiter,
     securityHeaders,
     inputValidator,
     enhancedAuth,

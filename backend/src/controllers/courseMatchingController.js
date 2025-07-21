@@ -3,6 +3,8 @@ import Student from "../models/Student.js";
 import CourseInstance from "../models/CourseInstance.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import { parseStudentExcel } from "../utils/parseStudentExcel.js";
+import { createOrFindTeacher } from "../utils/teacherService.js";
+import { createGlobalNotification } from "../controllers/notificationController.js";
 
 export const uploadStudentsForMatching = async (req, res) => {
     try {
@@ -32,7 +34,51 @@ export const uploadStudentsForMatching = async (req, res) => {
             students: [],
             warnings: [],
             errors: [],
+            createdTeachers: [],
         };
+
+        // Handle teacher creation if needed
+        let teacherInfo = null;
+        try {
+            const teacherResult = await createOrFindTeacher(
+                teacherName,
+                req.user?.userId
+            );
+
+            if (teacherResult.wasCreated) {
+                results.createdTeachers.push({
+                    name: teacherResult.user.username,
+                    email: teacherResult.user.email,
+                    password: teacherResult.password,
+                    subject: teacherResult.teacher.subject,
+                });
+
+                console.log(
+                    `👨‍🏫 Auto-created teacher: ${teacherResult.user.username}`
+                );
+
+                // Create notification for the user who uploaded the file
+                try {
+                    await createGlobalNotification(
+                        "teacher_auto_created",
+                        `Lärare "${teacherResult.user.username}" skapades automatiskt vid uppladdning av studenter. Lösenord: ${teacherResult.password}`
+                    );
+                } catch (notificationError) {
+                    console.error(
+                        "❌ Error creating notification:",
+                        notificationError
+                    );
+                }
+            }
+
+            teacherInfo = teacherResult.teacher;
+        } catch (error) {
+            console.error("❌ Error handling teacher creation:", error);
+            results.errors.push({
+                type: "teacher_creation",
+                error: error.message,
+            });
+        }
 
         // Process each student with the new course versioning system
         for (const studentData of parsedStudents) {
@@ -47,10 +93,16 @@ export const uploadStudentsForMatching = async (req, res) => {
                     student = new Student({
                         ...studentData,
                         education: [], // Start with empty education array
+                        teacherId: teacherInfo?._id, // Assign teacher if available
                     });
                     await student.save();
                     results.students.push(student);
                 } else {
+                    // Update existing student with teacher if not already assigned
+                    if (teacherInfo && !student.teacherId) {
+                        student.teacherId = teacherInfo._id;
+                        await student.save();
+                    }
                     results.students.push(student);
                 }
 
@@ -80,11 +132,18 @@ export const uploadStudentsForMatching = async (req, res) => {
             enrollments: results.enrollments?.length || 0,
             warnings: results.warnings?.length || 0,
             errors: results.errors?.length || 0,
+            createdTeachers: results.createdTeachers.length,
         });
+
+        // Prepare response message
+        let message = `Processed ${results.students.length} students`;
+        if (results.createdTeachers.length > 0) {
+            message += ` and created ${results.createdTeachers.length} new teacher account(s)`;
+        }
 
         res.json({
             success: true,
-            message: `Processed ${results.students.length} students`,
+            message,
             results,
         });
     } catch (error) {
@@ -181,6 +240,11 @@ export const getCourseInstances = async (req, res) => {
         const instances = await CourseInstance.find(query)
             .populate("mainCourseId")
             .populate("createdBy", "username email")
+            .populate({
+                path: "responsibleTeacher",
+                populate: { path: "userId", select: "username email" },
+                select: "userId subject",
+            })
             .sort({ startDate: -1 });
 
         res.json({
@@ -361,6 +425,26 @@ export const createCourseInstance = async (req, res) => {
         });
     } catch (error) {
         console.error("Error creating course instance:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+// Delete a course instance and its enrollments
+export const deleteCourseInstance = async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+        const instance = await CourseInstance.findByIdAndDelete(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Course instance not found" });
+        }
+        // Delete related enrollments
+        await StudentEnrollment.deleteMany({ courseInstanceId: instanceId });
+        res.json({
+            success: true,
+            message: "Course instance and related enrollments deleted",
+        });
+    } catch (error) {
+        console.error("Error deleting course instance:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
