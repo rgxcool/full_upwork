@@ -261,9 +261,20 @@ export const getCourseInstances = async (req, res) => {
             })
             .sort({ startDate: -1 });
 
+        // For each instance, count enrollments
+        const instancesWithCounts = await Promise.all(
+            instances.map(async (instance) => {
+                const enrollmentCount = await StudentEnrollment.countDocuments({ courseInstanceId: instance._id });
+                return {
+                    ...instance.toObject(),
+                    enrollmentCount,
+                };
+            })
+        );
+
         res.json({
             success: true,
-            instances,
+            instances: instancesWithCounts,
         });
     } catch (error) {
         console.error("Error fetching course instances:", error);

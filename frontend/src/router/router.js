@@ -201,12 +201,8 @@ const routes = [
     component: APLView,
     meta: { title: 'APL List', role: 'admin' },
   },
-  {
-    path: '/grades',
-    name: 'Grades',
-    component: GradeStudent,
-    meta: { title: 'Grade Student', role: 'teacher' },
-  },
+  // Remove duplicate /betyg route
+  // { path: '/betyg', name: 'Betyg', component: GradeStudent, meta: { title: 'Grade Student', role: 'teacher' } },
 ]
 
 const router = createRouter({
