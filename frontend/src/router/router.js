@@ -64,6 +64,14 @@ const routes = [
     meta: { title: 'Reset Password - Mindful Learning' },
   },
 
+  // Admin Dashboard: Move CoursesStats to top
+  {
+    path: '/stats/courses',
+    name: 'CoursesStats',
+    component: CoursesStats,
+    meta: { title: 'Kursstatistik', role: 'admin' },
+  },
+
   // Admin Routes (Requires "admin" or higher)
   { path: '/lagg-till-anvandare', component: AddUser, meta: { title: 'Add User', role: 'admin' } },
   {
@@ -122,9 +130,34 @@ const routes = [
     meta: { title: 'Edit Student', role: 'admin' },
   },
   {
-    path: '/stats/courses',
-    name: 'CoursesStats',
-    component: CoursesStats,
+    path: '/earnings',
+    name: 'Earnings',
+    component: EarningsOverview,
+    meta: { title: 'Earnings Overview', role: 'admin' },
+  },
+  {
+    path: '/course-instances',
+    name: 'CourseInstances',
+    component: CourseInstances,
+    meta: { title: 'Course Instances', role: 'admin' },
+  },
+  {
+    path: '/course-matching',
+    name: 'CourseMatching',
+    component: CourseMatching,
+    meta: { title: 'Course Matching', role: 'admin' },
+  },
+  {
+    path: '/student-enrollments',
+    name: 'StudentEnrollments',
+    component: StudentEnrollments,
+    meta: { title: 'Student Enrollments', role: 'admin' },
+  },
+  {
+    path: '/teacher-management',
+    name: 'TeacherManagement',
+    component: TeacherManagement,
+    meta: { title: 'Teacher Management', role: 'admin' },
   },
 
   // Teacher Routes (Requires "teacher" or higher)
@@ -171,36 +204,6 @@ const routes = [
     name: 'Grades',
     component: GradeStudent,
     meta: { title: 'Grade Student', role: 'teacher' },
-  },
-  {
-    path: '/earnings',
-    name: 'Earnings',
-    component: EarningsOverview,
-    meta: { title: 'Earnings Overview', role: 'admin' },
-  },
-  {
-    path: '/course-instances',
-    name: 'CourseInstances',
-    component: CourseInstances,
-    meta: { title: 'Course Instances', role: 'admin' },
-  },
-  {
-    path: '/course-matching',
-    name: 'CourseMatching',
-    component: CourseMatching,
-    meta: { title: 'Course Matching', role: 'admin' },
-  },
-  {
-    path: '/student-enrollments',
-    name: 'StudentEnrollments',
-    component: StudentEnrollments,
-    meta: { title: 'Student Enrollments', role: 'admin' },
-  },
-  {
-    path: '/teacher-management',
-    name: 'TeacherManagement',
-    component: TeacherManagement,
-    meta: { title: 'Teacher Management', role: 'admin' },
   },
 ]
 

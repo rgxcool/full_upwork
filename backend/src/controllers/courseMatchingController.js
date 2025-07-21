@@ -5,6 +5,7 @@ import StudentEnrollment from "../models/StudentEnrollment.js";
 import { parseStudentExcel } from "../utils/parseStudentExcel.js";
 import { createOrFindTeacher } from "../utils/teacherService.js";
 import { createGlobalNotification } from "../controllers/notificationController.js";
+import { normalizeMunicipalityName } from "./studentController.js";
 
 export const uploadStudentsForMatching = async (req, res) => {
     try {
@@ -35,6 +36,7 @@ export const uploadStudentsForMatching = async (req, res) => {
             warnings: [],
             errors: [],
             createdTeachers: [],
+            enrollments: [], // <-- add this line
         };
 
         // Handle teacher creation if needed
@@ -46,22 +48,24 @@ export const uploadStudentsForMatching = async (req, res) => {
             );
 
             if (teacherResult.wasCreated) {
+                const safeUsername = teacherResult.user?.username || teacherName;
+                const safeEmail = teacherResult.user?.email || `${teacherName.toLowerCase().replace(/\s+/g, ".")}@mindful.se`;
                 results.createdTeachers.push({
-                    name: teacherResult.user.username,
-                    email: teacherResult.user.email,
+                    name: safeUsername,
+                    email: safeEmail,
                     password: teacherResult.password,
-                    subject: teacherResult.teacher.subject,
+                    subject: teacherResult.teacher?.subject || "Övrigt",
                 });
 
                 console.log(
-                    `👨‍🏫 Auto-created teacher: ${teacherResult.user.username}`
+                    `👨‍🏫 Auto-created teacher: ${safeUsername}`
                 );
 
                 // Create notification for the user who uploaded the file
                 try {
                     await createGlobalNotification(
                         "teacher_auto_created",
-                        `Lärare "${teacherResult.user.username}" skapades automatiskt vid uppladdning av studenter. Lösenord: ${teacherResult.password}`
+                        `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Lösenord: ${teacherResult.password}`
                     );
                 } catch (notificationError) {
                     console.error(
@@ -83,6 +87,10 @@ export const uploadStudentsForMatching = async (req, res) => {
         // Process each student with the new course versioning system
         for (const studentData of parsedStudents) {
             try {
+                // Normalize municipality before any DB operation
+                if (studentData.municipality && typeof studentData.municipality.type === 'string') {
+                    studentData.municipality.type = normalizeMunicipalityName(studentData.municipality.type);
+                }
                 // Check if student already exists
                 let student = await Student.findOne({
                     email: studentData.email,
@@ -118,6 +126,9 @@ export const uploadStudentsForMatching = async (req, res) => {
                     // Add results to overall results
                     results.warnings.push(...educationResults.warnings);
                     results.errors.push(...educationResults.errors);
+                    if (educationResults.enrollments) {
+                        results.enrollments.push(...educationResults.enrollments);
+                    }
                 }
             } catch (error) {
                 results.errors.push({
@@ -140,6 +151,9 @@ export const uploadStudentsForMatching = async (req, res) => {
         if (results.createdTeachers.length > 0) {
             message += ` and created ${results.createdTeachers.length} new teacher account(s)`;
         }
+
+        // Filter out 'instance_created' warnings if everything else is fine
+        results.warnings = results.warnings.filter(w => w.type !== 'instance_created');
 
         res.json({
             success: true,
@@ -445,6 +459,20 @@ export const deleteCourseInstance = async (req, res) => {
         });
     } catch (error) {
         console.error("Error deleting course instance:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+// Bulk delete all course instances and related enrollments
+export const deleteAllCourseInstances = async (req, res) => {
+    try {
+        console.log("[API] DELETE /course-instances/all called");
+        const courseResult = await CourseInstance.deleteMany({});
+        const enrollmentResult = await StudentEnrollment.deleteMany({});
+        console.log(`[API] Deleted ${courseResult.deletedCount} course instances and ${enrollmentResult.deletedCount} enrollments`);
+        res.json({ success: true, message: `All course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount}) deleted` });
+    } catch (error) {
+        console.error("Error deleting all course instances:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };

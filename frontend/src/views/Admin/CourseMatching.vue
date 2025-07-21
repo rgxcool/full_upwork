@@ -115,7 +115,7 @@
             <input
               type="file"
               id="studentFile"
-              @change="handleFileUpload"
+              @change="handleFileChange"
               accept=".xlsx,.xls"
               class="form-control"
             />
@@ -123,24 +123,24 @@
 
           <div v-if="uploadedStudents.length > 0" class="upload-summary">
             <h6>Uppladdade studenter ({{ uploadedStudents.length }}):</h6>
-            <div class="student-list">
+            <div class="student-list scrollable-student-list">
               <div
-                v-for="(student, index) in uploadedStudents.slice(0, 5)"
+                v-for="(student, index) in uploadedStudents"
                 :key="index"
                 class="student-item"
               >
-                {{ student.name }} - {{ student.education?.length || 0 }} kurser
+                {{ student.name }} - {{ getEnrollmentCount(student.email) }} kurser
               </div>
-              <div v-if="uploadedStudents.length > 5" class="more-students">
-                ... och {{ uploadedStudents.length - 5 }} till
-              </div>
+            </div>
+            <div v-if="uploadedStudents.length > 5" class="more-students">
+              ... och {{ uploadedStudents.length - 5 }} till
             </div>
           </div>
 
           <button
             class="btn btn-success"
             @click="processStudents"
-            :disabled="uploadedStudents.length === 0 || isProcessing"
+            :disabled="isProcessing || !selectedFile"
           >
             {{ isProcessing ? 'Bearbetar...' : 'Bearbeta studenter' }}
           </button>
@@ -160,6 +160,19 @@
                 <span class="stat-label">Fel:</span>
                 <span class="stat-value error">{{ processingResults.errors.length }}</span>
               </div>
+            </div>
+
+            <!-- Scrollable list of created enrollments -->
+            <div v-if="processingResults.enrollments.length > 0" class="enrollments-scroll-list">
+              <h6>Skapade inskrivningar:</h6>
+              <ul>
+                <li v-for="(enrollment, idx) in processingResults.enrollments" :key="enrollment._id || idx">
+                  {{ enrollment.studentEmail }} –
+                  <span v-if="enrollment.courseInstanceName">{{ enrollment.courseInstanceName }}</span>
+                  <span v-else>kursinstans</span>
+                  – {{ enrollment.startDate ? (new Date(enrollment.startDate)).toLocaleDateString() : '' }} till {{ enrollment.endDate ? (new Date(enrollment.endDate)).toLocaleDateString() : '' }} – {{ enrollment.status }}
+                </li>
+              </ul>
             </div>
 
             <div v-if="processingResults.warnings.length > 0" class="warnings-section">
@@ -192,82 +205,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Course Statistics -->
-      <div class="card">
-        <div class="card-header">
-          <h5>Kursstatistik</h5>
-        </div>
-        <div class="card-body">
-          <div class="form-group">
-            <label for="statsStartDate">Startdatum:</label>
-            <input
-              type="date"
-              id="statsStartDate"
-              v-model="statsFilters.startDate"
-              class="form-control"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="statsEndDate">Slutdatum:</label>
-            <input
-              type="date"
-              id="statsEndDate"
-              v-model="statsFilters.endDate"
-              class="form-control"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="statsCourseId">Kurs (valfritt):</label>
-            <select id="statsCourseId" v-model="statsFilters.courseId" class="form-control">
-              <option value="">Alla kurser</option>
-              <option v-for="course in courses" :key="course._id" :value="course._id">
-                {{ course.courseName }} ({{ course.courseCode }})
-              </option>
-            </select>
-          </div>
-
-          <button
-            class="btn btn-info"
-            @click="loadStatistics"
-            :disabled="!statsFilters.startDate || !statsFilters.endDate"
-          >
-            Ladda statistik
-          </button>
-
-          <div v-if="statistics.length > 0" class="statistics-section">
-            <h6>Statistik:</h6>
-            <div class="stats-table">
-              <table class="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Kurs</th>
-                    <th>Totalt</th>
-                    <th>Slutförda</th>
-                    <th>Avbrutna</th>
-                    <th>Aktiva</th>
-                    <th>Genomsnitt närvaro</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="stat in statistics" :key="stat._id">
-                    <td>{{ stat.course.courseName }}</td>
-                    <td>{{ stat.totalEnrollments }}</td>
-                    <td class="text-success">{{ stat.completedEnrollments }}</td>
-                    <td class="text-danger">{{ stat.droppedEnrollments }}</td>
-                    <td class="text-primary">{{ stat.activeEnrollments }}</td>
-                    <td>
-                      {{ stat.averageAttendance ? `${stat.averageAttendance.toFixed(1)}%` : '-' }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -284,17 +221,12 @@
       const searchCourseName = ref('')
       const threshold = ref(0.7)
       const searchResult = ref(null)
-      const uploadedStudents = ref([])
+      const selectedFile = ref(null) // Store file here
+      const uploadedStudents = ref([]) // Populated from backend response
       const isProcessing = ref(false)
       const processingResults = ref(null)
       const courses = ref([])
-      const statistics = ref([])
-
-      const statsFilters = ref({
-        startDate: '',
-        endDate: '',
-        courseId: '',
-      })
+      // Remove statistics and statsFilters
 
       const searchCourse = async () => {
         if (!searchCourseName.value.trim()) return
@@ -317,42 +249,26 @@
         searchCourse()
       }
 
-      const handleFileUpload = async (event) => {
+      const handleFileChange = (event) => {
         const file = event.target.files[0]
         if (!file) return
-
-        try {
-          const formData = new FormData()
-          formData.append('file', file)
-
-          const response = await api.post('/upload-students', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          })
-
-          uploadedStudents.value = response.data.results.students || []
-
-          // Store the actual processing results for display
-          if (response.data.results) {
-            processingResults.value = {
-              enrollments: response.data.results.enrollments || [],
-              warnings: response.data.results.warnings || [],
-              errors: response.data.results.errors || [],
-            }
-          }
-        } catch (error) {
-          console.error('Error uploading file:', error)
-          alert('Ett fel uppstod vid uppladdning av filen.')
-        }
+        selectedFile.value = file
+        uploadedStudents.value = []
+        processingResults.value = null
       }
 
       const processStudents = async () => {
-        if (uploadedStudents.value.length === 0) return
-
+        if (!selectedFile.value) return
         isProcessing.value = true
         try {
-          // The upload already processes students, so we just show a success message
-          // The real results are already stored in processingResults.value from the upload
-          console.log('Processing results:', processingResults.value)
+          const formData = new FormData()
+          formData.append('file', selectedFile.value)
+          const response = await api.post('/upload-students', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+          // Populate students and results from backend
+          uploadedStudents.value = response.data.results.students || []
+          processingResults.value = response.data.results || null
         } catch (error) {
           console.error('Error processing students:', error)
           alert('Ett fel uppstod vid bearbetning av studenter.')
@@ -370,23 +286,7 @@
         }
       }
 
-      const loadStatistics = async () => {
-        try {
-          const params = new URLSearchParams({
-            startDate: statsFilters.value.startDate,
-            endDate: statsFilters.value.endDate,
-          })
-
-          if (statsFilters.value.courseId) {
-            params.append('courseId', statsFilters.value.courseId)
-          }
-
-          const response = await api.get(`/course-statistics?${params.toString()}`)
-          statistics.value = response.data.statistics
-        } catch (error) {
-          console.error('Error loading statistics:', error)
-        }
-      }
+      // Remove loadStatistics and statsFilters logic
 
       onMounted(() => {
         loadCourses()
@@ -397,6 +297,12 @@
       const userRole = computed(() => store.getters.userRole)
       const isAdmin = computed(() => store.getters.isAdmin)
 
+      // Helper to count enrollments per student
+      const getEnrollmentCount = (email) => {
+        if (!processingResults.value || !processingResults.value.enrollments) return 0;
+        return processingResults.value.enrollments.filter(e => e.studentEmail === email).length;
+      };
+
       return {
         isLoggedIn,
         userRole,
@@ -405,17 +311,18 @@
         searchCourseName,
         threshold,
         searchResult,
+        selectedFile,
         uploadedStudents,
         isProcessing,
         processingResults,
         courses,
-        statistics,
-        statsFilters,
+        // Remove statistics and statsFilters from returned object
         searchCourse,
         lowerThreshold,
-        handleFileUpload,
+        handleFileChange,
         processStudents,
-        loadStatistics,
+        // Remove loadStatistics,
+        getEnrollmentCount,
       }
     },
   }
@@ -669,6 +576,38 @@
 
   .text-primary {
     color: #007bff;
+  }
+
+  .scrollable-student-list {
+    max-height: 120px; /* About 3 students high */
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    padding: 4px 0;
+    margin-bottom: 8px;
+  }
+
+  .enrollments-scroll-list {
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-bottom: 12px;
+    background: #fafbfc;
+  }
+  .enrollments-scroll-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .enrollments-scroll-list li {
+    padding: 2px 0;
+    font-size: 0.97em;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .enrollments-scroll-list li:last-child {
+    border-bottom: none;
   }
 
   @media (max-width: 768px) {

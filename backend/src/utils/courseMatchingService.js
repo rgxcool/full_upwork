@@ -187,128 +187,30 @@ class CourseMatchingService {
                     });
 
                     await enrollment.save();
-                    results.enrollments.push(enrollment);
+                    // Attach student email for frontend display
+                    const studentDoc = await import('../models/Student.js').then(m => m.default.findById(studentId).lean());
+                    results.enrollments.push({
+                        ...enrollment.toObject(),
+                        studentEmail: studentDoc?.email || '',
+                        courseInstanceName: instance.courseName || '',
+                    });
                     console.log(
                         `✅ Created enrollment for student ${studentId} in course ${entry.name}`
                     );
-
-                    // Update course instance statistics
-                    await CourseInstance.findByIdAndUpdate(instance._id, {
-                        $inc: { enrollmentCount: 1 },
-                    });
-                } else if (
-                    entry.type === "Program" ||
-                    entry.type === "CoursePackage"
-                ) {
-                    // Handle programs and course packages (could be expanded later)
-                    results.warnings.push({
-                        type: "not_implemented",
-                        entryType: entry.type,
-                        message: `${entry.type} processing not yet implemented`,
-                    });
                 }
             } catch (error) {
                 results.errors.push({
+                    type: "processing_error",
                     courseName: entry.name,
-                    error: error.message,
+                    message: error.message,
                 });
+                console.error(
+                    `❌ Error processing education entry for student ${studentId}: ${error.message}`
+                );
             }
         }
 
         return results;
-    }
-
-    /**
-     * Get course statistics for a specific time period
-     */
-    static async getCourseStatistics(startDate, endDate, courseId = null) {
-        const matchQuery = {
-            startDate: { $gte: startDate },
-            endDate: { $lte: endDate },
-        };
-
-        if (courseId) {
-            matchQuery.mainCourseId = courseId;
-        }
-
-        const stats = await StudentEnrollment.aggregate([
-            { $match: matchQuery },
-            {
-                $group: {
-                    _id: "$mainCourseId",
-                    totalEnrollments: { $sum: 1 },
-                    completedEnrollments: {
-                        $sum: {
-                            $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
-                        },
-                    },
-                    droppedEnrollments: {
-                        $sum: {
-                            $cond: [{ $eq: ["$status", "dropped"] }, 1, 0],
-                        },
-                    },
-                    activeEnrollments: {
-                        $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
-                    },
-                    averageAttendance: { $avg: "$attendancePercentage" },
-                },
-            },
-            {
-                $lookup: {
-                    from: "courses",
-                    localField: "_id",
-                    foreignField: "_id",
-                    as: "course",
-                },
-            },
-            { $unwind: "$course" },
-        ]);
-
-        return stats;
-    }
-
-    /**
-     * Get student enrollment history
-     */
-    static async getStudentEnrollmentHistory(studentId) {
-        return await StudentEnrollment.find({ studentId })
-            .populate("courseInstanceId")
-            .populate("mainCourseId")
-            .populate("teacherId")
-            .sort({ startDate: -1 });
-    }
-
-    /**
-     * Update course instance statistics
-     */
-    static async updateCourseInstanceStats(courseInstanceId) {
-        const stats = await StudentEnrollment.aggregate([
-            { $match: { courseInstanceId: courseInstanceId } },
-            {
-                $group: {
-                    _id: null,
-                    enrollmentCount: { $sum: 1 },
-                    completionCount: {
-                        $sum: {
-                            $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
-                        },
-                    },
-                    dropoutCount: {
-                        $sum: {
-                            $cond: [{ $eq: ["$status", "dropped"] }, 1, 0],
-                        },
-                    },
-                },
-            },
-        ]);
-
-        if (stats.length > 0) {
-            await CourseInstance.findByIdAndUpdate(courseInstanceId, {
-                enrollmentCount: stats[0].enrollmentCount,
-                completionCount: stats[0].completionCount,
-                dropoutCount: stats[0].dropoutCount,
-            });
-        }
     }
 }
 

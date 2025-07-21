@@ -2,11 +2,19 @@
   <div class="course-instances-container">
     <div class="header-section">
       <h3 class="page-title">Kursinstanser</h3>
-      <div class="breadcrumb">
-        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-          <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
-        </svg>
-        <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="breadcrumb">
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+            <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
+          </svg>
+          <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
+        </div>
+        <button class="btn btn-danger" style="margin-left: 20px;" @click="deleteAllCourseInstances">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+          Radera alla kursinstanser
+        </button>
       </div>
     </div>
 
@@ -348,11 +356,28 @@
                       >
                         Visa student
                       </button>
+                      <button
+                        v-if="enrollment.studentId && enrollment.studentId._id"
+                        class="btn btn-sm btn-outline-danger ms-2"
+                        @click="deleteEnrollment(enrollment._id)"
+                        title="Ta bort inskrivning"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+                          <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                      </button>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
+            <button
+              v-if="enrollments.some(e => !e.studentId || !e.studentId._id)"
+              class="btn btn-danger mt-3"
+              @click="deleteUnknownEnrollments"
+            >
+              Ta bort alla okända elever
+            </button>
           </div>
         </div>
       </div>
@@ -554,6 +579,43 @@
         return texts[status] || status
       }
 
+      const deleteAllCourseInstances = async () => {
+        if (!confirm('Är du säker på att du vill ta bort ALLA kursinstanser och tillhörande data? Detta går inte att ångra.')) return;
+        try {
+          await api.delete('/course-instances/all');
+          await loadInstances();
+          alert('Alla kursinstanser och tillhörande data har raderats.');
+        } catch (error) {
+          console.error('Error deleting all course instances:', error);
+          alert('Ett fel uppstod när alla kursinstanser skulle tas bort.');
+        }
+      };
+
+      const deleteEnrollment = async (enrollmentId) => {
+        if (!confirm('Är du säker på att du vill ta bort denna inskrivning?')) return;
+        try {
+          await api.delete(`/enrollments/${enrollmentId}`);
+          await viewEnrollments(selectedInstance.value._id);
+        } catch (error) {
+          console.error('Error deleting enrollment:', error);
+          alert('Ett fel uppstod när inskrivningen skulle tas bort.');
+        }
+      };
+
+      const deleteUnknownEnrollments = async () => {
+        if (!confirm('Ta bort ALLA okända elever från denna kursinstans?')) return;
+        try {
+          const unknowns = enrollments.value.filter(e => !e.studentId || !e.studentId._id);
+          for (const e of unknowns) {
+            await api.delete(`/enrollments/${e._id}`);
+          }
+          await viewEnrollments(selectedInstance.value._id);
+        } catch (error) {
+          console.error('Error deleting unknown enrollments:', error);
+          alert('Ett fel uppstod när okända elever skulle tas bort.');
+        }
+      };
+
       onMounted(() => {
         loadCourses()
         loadInstances()
@@ -580,6 +642,9 @@
         formatDate,
         getStatusClass,
         getStatusText,
+        deleteAllCourseInstances,
+        deleteEnrollment,
+        deleteUnknownEnrollments,
       }
     },
   }

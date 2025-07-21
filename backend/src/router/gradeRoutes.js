@@ -299,4 +299,19 @@ router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
   }
 });
 
+// Delete an enrollment by ID
+router.delete('/enrollments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const enrollment = await StudentEnrollment.findByIdAndDelete(id);
+    if (!enrollment) {
+      return res.status(404).json({ error: 'Enrollment not found' });
+    }
+    res.json({ success: true, message: 'Enrollment deleted' });
+  } catch (err) {
+    console.error('Error deleting enrollment:', err);
+    res.status(500).json({ error: 'Failed to delete enrollment' });
+  }
+});
+
 export default router;
