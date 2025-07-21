@@ -175,7 +175,7 @@ export function exemptAdminsFromRateLimit(req, res, next) {
     if (req.user && ["admin", "systemadmin"].includes(req.user.role)) {
         return next(); // Skip rate limiting for admins
     }
-    return undefined; // Continue to rate limiter
+    next(); // Always call next() for everyone else!
 }
 
 // Security headers middleware

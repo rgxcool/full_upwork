@@ -33,14 +33,19 @@ console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
 console.log('All env variables:', import.meta.env)
 
 async function bootstrap() {
-  const token = store.state.auth?.token
-  if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+  // Use user from store.state, not store.state.auth
+  const user = store.state.user
+  if (user && user.token) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${user.token}`
   } else {
-    console.warn('⚠️ No token found in Vuex state.')
+    console.warn('⚠️ No user token found in Vuex state.')
   }
 
-  await store.dispatch('fetchUser')
+  try {
+    await store.dispatch('fetchUser')
+  } catch (e) {
+    console.error('Error during fetchUser:', e)
+  }
 
   const app = createApp(App)
   app.use(router)

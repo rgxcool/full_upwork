@@ -106,7 +106,6 @@
           </div>
         </div>
       </div>
-      <div v-if="!canSeeSearch" style="color: red; font-weight: bold;">[DEBUG] Search bar hidden: canSeeSearch is false. Role: {{ userRole }}</div>
       <!-- Resultat -->
       <div v-if="showResults" class="search-results me-3">
         <ul class="result-list">
@@ -129,7 +128,6 @@
       <router-link to="/login" class="login-btn">Logga in</router-link>
       <!-- Register button removed -->
     </div>
-    <div style="position: absolute; top: 0; right: 0; color: red; font-size: 12px;">[DEBUG] isLoggedIn: {{ isLoggedIn }}</div>
     <!-- Secret menu dropdown rendered as sibling to .top-nav and .nav-links -->
     <div v-if="showSecretMenu" class="secret-menu-dropdown" :style="secretMenuStyle">
       <ul>
@@ -251,9 +249,6 @@
         const allowedRoles = ['teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin']
         return isLoggedIn.value && allowedRoles.includes(userRole.value)
       })
-
-      console.log('🔹 Navbar: Current User Role ->', userRole.value)
-      console.log('🔹 Search Bar Visibility ->', canSeeSearch.value)
 
       const logout = () => {
         store.dispatch('logout')
@@ -380,7 +375,7 @@
         { name: 'Lägg till Lärare', link: '/lagg-till-larare', role: 'admin' },
         { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
         { name: 'Elever', link: '/students', role: 'admin' },
-        { name: 'Grades', link: '/grades', role: 'teacher' },
+        { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
       ];
       const filteredMenuItems = computed(() => {
