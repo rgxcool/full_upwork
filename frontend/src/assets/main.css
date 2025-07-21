@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 🎨 EGEN DESIGN: färgteman & stilar */
+
+:root {
+  --color-primary: #007BFF;    /* Blå */
+  --color-secondary: #10B981;  /* Grön */
+  --color-bg: #F9FAFB;         /* Ljus bakgrund */
+  --color-text: #1F2937;       /* Mörk text */
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Knappar */
+.btn-primary {
+  @apply bg-[--color-primary] text-white px-6 py-3 rounded-full shadow hover:bg-blue-700 transition;
+}
+
+.btn-secondary {
+  @apply bg-[--color-secondary] text-white px-6 py-3 rounded-full shadow hover:bg-emerald-600 transition;
+}
+
+/* Hero-sektion */
+.hero {
+  @apply bg-gradient-to-br from-emerald-500 to-blue-500 text-white py-28 px-6 text-center;
+}
+
+.hero h1 {
+  @apply text-5xl font-bold mb-6;
+}
+
+.hero p {
+  @apply text-xl max-w-2xl mx-auto leading-relaxed mb-8;
+}
+
+/* Feature cards */
+.feature-card {
+  @apply bg-white rounded-2xl shadow-lg p-6 text-left hover:shadow-xl transition;
+}
+
+.feature-icon {
+  @apply text-[--color-secondary] w-8 h-8 mb-4;
+}
+
+.section-title {
+  @apply text-4xl font-bold mb-12 font-heading;
+}
+
+/* CTA */
+.cta {
+  @apply bg-gradient-to-r from-blue-100 to-emerald-100 py-20 text-center;
+}
+
+.cta h2 {
+  @apply text-3xl font-bold mb-4;
+}
+
+.cta p {
+  @apply text-lg text-gray-700 mb-6;
+}
+
+/* Footer */
+footer {
+  @apply bg-gray-900 text-white text-center py-6 text-sm;
+}
