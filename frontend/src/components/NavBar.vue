@@ -367,7 +367,7 @@
       ];
       const menuItems = [
         { name: 'APL', link: '/apl', role: 'admin' },
-        { name: 'Kalender', link: '/kalender', role: 'teacher' },
+        { name: 'Kalender', link: '/kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },

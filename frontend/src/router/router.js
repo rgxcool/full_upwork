@@ -87,14 +87,14 @@ const routes = [
     path: '/detaljer/:type/:id',
     component: SearchResultDetails,
     props: true,
-    meta: { title: 'Search Result Details', role: 'teacher' }, // This was admin, and probably should be but making it teacher to broaden access.
+    meta: { title: 'Search Result Details', role: ['teacher', 'syv', 'specped'] },
   },
   {
     path: '/education/:id',
     name: 'EducationDetials',
     component: EducationDetails,
     props: true,
-    meta: { title: 'Education Details', role: 'admin' },
+    meta: { title: 'Education Details', role: ['admin', 'syv', 'specped'] },
   },
   {
     path: '/students',
@@ -163,7 +163,11 @@ const routes = [
   },
 
   // Teacher Routes (Requires "teacher" or higher)
-  { path: '/kalender', component: FullCalendar, meta: { title: 'Exam Calendar', role: 'teacher' } },
+  { 
+    path: '/kalender', 
+    component: FullCalendar, 
+    meta: { title: 'Kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin']  } },
+
   { path: '/betyg', component: BetygSattning, meta: { title: 'Grade Setting', role: 'teacher' } },
   {
     path: '/profile',

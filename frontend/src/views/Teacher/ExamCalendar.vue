@@ -15,26 +15,41 @@
 
     <div class="main-calendar">
 
-      <div v-if="isAdminOrTeacher" class="admin-controls mb-3">
-        <button @click="openAddEventModal">+ Lägg till Event</button>
-      </div>
+    <div v-if="canBookEvent" class="admin-controls mb-3">
+      <button @click="openAddEventModal">
+        + {{ eventButtonText }}
+      </button>
+    </div>
       <FullCalendar ref="fullCalendar" :options="calendarOptions" />
 
+      <!-- Modal based on role -->
       <AddEventModal
-        v-if="showAddEventModal"
+        v-if="showAddEventModal && isAdminOrTeacher"
         :teachers="teachers"
         @close="showAddEventModal = false"
         @event-added="addEventToCalendar"
         @update="handleExamUpdate"
       />
 
+      <AddMeetingModal
+        v-if="showAddEventModal && isSYVOrSpecped"
+        @close="showAddEventModal = false"
+        @event-added="addEventToCalendar"
+      />
 
+      <!-- Modal based on event -->
       <EventModal 
-        v-if="selectedEvent" 
+        v-if="selectedEvent && !selectedEvent.isMeeting" 
         :event="selectedEvent" 
         @close="selectedEvent = null" 
         @update="handleExamUpdate"
-        />
+      />
+
+      <MeetingModal
+        v-if="selectedEvent && selectedEvent.isMeeting"
+        :event="{ extendedProps: selectedEvent, start: selectedEvent.start }"
+        @close="selectedEvent = null"
+      />
 
 
     </div>
@@ -51,19 +66,18 @@ import interactionPlugin from '@fullcalendar/interaction';
 import DatePicker from "@vuepic/vue-datepicker";
 import "@vuepic/vue-datepicker/dist/main.css";
 import axios from 'axios';
-import EventModal from './EventModal.vue'; 
-import AddEventModal from './AddEventModal.vue';
+import EventModal from '../Modals/EventModal.vue'; 
+import AddEventModal from '../Modals/AddEventModal.vue';
+import AddMeetingModal from '../Modals/AddMeetingModal.vue';
+import MeetingModal from '../Modals/MeetingModal.vue';
 
 export default {
-  components: { FullCalendar, EventModal, DatePicker, AddEventModal },
-  setup() {
-    const router = useRouter();
-    const store = useStore();
-    const userRole = computed(() => store.getters.userRole || 'guest'); // Default to 'guest' if undefined
-    return { userRole };
-  },
+  components: { FullCalendar, EventModal, DatePicker, AddEventModal, AddMeetingModal, MeetingModal },
+
   data() {
+
     return {
+      loadingUser: true,
       selectedDate: new Date(),
       selectedEvent: null,
       showAddEventModal: false,
@@ -97,8 +111,20 @@ export default {
     };
   },
   computed: {
+    userRole() {
+      return this.$store.getters.userRole || 'guest';
+    },
     isAdminOrTeacher() {
-      return ["systemadmin", "teacher", "admin", "syv", "specped"].includes(this.userRole);
+      return ["systemadmin", "teacher", "admin"].includes(this.userRole);
+    },
+    isSYVOrSpecped() {
+      return ['syv', 'specped'].includes(this.userRole);
+    },
+    canBookEvent() {
+      return this.isAdminOrTeacher || this.isSYVOrSpecped;
+    },
+    eventButtonText() {
+      return this.isSYVOrSpecped ? 'Lägg till möte' : 'Lägg till slutprov';
     }
   },
   methods: {
@@ -108,7 +134,10 @@ export default {
     },
      async fetchTeachers() {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`);
+                  
+        const { api } = await import('@/store/store.js')
+
+        const res = await api.get('/teachers', { withCredentials: true })
         this.teachers = res.data
           .filter((t) => t.userId && t.userId.username) // undvik tomma
           .map((t) => ({
@@ -125,10 +154,25 @@ export default {
 
     addEventToCalendar(event) {
       const calendarApi = this.$refs.fullCalendar.getApi();
+
+      const isMeeting = this.isSYVOrSpecped;
+
+      const title = isMeeting
+        ? this.userRole === 'syv'
+          ? 'Möte SYV & elev'
+          : 'Möte Specped & elev'
+        : `Slutprov: ${event.extendedProps?.teacher || 'Okänd lärare'}`;
+
       calendarApi.addEvent({
         ...event,
-        title: event.extendedProps?.teacher || "Okänd lärare",
+        title,
         allDay: true,
+        color: '#b0b0b0',
+        extendedProps: {
+          ...event.extendedProps,
+          isMeeting,
+          role: this.userRole
+        }
       });
     },
     changeView(view) {
@@ -141,11 +185,15 @@ export default {
       calendarApi.gotoDate(this.selectedDate);
     },
     async fetchEvents() {
+
+    const { api } = await import('@/store/store.js')
       try {
-        const [savedEvents, syncedEvents] = await Promise.all([
-          axios.get(`${import.meta.env.VITE_API_URL}/api/calendar-events`),
-          axios.get(`${import.meta.env.VITE_API_URL}/api/calendar-events/syncable`)
-        ]);
+        const [savedEvents, syncedEvents, meetings] = await 
+          Promise.all([
+            api.get('/calendar-events'),
+            api.get('/calendar-events/syncable'),
+            api.get('/meetings')
+          ])
 
         this.calendarOptions.events = [
           ...savedEvents.data.map((event) => ({
@@ -164,6 +212,21 @@ export default {
             color: event.color || "#999999",
             extendedProps: event.extendedProps,
           })),
+          ...meetings.data.map(meeting => ({
+            id: meeting._id,
+            title: meeting.title,
+            start: meeting.start,
+            allDay: false,
+            color: '#999999',
+            extendedProps: {
+              isMeeting: true,
+              studentName: meeting.student?.name || 'Okänd',
+              personalNumber: meeting.student?.personalNumber || '',
+              location: meeting.location || '',
+              bookedBy: meeting.bookedBy || ''
+            }
+          }))
+
         ];
       } catch (error) {
         console.error("❌ Kunde inte ladda kalender-events:", error.message);
@@ -172,23 +235,57 @@ export default {
 
 
     openEventModal(info) {
-      this.selectedEvent = {
-        id: info.event.id,
-        title: info.event.title,
-        start: info.event.start,
-        teacher: info.event.extendedProps.teacher,
-        examMunicipality: info.event.extendedProps.examMunicipality,
-        examLocation: info.event.extendedProps.examLocation,
-        examTime: info.event.extendedProps.examTime, // 🟢 Lägg till denna rad!
-        students: info.event.extendedProps.students || [],
-      };
+      const props = info.event.extendedProps || {};
+      const isMeeting = props.isMeeting;
+
+      if (isMeeting) {
+        this.selectedEvent = {
+          id: info.event.id,
+          title: info.event.title,
+          start: info.event.start,
+          isMeeting: true,
+          studentName: props.studentName,
+          personalNumber: props.personalNumber,
+          location: props.location,
+          bookedBy: props.bookedBy
+        };
+      } else {
+        this.selectedEvent = {
+          id: info.event.id,
+          title: info.event.title,
+          start: info.event.start,
+          isMeeting: false,
+          student: props.student,
+          teacher: props.teacher,
+          examMunicipality: props.examMunicipality,
+          examLocation: props.examLocation,
+          examTime: props.examTime,
+          students: props.students || [],
+          location: props.location,
+          role: props.role
+        };
+      }
+
+      console.log("🟡 selectedEvent set:", this.selectedEvent)
     },
+
       async handleExamUpdate() {
       await this.fetchEvents(); // Hämta uppdaterade data från backend
       console.log("🔄 Kalendern har uppdaterats!");
     },
   },
   async mounted() {
+    if (this.$store.dispatch) {
+      try {
+        await this.$store.dispatch('loadUser'); // eller motsvarande
+      } catch (err) {
+        console.error("❌ Kunde inte ladda användare:", err);
+      }
+    }
+
+    console.log("✅ userRole efter dispatch:", this.userRole);
+    this.loadingUser = false;
+
     await this.fetchEvents();
   }
 };
