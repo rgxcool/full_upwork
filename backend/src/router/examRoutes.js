@@ -4,6 +4,7 @@ import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
 import Exam from "../models/Provning.js";
 import CalendarEvent from "../models/Event.js";
+import StudentEnrollment from "../models/StudentEnrollment.js";
 
 import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
 
@@ -255,33 +256,79 @@ router.get("/calendar-events/syncable", async (req, res) => {
         const students = await Student.find({
             finalExamDate: { $ne: null },
             dropout: { $ne: true },
-        }).populate({
+        })
+        .populate({
             path: "teacherId",
             populate: { path: "userId", select: "username" },
         });
+        await Student.populate(students, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });
 
         const grouped = {};
 
-        students.forEach((student) => {
-            const dateKey = student.finalExamDate.toISOString().split("T")[0];
-            const teacher = student.teacherId;
+        for (const student of students) {
+            if (!student.finalExamDate || !student.teacherId || !student.teacherId.userId) continue;
+            // Use only the date part (YYYY-MM-DD) for grouping
+            const dateObj = new Date(student.finalExamDate);
+            const dateKey = dateObj.toISOString().split("T")[0];
+            const teacherId = student.teacherId._id.toString();
+            const key = `${teacherId}_${dateKey}`;
 
-            if (!teacher || !teacher.userId) return;
+            // Find course name from education array
+            let courseName = null;
+            if (Array.isArray(student.education)) {
+                const edu = student.education.find(e => {
+                    if (e.type !== "Course" || !e.startDate || !e.endDate) return false;
+                    const start = new Date(e.startDate).setHours(0,0,0,0);
+                    const end = new Date(e.endDate).setHours(0,0,0,0);
+                    const exam = new Date(dateKey).setHours(0,0,0,0);
+                    return exam >= start && exam <= end && e.refId && typeof e.refId === "object" && e.refId.courseName;
+                });
+                if (edu && edu.refId && typeof edu.refId === "object" && edu.refId.courseName) {
+                    courseName = edu.refId.courseName;
+                }
+            }
+            // If not found, try StudentEnrollment
+            if (!courseName) {
+                const enrollment = await StudentEnrollment.findOne({
+                    studentId: student._id,
+                    endDate: { $gte: new Date(dateKey), $lt: new Date(new Date(dateKey).getTime() + 24*60*60*1000) }
+                }).populate("mainCourseId");
+                if (enrollment && enrollment.mainCourseId && enrollment.mainCourseId.courseName) {
+                    courseName = enrollment.mainCourseId.courseName;
+                }
+            }
 
-            const key = `${teacher._id}_${dateKey}`;
+            // Load per-event attendance if present
+            let attended = student.attendedExam || false;
+            // Try to find an existing event for this group and date
+            let eventDoc = await CalendarEvent.findOne({
+                title: { $regex: /^Slutprov/i },
+                start: new Date(dateKey + 'T00:00:00'),
+                'extendedProps.teacherId': student.teacherId._id,
+                'extendedProps.type': 'exam',
+            });
+            if (eventDoc && eventDoc.extendedProps && Array.isArray(eventDoc.extendedProps.students)) {
+                const found = eventDoc.extendedProps.students.find(s => s._id?.toString() === student._id.toString() || s.personalNumber === student.personalNumber);
+                if (found && typeof found.attended === 'boolean') {
+                    attended = found.attended;
+                }
+            }
 
             if (!grouped[key]) {
+                // Set event start to local midnight for the date
+                const startDate = new Date(dateKey + 'T00:00:00');
                 grouped[key] = {
-                    title: teacher.userId.username,
-                    start: new Date(student.finalExamDate),
-                    color: teacher.colorCode || "#999999",
+                    title: student.teacherId.userId.username,
+                    start: startDate,
+                    color: student.teacherId.colorCode || "#999999",
                     extendedProps: {
-                        teacher: teacher.userId.username,
-                        teacherId: teacher._id,
+                        teacher: student.teacherId.userId.username,
+                        teacherId: student.teacherId._id,
                         type: "exam",
                         examMunicipality: student.examMunicipality || "",
                         examLocation: student.examLocation || "",
                         examTime: student.examTime || "",
+                        courseName: courseName || null,
                         students: [],
                     },
                 };
@@ -292,9 +339,10 @@ router.get("/calendar-events/syncable", async (req, res) => {
                 name: student.name,
                 personalNumber: student.personalNumber,
                 additionalInfo: student.additionalInfo || "",
-                attended: student.attendedExam || false,
+                attended,
+                courseName: courseName || null,
             });
-        });
+        }
 
         res.json(Object.values(grouped));
     } catch (err) {
@@ -400,6 +448,38 @@ router.delete("/exams/:id", async (req, res) => {
         console.error("Fel vid radering av prövning:", err.message);
         res.status(500).json({ error: "Kunde inte radera prövning." });
     }
+});
+
+// PATCH: Batch update attendance for a specific event (date + teacher)
+router.post('/calendar-events/mark-attendance', async (req, res) => {
+  try {
+    const { date, teacherId, students } = req.body; // students: [{ _id, attended }]
+    if (!date || !teacherId || !Array.isArray(students)) {
+      return res.status(400).json({ error: 'Missing date, teacherId, or students array' });
+    }
+    const dateKey = new Date(date).toISOString().split('T')[0];
+    const eventDoc = await CalendarEvent.findOne({
+      title: { $regex: /^Slutprov/i },
+      start: new Date(dateKey + 'T00:00:00'),
+      'extendedProps.teacherId': teacherId,
+      'extendedProps.type': 'exam',
+    });
+    if (!eventDoc) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    // Update attendance for each student in the event
+    for (const s of students) {
+      const idx = eventDoc.extendedProps.students.findIndex(stu => stu._id?.toString() === s._id || stu.personalNumber === s.personalNumber);
+      if (idx !== -1) {
+        eventDoc.extendedProps.students[idx].attended = !!s.attended;
+      }
+    }
+    await eventDoc.save();
+    res.json({ message: 'Attendance updated for event', event: eventDoc });
+  } catch (err) {
+    console.error('❌ Error updating event attendance:', err);
+    res.status(500).json({ error: 'Failed to update event attendance' });
+  }
 });
 
 export default router;

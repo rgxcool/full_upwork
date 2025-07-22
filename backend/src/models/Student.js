@@ -25,6 +25,8 @@ const EducationEntrySchema = new mongoose.Schema(
         addedBy: { type: String },
         removedAt: { type: Date, default: null },
         status: { type: String, default: "" },
+        startDate: { type: Date },
+        endDate: { type: Date },
     },
     { _id: false }
 );
