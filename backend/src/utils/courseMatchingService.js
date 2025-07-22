@@ -66,7 +66,8 @@ class CourseMatchingService {
         mainCourseId,
         startDate,
         endDate,
-        userId = null
+        userId = null,
+        responsibleTeacherId = null
     ) {
         // First, try to find an existing instance that overlaps with the date range
         const existingInstance = await CourseInstance.findOne({
@@ -107,6 +108,7 @@ class CourseMatchingService {
             coursePoints: mainCourse.coursePoints,
             courseExtent: mainCourse.courseExtent,
             createdBy: userId,
+            responsibleTeacher: responsibleTeacherId || undefined,
             notes: `Auto-created for student enrollment (${startDate.toDateString()} - ${endDate.toDateString()})`,
         });
 
@@ -154,13 +156,14 @@ class CourseMatchingService {
                         continue;
                     }
 
-                    // Find or create course instance
+                    // Find or create course instance, pass responsibleTeacherId
                     const { instance, wasCreated } =
                         await this.findOrCreateCourseInstance(
                             match.course._id,
                             new Date(entry.startDate),
                             new Date(entry.endDate),
-                            userId
+                            userId,
+                            entry.teacherId || null // <-- pass teacherId
                         );
 
                     if (wasCreated) {
@@ -168,9 +171,7 @@ class CourseMatchingService {
                             type: "instance_created",
                             courseName: entry.name,
                             instanceId: instance._id,
-                            message: `Created new course instance for "${
-                                entry.name
-                            }" (${instance.startDate.toDateString()} - ${instance.endDate.toDateString()})`,
+                            message: `Created new course instance for "${entry.name}" (${instance.startDate.toDateString()} - ${instance.endDate.toDateString()})`,
                         });
                     }
 
@@ -188,7 +189,9 @@ class CourseMatchingService {
 
                     await enrollment.save();
                     // Attach student email for frontend display
-                    const studentDoc = await import('../models/Student.js').then(m => m.default.findById(studentId).lean());
+                    const studentDocImport = await import('../models/Student.js');
+                    const StudentModel = studentDocImport.default;
+                    const studentDoc = await StudentModel.findById(studentId);
                     results.enrollments.push({
                         ...enrollment.toObject(),
                         studentEmail: studentDoc?.email || '',
@@ -197,6 +200,34 @@ class CourseMatchingService {
                     console.log(
                         `✅ Created enrollment for student ${studentId} in course ${entry.name}`
                     );
+
+                    // --- PATCH: Update student's education array ---
+                    if (studentDoc) {
+                        // Remove any existing education entry for this course and date range
+                        studentDoc.education = (studentDoc.education || []).filter(e => {
+                            if (e.type !== 'Course') return true;
+                            if (!e.refId) return true;
+                            return (
+                                e.refId.toString() !== match.course._id.toString() ||
+                                new Date(e.startDate).getTime() !== new Date(entry.startDate).getTime() ||
+                                new Date(e.endDate).getTime() !== new Date(entry.endDate).getTime()
+                            );
+                        });
+                        // Add the new education entry
+                        studentDoc.education.push({
+                            type: 'Course',
+                            refId: match.course._id,
+                            name: match.course.courseName,
+                            startDate: new Date(entry.startDate),
+                            endDate: new Date(entry.endDate),
+                            grade: null,
+                            addedAt: new Date(),
+                            addedBy: userId,
+                            removedAt: null,
+                        });
+                        await studentDoc.save();
+                    }
+                    // --- END PATCH ---
                 }
             } catch (error) {
                 results.errors.push({
