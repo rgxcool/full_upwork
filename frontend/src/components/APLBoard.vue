@@ -196,6 +196,36 @@
   const draggedStudent = ref(null)
   const commentContainerRef = ref(null)
 
+  // Only include students with a started course package
+  const filteredStudents = computed(() => {
+    const now = new Date()
+    return students.value.filter(student => {
+      if (!Array.isArray(student.education)) return false
+      return student.education.some(edu => {
+        if (edu.type !== 'CoursePackage') return false
+        if (!edu.startDate) return false
+        const start = new Date(edu.startDate)
+        return !isNaN(start) && start <= now
+      })
+    })
+  })
+
+  // Update studentsByStatus and statusCounts to use filteredStudents
+  const studentsByStatus = computed(() => {
+    if (!Array.isArray(filteredStudents.value)) return {}
+    return statusMap.reduce((acc, status) => {
+      acc[status.key] = filteredStudents.value.filter((s) => s.aplStatus === status.key)
+      return acc
+    }, {})
+  })
+
+  const statusCounts = computed(() => {
+    return statusMap.reduce((acc, status) => {
+      acc[status.key] = filteredStudents.value.filter((s) => s.aplStatus === status.key).length
+      return acc
+    }, {})
+  })
+
   const roleRank = {
     guest: 0,
     user: 1,
@@ -215,21 +245,6 @@
     { key: 'YELLOW', label: 'Är i fas' },
     { key: 'GREEN', label: 'Har kontrakt, skall gå eller har börjat praktik' },
   ]
-
-  const studentsByStatus = computed(() => {
-    if (!Array.isArray(students.value)) return {}
-    return statusMap.reduce((acc, status) => {
-      acc[status.key] = students.value.filter((s) => s.aplStatus === status.key)
-      return acc
-    }, {})
-  })
-
-  const statusCounts = computed(() => {
-    return statusMap.reduce((acc, status) => {
-      acc[status.key] = students.value.filter((s) => s.aplStatus === status.key).length
-      return acc
-    }, {})
-  })
 
   const commentStatus = (student) => {
     const history = student.commentHistory || []
