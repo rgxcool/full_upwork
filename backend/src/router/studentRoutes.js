@@ -147,6 +147,16 @@ router.get("/students", authenticateUser, async (req, res) => {
       }));
       student.education = [...student.education, ...enrollmentEducation];
     }
+    // Deduplicate education array
+    const seen = new Set();
+    students.forEach(student => {
+      student.education = student.education.filter(e => {
+        const key = [e.type, e.refId?._id?.toString() || e.refId?.toString(), new Date(e.startDate).getTime(), new Date(e.endDate).getTime()].join('-');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    });
     res.status(200).json(students);
   } catch (error) {
     console.error("❌ Error fetching students:", error);
