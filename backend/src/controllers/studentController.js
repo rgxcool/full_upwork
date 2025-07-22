@@ -240,7 +240,9 @@ async function uploadXlsx(req, res) {
                     const exists = mergedEducation.some(
                         (old) =>
                             old.refId?.toString() === e.refId?.toString() &&
-                            old.type === e.type
+                            old.type === e.type &&
+                            new Date(old.startDate).getTime() === new Date(e.startDate).getTime() &&
+                            new Date(old.endDate).getTime() === new Date(e.endDate).getTime()
                     );
                     if (!exists) mergedEducation.push(e);
                 }
