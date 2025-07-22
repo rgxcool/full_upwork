@@ -121,32 +121,28 @@
       closeModal() {
         this.$emit('close')
       },
+      // Remove markAttendance API call from checkbox change
       async markAttendance(studentId, attended) {
-        try {
-          console.log(
-            `Uppdaterar närvaro för student ${studentId}: ${
-              attended ? 'Närvarande' : 'Ej närvarande'
-            }`
-          )
-          await axios.put(
-            `${import.meta.env.VITE_API_URL}/api/mark-attendance/${studentId}`,
-            { attended },
-            { withCredentials: true }
-          )
-          console.log('✅ Närvaro uppdaterad!')
-        } catch (error) {
-          console.error('❌ Fel vid uppdatering av närvaro:', error.response?.data || error.message)
-        }
+        // No-op: handled in submitExam
       },
       async submitExam() {
         if (!this.examTime || !this.examMunicipality || !this.examLocation) {
           alert('Välj tid, kommun och plats för provet.')
           return
         }
-
         try {
+          // Save attendance for all students via batch endpoint
+          await axios.post(
+            `${import.meta.env.VITE_API_URL}/api/calendar-events/mark-attendance`,
+            {
+              date: this.event.start,
+              teacherId: this.event.extendedProps?.teacherId || this.event.teacherId,
+              students: (this.event.students || []).map(s => ({ _id: s._id, attended: !!s.attended, personalNumber: s.personalNumber })),
+            },
+            { withCredentials: true }
+          )
+          // Save exam time, kommun, plats
           const studentIds = (this.event.students || []).map((s) => s._id)
-
           await axios.post(
             `${import.meta.env.VITE_API_URL}/api/examtime-location`,
             {
@@ -157,12 +153,10 @@
             },
             { withCredentials: true }
           )
-
           this.event.examTime = this.examTime
           this.event.examMunicipality = this.examMunicipality
           this.event.examLocation = this.examLocation
-
-          console.log('✅ Slutprov uppdaterat för alla studenter!')
+          console.log('✅ Slutprov och närvaro uppdaterat för alla studenter!')
           this.$emit('update')
           this.closeModal()
         } catch (error) {
