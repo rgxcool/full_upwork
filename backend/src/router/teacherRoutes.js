@@ -43,6 +43,35 @@ function generateStrongPassword(length = 12) {
         .sort(() => crypto.randomInt(0, 3) - 1)
         .join("");
 }
+// DEBUG: Testa populering av userId för alla lärare
+router.get(
+  "/debug-teachers",
+  async (req, res) => {
+    try {
+      const teachers = await Teacher.find().populate("userId", "username email role");
+
+      const results = teachers.map((t) => ({
+        teacherId: t._id,
+        subject: t.subject,
+        colorCode: t.colorCode,
+        user: t.userId
+          ? {
+              id: t.userId._id,
+              username: t.userId.username,
+              email: t.userId.email,
+              role: t.userId.role,
+            }
+          : null,
+      }));
+
+      res.json({ success: true, count: results.length, teachers: results });
+    } catch (err) {
+      console.error("❌ DEBUG populate error:", err);
+      res.status(500).json({ error: "Debug route failed." });
+    }
+  }
+);
+
 
 // Get all teachers
 router.get(

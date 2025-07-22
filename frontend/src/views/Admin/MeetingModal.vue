@@ -1,62 +1,38 @@
-// === frontend/components/MeetingModal.vue ===
 <template>
   <div class="modal-overlay">
     <div class="modal-content">
-      <h3>Boka möte med {{ studentName }}</h3>
-      <label>Titel:</label>
-      <input v-model="title" placeholder="Ex. Uppföljning" />
 
-      <label>Beskrivning:</label>
-      <textarea v-model="description" placeholder="Valfritt"></textarea>
+      <h3>{{ event.title || 'Mötesinformation' }}</h3>
+      
 
-      <label>Starttid:</label>
-      <input type="datetime-local" v-model="start" />
-
-      <label>Sluttid:</label>
-      <input type="datetime-local" v-model="end" />
+      <p><strong>Elev:</strong> {{ event.extendedProps?.studentName }}</p>
+      <p><strong>Personnummer:</strong> {{ event.extendedProps?.personalNumber }}</p>
+      <p><strong>Plats:</strong> {{ event.extendedProps?.location }}</p>
+      <p><strong>Bokad av:</strong> {{ event.extendedProps?.bookedBy }}</p>
+      <p><strong>Tid:</strong> {{ formatTime(event.start) }}</p>
 
       <div class="buttons">
-        <button @click="submitMeeting">Spara</button>
-        <button @click="$emit('close')">Avbryt</button>
+        <button @click="$emit('close')">Stäng</button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import axios from 'axios';
-import { useStore } from 'vuex';
-
 export default {
-  props: ['studentId', 'studentName'],
-  setup() {
-    const store = useStore();
-    const userRole = store.getters.userRole;
-    return { userRole };
-  },
-  data() {
-    return {
-      title: '',
-      description: '',
-      start: '',
-      end: ''
-    };
+  props: {
+    event: Object
   },
   methods: {
-    async submitMeeting() {
-      try {
-        await axios.post('/api/meetings', {
-          title: this.title,
-          description: this.description,
-          participants: [this.studentId],
-          start: this.start,
-          end: this.end,
-          createdBy: this.userRole
-        });
-        this.$emit('close');
-      } catch (err) {
-        console.error('Kunde inte spara möte:', err);
-      }
+    formatTime(date) {
+      return new Date(date).toLocaleString('sv-SE', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     }
   }
 };
@@ -80,12 +56,9 @@ export default {
   width: 400px;
   border-radius: 8px;
 }
-input, textarea {
-  width: 100%;
-  margin-bottom: 10px;
-}
 .buttons {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
+  margin-top: 20px;
 }
 </style>
