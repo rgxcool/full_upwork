@@ -6,7 +6,7 @@ const studentSchema = new mongoose.Schema(
         name: String,
       personalNumber: String,
       additionalInfo: String,
-      attended: Boolean,
+      attended: { type: Boolean, default: false },
     },
     { _id: false }
   );

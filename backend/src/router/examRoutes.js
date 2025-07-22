@@ -298,6 +298,22 @@ router.get("/calendar-events/syncable", async (req, res) => {
                 }
             }
 
+            // Load per-event attendance if present
+            let attended = student.attendedExam || false;
+            // Try to find an existing event for this group and date
+            let eventDoc = await CalendarEvent.findOne({
+                title: { $regex: /^Slutprov/i },
+                start: new Date(dateKey + 'T00:00:00'),
+                'extendedProps.teacherId': student.teacherId._id,
+                'extendedProps.type': 'exam',
+            });
+            if (eventDoc && eventDoc.extendedProps && Array.isArray(eventDoc.extendedProps.students)) {
+                const found = eventDoc.extendedProps.students.find(s => s._id?.toString() === student._id.toString() || s.personalNumber === student.personalNumber);
+                if (found && typeof found.attended === 'boolean') {
+                    attended = found.attended;
+                }
+            }
+
             if (!grouped[key]) {
                 // Set event start to local midnight for the date
                 const startDate = new Date(dateKey + 'T00:00:00');
@@ -323,7 +339,7 @@ router.get("/calendar-events/syncable", async (req, res) => {
                 name: student.name,
                 personalNumber: student.personalNumber,
                 additionalInfo: student.additionalInfo || "",
-                attended: student.attendedExam || false,
+                attended,
                 courseName: courseName || null,
             });
         }
@@ -432,6 +448,38 @@ router.delete("/exams/:id", async (req, res) => {
         console.error("Fel vid radering av prövning:", err.message);
         res.status(500).json({ error: "Kunde inte radera prövning." });
     }
+});
+
+// PATCH: Batch update attendance for a specific event (date + teacher)
+router.post('/calendar-events/mark-attendance', async (req, res) => {
+  try {
+    const { date, teacherId, students } = req.body; // students: [{ _id, attended }]
+    if (!date || !teacherId || !Array.isArray(students)) {
+      return res.status(400).json({ error: 'Missing date, teacherId, or students array' });
+    }
+    const dateKey = new Date(date).toISOString().split('T')[0];
+    const eventDoc = await CalendarEvent.findOne({
+      title: { $regex: /^Slutprov/i },
+      start: new Date(dateKey + 'T00:00:00'),
+      'extendedProps.teacherId': teacherId,
+      'extendedProps.type': 'exam',
+    });
+    if (!eventDoc) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    // Update attendance for each student in the event
+    for (const s of students) {
+      const idx = eventDoc.extendedProps.students.findIndex(stu => stu._id?.toString() === s._id || stu.personalNumber === s.personalNumber);
+      if (idx !== -1) {
+        eventDoc.extendedProps.students[idx].attended = !!s.attended;
+      }
+    }
+    await eventDoc.save();
+    res.json({ message: 'Attendance updated for event', event: eventDoc });
+  } catch (err) {
+    console.error('❌ Error updating event attendance:', err);
+    res.status(500).json({ error: 'Failed to update event attendance' });
+  }
 });
 
 export default router;
