@@ -4,6 +4,7 @@ import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
 import Exam from "../models/Provning.js";
 import CalendarEvent from "../models/Event.js";
+import StudentEnrollment from "../models/StudentEnrollment.js";
 
 import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
 
@@ -255,33 +256,63 @@ router.get("/calendar-events/syncable", async (req, res) => {
         const students = await Student.find({
             finalExamDate: { $ne: null },
             dropout: { $ne: true },
-        }).populate({
+        })
+        .populate({
             path: "teacherId",
             populate: { path: "userId", select: "username" },
         });
+        await Student.populate(students, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });
 
         const grouped = {};
 
-        students.forEach((student) => {
-            const dateKey = student.finalExamDate.toISOString().split("T")[0];
-            const teacher = student.teacherId;
+        for (const student of students) {
+            if (!student.finalExamDate || !student.teacherId || !student.teacherId.userId) continue;
+            // Use only the date part (YYYY-MM-DD) for grouping
+            const dateObj = new Date(student.finalExamDate);
+            const dateKey = dateObj.toISOString().split("T")[0];
+            const teacherId = student.teacherId._id.toString();
+            const key = `${teacherId}_${dateKey}`;
 
-            if (!teacher || !teacher.userId) return;
-
-            const key = `${teacher._id}_${dateKey}`;
+            // Find course name from education array
+            let courseName = null;
+            if (Array.isArray(student.education)) {
+                const edu = student.education.find(e => {
+                    if (e.type !== "Course" || !e.startDate || !e.endDate) return false;
+                    const start = new Date(e.startDate).setHours(0,0,0,0);
+                    const end = new Date(e.endDate).setHours(0,0,0,0);
+                    const exam = new Date(dateKey).setHours(0,0,0,0);
+                    return exam >= start && exam <= end && e.refId && typeof e.refId === "object" && e.refId.courseName;
+                });
+                if (edu && edu.refId && typeof edu.refId === "object" && edu.refId.courseName) {
+                    courseName = edu.refId.courseName;
+                }
+            }
+            // If not found, try StudentEnrollment
+            if (!courseName) {
+                const enrollment = await StudentEnrollment.findOne({
+                    studentId: student._id,
+                    endDate: { $gte: new Date(dateKey), $lt: new Date(new Date(dateKey).getTime() + 24*60*60*1000) }
+                }).populate("mainCourseId");
+                if (enrollment && enrollment.mainCourseId && enrollment.mainCourseId.courseName) {
+                    courseName = enrollment.mainCourseId.courseName;
+                }
+            }
 
             if (!grouped[key]) {
+                // Set event start to local midnight for the date
+                const startDate = new Date(dateKey + 'T00:00:00');
                 grouped[key] = {
-                    title: teacher.userId.username,
-                    start: new Date(student.finalExamDate),
-                    color: teacher.colorCode || "#999999",
+                    title: student.teacherId.userId.username,
+                    start: startDate,
+                    color: student.teacherId.colorCode || "#999999",
                     extendedProps: {
-                        teacher: teacher.userId.username,
-                        teacherId: teacher._id,
+                        teacher: student.teacherId.userId.username,
+                        teacherId: student.teacherId._id,
                         type: "exam",
                         examMunicipality: student.examMunicipality || "",
                         examLocation: student.examLocation || "",
                         examTime: student.examTime || "",
+                        courseName: courseName || null,
                         students: [],
                     },
                 };
@@ -293,8 +324,9 @@ router.get("/calendar-events/syncable", async (req, res) => {
                 personalNumber: student.personalNumber,
                 additionalInfo: student.additionalInfo || "",
                 attended: student.attendedExam || false,
+                courseName: courseName || null,
             });
-        });
+        }
 
         res.json(Object.values(grouped));
     } catch (err) {

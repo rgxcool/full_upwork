@@ -147,23 +147,39 @@ export default {
           axios.get(`${import.meta.env.VITE_API_URL}/api/calendar-events/syncable`)
         ]);
 
+        // Only use syncedEvents for Slutprov (type 'exam' or title contains 'Slutprov')
+        const syncedSlutprov = syncedEvents.data.filter(event => {
+          return (
+            event.extendedProps?.type === 'exam' ||
+            (event.title && event.title.toLowerCase().includes('slutprov'))
+          );
+        }).map(event => ({
+          id: `${event.extendedProps.teacherId}_${event.start}`,
+          title: event.title,
+          start: event.start,
+          allDay: true,
+          color: event.color || "#999999",
+          extendedProps: event.extendedProps,
+        }));
+
+        // Only use savedEvents that are NOT Slutprov
+        const nonSlutprov = savedEvents.data.filter(event => {
+          return !(
+            event.extendedProps?.type === 'exam' ||
+            (event.title && event.title.toLowerCase().includes('slutprov'))
+          );
+        }).map(event => ({
+          id: event._id,
+          title: event.title,
+          start: event.start,
+          allDay: true,
+          color: event.color || "#999999",
+          extendedProps: event.extendedProps,
+        }));
+
         this.calendarOptions.events = [
-          ...savedEvents.data.map((event) => ({
-            id: event._id,
-            title: event.title,
-            start: event.start,
-            allDay: true,
-            color: event.color || "#999999",
-            extendedProps: event.extendedProps,
-          })),
-          ...syncedEvents.data.map((event) => ({
-            id: `${event.extendedProps.teacherId}_${event.start}`,
-            title: event.title,
-            start: event.start,
-            allDay: true,
-            color: event.color || "#999999",
-            extendedProps: event.extendedProps,
-          })),
+          ...nonSlutprov,
+          ...syncedSlutprov,
         ];
       } catch (error) {
         console.error("❌ Kunde inte ladda kalender-events:", error.message);

@@ -30,6 +30,7 @@
               <tr>
                 <th>Namn</th>
                 <th>Personnummer</th>
+                <th>Kurs</th>
                 <th>Info</th>
                 <th>Närvaro</th>
               </tr>
@@ -38,6 +39,7 @@
               <tr v-for="(student, index) in event.students || []" :key="index">
                 <td>{{ student.name }}</td>
                 <td>{{ student.personalNumber }}</td>
+                <td>{{ student.courseName || '-' }}</td>
                 <td>{{ student.additionalInfo || '-' }}</td>
                 <td>
                   <input
