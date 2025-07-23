@@ -39,9 +39,20 @@ export default createStore({
     hasPermission: (state) => (requiredRole) => {
       const userRole = state.user?.role || 'guest'
       const userIndex = ROLE_HIERARCHY.indexOf(userRole)
+
+      // Om requiredRole är en array: returnera true om användaren uppfyller någon av dem
+      if (Array.isArray(requiredRole)) {
+        return requiredRole.some((role) => {
+          const requiredIndex = ROLE_HIERARCHY.indexOf(role)
+          return userIndex >= requiredIndex
+        })
+      }
+
+      // Annars, anta att det är en sträng
       const requiredIndex = ROLE_HIERARCHY.indexOf(requiredRole)
       return userIndex >= requiredIndex
-    },
+    }
+
   },
 
   mutations: {
