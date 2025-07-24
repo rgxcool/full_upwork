@@ -1,6 +1,3 @@
-import Course from "../models/Course.js";
-import CourseInstance from "../models/CourseInstance.js";
-import StudentEnrollment from "../models/StudentEnrollment.js";
 import { distance } from "fastest-levenshtein";
 
 class CourseMatchingService {
@@ -21,6 +18,7 @@ class CourseMatchingService {
      * Find the best matching course using fuzzy matching
      */
     static async findBestCourseMatch(courseName, threshold = 0.7) {
+        const { default: Course } = await import("../models/Course.js");
         const cleanedName = this.cleanCourseName(courseName);
 
         // Get all courses
@@ -69,6 +67,8 @@ class CourseMatchingService {
         userId = null,
         responsibleTeacherId = null
     ) {
+        const { default: CourseInstance } = await import("../models/CourseInstance.js");
+        const { default: Course } = await import("../models/Course.js");
         // First, try to find an existing instance that overlaps with the date range
         const existingInstance = await CourseInstance.findOne({
             mainCourseId,
@@ -131,6 +131,7 @@ class CourseMatchingService {
         educationEntries,
         userId = null
     ) {
+        const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
         const results = {
             enrollments: [],
             warnings: [],
@@ -189,22 +190,25 @@ class CourseMatchingService {
 
                     await enrollment.save();
                     // Attach student email for frontend display
-                    const studentDocImport = await import('../models/Student.js');
-                    const StudentModel = studentDocImport.default;
-                    const studentDoc = await StudentModel.findById(studentId);
+                    let studentDocA;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import('../models/Student.js');
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDocA = await global._StudentModel.findById(studentId);
                     results.enrollments.push({
                         ...enrollment.toObject(),
-                        studentEmail: studentDoc?.email || '',
+                        studentEmail: studentDocA?.email || '',
                         courseInstanceName: instance.courseName || '',
                     });
                     console.log(
                         `✅ Created enrollment for student ${studentId} in course ${entry.name}`
                     );
 
-                    // --- PATCH: Update student's education array ---
-                    if (studentDoc) {
+                    // --- PATCH: Update student's education array for ALL types ---
+                    if (studentDocA) {
                         // Remove any existing education entry for this course and date range
-                        studentDoc.education = (studentDoc.education || []).filter(e => {
+                        studentDocA.education = (studentDocA.education || []).filter(e => {
                             if (e.type !== 'Course') return true;
                             if (!e.refId) return true;
                             return (
@@ -213,8 +217,8 @@ class CourseMatchingService {
                                 new Date(e.endDate).getTime() !== new Date(entry.endDate).getTime()
                             );
                         });
-                        // Add the new education entry
-                        studentDoc.education.push({
+                        // Add the new education entry (always, regardless of type)
+                        studentDocA.education.push({
                             type: 'Course',
                             refId: match.course._id,
                             name: match.course.courseName,
@@ -225,9 +229,225 @@ class CourseMatchingService {
                             addedBy: userId,
                             removedAt: null,
                         });
-                        await studentDoc.save();
+                        await studentDocA.save();
                     }
                     // --- END PATCH ---
+                }
+                // --- PATCH: Handle CoursePackage and Program types as well ---
+                else if (entry.type === "CoursePackage" && entry.refId) {
+                    // Retrieve the course package and its courses (ordered)
+                    const CoursePackageModel = (await import('../models/CoursePackage.js')).default;
+                    const packageDoc = await CoursePackageModel.findById(entry.refId).populate('coursePackageCourses');
+                    if (!packageDoc) {
+                        results.errors.push({
+                            type: "no_package",
+                            packageId: entry.refId,
+                            message: `No course package found for id ${entry.refId}`,
+                        });
+                        continue;
+                    }
+                    // Helper: get next Monday
+                    function getNextMonday(date) {
+                        const d = new Date(date);
+                        const day = d.getDay();
+                        const diff = (day === 1) ? 0 : (8 - day) % 7;
+                        d.setDate(d.getDate() + diff);
+                        d.setHours(0,0,0,0);
+                        return d;
+                    }
+                    // Helper: add weeks
+                    function addWeeks(date, weeks) {
+                        const d = new Date(date);
+                        d.setDate(d.getDate() + weeks * 7);
+                        return d;
+                    }
+                    // Helper: get Wednesday of week X (1-based, relative to start)
+                    function getWednesdayOfWeek(startDate, weekNum) {
+                        const d = new Date(startDate);
+                        d.setDate(d.getDate() + (weekNum - 1) * 7);
+                        d.setDate(d.getDate() + (3 - d.getDay() + 7) % 7); // 3 = Wednesday
+                        d.setHours(0,0,0,0);
+                        return d;
+                    }
+                    // Start scheduling
+                    let courseStart = getNextMonday(entry.startDate || new Date());
+                    for (const courseId of packageDoc.coursePackageCourses) {
+                        // Get course details (with extent)
+                        const course = typeof courseId === 'object' ? courseId : await import('../models/Course.js').default.findById(courseId);
+                        const extentWeeks = parseInt(course.courseExtent) || 5; // Default to 5 weeks if not set
+                        const courseEnd = addWeeks(courseStart, extentWeeks);
+                        // Find or create CourseInstance
+                        const { instance: courseInstance, wasCreated } = await this.findOrCreateCourseInstance(
+                            course._id,
+                            courseStart,
+                            courseEnd,
+                            userId,
+                            entry.teacherId || null
+                        );
+                        console.log(`[DEBUG] Processing course: '${course.courseName}' | Found/created CourseInstance:`, courseInstance ? courseInstance._id : null);
+                        if (!courseInstance || !courseInstance._id) {
+                            console.warn(`[WARN] No CourseInstance found/created for course '${course.courseName}'. Skipping enrollment for this course.`);
+                            continue;
+                        }
+                        // Create enrollment
+                        const enrollment = new StudentEnrollment({
+                            studentId,
+                            courseInstanceId: courseInstance._id,
+                            mainCourseId: course._id,
+                            startDate: courseStart,
+                            endDate: courseEnd,
+                            status: "enrolled",
+                            teacherId: entry.teacherId || null,
+                            notes: entry.notes || null,
+                        });
+                        console.log('[DEBUG] StudentEnrollment to be created:', enrollment.toObject());
+                        await enrollment.save();
+                        // Attach student email for frontend display
+                        let studentDocB;
+                        if (!global._StudentModel) {
+                            const studentDocImport = await import('../models/Student.js');
+                            global._StudentModel = studentDocImport.default;
+                        }
+                        studentDocB = await global._StudentModel.findById(studentId);
+                        if (enrollment.courseInstanceId) {
+                            results.enrollments.push({
+                                ...enrollment.toObject(),
+                                studentEmail: studentDocB?.email || '',
+                                courseInstanceName: courseInstance.courseName || '',
+                            });
+                        } else {
+                            console.warn('[WARN] Skipping enrollment with missing courseInstanceId:', enrollment.toObject());
+                        }
+                        // Schedule 'slutprov' for Wednesday of week 4
+                        const slutprovDate = getWednesdayOfWeek(courseStart, 4);
+                        enrollment.slutprovDate = slutprovDate;
+                        let studentDocC;
+                        if (!global._StudentModel) {
+                            const studentDocImport = await import('../models/Student.js');
+                            global._StudentModel = studentDocImport.default;
+                        }
+                        studentDocC = await global._StudentModel.findById(studentId);
+                        results.enrollments.push({
+                            ...enrollment.toObject(),
+                            studentEmail: studentDocC?.email || '',
+                            courseInstanceName: courseInstance.courseName || '',
+                        });
+                        // Add to education array if not already present
+                        if (studentDocC) {
+                            const exists = (studentDocC.education || []).some(e =>
+                                e.type === 'Course' &&
+                                e.refId && e.refId.toString() === course._id.toString() &&
+                                new Date(e.startDate).getTime() === courseStart.getTime() &&
+                                new Date(e.endDate).getTime() === courseEnd.getTime()
+                            );
+                            if (!exists) {
+                                studentDocC.education.push({
+                                    type: 'Course',
+                                    refId: course._id,
+                                    name: course.courseName,
+                                    startDate: courseStart,
+                                    endDate: courseEnd,
+                                    grade: null,
+                                    addedAt: new Date(),
+                                    addedBy: userId,
+                                    removedAt: null,
+                                });
+                                await studentDocC.save();
+                            }
+                        }
+                        // Prepare for next course
+                        courseStart = getNextMonday(courseEnd);
+                    }
+                    // Optionally, create a StudentEnrollment for the package itself
+                    const packageEnrollment = new StudentEnrollment({
+                        studentId,
+                        coursePackageId: entry.refId,
+                        startDate: entry.startDate ? new Date(entry.startDate) : undefined,
+                        endDate: entry.endDate ? new Date(entry.endDate) : undefined,
+                        status: "enrolled",
+                        teacherId: entry.teacherId || null,
+                        notes: entry.notes || null,
+                    });
+                    await packageEnrollment.save();
+                    // Add to results
+                    let studentDocD;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import('../models/Student.js');
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDocD = await global._StudentModel.findById(studentId);
+                    results.enrollments.push({
+                        ...packageEnrollment.toObject(),
+                        studentEmail: studentDocD?.email || '',
+                        courseInstanceName: undefined,
+                    });
+                    // Add to education array if not already present
+                    if (studentDocD) {
+                        const exists = (studentDocD.education || []).some(e =>
+                            e.type === 'CoursePackage' &&
+                            e.refId && e.refId.toString() === entry.refId.toString()
+                        );
+                        if (!exists) {
+                            studentDocD.education.push({
+                                type: 'CoursePackage',
+                                refId: entry.refId,
+                                name: packageDoc.coursePackageName,
+                                startDate: entry.startDate ? new Date(entry.startDate) : undefined,
+                                endDate: entry.endDate ? new Date(entry.endDate) : undefined,
+                                grade: null,
+                                addedAt: new Date(),
+                                addedBy: userId,
+                                removedAt: null,
+                            });
+                            await studentDocD.save();
+                        }
+                    }
+                }
+                else if (entry.type === "Program" && entry.refId) {
+                    // Add to student's education array if not already present
+                    let studentDocE;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import('../models/Student.js');
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDocE = await global._StudentModel.findById(studentId);
+                    // Create enrollment for CoursePackage or Program
+                    const programEnrollment = new StudentEnrollment({
+                        studentId,
+                        programId: entry.refId,
+                        startDate: entry.startDate ? new Date(entry.startDate) : undefined,
+                        endDate: entry.endDate ? new Date(entry.endDate) : undefined,
+                        status: "enrolled",
+                        teacherId: entry.teacherId || null,
+                        notes: entry.notes || null,
+                    });
+                    await programEnrollment.save();
+                    results.enrollments.push({
+                        ...programEnrollment.toObject(),
+                        studentEmail: studentDocE?.email || '',
+                        courseInstanceName: undefined,
+                    });
+                    // Add to education array if not already present
+                    if (studentDocE) {
+                        const exists = (studentDocE.education || []).some(e =>
+                            e.type === 'Program' &&
+                            e.refId && e.refId.toString() === entry.refId.toString()
+                        );
+                        if (!exists) {
+                            studentDocE.education.push({
+                                type: 'Program',
+                                refId: entry.refId,
+                                name: entry.name,
+                                startDate: entry.startDate ? new Date(entry.startDate) : undefined,
+                                endDate: entry.endDate ? new Date(entry.endDate) : undefined,
+                                grade: null,
+                                addedAt: new Date(),
+                                addedBy: userId,
+                                removedAt: null,
+                            });
+                            await studentDocE.save();
+                        }
+                    }
                 }
             } catch (error) {
                 results.errors.push({
@@ -240,6 +460,19 @@ class CourseMatchingService {
                 );
             }
         }
+
+        // Before returning, filter out any enrollments with missing courseInstanceId
+        results.enrollments = results.enrollments.filter(e => e.courseInstanceId);
+        // Deduplicate enrollments by studentId + courseInstanceId
+        const seen = new Set();
+        results.enrollments = results.enrollments.filter(e => {
+          const key = `${e.studentId}_${e.courseInstanceId}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        console.log('[DEBUG] Deduplicated enrollments array:', results.enrollments);
+        console.log('[DEBUG] Final enrollments array:', results.enrollments);
 
         return results;
     }

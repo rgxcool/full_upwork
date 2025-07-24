@@ -327,7 +327,7 @@
       getEducationLabel(edu) {
         if (!edu.refId) return '(missing)'
         if (edu.type === 'Course') return edu.refId.courseName || '(no name)'
-        if (edu.type === 'CoursePackage') return edu.refId.coursePackageName || '(no name)'
+        if (edu.type === 'CoursePackage') return 'CoursePackage: ' + (edu.refId.coursePackageName || '(no name)')
         if (edu.type === 'Program') return edu.refId.programName || '(no name)'
         return '(invalid type)'
       },
