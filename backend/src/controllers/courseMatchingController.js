@@ -110,7 +110,14 @@ export const uploadStudentsForMatching = async (req, res) => {
                 normalized = normalized.replace(/[-\s]*\d+v$/i, '');
                 normalized = normalized.replace(/\d+v$/i, '');
                 const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
-                const type = isCourse ? 'Course' : 'CoursePackage';
+                // --- PATCH: Always prefer CoursePackage if name matches a package ---
+                let type = null;
+                if (normalizedPackageMap[normalized]) {
+                    type = 'CoursePackage';
+                    console.log(`[DEBUG] Name '${normalized}' matches a CoursePackage. Forcing type to CoursePackage.`);
+                } else {
+                    type = isCourse ? 'Course' : 'CoursePackage';
+                }
                 console.log(`[DEBUG] Education entry (normalized): '${normalized}' | Type: ${type}`);
                 if (type === 'CoursePackage') {
                     const pkg = normalizedPackageMap[normalized];
@@ -266,6 +273,17 @@ export const uploadStudentsForMatching = async (req, res) => {
                 });
             }
         }
+
+        // After processing all students, deduplicate missing package errors globally
+        const seenPackages = new Set();
+        results.errors = results.errors.filter(err => {
+            if (err.type !== 'missing_package') return true;
+            const norm = (err.packageName || '').toUpperCase().replace(/[,;|]/g, '').replace(/\s+/g, ' ').trim();
+            if (seenPackages.has(norm)) return false;
+            seenPackages.add(norm);
+            return true;
+        });
+        console.log('[DEBUG] Deduplicated missing package errors:', results.errors.filter(e => e.type === 'missing_package'));
 
         console.log("📊 Final results:", {
             students: results.students.length,

@@ -138,8 +138,46 @@ class CourseMatchingService {
             errors: [],
         };
 
+        // Deduplicate missing package errors
+        const missingPackages = new Set();
         for (const entry of educationEntries) {
             try {
+                // --- PATCH: Improved normalization and fuzzy matching for course packages ---
+                const { default: CoursePackage } = await import("../models/CoursePackage.js");
+                const allPackages = await CoursePackage.find({}).lean();
+                function normalizeName(name) {
+                    return (name || "")
+                        .toUpperCase()
+                        .replace(/[,;|]/g, "") // Remove commas, semicolons, pipes
+                        .replace(/\s+/g, " ")  // Collapse spaces
+                        .trim();
+                }
+                const normalizedEntryName = normalizeName(entry.name)
+                    .replace(/[-\s]*\d+\s*v$/i, '')
+                    .replace(/[-\s]*\d+v$/i, '')
+                    .replace(/\d+v$/i, '');
+                // Try exact match first
+                let packageMatch = allPackages.find(pkg => normalizeName(pkg.coursePackageName) === normalizedEntryName);
+                // Fallback: fuzzy match for long names (distance <= 1)
+                if (!packageMatch) {
+                    let best = null, minDist = Infinity;
+                    for (const pkg of allPackages) {
+                        const normPkg = normalizeName(pkg.coursePackageName);
+                        const d = distance(normalizedEntryName, normPkg);
+                        if (d < minDist) { minDist = d; best = pkg; }
+                    }
+                    if (normalizedEntryName.length > 12 && minDist <= 1) {
+                        packageMatch = best;
+                        console.log(`[DEBUG] Fuzzy matched package: '${entry.name}' → '${best.coursePackageName}' (distance ${minDist})`);
+                    }
+                }
+                if (packageMatch) {
+                    if (entry.type !== 'CoursePackage') {
+                        console.log(`[DEBUG] Name '${normalizedEntryName}' matches a CoursePackage. Forcing type to CoursePackage.`);
+                    }
+                    entry.type = 'CoursePackage';
+                    entry.refId = packageMatch._id;
+                }
                 if (
                     entry.type === "Course" &&
                     entry.startDate &&
@@ -152,7 +190,7 @@ class CourseMatchingService {
                         results.warnings.push({
                             type: "no_match",
                             courseName: entry.name,
-                            message: `No matching course found for "${entry.name}"`,
+                            message: `No matching course found for \"${entry.name}\"`,
                         });
                         continue;
                     }

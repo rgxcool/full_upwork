@@ -172,6 +172,7 @@ async function uploadXlsx(req, res) {
 
         const now = new Date();
 
+        const warnings = [];
         const bulkOps = await Promise.all(
             mergedStudents.map(async (student) => {
                 const existing = existingMap.get(student.email);
@@ -191,6 +192,7 @@ async function uploadXlsx(req, res) {
                 }
 
                 // Convert education entries → { refId, type, ... }
+                const studentWarnings = [];
                 const newEducation = student.education.map((entry) => {
                     let normalized = normalize(entry.name);
 
@@ -264,6 +266,14 @@ async function uploadXlsx(req, res) {
                             `🟡 No match for: "${entry.name}" → "${normalized}". Best package: ${bestPkg} (d=${bestPkgDist}), best course: ${bestCourse} (d=${bestCourseDist}). Normalized package keys:`,
                             Object.keys(normalizedPackageMap)
                         );
+                        // Only push warning for unmatched courses
+                        if (type === 'Course') {
+                            studentWarnings.push({
+                                type: 'no_match',
+                                courseName: entry.name,
+                                message: `No matching course found for \"${entry.name}\"`,
+                            });
+                        }
                     }
 
                     return {
@@ -276,6 +286,8 @@ async function uploadXlsx(req, res) {
                         removedAt: null,
                     };
                 });
+                // After processing this student, add their warnings to the global array
+                warnings.push(...studentWarnings);
 
                 // Merge new education with existing
                 const mergedEducation = [...existingEdu];
@@ -346,6 +358,7 @@ async function uploadXlsx(req, res) {
         res.status(200).json({
             message: "Upload successful",
             students: mergedStudents,
+            warnings,
         });
     } catch (err) {
         console.error("❌ Upload failed:", err);
