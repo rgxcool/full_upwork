@@ -7,6 +7,8 @@ import CoursePackage from "../models/CoursePackage.js";
 import { parseStudentExcel } from "../utils/parseStudentExcel.js";
 import { distance } from "fastest-levenshtein";
 
+console.log('[DEBUG] studentController.js loaded');
+
 // Normalize a string
 function normalize(value) {
     if (!value) return "";
@@ -109,6 +111,7 @@ export function normalizeMunicipalityName(name) {
 
 // ✅ Main upload function
 async function uploadXlsx(req, res) {
+    console.log('[DEBUG] uploadXlsx called');
     console.log("🟢 Received XLSX file upload request");
 
     if (!req.file) {
@@ -189,37 +192,77 @@ async function uploadXlsx(req, res) {
 
                 // Convert education entries → { refId, type, ... }
                 const newEducation = student.education.map((entry) => {
-                    const normalized = normalize(entry.name);
+                    let normalized = normalize(entry.name);
 
-                    const matchProgram = getBestFuzzyMatch(
+                    // Remove trailing week extent patterns for package matching
+                    normalized = normalized.replace(/[-\s]*\d+\s*v$/i, '');
+                    normalized = normalized.replace(/[-\s]*\d+v$/i, '');
+                    normalized = normalized.replace(/\d+v$/i, '');
+
+                    // Distinguish course vs package by name ending
+                    const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
+                    let type = isCourse ? "Course" : "CoursePackage";
+
+                    // Always log normalized input and all normalized package keys
+                    console.log(`[DEBUG] Normalized input: '${normalized}' | Package keys:`, Object.keys(normalizedPackageMap));
+
+                    // Require exact match for packages/courses, allow fuzzy only for long names
+                    function strictMatch(target, candidates) {
+                        if (candidates.includes(target)) return target;
+                        // Only allow fuzzy match for long names (length > 12) and distance = 1
+                        let best = null;
+                        let minDistance = Infinity;
+                        for (const candidate of candidates) {
+                            const d = distance(target, candidate);
+                            if (d < minDistance) {
+                                minDistance = d;
+                                best = candidate;
+                            }
+                        }
+                        if (target.length > 12 && minDistance === 1) return best;
+                        return null;
+                    }
+
+                    const matchProgram = strictMatch(
                         normalized,
                         Object.keys(normalizedProgramMap)
                     );
-                    const matchPackage = getBestFuzzyMatch(
+                    const matchPackage = strictMatch(
                         normalized,
                         Object.keys(normalizedPackageMap)
                     );
-                    const matchCourse = getBestFuzzyMatch(
+                    const matchCourse = strictMatch(
                         normalized,
                         Object.keys(normalizedCourseMap)
                     );
 
                     let refId = null;
-                    let type = entry.type;
 
                     if (matchProgram) {
                         refId = programMap[normalizedProgramMap[matchProgram]];
                         type = "Program";
-                    } else if (matchPackage) {
+                    } else if (type === "CoursePackage" && matchPackage) {
                         refId = packageMap[normalizedPackageMap[matchPackage]];
                         type = "CoursePackage";
-                    } else if (matchCourse) {
+                    } else if (type === "Course" && matchCourse) {
                         refId = courseMap[normalizedCourseMap[matchCourse]];
                         type = "Course";
                     } else {
                         if (!type || type === "Auto") type = "Course";
+                        // Log for debugging
+                        let bestPkg = null, bestPkgDist = Infinity;
+                        for (const candidate of Object.keys(normalizedPackageMap)) {
+                            const d = distance(normalized, candidate);
+                            if (d < bestPkgDist) { bestPkgDist = d; bestPkg = candidate; }
+                        }
+                        let bestCourse = null, bestCourseDist = Infinity;
+                        for (const candidate of Object.keys(normalizedCourseMap)) {
+                            const d = distance(normalized, candidate);
+                            if (d < bestCourseDist) { bestCourseDist = d; bestCourse = candidate; }
+                        }
                         console.warn(
-                            `🟡 No match for: "${entry.name}" → "${normalized}"`
+                            `🟡 No match for: "${entry.name}" → "${normalized}". Best package: ${bestPkg} (d=${bestPkgDist}), best course: ${bestCourse} (d=${bestCourseDist}). Normalized package keys:`,
+                            Object.keys(normalizedPackageMap)
                         );
                     }
 

@@ -84,7 +84,7 @@ const StudentSchema = new mongoose.Schema(
                     "Växjö",
                     "Österåker",
                 ],
-                default: "Choose municipality",
+                // No default value; must be set explicitly
             },
         },
 

@@ -6,10 +6,13 @@ import { parseStudentExcel } from "../utils/parseStudentExcel.js";
 import { createOrFindTeacher } from "../utils/teacherService.js";
 import { createGlobalNotification } from "../controllers/notificationController.js";
 import { normalizeMunicipalityName } from "./studentController.js";
+import CoursePackage from '../models/CoursePackage.js';
+
+console.log('[DEBUG] courseMatchingController.js loaded');
 
 export const uploadStudentsForMatching = async (req, res) => {
+    console.log('[DEBUG] uploadStudentsForMatching called');
     try {
-        console.log("🔍 uploadStudentsForMatching called");
         console.log("🔍 req.user:", req.user);
         console.log("🔍 req.userId:", req.userId);
         console.log("🔍 req.cookies:", req.cookies);
@@ -84,8 +87,76 @@ export const uploadStudentsForMatching = async (req, res) => {
             });
         }
 
+        // Build normalized package map
+        const allPackages = await CoursePackage.find({}).lean();
+        const normalizedPackageMap = {};
+        for (const pkg of allPackages) {
+            const norm = (pkg.coursePackageName || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
+            normalizedPackageMap[norm] = pkg;
+        }
+
         // Process each student with the new course versioning system
         for (const studentData of parsedStudents) {
+            console.log(`[DEBUG] Processing student: ${studentData.name || studentData.email || 'unknown'} | Raw education:`, studentData.education);
+            if (!studentData.education || !Array.isArray(studentData.education) || studentData.education.length === 0) {
+                console.log(`[DEBUG] No education entries for student: ${studentData.name || studentData.email || 'unknown'}`);
+                continue;
+            }
+            for (const entry of studentData.education) {
+                console.log(`[DEBUG] Education entry (raw):`, entry);
+                let normalized = (entry.name || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
+                // Remove trailing week extent patterns for package matching
+                normalized = normalized.replace(/[-\s]*\d+\s*v$/i, '');
+                normalized = normalized.replace(/[-\s]*\d+v$/i, '');
+                normalized = normalized.replace(/\d+v$/i, '');
+                const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
+                const type = isCourse ? 'Course' : 'CoursePackage';
+                console.log(`[DEBUG] Education entry (normalized): '${normalized}' | Type: ${type}`);
+                if (type === 'CoursePackage') {
+                    const pkg = normalizedPackageMap[normalized];
+                    if (pkg) {
+                        console.log(`[DEBUG] Matched package: '${normalized}' → '${pkg.coursePackageName}'`);
+                        // Find or create the student in the DB
+                        let dbStudent = null;
+                        if (studentData.personalNumber) {
+                            dbStudent = await Student.findOne({ personalNumber: studentData.personalNumber });
+                        }
+                        if (!dbStudent && studentData.email) {
+                            dbStudent = await Student.findOne({ email: studentData.email });
+                        }
+                        if (!dbStudent) {
+                            dbStudent = new Student({
+                                name: studentData.name,
+                                email: studentData.email,
+                                personalNumber: studentData.personalNumber,
+                                // Add any other fields as needed
+                            });
+                            await dbStudent.save();
+                        }
+                        // Call courseMatchingService to process the package enrollment
+                        try {
+                            const result = await CourseMatchingService.processStudentEducation(
+                                dbStudent._id,
+                                [{
+                                    type: 'CoursePackage',
+                                    refId: pkg._id,
+                                    name: pkg.coursePackageName,
+                                    startDate: entry.startDate,
+                                    endDate: entry.endDate
+                                }]
+                            );
+                            console.log(`[DEBUG] Enrollment result for student ${dbStudent.name || dbStudent.email}:`, result);
+                        } catch (err) {
+                            console.error(`[ERROR] Failed to enroll student ${dbStudent.name || dbStudent.email} in package ${pkg.coursePackageName}:`, err);
+                        }
+                    } else {
+                        // Do NOT push a warning for unmatched course packages
+                        // Only log for debugging
+                        console.warn(`[WARN] No course package match for: '${normalized}'. Available keys:`, Object.keys(normalizedPackageMap));
+                        continue;
+                    }
+                }
+            }
             try {
                 // Normalize municipality before any DB operation
                 if (studentData.municipality && typeof studentData.municipality.type === 'string') {
@@ -98,12 +169,65 @@ export const uploadStudentsForMatching = async (req, res) => {
 
                 if (!student) {
                     // Create new student
-                    student = new Student({
-                        ...studentData,
-                        education: [], // Start with empty education array
-                        teacherId: teacherInfo?._id, // Assign teacher if available
-                    });
-                    await student.save();
+                    // Debug log for municipality
+                    console.log('[DEBUG] Creating student with data:', studentData);
+                    console.log('[DEBUG] Municipality value before creation:', studentData.municipality);
+                    // Allowed municipality types from schema
+                    const allowedMunicipalities = [
+                        "Botkyrka", "Danderyd", "Huddinge", "Järfälla", "KCNO", "Lidingö", "Norrtälje", "Nykvarn", "Privat kunder", "Salem", "Sigtuna", "Sollentuna", "Solna", "Sundbyberg", "Södertälje", "Täby", "Upplands Bro", "Upplands Väsby", "Vallentuna", "Vaxholm", "Växjö", "Österåker"
+                    ];
+                    // Mapping for common Excel variants
+                    const municipalityMap = {
+                        "uppl väsby": "Upplands Väsby",
+                        "upplands väsby": "Upplands Väsby",
+                        "privat": "Privat kunder",
+                        "privat kunder": "Privat kunder",
+                        "jarfalla": "Järfälla",
+                        "sundbyberg": "Sundbyberg",
+                        "sodertalje": "Södertälje",
+                        // Add more mappings as needed
+                    };
+                    let rawMunicipality = studentData.municipality && (studentData.municipality.type || studentData.municipality);
+                    let normalizedMunicipality = (rawMunicipality || "").toString().trim().toLowerCase();
+                    normalizedMunicipality = municipalityMap[normalizedMunicipality] || allowedMunicipalities.find(m => m.toLowerCase() === normalizedMunicipality) || rawMunicipality;
+                    // Fuzzy fallback if not found in allowed list
+                    if (!allowedMunicipalities.includes(normalizedMunicipality)) {
+                        // Use getClosestMunicipality from studentController.js
+                        const { getClosestMunicipality } = await import("./studentController.js");
+                        const fuzzyMatch = getClosestMunicipality(rawMunicipality);
+                        if (fuzzyMatch) {
+                            console.log(`[DEBUG] Fuzzy matched municipality: '${rawMunicipality}' → '${fuzzyMatch}'`);
+                            normalizedMunicipality = fuzzyMatch;
+                        } else {
+                            console.error(`[ERROR] Invalid municipality for student ${studentData.name || studentData.email || 'unknown'}:`, rawMunicipality);
+                            continue; // Skip this student
+                        }
+                    }
+                    console.log(`[DEBUG] Raw municipality: '${rawMunicipality}' | Normalized: '${normalizedMunicipality}'`);
+                    if (!allowedMunicipalities.includes(normalizedMunicipality)) {
+                        console.error(`[ERROR] Invalid municipality for student ${studentData.name || studentData.email || 'unknown'}:`, rawMunicipality);
+                        // Optionally, you can push to a results.errors array or return a message to the frontend
+                        continue; // Skip this student
+                    }
+                    const municipality = { type: normalizedMunicipality };
+                    // Build student object field-by-field, do NOT use ...studentData
+                    const studentObj = {
+                        name: studentData.name,
+                        email: studentData.email,
+                        personalNumber: studentData.personalNumber,
+                        municipality: municipality,
+                        education: [],
+                        teacherId: teacherInfo?._id,
+                        // Add any other required fields here
+                    };
+                    console.log('[DEBUG] FINAL studentObj to be created:', studentObj);
+                    try {
+                        student = new Student(studentObj);
+                        await student.save();
+                    } catch (err) {
+                        console.error('[DEBUG] Student creation error:', err);
+                        throw err;
+                    }
                     results.students.push(student);
                 } else {
                     // Update existing student with teacher if not already assigned
@@ -116,6 +240,11 @@ export const uploadStudentsForMatching = async (req, res) => {
 
                 // Process education entries using the new course matching service
                 if (studentData.education && studentData.education.length > 0) {
+                    // Log normalization for each education entry
+                    for (const entry of studentData.education) {
+                        let normalized = entry.name && entry.name.toString().toLowerCase().replace(/[-\s]*\d+\s*v$/i, '').replace(/[-\s]*\d+v$/i, '').replace(/\d+v$/i, '');
+                        console.log(`[DEBUG] Normalized input: '${normalized}' | Package keys:`, Object.keys(normalizedPackageMap));
+                    }
                     const educationResults =
                         await CourseMatchingService.processStudentEducation(
                             student._id,
