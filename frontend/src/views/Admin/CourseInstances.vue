@@ -388,7 +388,7 @@
 </template>
 
 <script>
-  import { ref, onMounted, computed } from 'vue'
+  import { ref, onMounted, computed, watch } from 'vue'
   import { useStore } from 'vuex'
   import { api } from '@/store/store.js'
 
@@ -621,6 +621,22 @@
       onMounted(() => {
         loadCourses()
         loadInstances()
+      })
+
+      // Watch for showCreateModal changes to show/hide the modal
+      watch(showCreateModal, (newValue) => {
+        if (newValue) {
+          const modal = new bootstrap.Modal(document.getElementById('instanceModal'))
+          modal.show()
+          
+          // Listen for modal hidden event to reset showCreateModal
+          const modalElement = document.getElementById('instanceModal')
+          const handleModalHidden = () => {
+            showCreateModal.value = false
+            modalElement.removeEventListener('hidden.bs.modal', handleModalHidden)
+          }
+          modalElement.addEventListener('hidden.bs.modal', handleModalHidden)
+        }
       })
 
       return {
