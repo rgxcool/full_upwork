@@ -83,6 +83,7 @@ export const uploadStudentsForMatching = async (req, res) => {
             }
 
             teacherInfo = teacherResult.teacher;
+            console.log(`[DEBUG] Teacher info:`, teacherInfo ? { _id: teacherInfo._id, name: teacherInfo.userId?.username } : 'null');
         } catch (error) {
             console.error("❌ Error handling teacher creation:", error);
             results.errors.push({
@@ -174,13 +175,14 @@ export const uploadStudentsForMatching = async (req, res) => {
                         exam: studentData.exam || "",
                         additionalInfo: studentData.additionalInfo || "",
                         teacher: studentData.teacher || teacherName,
+                        teacherId: teacherInfo?._id || null,
                         dropout: studentData.dropout || false,
                         aplStatus: studentData.aplStatus || "GRAY",
                         education: [],
                     });
 
                     await dbStudent.save();
-                    console.log(`✅ Created new student: ${dbStudent.name} (${dbStudent.email})`);
+                    console.log(`✅ Created new student: ${dbStudent.name} (${dbStudent.email}) with teacherId: ${dbStudent.teacherId || 'null'}`);
                     results.students.push(dbStudent);
                 } else {
                     // Update existing student with teacher if not already assigned
@@ -451,13 +453,21 @@ export const getCourseInstances = async (req, res) => {
             })
             .sort({ startDate: -1 });
 
-        // For each instance, count enrollments
+        // For each instance, count enrollments and get slutprov date
         const instancesWithCounts = await Promise.all(
             instances.map(async (instance) => {
                 const enrollmentCount = await StudentEnrollment.countDocuments({ courseInstanceId: instance._id });
+                
+                // Get the slutprov date from the first enrollment (they should all have the same date for a course instance)
+                const firstEnrollment = await StudentEnrollment.findOne({ 
+                    courseInstanceId: instance._id,
+                    slutprovDate: { $ne: null }
+                }).select('slutprovDate');
+                
                 return {
                     ...instance.toObject(),
                     enrollmentCount,
+                    slutprovDate: firstEnrollment?.slutprovDate || null,
                 };
             })
         );

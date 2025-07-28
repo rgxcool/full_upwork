@@ -195,10 +195,28 @@ export default {
             api.get('/meetings')
           ])
 
-        // Only use syncedEvents for Slutprov (type 'exam' or title contains 'Slutprov')
+        console.log("📅 Backend returned syncedEvents:", syncedEvents.data);
+        console.log("📅 Backend returned savedEvents:", savedEvents.data);
+        
+        // Debug: Check if any events have type 'slutprov'
+        const slutprovEvents = syncedEvents.data.filter(event => 
+          event.extendedProps?.type === 'slutprov'
+        );
+        console.log("🔍 Found slutprov events:", slutprovEvents);
+        
+        // Debug: Check all event types
+        const eventTypes = syncedEvents.data.map(event => ({
+          title: event.title,
+          type: event.extendedProps?.type,
+          start: event.start
+        }));
+        console.log("🔍 All event types:", eventTypes);
+
+        // Only use syncedEvents for Slutprov (type 'exam', 'slutprov', or title contains 'Slutprov')
         const syncedSlutprov = syncedEvents.data.filter(event => {
           return (
             event.extendedProps?.type === 'exam' ||
+            event.extendedProps?.type === 'slutprov' ||
             (event.title && event.title.toLowerCase().includes('slutprov'))
           );
         }).map(event => ({
@@ -214,6 +232,7 @@ export default {
         const nonSlutprov = savedEvents.data.filter(event => {
           return !(
             event.extendedProps?.type === 'exam' ||
+            event.extendedProps?.type === 'slutprov' ||
             (event.title && event.title.toLowerCase().includes('slutprov'))
           );
         }).map(event => ({
@@ -224,6 +243,14 @@ export default {
           color: event.color || "#999999",
           extendedProps: event.extendedProps,
         }));
+
+        console.log("📅 Filtered syncedSlutprov events:", syncedSlutprov);
+        console.log("📅 Filtered nonSlutprov events:", nonSlutprov);
+        
+        // Debug: Check date formats
+        syncedSlutprov.forEach(event => {
+          console.log(`📅 Event: ${event.title}, Start: ${event.start}, Type: ${typeof event.start}`);
+        });
 
         this.calendarOptions.events = [
           ...nonSlutprov,
@@ -244,6 +271,24 @@ export default {
           }))
 
         ];
+
+        console.log("📅 Final calendar events:", this.calendarOptions.events);
+        
+        // Debug: Check if calendar is properly configured
+        console.log("📅 Calendar options:", {
+          initialView: this.calendarOptions.initialView,
+          plugins: this.calendarOptions.plugins?.length,
+          events: this.calendarOptions.events?.length
+        });
+        
+        // Debug: Check current date and event dates
+        const now = new Date();
+        console.log("📅 Current date:", now);
+        this.calendarOptions.events.forEach(event => {
+          const eventDate = new Date(event.start);
+          const daysDiff = Math.floor((eventDate - now) / (1000 * 60 * 60 * 24));
+          console.log(`📅 Event: ${event.title}, Date: ${eventDate}, Days from now: ${daysDiff}`);
+        });
       } catch (error) {
         console.error("❌ Kunde inte ladda kalender-events:", error.message);
       }

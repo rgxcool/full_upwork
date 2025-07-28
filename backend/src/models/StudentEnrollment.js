@@ -91,6 +91,9 @@ const studentEnrollmentSchema = new mongoose.Schema(
         grade: { type: String, default: null },
         gradeDate: { type: Date, default: null },
         gradeBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        
+        // Slutprov (final exam) date
+        slutprovDate: { type: Date, default: null },
 
         // Attendance tracking
         attendancePercentage: { type: Number, min: 0, max: 100, default: null },

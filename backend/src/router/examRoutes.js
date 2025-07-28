@@ -253,7 +253,10 @@ router.get("/calendar-events", async (req, res) => {
 
 router.get("/calendar-events/syncable", async (req, res) => {
     try {
-        const students = await Student.find({
+        console.log("🔍 /calendar-events/syncable called");
+        
+        // Get students with finalExamDate (manual scheduling)
+        const studentsWithFinalExam = await Student.find({
             finalExamDate: { $ne: null },
             dropout: { $ne: true },
         })
@@ -261,11 +264,31 @@ router.get("/calendar-events/syncable", async (req, res) => {
             path: "teacherId",
             populate: { path: "userId", select: "username" },
         });
-        await Student.populate(students, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });
+        await Student.populate(studentsWithFinalExam, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });
+
+        console.log("📅 Students with finalExamDate:", studentsWithFinalExam.length);
+
+        // Get enrollments with slutprovDate (automatic from courses)
+        const enrollmentsWithSlutprov = await StudentEnrollment.find({
+            slutprovDate: { $ne: null },
+            status: { $in: ['enrolled', 'active'] }
+        })
+        .populate('studentId')
+        .populate('mainCourseId')
+        .populate({
+            path: 'teacherId',
+            populate: { path: 'userId', select: 'username' }
+        });
+
+        console.log("📅 Enrollments with slutprovDate:", enrollmentsWithSlutprov.length);
+        enrollmentsWithSlutprov.forEach(e => {
+            console.log("  - Student:", e.studentId?.name, "Course:", e.mainCourseId?.courseName, "Date:", e.slutprovDate, "Teacher:", e.teacherId?.userId?.username || e.studentId?.teacherId?.userId?.username || "None");
+        });
 
         const grouped = {};
 
-        for (const student of students) {
+        // Process students with finalExamDate (existing logic)
+        for (const student of studentsWithFinalExam) {
             if (!student.finalExamDate || !student.teacherId || !student.teacherId.userId) continue;
             // Use only the date part (YYYY-MM-DD) for grouping
             const dateObj = new Date(student.finalExamDate);
@@ -344,6 +367,86 @@ router.get("/calendar-events/syncable", async (req, res) => {
             });
         }
 
+        // Process enrollments with slutprovDate (new logic)
+        for (const enrollment of enrollmentsWithSlutprov) {
+            if (!enrollment.slutprovDate || !enrollment.studentId || !enrollment.mainCourseId) continue;
+            
+            const student = enrollment.studentId;
+            const course = enrollment.mainCourseId;
+            
+            // Use only the date part (YYYY-MM-DD) for grouping
+            const dateObj = new Date(enrollment.slutprovDate);
+            const dateKey = dateObj.toISOString().split("T")[0];
+            
+            // Use teacherId from enrollment or fall back to student's teacherId
+            let teacherId = enrollment.teacherId;
+            let teacherUsername = 'Unknown';
+            let teacherColor = "#999999";
+            
+            if (teacherId && teacherId.userId) {
+                teacherUsername = teacherId.userId.username;
+                teacherColor = teacherId.colorCode || "#999999";
+            } else if (student.teacherId && student.teacherId.userId) {
+                teacherId = student.teacherId;
+                teacherUsername = student.teacherId.userId.username;
+                teacherColor = student.teacherId.colorCode || "#999999";
+            } else {
+                // If no teacher found, use a default teacher or skip
+                console.log(`⚠️ No teacher found for student ${student.name} in course ${course.courseName}`);
+                continue; // Skip if no teacher found
+            }
+            
+            const key = `${teacherId._id.toString()}_${dateKey}`;
+
+            // Load per-event attendance if present
+            let attended = false;
+            // Try to find an existing event for this group and date
+            let eventDoc = await CalendarEvent.findOne({
+                title: { $regex: /^Slutprov/i },
+                start: new Date(dateKey + 'T00:00:00'),
+                'extendedProps.teacherId': teacherId._id,
+                'extendedProps.type': 'slutprov',
+            });
+            if (eventDoc && eventDoc.extendedProps && Array.isArray(eventDoc.extendedProps.students)) {
+                const found = eventDoc.extendedProps.students.find(s => s._id?.toString() === student._id.toString() || s.personalNumber === student.personalNumber);
+                if (found && typeof found.attended === 'boolean') {
+                    attended = found.attended;
+                }
+            }
+
+            if (!grouped[key]) {
+                // Set event start to local midnight for the date
+                const startDate = new Date(dateKey + 'T00:00:00');
+                grouped[key] = {
+                    title: teacherUsername,
+                    start: startDate,
+                    color: teacherColor,
+                    extendedProps: {
+                        teacher: teacherUsername,
+                        teacherId: teacherId._id,
+                        type: "slutprov",
+                        examMunicipality: student.examMunicipality || "",
+                        examLocation: student.examLocation || "",
+                        examTime: student.examTime || "",
+                        courseName: course.courseName,
+                        students: [],
+                    },
+                };
+            }
+
+            grouped[key].extendedProps.students.push({
+                _id: student._id,
+                name: student.name,
+                personalNumber: student.personalNumber,
+                additionalInfo: student.additionalInfo || "",
+                attended,
+                courseName: course.courseName,
+            });
+        }
+
+        console.log("📅 Final grouped events:", Object.keys(grouped).length);
+        console.log("📅 Grouped events:", Object.values(grouped));
+        
         res.json(Object.values(grouped));
     } catch (err) {
         console.error("❌ Fel vid synk:", err.message);

@@ -2,6 +2,38 @@ import { distance } from "fastest-levenshtein";
 
 class CourseMatchingService {
     /**
+     * Helper: get next Monday
+     */
+    static getNextMonday(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = (day === 1) ? 0 : (8 - day) % 7;
+        d.setDate(d.getDate() + diff);
+        d.setHours(0,0,0,0);
+        return d;
+    }
+
+    /**
+     * Helper: add weeks
+     */
+    static addWeeks(date, weeks) {
+        const d = new Date(date);
+        d.setDate(d.getDate() + weeks * 7);
+        return d;
+    }
+
+    /**
+     * Helper: get Wednesday of week X (1-based, relative to start)
+     */
+    static getWednesdayOfWeek(startDate, weekNum) {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + (weekNum - 1) * 7);
+        d.setDate(d.getDate() + (3 - d.getDay() + 7) % 7); // 3 = Wednesday
+        d.setHours(0,0,0,0);
+        return d;
+    }
+
+    /**
      * Clean course name for better matching
      */
     static cleanCourseName(name) {
@@ -216,6 +248,14 @@ class CourseMatchingService {
                         });
                     }
 
+                    // Get student to find teacherId
+                    let studentDocA;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import('../models/Student.js');
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDocA = await global._StudentModel.findById(studentId);
+                    
                     // Create enrollment
                     const enrollment = new StudentEnrollment({
                         studentId,
@@ -224,18 +264,14 @@ class CourseMatchingService {
                         startDate: new Date(entry.startDate),
                         endDate: new Date(entry.endDate),
                         status: "enrolled",
-                        teacherId: entry.teacherId || null,
+                        teacherId: studentDocA?.teacherId || entry.teacherId || null,
                         notes: entry.notes || null,
                     });
+                    console.log(`[DEBUG] Creating individual course enrollment with teacherId: ${enrollment.teacherId || 'null'} (studentDocA.teacherId: ${studentDocA?.teacherId || 'null'}, entry.teacherId: ${entry.teacherId || 'null'})`);
 
                     await enrollment.save();
                     // Attach student email for frontend display
-                    let studentDocA;
-                    if (!global._StudentModel) {
-                        const studentDocImport = await import('../models/Student.js');
-                        global._StudentModel = studentDocImport.default;
-                    }
-                    studentDocA = await global._StudentModel.findById(studentId);
+                    // studentDocA is already loaded above
                     results.enrollments.push({
                         ...enrollment.toObject(),
                         studentEmail: studentDocA?.email || '',
@@ -244,6 +280,75 @@ class CourseMatchingService {
                     console.log(
                         `✅ Created enrollment for student ${studentId} in course ${entry.name} (CourseInstance: ${instance._id})`
                     );
+                    
+                    // Create calendar event for slutprov for individual courses
+                    try {
+                        console.log(`[DEBUG] 🗓️ Starting calendar event creation for individual course ${entry.name}`);
+                        const CalendarEvent = (await import('../models/Event.js')).default;
+                        
+                        // Use provided slutprov date or calculate as Wednesday of week 4
+                        const courseStart = new Date(entry.startDate);
+                        let slutprovDate;
+                        if (entry.slutprovDate) {
+                            slutprovDate = new Date(entry.slutprovDate);
+                            console.log(`[DEBUG] 📅 Using provided slutprov date for individual course: ${slutprovDate.toDateString()}`);
+                        } else {
+                            slutprovDate = this.getWednesdayOfWeek(courseStart, 4);
+                            console.log(`[DEBUG] 📅 Calculated slutprov date for individual course (Wednesday week 4): ${slutprovDate.toDateString()}`);
+                        }
+                        
+                        // Validate the slutprov date
+                        if (isNaN(slutprovDate.getTime())) {
+                            console.error(`[ERROR] Invalid slutprov date for individual course: ${entry.slutprovDate || 'calculated'}`);
+                            continue;
+                        }
+                        
+                        // Set slutprov date on enrollment
+                        enrollment.slutprovDate = slutprovDate;
+                        await enrollment.save();
+                        
+                        console.log(`[DEBUG] 🗓️ Student found for individual course: ${studentDocA ? studentDocA.name : 'NOT FOUND'}`);
+                        // Get student info for the event
+                        if (studentDocA) {
+                            // Check if event already exists for this student and course on this date
+                            const existingEvent = await CalendarEvent.findOne({
+                                title: { $regex: /^Slutprov/i },
+                                start: slutprovDate,
+                                'extendedProps.students._id': studentDocA._id,
+                                'extendedProps.type': 'slutprov'
+                            });
+                            
+                            if (!existingEvent) {
+                                const event = new CalendarEvent({
+                                    title: `Slutprov - ${entry.name}`,
+                                    start: slutprovDate,
+                                    color: '#ff6b6b', // Red color for exams
+                                    extendedProps: {
+                                        teacher: studentDocA.teacher || 'Unknown',
+                                        teacherId: studentDocA.teacherId || null,
+                                        type: 'slutprov',
+                                        examMunicipality: studentDocA.examMunicipality || '',
+                                        examLocation: studentDocA.examLocation || '',
+                                        examTime: studentDocA.examTime || '',
+                                        students: [{
+                                            _id: studentDocA._id,
+                                            name: studentDocA.name,
+                                            personalNumber: studentDocA.personalNumber,
+                                            additionalInfo: studentDocA.additionalInfo || '',
+                                            attended: false
+                                        }]
+                                    }
+                                });
+                                
+                                await event.save();
+                                console.log(`✅ Created slutprov calendar event for student ${studentDocA.name} in course ${entry.name} on ${slutprovDate.toDateString()}`);
+                            } else {
+                                console.log(`ℹ️ Slutprov event already exists for student ${studentDocA.name} in course ${entry.name} on ${slutprovDate.toDateString()}`);
+                            }
+                        }
+                    } catch (eventError) {
+                        console.error(`❌ Failed to create slutprov calendar event for student ${studentId} in course ${entry.name}:`, eventError);
+                    }
 
                     // --- PATCH: Update student's education array for ALL types ---
                     if (studentDocA) {
@@ -286,36 +391,13 @@ class CourseMatchingService {
                         });
                         continue;
                     }
-                    // Helper: get next Monday
-                    function getNextMonday(date) {
-                        const d = new Date(date);
-                        const day = d.getDay();
-                        const diff = (day === 1) ? 0 : (8 - day) % 7;
-                        d.setDate(d.getDate() + diff);
-                        d.setHours(0,0,0,0);
-                        return d;
-                    }
-                    // Helper: add weeks
-                    function addWeeks(date, weeks) {
-                        const d = new Date(date);
-                        d.setDate(d.getDate() + weeks * 7);
-                        return d;
-                    }
-                    // Helper: get Wednesday of week X (1-based, relative to start)
-                    function getWednesdayOfWeek(startDate, weekNum) {
-                        const d = new Date(startDate);
-                        d.setDate(d.getDate() + (weekNum - 1) * 7);
-                        d.setDate(d.getDate() + (3 - d.getDay() + 7) % 7); // 3 = Wednesday
-                        d.setHours(0,0,0,0);
-                        return d;
-                    }
                     // Start scheduling
-                    let courseStart = getNextMonday(entry.startDate || new Date());
+                    let courseStart = this.getNextMonday(entry.startDate || new Date());
                     for (const courseId of packageDoc.coursePackageCourses) {
                         // Get course details (with extent)
                         const course = typeof courseId === 'object' ? courseId : await import('../models/Course.js').default.findById(courseId);
                         const extentWeeks = parseInt(course.courseExtent) || 5; // Default to 5 weeks if not set
-                        const courseEnd = addWeeks(courseStart, extentWeeks);
+                        const courseEnd = this.addWeeks(courseStart, extentWeeks);
                         // Find or create CourseInstance
                         const { instance: courseInstance, wasCreated } = await this.findOrCreateCourseInstance(
                             course._id,
@@ -329,6 +411,14 @@ class CourseMatchingService {
                             console.warn(`[WARN] No CourseInstance found/created for course '${course.courseName}'. Skipping enrollment for this course.`);
                             continue;
                         }
+                        // Get student to find teacherId
+                        let studentDocB;
+                        if (!global._StudentModel) {
+                            const studentDocImport = await import('../models/Student.js');
+                            global._StudentModel = studentDocImport.default;
+                        }
+                        studentDocB = await global._StudentModel.findById(studentId);
+                        
                         // Create enrollment
                         const enrollment = new StudentEnrollment({
                             studentId,
@@ -337,18 +427,14 @@ class CourseMatchingService {
                             startDate: courseStart,
                             endDate: courseEnd,
                             status: "enrolled",
-                            teacherId: entry.teacherId || null,
+                            teacherId: studentDocB?.teacherId || entry.teacherId || null,
                             notes: entry.notes || null,
                         });
+                        console.log(`[DEBUG] Creating enrollment with teacherId: ${enrollment.teacherId || 'null'} (studentDocB.teacherId: ${studentDocB?.teacherId || 'null'}, entry.teacherId: ${entry.teacherId || 'null'})`);
                         console.log('[DEBUG] StudentEnrollment to be created:', enrollment.toObject());
                         await enrollment.save();
                         // Attach student email for frontend display
-                        let studentDocB;
-                        if (!global._StudentModel) {
-                            const studentDocImport = await import('../models/Student.js');
-                            global._StudentModel = studentDocImport.default;
-                        }
-                        studentDocB = await global._StudentModel.findById(studentId);
+                        // studentDocB is already loaded above
                         if (enrollment.courseInstanceId) {
                             results.enrollments.push({
                                 ...enrollment.toObject(),
@@ -359,10 +445,27 @@ class CourseMatchingService {
                         } else {
                             console.warn('[WARN] Skipping enrollment with missing courseInstanceId:', enrollment.toObject());
                         }
-                        // Schedule 'slutprov' for Wednesday of week 4
-                        const slutprovDate = getWednesdayOfWeek(courseStart, 4);
+                        // Use provided slutprov date or calculate as Wednesday of week 4
+                        let slutprovDate;
+                        if (entry.slutprovDate) {
+                            slutprovDate = new Date(entry.slutprovDate);
+                            console.log(`[DEBUG] 📅 Using provided slutprov date: ${slutprovDate.toDateString()}`);
+                        } else {
+                            slutprovDate = this.getWednesdayOfWeek(courseStart, 4);
+                            console.log(`[DEBUG] 📅 Calculated slutprov date (Wednesday week 4): ${slutprovDate.toDateString()}`);
+                        }
+                        
+                        // Validate the slutprov date
+                        if (isNaN(slutprovDate.getTime())) {
+                            console.error(`[ERROR] Invalid slutprov date: ${entry.slutprovDate || 'calculated'}`);
+                            continue;
+                        }
                         enrollment.slutprovDate = slutprovDate;
                         await enrollment.save(); // Save the updated enrollment with slutprovDate
+                        
+                                                // Note: Calendar events are now generated automatically by the /calendar-events/syncable endpoint
+                        // based on StudentEnrollment.slutprovDate, so we don't need to create them here
+                        console.log(`📅 Slutprov date set for student ${studentId} in course ${course.courseName}: ${slutprovDate.toDateString()}`);
                         let studentDocC;
                         if (!global._StudentModel) {
                             const studentDocImport = await import('../models/Student.js');
@@ -394,7 +497,7 @@ class CourseMatchingService {
                             }
                         }
                         // Prepare for next course
-                        courseStart = getNextMonday(courseEnd);
+                        courseStart = this.getNextMonday(courseEnd);
                     }
                     
                     // Add CoursePackage entry to student's education array for APL filtering
@@ -480,6 +583,128 @@ class CourseMatchingService {
                     //         await studentDocD.save();
                     //     }
                     // }
+                }
+                else if (entry.type === "Course" && entry.name) {
+                    console.log(`[DEBUG] Processing individual course: '${entry.name}'`);
+                    
+                    // Find the best matching course
+                    const courseMatch = await this.findBestCourseMatch(entry.name);
+                    if (!courseMatch) {
+                        results.warnings.push({
+                            type: "no_match",
+                            courseName: entry.name,
+                            message: `No course match found for: ${entry.name}`,
+                        });
+                        continue;
+                    }
+                    
+                    const course = courseMatch.course;
+                    console.log(`[DEBUG] Matched individual course: '${entry.name}' → '${course.courseName}'`);
+                    
+                    // Calculate course dates
+                    const courseStart = entry.startDate ? new Date(entry.startDate) : this.getNextMonday(new Date());
+                    const extentWeeks = parseInt(course.courseExtent) || 5; // Default to 5 weeks if not set
+                    const courseEnd = this.addWeeks(courseStart, extentWeeks);
+                    
+                    // Find or create CourseInstance
+                    const { instance: courseInstance, wasCreated } = await this.findOrCreateCourseInstance(
+                        course._id,
+                        courseStart,
+                        courseEnd,
+                        userId,
+                        entry.teacherId || null
+                    );
+                    
+                    console.log(`[DEBUG] Processing individual course: '${course.courseName}' | Found/created CourseInstance:`, courseInstance ? courseInstance._id : null);
+                    if (!courseInstance || !courseInstance._id) {
+                        console.warn(`[WARN] No CourseInstance found/created for individual course '${course.courseName}'. Skipping enrollment.`);
+                        continue;
+                    }
+                    
+                    // Get student to find teacherId
+                    let studentDoc;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import('../models/Student.js');
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDoc = await global._StudentModel.findById(studentId);
+                    
+                    // Create enrollment
+                    const enrollment = new StudentEnrollment({
+                        studentId,
+                        courseInstanceId: courseInstance._id,
+                        mainCourseId: course._id,
+                        startDate: courseStart,
+                        endDate: courseEnd,
+                        status: "enrolled",
+                        teacherId: studentDoc?.teacherId || entry.teacherId || null,
+                        notes: entry.notes || null,
+                    });
+                    
+                    console.log('[DEBUG] Individual course StudentEnrollment to be created:', enrollment.toObject());
+                    await enrollment.save();
+                    
+                    // Attach student email for frontend display
+                    // studentDoc is already loaded above
+                    
+                    if (enrollment.courseInstanceId) {
+                        results.enrollments.push({
+                            ...enrollment.toObject(),
+                            studentEmail: studentDoc?.email || '',
+                            courseInstanceName: courseInstance.courseName || '',
+                        });
+                        console.log(`✅ Created enrollment for student ${studentId} in individual course ${course.courseName} (CourseInstance: ${courseInstance._id})`);
+                    } else {
+                        console.warn('[WARN] Skipping individual course enrollment with missing courseInstanceId:', enrollment.toObject());
+                    }
+                    
+                    // Use provided slutprov date or calculate as Wednesday of week 4
+                    let slutprovDate;
+                    if (entry.slutprovDate) {
+                        slutprovDate = new Date(entry.slutprovDate);
+                        console.log(`[DEBUG] 📅 Using provided slutprov date for individual course: ${slutprovDate.toDateString()}`);
+                    } else {
+                        slutprovDate = this.getWednesdayOfWeek(courseStart, 4);
+                        console.log(`[DEBUG] 📅 Calculated slutprov date for individual course (Wednesday week 4): ${slutprovDate.toDateString()}`);
+                    }
+                    
+                    // Validate the slutprov date
+                    if (isNaN(slutprovDate.getTime())) {
+                        console.error(`[ERROR] Invalid slutprov date for individual course: ${entry.slutprovDate || 'calculated'}`);
+                        continue;
+                    }
+                    
+                    enrollment.slutprovDate = slutprovDate;
+                    await enrollment.save(); // Save the updated enrollment with slutprovDate
+                    
+                    // Note: Calendar events are now generated automatically by the /calendar-events/syncable endpoint
+                    // based on StudentEnrollment.slutprovDate, so we don't need to create them here
+                    console.log(`📅 Slutprov date set for student ${studentId} in individual course ${course.courseName}: ${slutprovDate.toDateString()}`);
+                    
+                    // Add to education array if not already present
+                    if (studentDoc) {
+                        const exists = (studentDoc.education || []).some(e =>
+                            e.type === 'Course' &&
+                            e.refId && e.refId.toString() === course._id.toString() &&
+                            new Date(e.startDate).getTime() === courseStart.getTime() &&
+                            new Date(e.endDate).getTime() === courseEnd.getTime()
+                        );
+                        if (!exists) {
+                            studentDoc.education.push({
+                                type: 'Course',
+                                refId: course._id,
+                                name: course.courseName,
+                                startDate: courseStart,
+                                endDate: courseEnd,
+                                grade: null,
+                                addedAt: new Date(),
+                                addedBy: userId,
+                                removedAt: null,
+                            });
+                            await studentDoc.save();
+                            console.log(`✅ Added individual course education entry for student ${studentDoc.name || studentDoc.email} in course ${course.courseName}`);
+                        }
+                    }
                 }
                 else if (entry.type === "Program" && entry.refId) {
                     // Add to student's education array if not already present
