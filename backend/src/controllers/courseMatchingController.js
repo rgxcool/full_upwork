@@ -654,6 +654,36 @@ export const createCourseInstance = async (req, res) => {
     }
 };
 
+// Update a course instance
+export const updateCourseInstance = async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+        const updateData = req.body;
+        
+        // Find the instance first
+        const instance = await CourseInstance.findById(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Course instance not found" });
+        }
+
+        // Update the instance with the provided data
+        const updatedInstance = await CourseInstance.findByIdAndUpdate(
+            instanceId,
+            updateData,
+            { new: true, runValidators: true }
+        );
+
+        res.json({
+            success: true,
+            message: "Course instance updated successfully",
+            instance: updatedInstance,
+        });
+    } catch (error) {
+        console.error("Error updating course instance:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
 // Delete a course instance and its enrollments
 export const deleteCourseInstance = async (req, res) => {
     try {
