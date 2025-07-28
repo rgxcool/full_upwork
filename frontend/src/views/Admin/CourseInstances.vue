@@ -83,6 +83,7 @@
             <th>Kurskod</th>
             <th>Startdatum</th>
             <th>Slutdatum</th>
+            <th>Slutprov datum</th>
             <th>Inskrivningar</th>
             <th>Status</th>
             <th>Skapad av</th>
@@ -96,6 +97,7 @@
             <td>{{ instance.courseCode }}</td>
             <td>{{ formatDate(instance.startDate) }}</td>
             <td>{{ formatDate(instance.endDate) }}</td>
+            <td>{{ formatDate(instance.slutprovDate) || '-' }}</td>
             <td>
               <span class="enrollment-count">{{ instance.enrollmentCount }}</span>
               <button

@@ -107,16 +107,19 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
         for (const name of rawNames) {
             const parsedStartDate = parseExcelDate(rowObject["START"]);
             const parsedEndDate = parseExcelDate(rowObject["SLUT"]);
+            const parsedSlutprovDate = parseExcelDate(rowObject["PREL. DATUM SLUTPROV"]);
             
             console.log(`[DEBUG] 📋 Parsing education entry for student ${rowObject["NAMN"]}:`);
             console.log(`[DEBUG] 📋 Raw START: ${rowObject["START"]} -> Parsed: ${parsedStartDate}`);
             console.log(`[DEBUG] 📋 Raw SLUT: ${rowObject["SLUT"]} -> Parsed: ${parsedEndDate}`);
+            console.log(`[DEBUG] 📋 Raw PREL. DATUM SLUTPROV: ${rowObject["PREL. DATUM SLUTPROV"]} -> Parsed: ${parsedSlutprovDate}`);
             
             education.push({
                 type: "Course",
                 name: cleanCourseName(name),
                 startDate: parsedStartDate,
                 endDate: parsedEndDate,
+                slutprovDate: parsedSlutprovDate,
             });
         }
 
