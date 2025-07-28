@@ -28,6 +28,10 @@ export const uploadStudentsForMatching = async (req, res) => {
         // Parse students using the existing parser
         const parsedStudents = await parseStudentExcel(fileBuffer, teacherName);
 
+        console.log(`[DEBUG] 📊 Excel parsing results:`);
+        console.log(`[DEBUG] Total students parsed from Excel: ${parsedStudents.length}`);
+        console.log(`[DEBUG] Student names:`, parsedStudents.map(s => s.name || s.email || 'unknown'));
+
         if (parsedStudents.length === 0) {
             return res
                 .status(400)
@@ -98,10 +102,110 @@ export const uploadStudentsForMatching = async (req, res) => {
         // Process each student with the new course versioning system
         for (const studentData of parsedStudents) {
             console.log(`[DEBUG] Processing student: ${studentData.name || studentData.email || 'unknown'} | Raw education:`, studentData.education);
+            
+            // First, create or find the student
+            let dbStudent = null;
+            try {
+                // Normalize municipality before any DB operation
+                if (studentData.municipality && typeof studentData.municipality.type === 'string') {
+                    studentData.municipality.type = normalizeMunicipalityName(studentData.municipality.type);
+                }
+                
+                // Check if student already exists
+                if (studentData.personalNumber) {
+                    dbStudent = await Student.findOne({ personalNumber: studentData.personalNumber });
+                }
+                if (!dbStudent && studentData.email) {
+                    dbStudent = await Student.findOne({ email: studentData.email });
+                }
+
+                if (!dbStudent) {
+                    // Create new student
+                    console.log('[DEBUG] Creating student with data:', studentData);
+                    console.log('[DEBUG] Municipality value before creation:', studentData.municipality);
+                    
+                    // Allowed municipality types from schema
+                    const allowedMunicipalities = [
+                        "Botkyrka", "Danderyd", "Huddinge", "Järfälla", "KCNO", "Lidingö", "Norrtälje", "Nykvarn", "Privat kunder", "Salem", "Sigtuna", "Sollentuna", "Solna", "Sundbyberg", "Södertälje", "Täby", "Upplands Bro", "Upplands Väsby", "Vallentuna", "Vaxholm", "Växjö", "Österåker"
+                    ];
+                    
+                    // Mapping for common Excel variants
+                    const municipalityMap = {
+                        "uppl väsby": "Upplands Väsby",
+                        "upplands väsby": "Upplands Väsby",
+                        "privat": "Privat kunder",
+                        "privat kunder": "Privat kunder",
+                        "jarfalla": "Järfälla",
+                        "sundbyberg": "Sundbyberg",
+                        "sodertalje": "Södertälje",
+                        // Add more mappings as needed
+                    };
+                    
+                    let rawMunicipality = studentData.municipality && (studentData.municipality.type || studentData.municipality);
+                    let normalizedMunicipality = (rawMunicipality || "").toString().trim().toLowerCase();
+                    normalizedMunicipality = municipalityMap[normalizedMunicipality] || allowedMunicipalities.find(m => m.toLowerCase() === normalizedMunicipality) || rawMunicipality;
+                    
+                    // Fuzzy fallback if not found in allowed list
+                    if (!allowedMunicipalities.includes(normalizedMunicipality)) {
+                        // Use getClosestMunicipality from studentController.js
+                        const { getClosestMunicipality } = await import("./studentController.js");
+                        const fuzzyMatch = getClosestMunicipality(rawMunicipality);
+                        if (fuzzyMatch) {
+                            console.log(`[DEBUG] Fuzzy matched municipality: '${rawMunicipality}' → '${fuzzyMatch}'`);
+                            normalizedMunicipality = fuzzyMatch;
+                        } else {
+                            console.error(`[ERROR] Invalid municipality for student ${studentData.name || studentData.email || 'unknown'}:`, rawMunicipality);
+                            throw new Error(`Invalid municipality: "${rawMunicipality}"`);
+                        }
+                    }
+
+                    dbStudent = new Student({
+                        name: studentData.name,
+                        personalNumber: studentData.personalNumber,
+                        email: studentData.email,
+                        phone: studentData.phone || "",
+                        municipality: { type: normalizedMunicipality },
+                        startDate: studentData.startDate,
+                        endDate: studentData.endDate,
+                        finalExamDate: studentData.finalExamDate,
+                        examMunicipality: studentData.examMunicipality || "",
+                        examLocation: studentData.examLocation || "",
+                        examTime: studentData.examTime || "",
+                        exam: studentData.exam || "",
+                        additionalInfo: studentData.additionalInfo || "",
+                        teacher: studentData.teacher || teacherName,
+                        dropout: studentData.dropout || false,
+                        aplStatus: studentData.aplStatus || "GRAY",
+                        education: [],
+                    });
+
+                    await dbStudent.save();
+                    console.log(`✅ Created new student: ${dbStudent.name} (${dbStudent.email})`);
+                    results.students.push(dbStudent);
+                } else {
+                    // Update existing student with teacher if not already assigned
+                    if (teacherInfo && !dbStudent.teacherId) {
+                        dbStudent.teacherId = teacherInfo._id;
+                        await dbStudent.save();
+                    }
+                    results.students.push(dbStudent);
+                }
+            } catch (error) {
+                console.error(`❌ Error creating/finding student ${studentData.name || studentData.email}:`, error);
+                results.errors.push({
+                    studentName: studentData.name,
+                    type: "student_creation",
+                    error: error.message,
+                });
+                continue; // Skip to next student
+            }
+
+            // Now process education entries for this student
             if (!studentData.education || !Array.isArray(studentData.education) || studentData.education.length === 0) {
                 console.log(`[DEBUG] No education entries for student: ${studentData.name || studentData.email || 'unknown'}`);
                 continue;
             }
+            
             for (const entry of studentData.education) {
                 console.log(`[DEBUG] Education entry (raw):`, entry);
                 let normalized = (entry.name || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
@@ -110,6 +214,7 @@ export const uploadStudentsForMatching = async (req, res) => {
                 normalized = normalized.replace(/[-\s]*\d+v$/i, '');
                 normalized = normalized.replace(/\d+v$/i, '');
                 const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
+                
                 // --- PATCH: Always prefer CoursePackage if name matches a package ---
                 let type = null;
                 if (normalizedPackageMap[normalized]) {
@@ -119,27 +224,12 @@ export const uploadStudentsForMatching = async (req, res) => {
                     type = isCourse ? 'Course' : 'CoursePackage';
                 }
                 console.log(`[DEBUG] Education entry (normalized): '${normalized}' | Type: ${type}`);
+                
                 if (type === 'CoursePackage') {
                     const pkg = normalizedPackageMap[normalized];
                     if (pkg) {
                         console.log(`[DEBUG] Matched package: '${normalized}' → '${pkg.coursePackageName}'`);
-                        // Find or create the student in the DB
-                        let dbStudent = null;
-                        if (studentData.personalNumber) {
-                            dbStudent = await Student.findOne({ personalNumber: studentData.personalNumber });
-                        }
-                        if (!dbStudent && studentData.email) {
-                            dbStudent = await Student.findOne({ email: studentData.email });
-                        }
-                        if (!dbStudent) {
-                            dbStudent = new Student({
-                                name: studentData.name,
-                                email: studentData.email,
-                                personalNumber: studentData.personalNumber,
-                                // Add any other fields as needed
-                            });
-                            await dbStudent.save();
-                        }
+                        
                         // Call courseMatchingService to process the package enrollment
                         try {
                             const result = await CourseMatchingService.processStudentEducation(
@@ -153,126 +243,79 @@ export const uploadStudentsForMatching = async (req, res) => {
                                 }]
                             );
                             console.log(`[DEBUG] Enrollment result for student ${dbStudent.name || dbStudent.email}:`, result);
+                            
+                            // Aggregate the enrollments from the service result
+                            if (result && result.enrollments && Array.isArray(result.enrollments)) {
+                                results.enrollments.push(...result.enrollments);
+                                console.log(`[DEBUG] Added ${result.enrollments.length} enrollments to results for student ${dbStudent.name || dbStudent.email}`);
+                            }
+                            
+                            // Also aggregate any warnings or errors
+                            if (result && result.warnings && Array.isArray(result.warnings)) {
+                                results.warnings.push(...result.warnings);
+                            }
+                            if (result && result.errors && Array.isArray(result.errors)) {
+                                results.errors.push(...result.errors);
+                            }
                         } catch (err) {
                             console.error(`[ERROR] Failed to enroll student ${dbStudent.name || dbStudent.email} in package ${pkg.coursePackageName}:`, err);
+                            results.errors.push({
+                                studentName: dbStudent.name || dbStudent.email,
+                                type: "enrollment_error",
+                                error: err.message,
+                                packageName: pkg.coursePackageName
+                            });
                         }
                     } else {
                         // Do NOT push a warning for unmatched course packages
                         // Only log for debugging
                         console.warn(`[WARN] No course package match for: '${normalized}'. Available keys:`, Object.keys(normalizedPackageMap));
-                        continue;
                     }
-                }
-            }
-            try {
-                // Normalize municipality before any DB operation
-                if (studentData.municipality && typeof studentData.municipality.type === 'string') {
-                    studentData.municipality.type = normalizeMunicipalityName(studentData.municipality.type);
-                }
-                // Check if student already exists
-                let student = await Student.findOne({
-                    email: studentData.email,
-                });
-
-                if (!student) {
-                    // Create new student
-                    // Debug log for municipality
-                    console.log('[DEBUG] Creating student with data:', studentData);
-                    console.log('[DEBUG] Municipality value before creation:', studentData.municipality);
-                    // Allowed municipality types from schema
-                    const allowedMunicipalities = [
-                        "Botkyrka", "Danderyd", "Huddinge", "Järfälla", "KCNO", "Lidingö", "Norrtälje", "Nykvarn", "Privat kunder", "Salem", "Sigtuna", "Sollentuna", "Solna", "Sundbyberg", "Södertälje", "Täby", "Upplands Bro", "Upplands Väsby", "Vallentuna", "Vaxholm", "Växjö", "Österåker"
-                    ];
-                    // Mapping for common Excel variants
-                    const municipalityMap = {
-                        "uppl väsby": "Upplands Väsby",
-                        "upplands väsby": "Upplands Väsby",
-                        "privat": "Privat kunder",
-                        "privat kunder": "Privat kunder",
-                        "jarfalla": "Järfälla",
-                        "sundbyberg": "Sundbyberg",
-                        "sodertalje": "Södertälje",
-                        // Add more mappings as needed
-                    };
-                    let rawMunicipality = studentData.municipality && (studentData.municipality.type || studentData.municipality);
-                    let normalizedMunicipality = (rawMunicipality || "").toString().trim().toLowerCase();
-                    normalizedMunicipality = municipalityMap[normalizedMunicipality] || allowedMunicipalities.find(m => m.toLowerCase() === normalizedMunicipality) || rawMunicipality;
-                    // Fuzzy fallback if not found in allowed list
-                    if (!allowedMunicipalities.includes(normalizedMunicipality)) {
-                        // Use getClosestMunicipality from studentController.js
-                        const { getClosestMunicipality } = await import("./studentController.js");
-                        const fuzzyMatch = getClosestMunicipality(rawMunicipality);
-                        if (fuzzyMatch) {
-                            console.log(`[DEBUG] Fuzzy matched municipality: '${rawMunicipality}' → '${fuzzyMatch}'`);
-                            normalizedMunicipality = fuzzyMatch;
-                        } else {
-                            console.error(`[ERROR] Invalid municipality for student ${studentData.name || studentData.email || 'unknown'}:`, rawMunicipality);
-                            continue; // Skip this student
-                        }
-                    }
-                    console.log(`[DEBUG] Raw municipality: '${rawMunicipality}' | Normalized: '${normalizedMunicipality}'`);
-                    if (!allowedMunicipalities.includes(normalizedMunicipality)) {
-                        console.error(`[ERROR] Invalid municipality for student ${studentData.name || studentData.email || 'unknown'}:`, rawMunicipality);
-                        // Optionally, you can push to a results.errors array or return a message to the frontend
-                        continue; // Skip this student
-                    }
-                    const municipality = { type: normalizedMunicipality };
-                    // Build student object field-by-field, do NOT use ...studentData
-                    const studentObj = {
-                        name: studentData.name,
-                        email: studentData.email,
-                        personalNumber: studentData.personalNumber,
-                        municipality: municipality,
-                        education: [],
-                        teacherId: teacherInfo?._id,
-                        // Add any other required fields here
-                    };
-                    console.log('[DEBUG] FINAL studentObj to be created:', studentObj);
+                } else if (type === 'Course') {
+                    console.log(`[DEBUG] Processing individual course: '${normalized}'`);
+                    
+                    // Call courseMatchingService to process the individual course enrollment
                     try {
-                        student = new Student(studentObj);
-                        await student.save();
-                    } catch (err) {
-                        console.error('[DEBUG] Student creation error:', err);
-                        throw err;
-                    }
-                    results.students.push(student);
-                } else {
-                    // Update existing student with teacher if not already assigned
-                    if (teacherInfo && !student.teacherId) {
-                        student.teacherId = teacherInfo._id;
-                        await student.save();
-                    }
-                    results.students.push(student);
-                }
-
-                // Process education entries using the new course matching service
-                if (studentData.education && studentData.education.length > 0) {
-                    // Log normalization for each education entry
-                    for (const entry of studentData.education) {
-                        let normalized = entry.name && entry.name.toString().toLowerCase().replace(/[-\s]*\d+\s*v$/i, '').replace(/[-\s]*\d+v$/i, '').replace(/\d+v$/i, '');
-                        console.log(`[DEBUG] Normalized input: '${normalized}' | Package keys:`, Object.keys(normalizedPackageMap));
-                    }
-                    const educationResults =
-                        await CourseMatchingService.processStudentEducation(
-                            student._id,
-                            studentData.education,
-                            req.user?.userId
+                        const result = await CourseMatchingService.processStudentEducation(
+                            dbStudent._id,
+                            [{
+                                type: 'Course',
+                                name: entry.name,
+                                startDate: entry.startDate,
+                                endDate: entry.endDate
+                            }]
                         );
-
-                    // Add results to overall results
-                    results.warnings.push(...educationResults.warnings);
-                    results.errors.push(...educationResults.errors);
-                    if (educationResults.enrollments) {
-                        results.enrollments.push(...educationResults.enrollments);
+                        console.log(`[DEBUG] Course enrollment result for student ${dbStudent.name || dbStudent.email}:`, result);
+                        
+                        // Aggregate the enrollments from the service result
+                        if (result && result.enrollments && Array.isArray(result.enrollments)) {
+                            results.enrollments.push(...result.enrollments);
+                            console.log(`[DEBUG] Added ${result.enrollments.length} course enrollments to results for student ${dbStudent.name || dbStudent.email}`);
+                        }
+                        
+                        // Also aggregate any warnings or errors
+                        if (result && result.warnings && Array.isArray(result.warnings)) {
+                            results.warnings.push(...result.warnings);
+                        }
+                        if (result && result.errors && Array.isArray(result.errors)) {
+                            results.errors.push(...result.errors);
+                        }
+                    } catch (err) {
+                        console.error(`[ERROR] Failed to enroll student ${dbStudent.name || dbStudent.email} in course ${entry.name}:`, err);
+                        results.errors.push({
+                            studentName: dbStudent.name || dbStudent.email,
+                            type: "enrollment_error",
+                            error: err.message,
+                            courseName: entry.name
+                        });
                     }
                 }
-            } catch (error) {
-                results.errors.push({
-                    studentName: studentData.name,
-                    error: error.message,
-                });
             }
         }
+
+        console.log(`[DEBUG] 📊 Processing results:`);
+        console.log(`[DEBUG] Students processed: ${results.students.length}`);
+        console.log(`[DEBUG] Students created/found:`, results.students.map(s => s.name || s.email || 'unknown'));
 
         // After processing all students, deduplicate missing package errors globally
         const seenPackages = new Set();

@@ -138,6 +138,8 @@ class CourseMatchingService {
             errors: [],
         };
 
+        console.log(`[DEBUG] 🔄 Processing ${educationEntries.length} education entries for student ${studentId}`);
+
         // Deduplicate missing package errors
         const missingPackages = new Set();
         for (const entry of educationEntries) {
@@ -240,7 +242,7 @@ class CourseMatchingService {
                         courseInstanceName: instance.courseName || '',
                     });
                     console.log(
-                        `✅ Created enrollment for student ${studentId} in course ${entry.name}`
+                        `✅ Created enrollment for student ${studentId} in course ${entry.name} (CourseInstance: ${instance._id})`
                     );
 
                     // --- PATCH: Update student's education array for ALL types ---
@@ -353,23 +355,21 @@ class CourseMatchingService {
                                 studentEmail: studentDocB?.email || '',
                                 courseInstanceName: courseInstance.courseName || '',
                             });
+                            console.log(`✅ Created enrollment for student ${studentId} in course ${course.courseName} (CourseInstance: ${courseInstance._id})`);
                         } else {
                             console.warn('[WARN] Skipping enrollment with missing courseInstanceId:', enrollment.toObject());
                         }
                         // Schedule 'slutprov' for Wednesday of week 4
                         const slutprovDate = getWednesdayOfWeek(courseStart, 4);
                         enrollment.slutprovDate = slutprovDate;
+                        await enrollment.save(); // Save the updated enrollment with slutprovDate
                         let studentDocC;
                         if (!global._StudentModel) {
                             const studentDocImport = await import('../models/Student.js');
                             global._StudentModel = studentDocImport.default;
                         }
                         studentDocC = await global._StudentModel.findById(studentId);
-                        results.enrollments.push({
-                            ...enrollment.toObject(),
-                            studentEmail: studentDocC?.email || '',
-                            courseInstanceName: courseInstance.courseName || '',
-                        });
+                        // Note: Enrollment is already pushed above, no need to push again
                         // Add to education array if not already present
                         if (studentDocC) {
                             const exists = (studentDocC.education || []).some(e =>
@@ -396,6 +396,46 @@ class CourseMatchingService {
                         // Prepare for next course
                         courseStart = getNextMonday(courseEnd);
                     }
+                    
+                    // Add CoursePackage entry to student's education array for APL filtering
+                    let studentDocD;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import('../models/Student.js');
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDocD = await global._StudentModel.findById(studentId);
+                    if (studentDocD) {
+                        const exists = (studentDocD.education || []).some(e =>
+                            e.type === 'CoursePackage' &&
+                            e.refId && e.refId.toString() === packageDoc._id.toString() &&
+                            new Date(e.startDate).getTime() === new Date(entry.startDate).getTime() &&
+                            new Date(e.endDate).getTime() === new Date(entry.endDate).getTime()
+                        );
+                        if (!exists) {
+                            const packageStartDate = entry.startDate ? new Date(entry.startDate) : undefined;
+                            const packageEndDate = entry.endDate ? new Date(entry.endDate) : undefined;
+                            
+                            console.log(`[DEBUG] 📦 Creating CoursePackage education entry:`);
+                            console.log(`[DEBUG] 📦 Package: ${packageDoc.coursePackageName}`);
+                            console.log(`[DEBUG] 📦 Entry startDate: ${entry.startDate} -> Parsed: ${packageStartDate}`);
+                            console.log(`[DEBUG] 📦 Entry endDate: ${entry.endDate} -> Parsed: ${packageEndDate}`);
+                            
+                            studentDocD.education.push({
+                                type: 'CoursePackage',
+                                refId: packageDoc._id,
+                                name: packageDoc.coursePackageName,
+                                startDate: packageStartDate,
+                                endDate: packageEndDate,
+                                grade: null,
+                                addedAt: new Date(),
+                                addedBy: userId,
+                                removedAt: null,
+                            });
+                            await studentDocD.save();
+                            console.log(`✅ Added CoursePackage education entry for student ${studentDocD.name || studentDocD.email} in package ${packageDoc.coursePackageName}`);
+                        }
+                    }
+                    
                     // Optionally, create a StudentEnrollment for the package itself
                     // const packageEnrollment = new StudentEnrollment({
                     //     studentId,
@@ -499,18 +539,16 @@ class CourseMatchingService {
             }
         }
 
+        console.log(`[DEBUG] ✅ Finished processing ${educationEntries.length} education entries for student ${studentId}. Total enrollments created: ${results.enrollments.length}`);
+
         // Before returning, filter out any enrollments with missing courseInstanceId
-        results.enrollments = results.enrollments.filter(e => e.courseInstanceId);
-        // Deduplicate enrollments by studentId + courseInstanceId
-        const seen = new Set();
-        results.enrollments = results.enrollments.filter(e => {
-          const key = `${e.studentId}_${e.courseInstanceId}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
+        results.enrollments = results.enrollments.filter(enrollment => {
+            if (!enrollment.courseInstanceId) {
+                console.warn(`[WARN] Filtering out enrollment with missing courseInstanceId:`, enrollment);
+                return false;
+            }
+            return true;
         });
-        console.log('[DEBUG] Deduplicated enrollments array:', results.enrollments);
-        console.log('[DEBUG] Final enrollments array:', results.enrollments);
 
         return results;
     }

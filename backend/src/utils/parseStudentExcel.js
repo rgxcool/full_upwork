@@ -48,6 +48,8 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
     const studentsToSave = [];
     let consecutiveEmptyRows = 0;
 
+    console.log(`[DEBUG] 📋 Excel parsing: Starting to process ${worksheet.rowCount} rows`);
+
     for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
         const row = worksheet.getRow(rowNumber);
         const rowObject = {};
@@ -70,7 +72,10 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
 
         if (requiredFields.every((field) => !rowObject[field])) {
             consecutiveEmptyRows++;
-            if (consecutiveEmptyRows >= 5) break;
+            if (consecutiveEmptyRows >= 20) {
+                console.log(`[DEBUG] 📋 Excel parsing: Stopping at row ${rowNumber} due to ${consecutiveEmptyRows} consecutive empty rows`);
+                break; // Increased from 5 to 20
+            }
             continue;
         } else {
             consecutiveEmptyRows = 0;
@@ -100,11 +105,18 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
         }
 
         for (const name of rawNames) {
+            const parsedStartDate = parseExcelDate(rowObject["START"]);
+            const parsedEndDate = parseExcelDate(rowObject["SLUT"]);
+            
+            console.log(`[DEBUG] 📋 Parsing education entry for student ${rowObject["NAMN"]}:`);
+            console.log(`[DEBUG] 📋 Raw START: ${rowObject["START"]} -> Parsed: ${parsedStartDate}`);
+            console.log(`[DEBUG] 📋 Raw SLUT: ${rowObject["SLUT"]} -> Parsed: ${parsedEndDate}`);
+            
             education.push({
                 type: "Course",
                 name: cleanCourseName(name),
-                startDate: rowObject["START"],
-                endDate: rowObject["SLUT"],
+                startDate: parsedStartDate,
+                endDate: parsedEndDate,
             });
         }
 
@@ -131,6 +143,9 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             education,
         });
     }
+
+    console.log(`[DEBUG] 📋 Excel parsing: Completed. Parsed ${studentsToSave.length} students`);
+    console.log(`[DEBUG] 📋 Student names parsed:`, studentsToSave.map(s => s.name || 'unknown'));
 
     return studentsToSave;
 }
