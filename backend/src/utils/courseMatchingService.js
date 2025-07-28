@@ -397,49 +397,49 @@ class CourseMatchingService {
                         courseStart = getNextMonday(courseEnd);
                     }
                     // Optionally, create a StudentEnrollment for the package itself
-                    const packageEnrollment = new StudentEnrollment({
-                        studentId,
-                        coursePackageId: entry.refId,
-                        startDate: entry.startDate ? new Date(entry.startDate) : undefined,
-                        endDate: entry.endDate ? new Date(entry.endDate) : undefined,
-                        status: "enrolled",
-                        teacherId: entry.teacherId || null,
-                        notes: entry.notes || null,
-                    });
-                    await packageEnrollment.save();
-                    // Add to results
-                    let studentDocD;
-                    if (!global._StudentModel) {
-                        const studentDocImport = await import('../models/Student.js');
-                        global._StudentModel = studentDocImport.default;
-                    }
-                    studentDocD = await global._StudentModel.findById(studentId);
-                    results.enrollments.push({
-                        ...packageEnrollment.toObject(),
-                        studentEmail: studentDocD?.email || '',
-                        courseInstanceName: undefined,
-                    });
+                    // const packageEnrollment = new StudentEnrollment({
+                    //     studentId,
+                    //     coursePackageId: entry.refId,
+                    //     startDate: entry.startDate ? new Date(entry.startDate) : undefined,
+                    //     endDate: entry.endDate ? new Date(entry.endDate) : undefined,
+                    //     status: "enrolled",
+                    //     teacherId: entry.teacherId || null,
+                    //     notes: entry.notes || null,
+                    // });
+                    // await packageEnrollment.save();
+                    // // Add to results
+                    // let studentDocD;
+                    // if (!global._StudentModel) {
+                    //     const studentDocImport = await import('../models/Student.js');
+                    //     global._StudentModel = studentDocImport.default;
+                    // }
+                    // studentDocD = await global._StudentModel.findById(studentId);
+                    // results.enrollments.push({
+                    //     ...packageEnrollment.toObject(),
+                    //     studentEmail: studentDocD?.email || '',
+                    //     courseInstanceName: undefined,
+                    // });
                     // Add to education array if not already present
-                    if (studentDocD) {
-                        const exists = (studentDocD.education || []).some(e =>
-                            e.type === 'CoursePackage' &&
-                            e.refId && e.refId.toString() === entry.refId.toString()
-                        );
-                        if (!exists) {
-                            studentDocD.education.push({
-                                type: 'CoursePackage',
-                                refId: entry.refId,
-                                name: packageDoc.coursePackageName,
-                                startDate: entry.startDate ? new Date(entry.startDate) : undefined,
-                                endDate: entry.endDate ? new Date(entry.endDate) : undefined,
-                                grade: null,
-                                addedAt: new Date(),
-                                addedBy: userId,
-                                removedAt: null,
-                            });
-                            await studentDocD.save();
-                        }
-                    }
+                    // if (studentDocD) {
+                    //     const exists = (studentDocD.education || []).some(e =>
+                    //         e.type === 'CoursePackage' &&
+                    //         e.refId && e.refId.toString() === entry.refId.toString()
+                    //     );
+                    //     if (!exists) {
+                    //         studentDocD.education.push({
+                    //             type: 'CoursePackage',
+                    //             refId: entry.refId,
+                    //             name: packageDoc.coursePackageName,
+                    //             startDate: entry.startDate ? new Date(entry.startDate) : undefined,
+                    //             endDate: entry.endDate ? new Date(entry.endDate) : undefined,
+                    //             grade: null,
+                    //             addedAt: new Date(),
+                    //             addedBy: userId,
+                    //             removedAt: null,
+                    //         });
+                    //         await studentDocD.save();
+                    //     }
+                    // }
                 }
                 else if (entry.type === "Program" && entry.refId) {
                     // Add to student's education array if not already present

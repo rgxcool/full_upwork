@@ -206,7 +206,7 @@ async function uploadXlsx(req, res) {
                     let type = isCourse ? "Course" : "CoursePackage";
 
                     // Always log normalized input and all normalized package keys
-                    console.log(`[DEBUG] Normalized input: '${normalized}' | Package keys:`, Object.keys(normalizedPackageMap));
+                    console.log("[DEBUG] Normalized input:", normalized, "Normalized package keys:", Object.keys(normalizedPackageMap));
 
                     // Require exact match for packages/courses, allow fuzzy only for long names
                     function strictMatch(target, candidates) {
@@ -266,8 +266,15 @@ async function uploadXlsx(req, res) {
                             `🟡 No match for: "${entry.name}" → "${normalized}". Best package: ${bestPkg} (d=${bestPkgDist}), best course: ${bestCourse} (d=${bestCourseDist}). Normalized package keys:`,
                             Object.keys(normalizedPackageMap)
                         );
-                        // Only push warning for unmatched courses
-                        if (type === 'Course') {
+                        // Only push warning for unmatched courses, unless the name matches a known package
+                        if (type === 'Course' && !matchPackage) {
+                            console.warn('[DEBUG] Pushing no_match warning:', {
+                                entryName: entry.name,
+                                type,
+                                matchPackage,
+                                normalized,
+                                packageKeys: Object.keys(normalizedPackageMap)
+                            });
                             studentWarnings.push({
                                 type: 'no_match',
                                 courseName: entry.name,
