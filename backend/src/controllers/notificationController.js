@@ -2,6 +2,11 @@ import Notification from "../models/Notification.js";
 import Student from "../models/Student.js";
 import User from "../models/User.js";
 
+/**
+ * Notification Controller
+ * Handles creation, resolution, and evaluation of notifications for students, grades, action plans, and dropouts.
+ * Uses Notification, Student, and User models.
+ */
 export const checkPendingGradesAndNotify = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -46,6 +51,16 @@ export const checkPendingGradesAndNotify = async () => {
   
 
 
+/**
+ * Creates a notification for a specific student and course if one does not already exist.
+ * @async
+ * @param {Object} params
+ * @param {string} params.studentId - Student ID
+ * @param {string} params.courseId - Course ID
+ * @param {string} params.type - Notification type
+ * @param {string} params.message - Notification message
+ * @returns {Promise<Object|undefined>} The created notification or undefined if already exists
+ */
 export async function createNotification({ studentId, courseId, type, message }) {
     const existing = await Notification.findOne({
       studentId,
@@ -65,6 +80,15 @@ export async function createNotification({ studentId, courseId, type, message })
     }
   }
   
+  /**
+ * Resolves notifications for a specific student, course, and type.
+ * @async
+ * @param {Object} params
+ * @param {string} params.studentId - Student ID
+ * @param {string} params.courseId - Course ID
+ * @param {string} params.type - Notification type
+ * @returns {Promise<Object>} The result of the update operation
+ */
   export async function resolveNotification({ studentId, courseId, type }) {
     return await Notification.updateMany(
       {
@@ -78,6 +102,13 @@ export async function createNotification({ studentId, courseId, type, message })
   }
 
 
+/**
+ * Creates a global notification of a given type if it does not already exist.
+ * @async
+ * @param {string} type - Notification type
+ * @param {string} message - Notification message
+ * @returns {Promise<Object|undefined>} The created notification or undefined if already exists
+ */
 // 🔔 Skapa en systemnotis om den inte finns
 export async function createGlobalNotification(type, message) {
   const existing = await Notification.findOne({ type, resolved: false });
@@ -90,6 +121,12 @@ export async function createGlobalNotification(type, message) {
   }
 }
 
+/**
+ * Resolves all global notifications of a given type.
+ * @async
+ * @param {string} type - Notification type
+ * @returns {Promise<Object>} The result of the update operation
+ */
 // ✅ Avsluta systemnotis av viss typ
 export async function resolveGlobalNotification(type) {
   return await Notification.updateMany(
@@ -98,6 +135,11 @@ export async function resolveGlobalNotification(type) {
   );
 }
 
+/**
+ * Evaluates action plan status and creates or resolves global notifications as needed.
+ * @async
+ * @returns {Promise<void>}
+ */
 export async function evaluateActionPlanStatusAndNotify() {
   try {
     const finnsObearbetadeHandlingsplaner = await Notification.exists({
@@ -118,6 +160,11 @@ export async function evaluateActionPlanStatusAndNotify() {
 }
   
   
+/**
+ * Evaluates grading status and creates or resolves global notifications as needed.
+ * @async
+ * @returns {Promise<void>}
+ */
   export async function evaluateGradingStatusAndNotify() {
     try {
       const students = await Student.find().lean();
@@ -142,6 +189,14 @@ export async function evaluateActionPlanStatusAndNotify() {
   
 
 
+/**
+ * Sends a dropout notification for a student and education.
+ * @async
+ * @param {Object} params
+ * @param {Object} params.student - Student object
+ * @param {Object} params.education - Education object
+ * @returns {Promise<Object>} The created notification
+ */
   export async function sendDropoutNotification({ student, education }) {
     let teacherId = null;
 

@@ -1,3 +1,8 @@
+/**
+ * Student Controller
+ * Handles student data, normalization, municipality matching, and related utilities.
+ * Uses Student, Program, Course, User, Teacher, and CoursePackage models.
+ */
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
@@ -9,7 +14,11 @@ import { distance } from "fastest-levenshtein";
 
 console.log('[DEBUG] studentController.js loaded');
 
-// Normalize a string
+/**
+ * Normalizes a string by removing special characters, accents, and converting to lowercase.
+ * @param {string} value - The string to normalize
+ * @returns {string} The normalized string
+ */
 function normalize(value) {
     if (!value) return "";
     return value
@@ -22,6 +31,13 @@ function normalize(value) {
         .toLowerCase();
 }
 
+/**
+ * Finds the best fuzzy match for a target string among candidates using Levenshtein distance.
+ * @param {string} target - The string to match
+ * @param {string[]} candidates - Array of candidate strings
+ * @param {number} [maxRatio=0.3] - Maximum allowed ratio for a match
+ * @returns {string|null} The best match or null if none found
+ */
 function getBestFuzzyMatch(target, candidates, maxRatio = 0.3) {
     let best = null;
     let minDistance = Infinity;
@@ -63,6 +79,11 @@ const VALID_MUNICIPALITIES = [
     "Österåker",
 ];
 
+/**
+ * Returns the closest valid municipality name to the input using Levenshtein distance.
+ * @param {string} input - The input municipality name
+ * @returns {string|null} The closest valid municipality or null
+ */
 function getClosestMunicipality(input) {
     if (!input) return null;
     let bestMatch = null;
@@ -77,6 +98,11 @@ function getClosestMunicipality(input) {
     return minDistance <= 4 ? bestMatch : null;
 }
 
+/**
+ * Builds a normalized map from an array of original names.
+ * @param {string[]} originals - Array of original names
+ * @returns {Object} Map of normalized names to original names
+ */
 function buildNormalizedMap(originals) {
     const map = {};
     for (const name of originals) {
@@ -85,6 +111,11 @@ function buildNormalizedMap(originals) {
     return map;
 }
 
+/**
+ * Normalizes a municipality name, handling common aliases.
+ * @param {string} name - The municipality name
+ * @returns {string} The normalized municipality name
+ */
 export function normalizeMunicipalityName(name) {
     if (!name) return name;
     const trimmed = name.trim().toLowerCase();

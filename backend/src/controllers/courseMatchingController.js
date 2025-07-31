@@ -8,8 +8,22 @@ import { createGlobalNotification } from "../controllers/notificationController.
 import { normalizeMunicipalityName } from "./studentController.js";
 import CoursePackage from '../models/CoursePackage.js';
 
+/**
+ * Course Matching Controller
+ * Handles endpoints for uploading students, matching courses, managing enrollments, and course instances.
+ * Relies on CourseMatchingService and related models/utilities.
+ */
+import CoursePackage from '../models/CoursePackage.js';
+
 console.log('[DEBUG] courseMatchingController.js loaded');
 
+/**
+ * Uploads an Excel file of students for course matching, parses the file, creates teachers if needed, and returns results.
+ * @async
+ * @param {import('express').Request} req - Express request object (expects file upload)
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
 export const uploadStudentsForMatching = async (req, res) => {
     console.log('[DEBUG] uploadStudentsForMatching called');
     try {
