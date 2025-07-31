@@ -391,14 +391,43 @@ class CourseMatchingService {
                         });
                         continue;
                     }
+                    
                     // Start scheduling
                     let courseStart = this.getNextMonday(entry.startDate || new Date());
-                    for (const courseId of packageDoc.coursePackageCourses) {
-                        // Get course details (with extent)
+                    let i = 0;
+                    
+                    while (i < packageDoc.coursePackageCourses.length) {
+                        // Get current course details
+                        const courseId = packageDoc.coursePackageCourses[i];
                         const course = typeof courseId === 'object' ? courseId : await import('../models/Course.js').default.findById(courseId);
-                        const extentWeeks = parseInt(course.courseExtent) || 5; // Default to 5 weeks if not set
-                        const courseEnd = this.addWeeks(courseStart, extentWeeks);
-                        // Find or create CourseInstance
+                        const extentWeeks = parseFloat(course.courseExtent) || 5; // Use parseFloat to handle 2.5
+                        
+                        // Check if this course has 2.5 extent and if there's a next course
+                        let shouldGroup = false;
+                        let nextCourse = null;
+                        let nextExtentWeeks = 0;
+                        
+                        if (extentWeeks === 2.5 && i + 1 < packageDoc.coursePackageCourses.length) {
+                            const nextCourseId = packageDoc.coursePackageCourses[i + 1];
+                            nextCourse = typeof nextCourseId === 'object' ? nextCourseId : await import('../models/Course.js').default.findById(nextCourseId);
+                            nextExtentWeeks = parseFloat(nextCourse.courseExtent) || 5;
+                            
+                            if (nextExtentWeeks === 2.5) {
+                                shouldGroup = true;
+                                console.log(`[DEBUG] 🔗 Grouping courses: '${course.courseName}' (2.5) + '${nextCourse.courseName}' (2.5)`);
+                            }
+                        }
+                        
+                        // Calculate course end date
+                        let courseEnd;
+                        if (shouldGroup) {
+                            // For grouped courses, use combined extent (5 weeks total)
+                            courseEnd = this.addWeeks(courseStart, 5);
+                        } else {
+                            courseEnd = this.addWeeks(courseStart, extentWeeks);
+                        }
+                        
+                        // Process current course
                         const { instance: courseInstance, wasCreated } = await this.findOrCreateCourseInstance(
                             course._id,
                             courseStart,
@@ -409,8 +438,10 @@ class CourseMatchingService {
                         console.log(`[DEBUG] Processing course: '${course.courseName}' | Found/created CourseInstance:`, courseInstance ? courseInstance._id : null);
                         if (!courseInstance || !courseInstance._id) {
                             console.warn(`[WARN] No CourseInstance found/created for course '${course.courseName}'. Skipping enrollment for this course.`);
+                            i++;
                             continue;
                         }
+                        
                         // Get student to find teacherId
                         let studentDocB;
                         if (!global._StudentModel) {
@@ -419,7 +450,7 @@ class CourseMatchingService {
                         }
                         studentDocB = await global._StudentModel.findById(studentId);
                         
-                        // Create enrollment
+                        // Create enrollment for current course
                         const enrollment = new StudentEnrollment({
                             studentId,
                             courseInstanceId: courseInstance._id,
@@ -433,8 +464,8 @@ class CourseMatchingService {
                         console.log(`[DEBUG] Creating enrollment with teacherId: ${enrollment.teacherId || 'null'} (studentDocB.teacherId: ${studentDocB?.teacherId || 'null'}, entry.teacherId: ${entry.teacherId || 'null'})`);
                         console.log('[DEBUG] StudentEnrollment to be created:', enrollment.toObject());
                         await enrollment.save();
+                        
                         // Attach student email for frontend display
-                        // studentDocB is already loaded above
                         if (enrollment.courseInstanceId) {
                             results.enrollments.push({
                                 ...enrollment.toObject(),
@@ -445,7 +476,8 @@ class CourseMatchingService {
                         } else {
                             console.warn('[WARN] Skipping enrollment with missing courseInstanceId:', enrollment.toObject());
                         }
-                        // Use provided slutprov date or calculate as Wednesday of week 4
+                        
+                        // Calculate slutprov date - for grouped courses, use the same date for both
                         let slutprovDate;
                         if (entry.slutprovDate) {
                             slutprovDate = new Date(entry.slutprovDate);
@@ -458,22 +490,23 @@ class CourseMatchingService {
                         // Validate the slutprov date
                         if (isNaN(slutprovDate.getTime())) {
                             console.error(`[ERROR] Invalid slutprov date: ${entry.slutprovDate || 'calculated'}`);
+                            i++;
                             continue;
                         }
-                        enrollment.slutprovDate = slutprovDate;
-                        await enrollment.save(); // Save the updated enrollment with slutprovDate
                         
-                                                // Note: Calendar events are now generated automatically by the /calendar-events/syncable endpoint
-                        // based on StudentEnrollment.slutprovDate, so we don't need to create them here
+                        enrollment.slutprovDate = slutprovDate;
+                        await enrollment.save();
+                        
                         console.log(`📅 Slutprov date set for student ${studentId} in course ${course.courseName}: ${slutprovDate.toDateString()}`);
+                        
+                        // Add to education array
                         let studentDocC;
                         if (!global._StudentModel) {
                             const studentDocImport = await import('../models/Student.js');
                             global._StudentModel = studentDocImport.default;
                         }
                         studentDocC = await global._StudentModel.findById(studentId);
-                        // Note: Enrollment is already pushed above, no need to push again
-                        // Add to education array if not already present
+                        
                         if (studentDocC) {
                             const exists = (studentDocC.education || []).some(e =>
                                 e.type === 'Course' &&
@@ -496,7 +529,82 @@ class CourseMatchingService {
                                 await studentDocC.save();
                             }
                         }
-                        // Prepare for next course
+                        
+                        // If we're grouping courses, process the next course as well
+                        if (shouldGroup && nextCourse) {
+                            console.log(`[DEBUG] 🔗 Processing grouped course: '${nextCourse.courseName}'`);
+                            
+                            // Create CourseInstance for next course (same dates as current course)
+                            const { instance: nextCourseInstance, wasCreated: nextWasCreated } = await this.findOrCreateCourseInstance(
+                                nextCourse._id,
+                                courseStart,
+                                courseEnd,
+                                userId,
+                                entry.teacherId || null
+                            );
+                            
+                            if (nextCourseInstance && nextCourseInstance._id) {
+                                // Create enrollment for next course
+                                const nextEnrollment = new StudentEnrollment({
+                                    studentId,
+                                    courseInstanceId: nextCourseInstance._id,
+                                    mainCourseId: nextCourse._id,
+                                    startDate: courseStart,
+                                    endDate: courseEnd,
+                                    status: "enrolled",
+                                    teacherId: studentDocB?.teacherId || entry.teacherId || null,
+                                    notes: entry.notes || null,
+                                });
+                                
+                                await nextEnrollment.save();
+                                
+                                // Use the same slutprov date for the grouped course
+                                nextEnrollment.slutprovDate = slutprovDate;
+                                await nextEnrollment.save();
+                                
+                                console.log(`✅ Created grouped enrollment for student ${studentId} in course ${nextCourse.courseName} (CourseInstance: ${nextCourseInstance._id})`);
+                                console.log(`📅 Same slutprov date for grouped course ${nextCourse.courseName}: ${slutprovDate.toDateString()}`);
+                                
+                                // Add to results
+                                results.enrollments.push({
+                                    ...nextEnrollment.toObject(),
+                                    studentEmail: studentDocB?.email || '',
+                                    courseInstanceName: nextCourseInstance.courseName || '',
+                                });
+                                
+                                // Add to education array
+                                if (studentDocC) {
+                                    const nextExists = (studentDocC.education || []).some(e =>
+                                        e.type === 'Course' &&
+                                        e.refId && e.refId.toString() === nextCourse._id.toString() &&
+                                        new Date(e.startDate).getTime() === courseStart.getTime() &&
+                                        new Date(e.endDate).getTime() === courseEnd.getTime()
+                                    );
+                                    if (!nextExists) {
+                                        studentDocC.education.push({
+                                            type: 'Course',
+                                            refId: nextCourse._id,
+                                            name: nextCourse.courseName,
+                                            startDate: courseStart,
+                                            endDate: courseEnd,
+                                            grade: null,
+                                            addedAt: new Date(),
+                                            addedBy: userId,
+                                            removedAt: null,
+                                        });
+                                        await studentDocC.save();
+                                    }
+                                }
+                            }
+                            
+                            // Skip the next course in the next iteration since we've already processed it
+                            i += 2;
+                        } else {
+                            // Move to next course
+                            i++;
+                        }
+                        
+                        // Prepare for next course (or next group)
                         courseStart = this.getNextMonday(courseEnd);
                     }
                     
