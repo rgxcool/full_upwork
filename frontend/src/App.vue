@@ -25,6 +25,13 @@
     overflow-x: hidden; /* prevent horizontal scroll */
   }
 
+  .content {
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
   router-view {
     flex-grow: 1;
     width: 100%;
