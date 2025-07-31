@@ -94,6 +94,7 @@
 
             <!-- Mobilmeny under profilikonen -->
             <div v-if="showProfileMenu" class="profile-dropdown" ref="profileDropdown">
+              <router-link v-if="isLoggedIn" to="/profile" class="dropdown-link">Profil</router-link>
               <button v-if="isLoggedIn" @click="logout" class="logout-btn">Logga ut</button>
               <router-link v-else to="/login" class="dropdown-link">Logga in</router-link>
             </div>
@@ -1061,6 +1062,10 @@
     transition: background 0.2s, color 0.2s;
     width: 100%;
     display: block;
+  }
+
+  .profile-dropdown .dropdown-link {
+    text-decoration: none;
   }
 
   .profile-dropdown .logout-btn:hover,
