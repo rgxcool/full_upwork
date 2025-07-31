@@ -5,6 +5,7 @@ import Teacher from "../models/Teacher.js";
 import Exam from "../models/Provning.js";
 import CalendarEvent from "../models/Event.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
+import { authenticateUser } from "../controllers/authController.js";
 
 import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
 
@@ -163,9 +164,25 @@ router.post("/exams", async (req, res) => {
     }
 });
 
-router.get("/exams", async (req, res) => {
+router.get("/exams", authenticateUser, async (req, res) => {
     try {
-        const exams = await Exam.find().populate({
+        let query = {};
+        
+        // If user is a teacher, filter exams by their teacherId
+        if (req.user.role === "teacher") {
+            // Find the teacher record for this user
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            
+            // Filter exams by this teacher's ID
+            query.teacherId = teacher._id;
+            console.log(`🔍 Teacher ${teacher._id} fetching their exams`);
+        }
+        
+        const exams = await Exam.find(query).populate({
             path: "teacherId",
             populate: {
                 path: "userId",
@@ -241,9 +258,25 @@ router.post("/calendar-events", async (req, res) => {
     }
 });
 
-router.get("/calendar-events", async (req, res) => {
+router.get("/calendar-events", authenticateUser, async (req, res) => {
     try {
-        const events = await CalendarEvent.find();
+        let query = {};
+        
+        // If user is a teacher, filter events by their teacherId
+        if (req.user.role === "teacher") {
+            // Find the teacher record for this user
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            
+            // Filter events by this teacher's ID
+            query.teacherId = teacher._id;
+            console.log(`🔍 Teacher ${teacher._id} fetching their calendar events`);
+        }
+        
+        const events = await CalendarEvent.find(query);
         res.json(events);
     } catch (err) {
         console.error("❌ Fel vid hämtning:", err);
@@ -251,15 +284,37 @@ router.get("/calendar-events", async (req, res) => {
     }
 });
 
-router.get("/calendar-events/syncable", async (req, res) => {
+router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
     try {
         console.log("🔍 /calendar-events/syncable called");
         
-        // Get students with finalExamDate (manual scheduling)
-        const studentsWithFinalExam = await Student.find({
+        let studentQuery = {
             finalExamDate: { $ne: null },
             dropout: { $ne: true },
-        })
+        };
+        
+        let enrollmentQuery = {
+            slutprovDate: { $ne: null },
+            status: { $in: ['enrolled', 'active'] }
+        };
+        
+        // If user is a teacher, filter by their teacherId
+        if (req.user.role === "teacher") {
+            // Find the teacher record for this user
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            
+            // Filter students and enrollments by this teacher's ID
+            studentQuery.teacherId = teacher._id;
+            enrollmentQuery.teacherId = teacher._id;
+            console.log(`🔍 Teacher ${teacher._id} fetching their syncable calendar events`);
+        }
+        
+        // Get students with finalExamDate (manual scheduling)
+        const studentsWithFinalExam = await Student.find(studentQuery)
         .populate({
             path: "teacherId",
             populate: { path: "userId", select: "username" },
@@ -269,10 +324,7 @@ router.get("/calendar-events/syncable", async (req, res) => {
         console.log("📅 Students with finalExamDate:", studentsWithFinalExam.length);
 
         // Get enrollments with slutprovDate (automatic from courses)
-        const enrollmentsWithSlutprov = await StudentEnrollment.find({
-            slutprovDate: { $ne: null },
-            status: { $in: ['enrolled', 'active'] }
-        })
+        const enrollmentsWithSlutprov = await StudentEnrollment.find(enrollmentQuery)
         .populate('studentId')
         .populate('mainCourseId')
         .populate({
