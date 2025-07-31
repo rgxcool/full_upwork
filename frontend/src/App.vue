@@ -26,7 +26,8 @@
   }
 
   .content {
-    height: 100%;
+    margin-top: 166px;
+    height: calc(100vh - 166px);
     overflow: hidden;
     display: flex;
     flex-direction: column;

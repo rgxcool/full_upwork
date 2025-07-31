@@ -1155,4 +1155,14 @@
   .secret-menu-dropdown li:last-child {
     margin-bottom: 0;
   }
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 100;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  height: 166px;
+}
 </style>

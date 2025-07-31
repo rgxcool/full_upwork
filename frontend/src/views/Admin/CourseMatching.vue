@@ -3,12 +3,7 @@
     <div class="course-matching-container">
       <div class="header-section">
         <h3 class="page-title">Kursmatchning</h3>
-        <div class="breadcrumb">
-          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-            <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
-          </svg>
-          <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
-        </div>
+        <!-- Removed Tillbaka till Admin link and breadcrumb -->
       </div>
 
       <div class="content-grid">
@@ -237,6 +232,7 @@
     height: 100%;
     overflow: auto;
     box-sizing: border-box;
+    padding-bottom: 180px;
   }
   .course-matching-container {
     height: 100%;

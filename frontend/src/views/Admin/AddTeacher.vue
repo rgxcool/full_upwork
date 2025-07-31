@@ -4,14 +4,7 @@
       <div class="header-section">
         <h3 class="page-title">Lägg till Lärare</h3>
 
-        <div class="breadcrumb">
-          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-            <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
-          </svg>
-          <router-link to="/admin/users" class="breadcrumb-link">
-            Tillbaka till Användarhantering
-          </router-link>
-        </div>
+        <!-- Removed Tillbaka till Användarhantering link and breadcrumb -->
       </div>
 
       <div class="form-container">
