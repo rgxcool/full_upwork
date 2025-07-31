@@ -8,7 +8,16 @@ import CourseInstance from "../models/CourseInstance.js";
 import mongoose from "mongoose";
 
 /**
- * Get student details with populated references
+ * Student Details Controller
+ * Handles fetching and populating student details, including education and enrollments.
+ * Uses Student, Course, CoursePackage, Program, User, StudentEnrollment, and CourseInstance models.
+ */
+/**
+ * Get student details with populated references and enrollment statistics.
+ * @async
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export const getStudentDetails = async (req, res) => {
     try {
