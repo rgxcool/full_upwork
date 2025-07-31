@@ -1,340 +1,342 @@
 <template>
-  <div class="student-details-container">
-    <div class="header-section">
-      <h1 class="page-title">Elevdetaljer</h1>
-      <div class="breadcrumb">
-        <router-link to="/admin/users" class="breadcrumb-link">← Tillbaka till Admin</router-link>
-      </div>
-    </div>
-
-    <div v-if="loading" class="loading">
-      <div class="spinner"></div>
-      <p>Laddar elevinformation...</p>
-    </div>
-
-    <div v-else-if="error" class="error-message">
-      <p>{{ error }}</p>
-    </div>
-
-    <div v-else-if="student" class="content-grid">
-      <!-- Basic Information Card -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Grundläggande Information</h3>
-          <button
-            v-if="isAdmin"
-            @click="toggleEditMode"
-            class="btn btn-sm"
-            :class="editMode ? 'btn-secondary' : 'btn-primary'"
-          >
-            {{ editMode ? 'Avbryt' : 'Redigera' }}
-          </button>
+  <div class="scrollable-view">
+    <div class="student-details-container">
+      <div class="header-section">
+        <h1 class="page-title">Elevdetaljer</h1>
+        <div class="breadcrumb">
+          <router-link to="/admin/users" class="breadcrumb-link">← Tillbaka till Admin</router-link>
         </div>
-        <div class="card-body">
-          <div class="info-grid">
-            <div class="info-item">
-              <label>Namn:</label>
-              <input
-                v-if="editMode && isAdmin"
-                v-model="editData.name"
-                type="text"
-                class="form-control"
-              />
-              <span v-else>{{ student.name || 'Ej angivet' }}</span>
-            </div>
+      </div>
 
-            <div class="info-item">
-              <label>Personnummer:</label>
-              <input
-                v-if="editMode && isAdmin"
-                v-model="editData.personalNumber"
-                type="text"
-                class="form-control"
-              />
-              <span v-else>{{ student.personalNumber || 'Ej angivet' }}</span>
-            </div>
+      <div v-if="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Laddar elevinformation...</p>
+      </div>
 
-            <div class="info-item">
-              <label>Telefon:</label>
-              <input
-                v-if="editMode && isAdmin"
-                v-model="editData.phone"
-                type="text"
-                class="form-control"
-              />
-              <span v-else>{{ student.phone || 'Ej angivet' }}</span>
-            </div>
+      <div v-else-if="error" class="error-message">
+        <p>{{ error }}</p>
+      </div>
 
-            <div class="info-item">
-              <label>E-post:</label>
-              <input
-                v-if="editMode && isAdmin"
-                v-model="editData.email"
-                type="email"
-                class="form-control"
-              />
-              <span v-else>{{ student.email || 'Ej angivet' }}</span>
-            </div>
-
-            <div class="info-item">
-              <label>Kommun:</label>
-              <select
-                v-if="editMode && isAdmin"
-                v-model="editData.municipality.type"
-                class="form-control"
-              >
-                <option value="">Välj kommun</option>
-                <option
-                  v-for="municipality in municipalities"
-                  :key="municipality"
-                  :value="municipality"
-                >
-                  {{ municipality }}
-                </option>
-              </select>
-              <span v-else>{{ student.municipality?.type || 'Ej angivet' }}</span>
-            </div>
-          </div>
-
-          <div v-if="editMode && isAdmin" class="edit-actions">
-            <button @click="saveChanges" class="btn btn-success" :disabled="saving">
-              {{ saving ? 'Sparar...' : 'Spara ändringar' }}
+      <div v-else-if="student" class="content-grid">
+        <!-- Basic Information Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Grundläggande Information</h3>
+            <button
+              v-if="isAdmin"
+              @click="toggleEditMode"
+              class="btn btn-sm"
+              :class="editMode ? 'btn-secondary' : 'btn-primary'"
+            >
+              {{ editMode ? 'Avbryt' : 'Redigera' }}
             </button>
-            <button @click="cancelEdit" class="btn btn-secondary">Avbryt</button>
           </div>
-        </div>
-      </div>
-
-      <!-- Status Card -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Status</h3>
-        </div>
-        <div class="card-body">
-          <div class="info-grid">
-            <div class="info-item">
-              <label>Startdatum:</label>
-              <input
-                v-if="editMode && isAdmin"
-                v-model="editData.startDate"
-                type="date"
-                class="form-control"
-              />
-              <span v-else>{{ formatDate(student.startDate) || 'Ej angivet' }}</span>
-            </div>
-
-            <div class="info-item">
-              <label>Slutdatum:</label>
-              <input
-                v-if="editMode && isAdmin"
-                v-model="editData.endDate"
-                type="date"
-                class="form-control"
-              />
-              <span v-else>{{ formatDate(student.endDate) || 'Ej angivet' }}</span>
-            </div>
-
-            <div class="info-item">
-              <label>Provstatus:</label>
-              <input
-                v-if="editMode && isAdmin"
-                v-model="editData.exam"
-                type="text"
-                class="form-control"
-              />
-              <span v-else>{{ student.exam || 'Ej angivet' }}</span>
-            </div>
-
-            <div class="info-item">
-              <label>Övrigt:</label>
-              <textarea
-                v-if="editMode && isAdmin"
-                v-model="editData.additionalInfo"
-                class="form-control"
-                rows="3"
-              ></textarea>
-              <span v-else>{{ student.additionalInfo || 'Ej angivet' }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Education Card -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Utbildning</h3>
-          <div v-if="student.enrollmentStats" class="enrollment-stats">
-            <span class="stat-item">
-              <strong>{{ student.enrollmentStats.totalEnrollments }}</strong>
-              totalt
-            </span>
-            <span class="stat-item">
-              <strong>{{ student.enrollmentStats.activeEnrollments }}</strong>
-              aktiva
-            </span>
-          </div>
-        </div>
-        <div class="card-body">
-          <div v-if="student.education && student.education.length > 0" class="education-list">
-            <div
-              v-for="(edu, index) in student.education"
-              :key="edu._id || index"
-              class="education-item"
-              :class="{ 'enrollment-item': edu.isEnrollment }"
-            >
-              <div class="education-header">
-                <span class="education-type">{{ edu.type }}</span>
-                <span v-if="edu.isEnrollment" class="enrollment-badge">Inskriven</span>
-                <span class="education-name">
-                  {{ getEducationName(edu) }}
-                </span>
+          <div class="card-body">
+            <div class="info-grid">
+              <div class="info-item">
+                <label>Namn:</label>
+                <input
+                  v-if="editMode && isAdmin"
+                  v-model="editData.name"
+                  type="text"
+                  class="form-control"
+                />
+                <span v-else>{{ student.name || 'Ej angivet' }}</span>
               </div>
 
-              <div class="education-details">
-                <div v-if="edu.startDate && edu.endDate" class="education-dates">
-                  {{ formatDate(edu.startDate) }} - {{ formatDate(edu.endDate) }}
-                </div>
-
-                <div v-if="edu.status" class="education-status">
-                  Status:
-                  <span :class="'status-' + edu.status">{{ edu.status }}</span>
-                </div>
-
-                <div v-if="edu.grade" class="education-grade">Betyg: {{ edu.grade }}</div>
-
-                <div v-if="edu.isEnrollment && edu.courseInstance" class="course-instance-info">
-                  Kursinstans: {{ edu.courseInstance.courseName }} ({{
-                    formatDate(edu.courseInstance.startDate)
-                  }}
-                  - {{ formatDate(edu.courseInstance.endDate) }})
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="no-education">Ingen utbildning registrerad</div>
-        </div>
-      </div>
-
-      <!-- Comments Card -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Kommentarer</h3>
-          <button v-if="canComment" @click="showCommentModal = true" class="btn btn-primary btn-sm">
-            Lägg till kommentar
-          </button>
-        </div>
-        <div class="card-body">
-          <div
-            v-if="student.commentHistory && student.commentHistory.length > 0"
-            class="comments-list"
-          >
-            <div
-              v-for="(comment, index) in activeComments"
-              :key="comment._id"
-              class="comment-item"
-              :class="{ deleted: comment.isDeleted }"
-            >
-              <div class="comment-header">
-                <span class="comment-author">{{ comment.author }}</span>
-                <span class="comment-date">{{ formatDate(comment.date) }}</span>
-                <span class="comment-role">{{ comment.authorRole }}</span>
+              <div class="info-item">
+                <label>Personnummer:</label>
+                <input
+                  v-if="editMode && isAdmin"
+                  v-model="editData.personalNumber"
+                  type="text"
+                  class="form-control"
+                />
+                <span v-else>{{ student.personalNumber || 'Ej angivet' }}</span>
               </div>
 
-              <div class="comment-content">
-                <span v-if="comment.isDeleted" class="deleted-text">[RADERAD]</span>
-                <span v-else>{{ comment.comment }}</span>
+              <div class="info-item">
+                <label>Telefon:</label>
+                <input
+                  v-if="editMode && isAdmin"
+                  v-model="editData.phone"
+                  type="text"
+                  class="form-control"
+                />
+                <span v-else>{{ student.phone || 'Ej angivet' }}</span>
               </div>
 
-              <div v-if="comment.editedAt" class="comment-edited">
-                Redigerad {{ formatDate(comment.editedAt) }}
+              <div class="info-item">
+                <label>E-post:</label>
+                <input
+                  v-if="editMode && isAdmin"
+                  v-model="editData.email"
+                  type="email"
+                  class="form-control"
+                />
+                <span v-else>{{ student.email || 'Ej angivet' }}</span>
               </div>
 
-              <div class="comment-actions">
-                <button
-                  v-if="canEditComment(comment)"
-                  @click="editComment(comment)"
-                  class="btn btn-sm btn-outline-primary"
+              <div class="info-item">
+                <label>Kommun:</label>
+                <select
+                  v-if="editMode && isAdmin"
+                  v-model="editData.municipality.type"
+                  class="form-control"
                 >
-                  Redigera
-                </button>
-                <button
-                  v-if="canDeleteComment(comment)"
-                  @click="deleteComment(comment._id)"
-                  class="btn btn-sm btn-outline-danger"
-                >
-                  Radera
-                </button>
+                  <option value="">Välj kommun</option>
+                  <option
+                    v-for="municipality in municipalities"
+                    :key="municipality"
+                    :value="municipality"
+                  >
+                    {{ municipality }}
+                  </option>
+                </select>
+                <span v-else>{{ student.municipality?.type || 'Ej angivet' }}</span>
+              </div>
+            </div>
+
+            <div v-if="editMode && isAdmin" class="edit-actions">
+              <button @click="saveChanges" class="btn btn-success" :disabled="saving">
+                {{ saving ? 'Sparar...' : 'Spara ändringar' }}
+              </button>
+              <button @click="cancelEdit" class="btn btn-secondary">Avbryt</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Status</h3>
+          </div>
+          <div class="card-body">
+            <div class="info-grid">
+              <div class="info-item">
+                <label>Startdatum:</label>
+                <input
+                  v-if="editMode && isAdmin"
+                  v-model="editData.startDate"
+                  type="date"
+                  class="form-control"
+                />
+                <span v-else>{{ formatDate(student.startDate) || 'Ej angivet' }}</span>
+              </div>
+
+              <div class="info-item">
+                <label>Slutdatum:</label>
+                <input
+                  v-if="editMode && isAdmin"
+                  v-model="editData.endDate"
+                  type="date"
+                  class="form-control"
+                />
+                <span v-else>{{ formatDate(student.endDate) || 'Ej angivet' }}</span>
+              </div>
+
+              <div class="info-item">
+                <label>Provstatus:</label>
+                <input
+                  v-if="editMode && isAdmin"
+                  v-model="editData.exam"
+                  type="text"
+                  class="form-control"
+                />
+                <span v-else>{{ student.exam || 'Ej angivet' }}</span>
+              </div>
+
+              <div class="info-item">
+                <label>Övrigt:</label>
+                <textarea
+                  v-if="editMode && isAdmin"
+                  v-model="editData.additionalInfo"
+                  class="form-control"
+                  rows="3"
+                ></textarea>
+                <span v-else>{{ student.additionalInfo || 'Ej angivet' }}</span>
               </div>
             </div>
           </div>
-          <div v-else class="no-comments">Inga kommentarer än</div>
         </div>
-      </div>
 
-      <!-- Change History Card (Admin only) -->
-      <div v-if="isAdmin" class="card">
-        <div class="card-header">
-          <h3>Ändringshistorik</h3>
-        </div>
-        <div class="card-body">
-          <div v-if="changeHistory && changeHistory.length > 0" class="history-list">
-            <div v-for="(change, index) in changeHistory" :key="index" class="history-item">
-              <div class="history-header">
-                <span class="history-date">{{ formatDate(change.timestamp) }}</span>
-                <span class="history-user">{{ change.changedByRole }}</span>
-              </div>
-              <div class="history-changes">
-                <div v-for="field in change.changes" :key="field" class="change-item">
-                  <strong>{{ field }}:</strong>
-                  <span class="change-from">{{ change.previousValues[field] || 'tomt' }}</span>
-                  <span class="change-arrow">→</span>
-                  <span class="change-to">{{ change.newValues[field] || 'tomt' }}</span>
+        <!-- Education Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Utbildning</h3>
+            <div v-if="student.enrollmentStats" class="enrollment-stats">
+              <span class="stat-item">
+                <strong>{{ student.enrollmentStats.totalEnrollments }}</strong>
+                totalt
+              </span>
+              <span class="stat-item">
+                <strong>{{ student.enrollmentStats.activeEnrollments }}</strong>
+                aktiva
+              </span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div v-if="student.education && student.education.length > 0" class="education-list">
+              <div
+                v-for="(edu, index) in student.education"
+                :key="edu._id || index"
+                class="education-item"
+                :class="{ 'enrollment-item': edu.isEnrollment }"
+              >
+                <div class="education-header">
+                  <span class="education-type">{{ edu.type }}</span>
+                  <span v-if="edu.isEnrollment" class="enrollment-badge">Inskriven</span>
+                  <span class="education-name">
+                    {{ getEducationName(edu) }}
+                  </span>
+                </div>
+
+                <div class="education-details">
+                  <div v-if="edu.startDate && edu.endDate" class="education-dates">
+                    {{ formatDate(edu.startDate) }} - {{ formatDate(edu.endDate) }}
+                  </div>
+
+                  <div v-if="edu.status" class="education-status">
+                    Status:
+                    <span :class="'status-' + edu.status">{{ edu.status }}</span>
+                  </div>
+
+                  <div v-if="edu.grade" class="education-grade">Betyg: {{ edu.grade }}</div>
+
+                  <div v-if="edu.isEnrollment && edu.courseInstance" class="course-instance-info">
+                    Kursinstans: {{ edu.courseInstance.courseName }} ({{
+                      formatDate(edu.courseInstance.startDate)
+                    }}
+                    - {{ formatDate(edu.courseInstance.endDate) }})
+                  </div>
                 </div>
               </div>
             </div>
+            <div v-else class="no-education">Ingen utbildning registrerad</div>
           </div>
-          <div v-else class="no-history">Ingen ändringshistorik</div>
+        </div>
+
+        <!-- Comments Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Kommentarer</h3>
+            <button v-if="canComment" @click="showCommentModal = true" class="btn btn-primary btn-sm">
+              Lägg till kommentar
+            </button>
+          </div>
+          <div class="card-body">
+            <div
+              v-if="student.commentHistory && student.commentHistory.length > 0"
+              class="comments-list"
+            >
+              <div
+                v-for="(comment, index) in activeComments"
+                :key="comment._id"
+                class="comment-item"
+                :class="{ deleted: comment.isDeleted }"
+              >
+                <div class="comment-header">
+                  <span class="comment-author">{{ comment.author }}</span>
+                  <span class="comment-date">{{ formatDate(comment.date) }}</span>
+                  <span class="comment-role">{{ comment.authorRole }}</span>
+                </div>
+
+                <div class="comment-content">
+                  <span v-if="comment.isDeleted" class="deleted-text">[RADERAD]</span>
+                  <span v-else>{{ comment.comment }}</span>
+                </div>
+
+                <div v-if="comment.editedAt" class="comment-edited">
+                  Redigerad {{ formatDate(comment.editedAt) }}
+                </div>
+
+                <div class="comment-actions">
+                  <button
+                    v-if="canEditComment(comment)"
+                    @click="editComment(comment)"
+                    class="btn btn-sm btn-outline-primary"
+                  >
+                    Redigera
+                  </button>
+                  <button
+                    v-if="canDeleteComment(comment)"
+                    @click="deleteComment(comment._id)"
+                    class="btn btn-sm btn-outline-danger"
+                  >
+                    Radera
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-else class="no-comments">Inga kommentarer än</div>
+          </div>
+        </div>
+
+        <!-- Change History Card (Admin only) -->
+        <div v-if="isAdmin" class="card">
+          <div class="card-header">
+            <h3>Ändringshistorik</h3>
+          </div>
+          <div class="card-body">
+            <div v-if="changeHistory && changeHistory.length > 0" class="history-list">
+              <div v-for="(change, index) in changeHistory" :key="index" class="history-item">
+                <div class="history-header">
+                  <span class="history-date">{{ formatDate(change.timestamp) }}</span>
+                  <span class="history-user">{{ change.changedByRole }}</span>
+                </div>
+                <div class="history-changes">
+                  <div v-for="field in change.changes" :key="field" class="change-item">
+                    <strong>{{ field }}:</strong>
+                    <span class="change-from">{{ change.previousValues[field] || 'tomt' }}</span>
+                    <span class="change-arrow">→</span>
+                    <span class="change-to">{{ change.newValues[field] || 'tomt' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="no-history">Ingen ändringshistorik</div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Comment Modal -->
-    <div v-if="showCommentModal" class="modal-overlay" @click="showCommentModal = false">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>Lägg till kommentar</h3>
-          <button @click="showCommentModal = false" class="close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-          <textarea
-            v-model="newComment"
-            class="form-control"
-            rows="4"
-            placeholder="Skriv din kommentar här..."
-          ></textarea>
-        </div>
-        <div class="modal-footer">
-          <button @click="addComment" class="btn btn-primary" :disabled="!newComment.trim()">
-            Lägg till
-          </button>
-          <button @click="showCommentModal = false" class="btn btn-secondary">Avbryt</button>
+      <!-- Comment Modal -->
+      <div v-if="showCommentModal" class="modal-overlay" @click="showCommentModal = false">
+        <div class="modal-content" @click.stop>
+          <div class="modal-header">
+            <h3>Lägg till kommentar</h3>
+            <button @click="showCommentModal = false" class="close-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <textarea
+              v-model="newComment"
+              class="form-control"
+              rows="4"
+              placeholder="Skriv din kommentar här..."
+            ></textarea>
+          </div>
+          <div class="modal-footer">
+            <button @click="addComment" class="btn btn-primary" :disabled="!newComment.trim()">
+              Lägg till
+            </button>
+            <button @click="showCommentModal = false" class="btn btn-secondary">Avbryt</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Edit Comment Modal -->
-    <div v-if="showEditModal" class="modal-overlay" @click="showEditModal = false">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>Redigera kommentar</h3>
-          <button @click="showEditModal = false" class="close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-          <textarea v-model="editingComment.comment" class="form-control" rows="4"></textarea>
-        </div>
-        <div class="modal-footer">
-          <button @click="saveEditedComment" class="btn btn-primary">Spara</button>
-          <button @click="showEditModal = false" class="btn btn-secondary">Avbryt</button>
+      <!-- Edit Comment Modal -->
+      <div v-if="showEditModal" class="modal-overlay" @click="showEditModal = false">
+        <div class="modal-content" @click.stop>
+          <div class="modal-header">
+            <h3>Redigera kommentar</h3>
+            <button @click="showEditModal = false" class="close-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <textarea v-model="editingComment.comment" class="form-control" rows="4"></textarea>
+          </div>
+          <div class="modal-footer">
+            <button @click="saveEditedComment" class="btn btn-primary">Spara</button>
+            <button @click="showEditModal = false" class="btn btn-secondary">Avbryt</button>
+          </div>
         </div>
       </div>
     </div>

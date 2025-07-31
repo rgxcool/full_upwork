@@ -7,6 +7,20 @@
   --color-text: #1F2937;       /* Mörk text */
 }
 
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.scrollable-view {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text);

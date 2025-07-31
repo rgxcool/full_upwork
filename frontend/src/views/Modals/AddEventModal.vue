@@ -1,4 +1,5 @@
 <template>
+  <div class="scrollable-view">
     <div class="modal">
       <div class="modal-content">
         <h3>Lägg till nytt event</h3>
@@ -31,7 +32,8 @@
         </div>
       </div>
     </div>
-  </template>
+  </div>
+</template>
   
   <script>
   import DatePicker from "@vuepic/vue-datepicker";

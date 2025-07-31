@@ -1,7 +1,9 @@
 <template>
-  <div class="home-minimal">
-    <div class="center-content">
-      <h1>Välkommen till Mindfullearning</h1>
+  <div class="scrollable-view">
+    <div class="home-minimal">
+      <div class="center-content">
+        <h1>Välkommen till Mindfullearning</h1>
+      </div>
     </div>
   </div>
 </template>

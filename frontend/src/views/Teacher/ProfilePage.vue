@@ -1,56 +1,65 @@
 <template>
-  <div class="container mt-5">
-    <div class="row">
-      <div class="col-lg-8 mb-4">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Information</h2>
-            <p class="card-text">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+  <div class="scrollable-view">
+    <div class="container mt-5">
+      <div class="row">
+        <div class="col-lg-8 mb-4">
+          <div class="card shadow-sm">
+            <div class="card-body">
+              <h3 class="card-title text-center mb-4">Information</h3>
+              <br/>
+              <p class="card-text text-center">
+                <strong>Välkommen till Mindfullearning</strong>
+                <br />
+                <br>Viktig information kommer visas här</br>
+                <br>Just nu har ni tillgång till:</br>
+                <br>APL, Slutprov i kalendern och Elever</br>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="col-lg-4">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <h2 class="card-title mb-4">Att göra</h2>
-            <ul class="list-group">
-              <li
-                class="list-group-item d-flex justify-content-between align-items-center"
-                v-for="task in tasks"
-                :key="task._id"
-                :class="{ 'list-group-item-success': task.isDone }"
-              >
-                <div class="d-flex align-items-center">
+        <div class="col-lg-4">
+          <div class="card shadow-sm">
+            <div class="card-body">
+              <h2 class="card-title mb-4">Att göra</h2>
+              <ul class="list-group">
+                <li
+                  class="list-group-item d-flex justify-content-between align-items-center"
+                  v-for="task in tasks"
+                  :key="task._id"
+                  :class="{ 'list-group-item-success': task.isDone }"
+                >
+                  <div class="d-flex align-items-center">
+                    <input
+                      type="checkbox"
+                      class="form-check-input me-3"
+                      :checked="task.isDone"
+                      @change="toggleTaskCompletion(task)"
+                    />
+                    <p :class="{ 'text-decoration-line-through': task.isDone }" class="mb-0">
+                      {{ task.description }}
+                    </p>
+                  </div>
+                  <button class="btn btn-danger btn-sm" @click="deleteTask(task._id)">Ta bort</button>
+                </li>
+              </ul>
+              <div class="mt-3">
+                <div class="input-group">
                   <input
-                    type="checkbox"
-                    class="form-check-input me-3"
-                    :checked="task.isDone"
-                    @change="toggleTaskCompletion(task)"
+                    type="text"
+                    class="form-control"
+                    placeholder="Lägg till en uppgift..."
+                    v-model="newTask"
+                    @keyup.enter="addTask"
                   />
-                  <p :class="{ 'text-decoration-line-through': task.isDone }" class="mb-0">
-                    {{ task.description }}
-                  </p>
+                  <button class="btn btn-primary" @click="addTask">Lägg till</button>
                 </div>
-                <button class="btn btn-danger btn-sm" @click="deleteTask(task._id)">Ta bort</button>
-              </li>
-            </ul>
-            <div class="mt-3">
-              <div class="input-group">
-                <input
-                  type="text"
-                  class="form-control"
-                  placeholder="Lägg till en uppgift..."
-                  v-model="newTask"
-                  @keyup.enter="addTask"
-                />
-                <button class="btn btn-primary" @click="addTask">Lägg till</button>
               </div>
-            </div>
-            <div class="text-end mt-4">
-              <button class="btn btn-warning btn-sm" @click="deleteAllTasks">
-                Rensa alla uppgifter
-              </button>
+              <div class="text-end mt-4">
+                <button class="btn btn-warning btn-sm" @click="deleteAllTasks">
+                  Rensa alla uppgifter
+                </button>
+              </div>
             </div>
           </div>
         </div>

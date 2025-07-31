@@ -1,36 +1,38 @@
 <template>
-  <div class="course-stats">
-    <h2>📊 Course Statistics ({{ currentMonth }})</h2>
+  <div class="scrollable-view">
+    <div class="course-stats">
+      <h2>📊 Course Statistics ({{ currentMonth }})</h2>
 
-    <label>
-      Filter by Municipality:
-      <select v-model="selectedMunicipality">
-        <option value="">All</option>
-        <option v-for="m in availableMunicipalities" :key="m">{{ m }}</option>
-      </select>
-    </label>
+      <label>
+        Filter by Municipality:
+        <select v-model="selectedMunicipality">
+          <option value="">All</option>
+          <option v-for="m in availableMunicipalities" :key="m">{{ m }}</option>
+        </select>
+      </label>
 
-    <button @click="toggleSort">Sort: {{ sortDescending ? 'Most' : 'Least' }} Popular</button>
-    <button @click="exportCSV">Export CSV</button>
+      <button @click="toggleSort">Sort: {{ sortDescending ? 'Most' : 'Least' }} Popular</button>
+      <button @click="exportCSV">Export CSV</button>
 
-    <div v-for="(courses, month) in sortedStats" :key="month" class="month-section">
-      <h3>{{ month }}</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Course</th>
-            <th v-for="grade in gradeOrder" :key="grade">{{ grade }}</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(grades, course) in courses" :key="course">
-            <td>{{ course }}</td>
-            <td v-for="grade in gradeOrder" :key="grade">{{ grades[grade] || 0 }}</td>
-            <td>{{ totalGrades(grades) }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-for="(courses, month) in sortedStats" :key="month" class="month-section">
+        <h3>{{ month }}</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Course</th>
+              <th v-for="grade in gradeOrder" :key="grade">{{ grade }}</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(grades, course) in courses" :key="course">
+              <td>{{ course }}</td>
+              <td v-for="grade in gradeOrder" :key="grade">{{ grades[grade] || 0 }}</td>
+              <td>{{ totalGrades(grades) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>

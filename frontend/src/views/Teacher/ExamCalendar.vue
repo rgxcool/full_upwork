@@ -1,57 +1,59 @@
 <template>
-  <div class="calendar-container">
-    <aside class="sidebar">
-      <DatePicker 
-        v-model="selectedDate" 
-        @update:modelValue="onDateChange"
-        :auto-apply="true" 
-        inline 
-        :enable-time="false"
-        locale="sv"
-        :firstDayOfWeek="1"
-      />
+  <div class="scrollable-view">
+    <div class="calendar-container">
+      <aside class="sidebar">
+        <DatePicker 
+          v-model="selectedDate" 
+          @update:modelValue="onDateChange"
+          :auto-apply="true" 
+          inline 
+          :enable-time="false"
+          locale="sv"
+          :firstDayOfWeek="1"
+        />
 
-    </aside>
+      </aside>
 
-    <div class="main-calendar">
+      <div class="main-calendar">
 
-    <div v-if="canBookEvent" class="admin-controls mb-3">
-      <button @click="openAddEventModal">
-        + {{ eventButtonText }}
-      </button>
-    </div>
-      <FullCalendar ref="fullCalendar" :options="calendarOptions" />
+      <div v-if="canBookEvent" class="admin-controls mb-3">
+        <button @click="openAddEventModal">
+          + {{ eventButtonText }}
+        </button>
+      </div>
+        <FullCalendar ref="fullCalendar" :options="calendarOptions" />
 
-      <!-- Modal based on role -->
-      <AddEventModal
-        v-if="showAddEventModal && isAdminOrTeacher"
-        :teachers="teachers"
-        @close="showAddEventModal = false"
-        @event-added="addEventToCalendar"
-        @update="handleExamUpdate"
-      />
+        <!-- Modal based on role -->
+        <AddEventModal
+          v-if="showAddEventModal && isAdminOrTeacher"
+          :teachers="teachers"
+          @close="showAddEventModal = false"
+          @event-added="addEventToCalendar"
+          @update="handleExamUpdate"
+        />
 
-      <AddMeetingModal
-        v-if="showAddEventModal && isSYVOrSpecped"
-        @close="showAddEventModal = false"
-        @event-added="addEventToCalendar"
-      />
+        <AddMeetingModal
+          v-if="showAddEventModal && isSYVOrSpecped"
+          @close="showAddEventModal = false"
+          @event-added="addEventToCalendar"
+        />
 
-      <!-- Modal based on event -->
-      <EventModal 
-        v-if="selectedEvent && !selectedEvent.isMeeting" 
-        :event="selectedEvent" 
-        @close="selectedEvent = null" 
-        @update="handleExamUpdate"
-      />
+        <!-- Modal based on event -->
+        <EventModal 
+          v-if="selectedEvent && !selectedEvent.isMeeting" 
+          :event="selectedEvent" 
+          @close="selectedEvent = null" 
+          @update="handleExamUpdate"
+        />
 
-      <MeetingModal
-        v-if="selectedEvent && selectedEvent.isMeeting"
-        :event="{ extendedProps: selectedEvent, start: selectedEvent.start }"
-        @close="selectedEvent = null"
-      />
+        <MeetingModal
+          v-if="selectedEvent && selectedEvent.isMeeting"
+          :event="{ extendedProps: selectedEvent, start: selectedEvent.start }"
+          @close="selectedEvent = null"
+        />
 
 
+      </div>
     </div>
   </div>
 </template>

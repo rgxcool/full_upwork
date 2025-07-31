@@ -1,26 +1,27 @@
 <template>
-
-<div class="name-container">  
-  Användarinformation: {{ data?.name }}
-</div>
-  <section class="tab-container">
-    <div class="tab-menu">
-
-      <ul>
-        <li 
-          v-for="tab in tabs" 
-          :key="tab" 
-          @click="activeTab = tab" 
-          :class="{ active: activeTab === tab }"
-        >
-          {{ tab }}
-        </li>
-      </ul>
+  <div class="scrollable-view">
+    <div class="name-container">  
+      Användarinformation: {{ data?.name }}
     </div>
-    <div class="content">
-      <component :is="currentComponent" :userData="data" :userType="type"></component>
-    </div>
-  </section>
+    <section class="tab-container">
+      <div class="tab-menu">
+
+        <ul>
+          <li 
+            v-for="tab in tabs" 
+            :key="tab" 
+            @click="activeTab = tab" 
+            :class="{ active: activeTab === tab }"
+          >
+            {{ tab }}
+          </li>
+        </ul>
+      </div>
+      <div class="content">
+        <component :is="currentComponent" :userData="data" :userType="type"></component>
+      </div>
+    </section>
+  </div>
 </template>
 
 <script>
