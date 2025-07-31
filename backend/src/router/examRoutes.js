@@ -398,20 +398,27 @@ router.get("/calendar-events/syncable", async (req, res) => {
             
             const key = `${teacherId._id.toString()}_${dateKey}`;
 
-            // Load per-event attendance if present
-            let attended = false;
-            // Try to find an existing event for this group and date
-            let eventDoc = await CalendarEvent.findOne({
-                title: { $regex: /^Slutprov/i },
-                start: new Date(dateKey + 'T00:00:00'),
-                'extendedProps.teacherId': teacherId._id,
-                'extendedProps.type': 'slutprov',
+            // Load attendance from ExamAttendance records
+            const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+            
+            // Use date range query to handle timezone issues
+            const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
+            const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
+            
+            console.log(`🔍 Querying attendance for ${student.name} on date ${dateKey}`);
+            console.log(`🔍 Query range: ${startOfDay} to ${endOfDay}`);
+            console.log(`🔍 Query teacherId: ${teacherId._id}`);
+            console.log(`🔍 Query studentId: ${student._id}`);
+            
+            const attendanceRecord = await ExamAttendance.findOne({
+                examDate: { $gte: startOfDay, $lte: endOfDay },
+                teacherId: teacherId._id,
+                studentId: student._id
             });
-            if (eventDoc && eventDoc.extendedProps && Array.isArray(eventDoc.extendedProps.students)) {
-                const found = eventDoc.extendedProps.students.find(s => s._id?.toString() === student._id.toString() || s.personalNumber === student.personalNumber);
-                if (found && typeof found.attended === 'boolean') {
-                    attended = found.attended;
-                }
+            let attended = attendanceRecord ? attendanceRecord.attended : false;
+            console.log(`📊 Student ${student.name} attendance: ${attended} (from ExamAttendance: ${attendanceRecord ? 'found' : 'not found'}) for date ${dateKey}`);
+            if (attendanceRecord) {
+                console.log(`📊 Found record: examDate=${attendanceRecord.examDate}, attended=${attendanceRecord.attended}`);
             }
 
             if (!grouped[key]) {
@@ -434,14 +441,16 @@ router.get("/calendar-events/syncable", async (req, res) => {
                 };
             }
 
-            grouped[key].extendedProps.students.push({
+            const studentData = {
                 _id: student._id,
                 name: student.name,
                 personalNumber: student.personalNumber,
                 additionalInfo: student.additionalInfo || "",
                 attended,
                 courseName: course.courseName,
-            });
+            };
+            console.log(`📤 Sending student data for ${student.name}: attended=${attended}`);
+            grouped[key].extendedProps.students.push(studentData);
         }
 
         console.log("📅 Final grouped events:", Object.keys(grouped).length);
@@ -539,6 +548,55 @@ router.post("/examtime-location", async (req, res) => {
     }
 });
 
+// Get attendance statistics for a student
+router.get("/attendance-stats/:studentId", async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+    
+    const attendanceRecords = await ExamAttendance.find({ studentId })
+      .populate('teacherId', 'userId')
+      .populate('courseId', 'courseName')
+      .sort({ examDate: -1 });
+    
+    const totalExams = attendanceRecords.length;
+    const attendedExams = attendanceRecords.filter(r => r.attended).length;
+    const attendanceRate = totalExams > 0 ? (attendedExams / totalExams * 100).toFixed(1) : 0;
+    
+    const stats = {
+      totalExams,
+      attendedExams,
+      missedExams: totalExams - attendedExams,
+      attendanceRate: parseFloat(attendanceRate),
+      recentExams: attendanceRecords.slice(0, 10), // Last 10 exams
+      byCourse: {}
+    };
+    
+    // Group by course
+    attendanceRecords.forEach(record => {
+      const courseName = record.courseName;
+      if (!stats.byCourse[courseName]) {
+        stats.byCourse[courseName] = {
+          total: 0,
+          attended: 0,
+          missed: 0
+        };
+      }
+      stats.byCourse[courseName].total++;
+      if (record.attended) {
+        stats.byCourse[courseName].attended++;
+      } else {
+        stats.byCourse[courseName].missed++;
+      }
+    });
+    
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Error getting attendance stats:', error);
+    res.status(500).json({ error: 'Failed to get attendance statistics' });
+  }
+});
+
 router.delete("/exams/:id", async (req, res) => {
     try {
         const examId = req.params.id;
@@ -555,33 +613,135 @@ router.delete("/exams/:id", async (req, res) => {
 
 // PATCH: Batch update attendance for a specific event (date + teacher)
 router.post('/calendar-events/mark-attendance', async (req, res) => {
+  console.log('🚀 mark-attendance endpoint called!');
+  console.log('📥 Request body:', req.body);
+  console.log('📥 Request method:', req.method);
+  console.log('📥 Request URL:', req.url);
+  console.log('📥 Request headers:', req.headers);
   try {
-    const { date, teacherId, students } = req.body; // students: [{ _id, attended }]
+    const { date, teacherId, students, courseName, courseId } = req.body; // students: [{ _id, attended }]
+    console.log('🔍 mark-attendance called with:', { date, teacherId, students, courseName, courseId });
+    
     if (!date || !teacherId || !Array.isArray(students)) {
       return res.status(400).json({ error: 'Missing date, teacherId, or students array' });
     }
-    const dateKey = new Date(date).toISOString().split('T')[0];
-    const eventDoc = await CalendarEvent.findOne({
-      title: { $regex: /^Slutprov/i },
-      start: new Date(dateKey + 'T00:00:00'),
-      'extendedProps.teacherId': teacherId,
-      'extendedProps.type': 'exam',
-    });
-    if (!eventDoc) {
-      return res.status(404).json({ error: 'Event not found' });
-    }
-    // Update attendance for each student in the event
-    for (const s of students) {
-      const idx = eventDoc.extendedProps.students.findIndex(stu => stu._id?.toString() === s._id || stu.personalNumber === s.personalNumber);
-      if (idx !== -1) {
-        eventDoc.extendedProps.students[idx].attended = !!s.attended;
+    
+    // Import models
+    const { default: Student } = await import('../models/Student.js');
+    const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+    
+    // Handle date conversion properly to avoid timezone issues
+    const examDate = new Date(date);
+    // Use the local date from the frontend, not UTC
+    const dateKey = examDate.getFullYear() + '-' + 
+                   String(examDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(examDate.getDate()).padStart(2, '0');
+    console.log(`🔍 Original date: ${date}`);
+    console.log(`🔍 Parsed examDate: ${examDate}`);
+    console.log(`🔍 Generated dateKey: ${dateKey}`);
+    
+    const updatePromises = students.map(async (student) => {
+      try {
+        const studentDoc = await Student.findById(student._id);
+        if (!studentDoc) {
+          console.log(`❌ Student not found: ${student._id}`);
+          return { success: false, studentId: student._id, error: 'Student not found' };
+        }
+        
+                // Find or create exam attendance record
+        const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
+        const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
+        
+        let attendanceRecord = await ExamAttendance.findOne({
+            examDate: { $gte: startOfDay, $lte: endOfDay },
+            teacherId: teacherId,
+            studentId: student._id
+        });
+        
+        if (!attendanceRecord) {
+          // Create new attendance record
+          attendanceRecord = new ExamAttendance({
+            examDate: new Date(dateKey + 'T00:00:00.000Z'),
+            courseName: courseName || 'Unknown Course',
+            courseId: courseId,
+            teacherId: teacherId,
+            studentId: student._id,
+            studentName: studentDoc.name,
+            personalNumber: studentDoc.personalNumber,
+            attended: !!student.attended,
+            examTime: student.examTime || '',
+            examMunicipality: student.examMunicipality || '',
+            examLocation: student.examLocation || '',
+            recordedBy: req.user?._id
+          });
+        } else {
+          // Update existing record
+          attendanceRecord.attended = !!student.attended;
+          attendanceRecord.updatedAt = new Date();
+          attendanceRecord.updatedBy = req.user?._id;
+          if (student.examTime) attendanceRecord.examTime = student.examTime;
+          if (student.examMunicipality) attendanceRecord.examMunicipality = student.examMunicipality;
+          if (student.examLocation) attendanceRecord.examLocation = student.examLocation;
+        }
+        
+        await attendanceRecord.save();
+        console.log(`💾 Saved attendance record: ${attendanceRecord._id} for student ${studentDoc.name} - attended: ${attendanceRecord.attended}`);
+        console.log(`💾 Saved examDate: ${attendanceRecord.examDate}`);
+        console.log(`💾 Saved teacherId: ${attendanceRecord.teacherId}`);
+        console.log(`💾 Saved studentId: ${attendanceRecord.studentId}`);
+        
+                 // Update student's exam history
+         const existingHistoryIndex = studentDoc.examHistory.findIndex(h => {
+           const historyDate = h.examDate.toISOString().split('T')[0];
+           return historyDate === dateKey && h.teacherId.toString() === teacherId.toString();
+         });
+        
+        if (existingHistoryIndex >= 0) {
+          // Update existing history entry
+          studentDoc.examHistory[existingHistoryIndex].attended = !!student.attended;
+          studentDoc.examHistory[existingHistoryIndex].updatedAt = new Date();
+        } else {
+                     // Add new history entry
+           studentDoc.examHistory.push({
+             examDate: new Date(dateKey + 'T00:00:00.000Z'),
+            courseName: courseName || 'Unknown Course',
+            courseId: courseId,
+            teacherId: teacherId,
+            attended: !!student.attended,
+            examTime: student.examTime || '',
+            examMunicipality: student.examMunicipality || '',
+            examLocation: student.examLocation || '',
+            recordedAt: new Date(),
+            recordedBy: req.user?._id
+          });
+        }
+        
+        await studentDoc.save();
+        
+        console.log(`✅ Updated attendance for student ${studentDoc.name}: ${student.attended}`);
+        return { success: true, studentId: student._id, attendanceId: attendanceRecord._id };
+        
+      } catch (error) {
+        console.error(`❌ Error updating student ${student._id}:`, error);
+        return { success: false, studentId: student._id, error: error.message };
       }
-    }
-    await eventDoc.save();
-    res.json({ message: 'Attendance updated for event', event: eventDoc });
+    });
+    
+    const results = await Promise.all(updatePromises);
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.filter(r => !r.success).length;
+    
+    console.log(`📊 Attendance update results: ${successCount} successful, ${failureCount} failed`);
+    
+    res.json({ 
+      message: `Attendance updated for ${successCount} students`, 
+      results,
+      successCount,
+      failureCount
+    });
   } catch (err) {
-    console.error('❌ Error updating event attendance:', err);
-    res.status(500).json({ error: 'Failed to update event attendance' });
+    console.error('❌ Error updating student attendance:', err);
+    res.status(500).json({ error: 'Failed to update student attendance' });
   }
 });
 
