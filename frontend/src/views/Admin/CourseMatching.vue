@@ -232,8 +232,15 @@
 </script>
 
 <style scoped>
+  .scrollable-view {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    box-sizing: border-box;
+  }
   .course-matching-container {
-    padding: 20px;
+    height: 100%;
+    overflow: auto;
   }
 
   .header-section {
