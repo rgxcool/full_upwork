@@ -94,6 +94,9 @@ router.get("/search", authenticateUser, async (req, res) => {
                 return res.status(400).json({ message: "Ogiltigt datum" });
             }
 
+            // Only include students whose startDate <= date <= endDate.
+            // Do NOT include students just because they have an exam (finalExamDate) on this date.
+            // This ensures the date search is strictly for enrollment period, not exam dates.
             const students = await Student.find({
                 ...studentQuery,
                 startDate: { $lte: parsedDate },
