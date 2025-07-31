@@ -487,13 +487,20 @@
 
 <style scoped>
   .apl-board {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
     display: flex;
+    flex-direction: row;
     gap: 16px;
-    padding: 16px;
+    box-sizing: border-box;
   }
 
   .column {
-    flex: 1;
+    min-width: 300px;
+    flex: 1 1 0;
+    overflow-y: auto;
+    max-height: 80vh;
     padding: 10px;
     border-radius: 8px;
     min-height: 300px;
