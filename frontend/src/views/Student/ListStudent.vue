@@ -1,26 +1,28 @@
 <template>
-  <v-container>
-    <v-form>
-      <!-- Dropdown for selecting a student -->
-      <v-select
-        v-model="selectedStudent"
-        :items="students"
-        item-title="namn"
-        label="Select a student"
-        return-object
-        outlined
-      />
+  <div class="scrollable-view">
+    <v-container>
+      <v-form>
+        <!-- Dropdown for selecting a student -->
+        <v-select
+          v-model="selectedStudent"
+          :items="students"
+          item-title="namn"
+          label="Select a student"
+          return-object
+          outlined
+        />
 
-      <v-row v-if="selectedStudent">
-        <v-col cols="12" md="6">
-          <v-text-field label="Full Name" v-model="selectedStudent.namn" readonly />
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-text-field label="Personal Number" v-model="selectedStudent.personnummer" readonly />
-        </v-col>
-      </v-row>
-    </v-form>
-  </v-container>
+        <v-row v-if="selectedStudent">
+          <v-col cols="12" md="6">
+            <v-text-field label="Full Name" v-model="selectedStudent.namn" readonly />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field label="Personal Number" v-model="selectedStudent.personnummer" readonly />
+          </v-col>
+        </v-row>
+      </v-form>
+    </v-container>
+  </div>
 </template>
 
 <script>

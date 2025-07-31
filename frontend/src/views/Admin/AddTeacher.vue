@@ -1,295 +1,140 @@
 <template>
-  <div class="add-teacher-container">
-    <div class="header-section">
-      <h3 class="page-title">Lägg till Lärare</h3>
+  <div class="scrollable-view">
+    <div class="add-teacher-container">
+      <div class="header-section">
+        <h3 class="page-title">Lägg till Lärare</h3>
 
-      <div class="breadcrumb">
-        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-          <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
-        </svg>
-        <router-link to="/admin/users" class="breadcrumb-link">
-          Tillbaka till Användarhantering
-        </router-link>
-      </div>
-    </div>
-
-    <div class="form-container">
-      <form @submit.prevent="submitTeacherForm" class="teacher-form">
-        <div class="form-header">
-          <h4>Skapa nytt lärarkonto</h4>
-          <p class="form-description">
-            Fyll i lärarens information nedan. Ett lösenord kommer att genereras automatiskt.
-          </p>
+        <div class="breadcrumb">
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+            <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
+          </svg>
+          <router-link to="/admin/users" class="breadcrumb-link">
+            Tillbaka till Användarhantering
+          </router-link>
         </div>
+      </div>
 
-        <div class="form-grid">
-          <!-- Basic Information -->
-          <div class="form-section">
-            <h5 class="section-title">Grundläggande Information</h5>
-
-            <div class="form-group">
-              <label for="username" class="form-label">
-                Fullständigt namn
-                <span class="required">*</span>
-              </label>
-              <input
-                type="text"
-                id="username"
-                class="form-control"
-                v-model="teacherForm.username"
-                placeholder="Ex. Anna Andersson"
-                required
-              />
-              <small class="form-help">Detta namn kommer att visas i systemet</small>
-            </div>
-
-            <div class="form-group">
-              <label for="email" class="form-label">
-                E-postadress
-                <span class="required">*</span>
-              </label>
-              <input
-                type="email"
-                id="email"
-                class="form-control"
-                v-model="teacherForm.email"
-                placeholder="anna.andersson@example.com"
-                required
-              />
-              <small class="form-help">Används för inloggning och kommunikation</small>
-            </div>
-
-            <div class="form-group">
-              <label for="subject" class="form-label">
-                Huvudämne
-                <span class="required">*</span>
-              </label>
-              <select id="subject" class="form-control" v-model="teacherForm.subject" required>
-                <option value="">Välj ämne</option>
-                <option value="Svenska">Svenska</option>
-                <option value="Engelska">Engelska</option>
-                <option value="Matematik">Matematik</option>
-                <option value="Historia">Historia</option>
-                <option value="Samhällskunskap">Samhällskunskap</option>
-                <option value="Naturkunskap">Naturkunskap</option>
-                <option value="Fysik">Fysik</option>
-                <option value="Kemi">Kemi</option>
-                <option value="Biologi">Biologi</option>
-                <option value="Idrott och hälsa">Idrott och hälsa</option>
-                <option value="Slöjd">Slöjd</option>
-                <option value="Bild">Bild</option>
-                <option value="Musik">Musik</option>
-                <option value="Specialpedagogik">Specialpedagogik</option>
-                <option value="Studievägledning">Studievägledning</option>
-                <option value="Övrigt">Övrigt</option>
-              </select>
-              <small class="form-help">Lärarens huvudsakliga undervisningsämne</small>
-            </div>
+      <div class="form-container">
+        <form @submit.prevent="submitTeacherForm" class="teacher-form">
+          <div class="form-header">
+            <h4>Skapa nytt lärarkonto</h4>
+            <p class="form-description">
+              Fyll i lärarens information nedan. Ett lösenord kommer att genereras automatiskt.
+            </p>
           </div>
 
-          <!-- Visual Settings -->
-          <div class="form-section">
-            <h5 class="section-title">Visuella inställningar</h5>
+          <div class="form-grid">
+            <!-- Basic Information -->
+            <div class="form-section">
+              <h5 class="section-title">Grundläggande Information</h5>
 
-            <div class="form-group">
-              <label for="colorCode" class="form-label">Färgkod</label>
-              <div class="color-input-group">
-                <input
-                  type="color"
-                  id="colorCode"
-                  class="form-control color-picker"
-                  v-model="teacherForm.colorCode"
-                />
+              <div class="form-group">
+                <label for="username" class="form-label">
+                  Fullständigt namn
+                  <span class="required">*</span>
+                </label>
                 <input
                   type="text"
-                  class="form-control color-text"
-                  v-model="teacherForm.colorCode"
-                  placeholder="#FF0000"
-                  pattern="^#[0-9A-Fa-f]{6}$"
+                  id="username"
+                  class="form-control"
+                  v-model="teacherForm.username"
+                  placeholder="Ex. Anna Andersson"
+                  required
                 />
-                <button
-                  type="button"
-                  class="btn btn-outline-secondary"
-                  @click="generateRandomColor"
-                >
-                  Slumpa
-                </button>
-              </div>
-              <small class="form-help">
-                Färg som används för att identifiera läraren i scheman och kalender
-              </small>
-            </div>
-
-            <div class="color-preview">
-              <span class="preview-label">Förhandsvisning:</span>
-              <div class="color-sample" :style="{ backgroundColor: teacherForm.colorCode }">
-                {{ teacherForm.username || 'Lärarens namn' }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Password Information -->
-          <div class="form-section">
-            <h5 class="section-title">Lösenordsinformation</h5>
-
-            <div class="password-info">
-              <div class="info-box">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="m9 12 2 2 4-4" />
-                </svg>
-                <div>
-                  <strong>Automatisk lösenordsgenerering</strong>
-                  <p>
-                    Ett säkert lösenord kommer att genereras automatiskt och visas efter att kontot
-                    skapats.
-                  </p>
-                </div>
+                <small class="form-help">Detta namn kommer att visas i systemet</small>
               </div>
 
-              <div class="info-box warning">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="m21 2-1 1L4 18l-1 1" />
-                  <path d="M10.5 10.5C10.5 10.5 12 12 12 12s1.5-1.5 1.5-1.5" />
-                  <circle cx="12" cy="12" r="2" />
-                </svg>
-                <div>
-                  <strong>Viktigt att komma ihåg</strong>
-                  <p>
-                    Se till att dela lösenordet säkert med läraren och uppmana dem att ändra det vid
-                    första inloggning.
-                  </p>
-                </div>
+              <div class="form-group">
+                <label for="email" class="form-label">
+                  E-postadress
+                  <span class="required">*</span>
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  class="form-control"
+                  v-model="teacherForm.email"
+                  placeholder="anna.andersson@example.com"
+                  required
+                />
+                <small class="form-help">Används för inloggning och kommunikation</small>
+              </div>
+
+              <div class="form-group">
+                <label for="subject" class="form-label">
+                  Huvudämne
+                  <span class="required">*</span>
+                </label>
+                <select id="subject" class="form-control" v-model="teacherForm.subject" required>
+                  <option value="">Välj ämne</option>
+                  <option value="Svenska">Svenska</option>
+                  <option value="Engelska">Engelska</option>
+                  <option value="Matematik">Matematik</option>
+                  <option value="Historia">Historia</option>
+                  <option value="Samhällskunskap">Samhällskunskap</option>
+                  <option value="Naturkunskap">Naturkunskap</option>
+                  <option value="Fysik">Fysik</option>
+                  <option value="Kemi">Kemi</option>
+                  <option value="Biologi">Biologi</option>
+                  <option value="Idrott och hälsa">Idrott och hälsa</option>
+                  <option value="Slöjd">Slöjd</option>
+                  <option value="Bild">Bild</option>
+                  <option value="Musik">Musik</option>
+                  <option value="Specialpedagogik">Specialpedagogik</option>
+                  <option value="Studievägledning">Studievägledning</option>
+                  <option value="Övrigt">Övrigt</option>
+                </select>
+                <small class="form-help">Lärarens huvudsakliga undervisningsämne</small>
               </div>
             </div>
-          </div>
-        </div>
 
-        <!-- Submit Button -->
-        <div class="form-actions">
-          <button type="button" class="btn btn-outline-secondary me-3" @click="resetForm">
-            Rensa formulär
-          </button>
-          <button type="submit" class="btn btn-success" :disabled="isSubmitting">
-            <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2"></span>
-            {{ isSubmitting ? 'Skapar konto...' : 'Skapa lärarkonto' }}
-          </button>
-        </div>
-      </form>
-    </div>
+            <!-- Visual Settings -->
+            <div class="form-section">
+              <h5 class="section-title">Visuella inställningar</h5>
 
-    <!-- Success Modal -->
-    <div class="modal fade" id="successModal" tabindex="-1" ref="successModal">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header bg-success text-white">
-            <h5 class="modal-title">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="me-2"
-              >
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                <polyline points="22,4 12,14.01 9,11.01" />
-              </svg>
-              Lärarkonto skapat!
-            </h5>
-            <button
-              type="button"
-              class="btn-close btn-close-white"
-              data-bs-dismiss="modal"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div class="success-content">
-              <div class="teacher-info">
-                <h6>Kontoinformation:</h6>
-                <div class="info-grid">
-                  <div>
-                    <strong>Namn:</strong>
-                    {{ createdTeacher.username }}
-                  </div>
-                  <div>
-                    <strong>E-post:</strong>
-                    {{ createdTeacher.email }}
-                  </div>
-                  <div>
-                    <strong>Ämne:</strong>
-                    {{ createdTeacher.subject }}
-                  </div>
-                  <div>
-                    <strong>Roll:</strong>
-                    Lärare
-                  </div>
+              <div class="form-group">
+                <label for="colorCode" class="form-label">Färgkod</label>
+                <div class="color-input-group">
+                  <input
+                    type="color"
+                    id="colorCode"
+                    class="form-control color-picker"
+                    v-model="teacherForm.colorCode"
+                  />
+                  <input
+                    type="text"
+                    class="form-control color-text"
+                    v-model="teacherForm.colorCode"
+                    placeholder="#FF0000"
+                    pattern="^#[0-9A-Fa-f]{6}$"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary"
+                    @click="generateRandomColor"
+                  >
+                    Slumpa
+                  </button>
                 </div>
+                <small class="form-help">
+                  Färg som används för att identifiera läraren i scheman och kalender
+                </small>
               </div>
 
-              <div class="password-section">
-                <h6>Inloggningsuppgifter:</h6>
-                <div class="credential-box">
-                  <div class="credential-item">
-                    <label>E-postadress:</label>
-                    <code>{{ createdTeacher.email }}</code>
-                  </div>
-                  <div class="credential-item">
-                    <label>Lösenord:</label>
-                    <div class="password-display">
-                      <code>{{ generatedPassword }}</code>
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-primary"
-                        @click="copyPassword"
-                        title="Kopiera lösenord"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                          <path d="m4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+              <div class="color-preview">
+                <span class="preview-label">Förhandsvisning:</span>
+                <div class="color-sample" :style="{ backgroundColor: teacherForm.colorCode }">
+                  {{ teacherForm.username || 'Lärarens namn' }}
                 </div>
               </div>
+            </div>
 
-              <div class="security-warning">
-                <div class="alert alert-warning d-flex align-items-start">
+            <!-- Password Information -->
+            <div class="form-section">
+              <h5 class="section-title">Lösenordsinformation</h5>
+
+              <div class="password-info">
+                <div class="info-box">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="20"
@@ -300,32 +145,189 @@
                     stroke-width="2"
                     stroke-linecap="round"
                     stroke-linejoin="round"
-                    class="me-2 mt-1"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
+                  <div>
+                    <strong>Automatisk lösenordsgenerering</strong>
+                    <p>
+                      Ett säkert lösenord kommer att genereras automatiskt och visas efter att kontot
+                      skapats.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="info-box warning">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
                   >
                     <path d="m21 2-1 1L4 18l-1 1" />
                     <path d="M10.5 10.5C10.5 10.5 12 12 12 12s1.5-1.5 1.5-1.5" />
                     <circle cx="12" cy="12" r="2" />
                   </svg>
                   <div>
-                    <strong>Säkerhetsanvisningar:</strong>
-                    <ul class="mb-0 mt-1">
-                      <li>
-                        Dela lösenordet säkert med läraren (t.ex. via krypterad e-post eller
-                        personligen)
-                      </li>
-                      <li>Uppmana läraren att ändra lösenordet vid första inloggning</li>
-                      <li>Lösenordet kommer inte att visas igen efter att denna dialog stängs</li>
-                    </ul>
+                    <strong>Viktigt att komma ihåg</strong>
+                    <p>
+                      Se till att dela lösenordet säkert med läraren och uppmana dem att ändra det vid
+                      första inloggning.
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" @click="createAnotherTeacher">
-              Skapa ytterligare lärare
+
+          <!-- Submit Button -->
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline-secondary me-3" @click="resetForm">
+              Rensa formulär
             </button>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Stäng</button>
+            <button type="submit" class="btn btn-success" :disabled="isSubmitting">
+              <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2"></span>
+              {{ isSubmitting ? 'Skapar konto...' : 'Skapa lärarkonto' }}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Success Modal -->
+      <div class="modal fade" id="successModal" tabindex="-1" ref="successModal">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+              <h5 class="modal-title">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="me-2"
+                >
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22,4 12,14.01 9,11.01" />
+                </svg>
+                Lärarkonto skapat!
+              </h5>
+              <button
+                type="button"
+                class="btn-close btn-close-white"
+                data-bs-dismiss="modal"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <div class="success-content">
+                <div class="teacher-info">
+                  <h6>Kontoinformation:</h6>
+                  <div class="info-grid">
+                    <div>
+                      <strong>Namn:</strong>
+                      {{ createdTeacher.username }}
+                    </div>
+                    <div>
+                      <strong>E-post:</strong>
+                      {{ createdTeacher.email }}
+                    </div>
+                    <div>
+                      <strong>Ämne:</strong>
+                      {{ createdTeacher.subject }}
+                    </div>
+                    <div>
+                      <strong>Roll:</strong>
+                      Lärare
+                    </div>
+                  </div>
+                </div>
+
+                <div class="password-section">
+                  <h6>Inloggningsuppgifter:</h6>
+                  <div class="credential-box">
+                    <div class="credential-item">
+                      <label>E-postadress:</label>
+                      <code>{{ createdTeacher.email }}</code>
+                    </div>
+                    <div class="credential-item">
+                      <label>Lösenord:</label>
+                      <div class="password-display">
+                        <code>{{ generatedPassword }}</code>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          @click="copyPassword"
+                          title="Kopiera lösenord"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                            <path d="m4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="security-warning">
+                  <div class="alert alert-warning d-flex align-items-start">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="me-2 mt-1"
+                    >
+                      <path d="m21 2-1 1L4 18l-1 1" />
+                      <path d="M10.5 10.5C10.5 10.5 12 12 12 12s1.5-1.5 1.5-1.5" />
+                      <circle cx="12" cy="12" r="2" />
+                    </svg>
+                    <div>
+                      <strong>Säkerhetsanvisningar:</strong>
+                      <ul class="mb-0 mt-1">
+                        <li>
+                          Dela lösenordet säkert med läraren (t.ex. via krypterad e-post eller
+                          personligen)
+                        </li>
+                        <li>Uppmana läraren att ändra lösenordet vid första inloggning</li>
+                        <li>Lösenordet kommer inte att visas igen efter att denna dialog stängs</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-primary" @click="createAnotherTeacher">
+                Skapa ytterligare lärare
+              </button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Stäng</button>
+            </div>
           </div>
         </div>
       </div>

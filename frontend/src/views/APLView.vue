@@ -1,5 +1,5 @@
 <template>
-  <div class="apl-view">
+  <div class="scrollable-view">
     <h1>APL Status Board</h1>
     <APLBoard />
   </div>

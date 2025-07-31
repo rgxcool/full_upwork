@@ -1,32 +1,34 @@
 <template>
-  <v-container>
-    <v-form>
-      <!-- Autocomplete for selecting a student -->
-      <v-autocomplete
-        v-model="selectedStudent"
-        :items="students"
-        item-title="namn"
-        item-value="_id"
-        label="Select a student"
-        return-object
-        outlined
-        clearable
-        search-input
-        hide-details
-        dense
-      />
+  <div class="scrollable-view">
+    <v-container>
+      <v-form>
+        <!-- Autocomplete for selecting a student -->
+        <v-autocomplete
+          v-model="selectedStudent"
+          :items="students"
+          item-title="namn"
+          item-value="_id"
+          label="Select a student"
+          return-object
+          outlined
+          clearable
+          search-input
+          hide-details
+          dense
+        />
 
-      <!-- Display student details if one is selected -->
-      <v-row v-if="selectedStudent">
-        <v-col cols="12" md="6">
-          <v-text-field label="Full Name" v-model="selectedStudent.namn" readonly />
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-text-field label="Personal Number" v-model="selectedStudent.personnummer" readonly />
-        </v-col>
-      </v-row>
-    </v-form>
-  </v-container>
+        <!-- Display student details if one is selected -->
+        <v-row v-if="selectedStudent">
+          <v-col cols="12" md="6">
+            <v-text-field label="Full Name" v-model="selectedStudent.namn" readonly />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field label="Personal Number" v-model="selectedStudent.personnummer" readonly />
+          </v-col>
+        </v-row>
+      </v-form>
+    </v-container>
+  </div>
 </template>
 
 <script>

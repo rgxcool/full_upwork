@@ -1,77 +1,79 @@
 <template>
-  <section class="container py-4">
-    <div v-if="studentsToGrade.length === 0" class="text-muted empty-state">
-      <p>Inga elever att betygsätta just nu.</p>
-    </div>
-    <div v-if="studentsToGrade.length === 0" class="text-center text-muted py-5">
-      <v-icon size="48">mdi-account-off</v-icon>
-      <div class="mt-2">Inga elever att betygsätta just nu.</div>
-    </div>
-    <v-data-table
-      :headers="headers"
-      :items="formattedRows"
-      class="elevation-1"
-      item-value="id"
-      disable-sort
-    >
-      <template #item.name="{ item }">
-        {{ item.student.name }}
-      </template>
+  <div class="scrollable-view">
+    <section class="container py-4">
+      <div v-if="studentsToGrade.length === 0" class="text-muted empty-state">
+        <p>Inga elever att betygsätta just nu.</p>
+      </div>
+      <div v-if="studentsToGrade.length === 0" class="text-center text-muted py-5">
+        <v-icon size="48">mdi-account-off</v-icon>
+        <div class="mt-2">Inga elever att betygsätta just nu.</div>
+      </div>
+      <v-data-table
+        :headers="headers"
+        :items="formattedRows"
+        class="elevation-1"
+        item-value="id"
+        disable-sort
+      >
+        <template #item.name="{ item }">
+          {{ item.student.name }}
+        </template>
 
-      <template #item.courseCode="{ item }">
-        {{ item.course.courseCode || '-' }}
-      </template>
+        <template #item.courseCode="{ item }">
+          {{ item.course.courseCode || '-' }}
+        </template>
 
-      <template #item.grade="{ item }">
-        <v-select
-          v-model="item.course.grade"
-          :items="grades"
-          label="Betyg"
-          variant="outlined"
-          density="compact"
-          :disabled="item.course.locked"
-          hide-details
-        />
-      </template>
+        <template #item.grade="{ item }">
+          <v-select
+            v-model="item.course.grade"
+            :items="grades"
+            label="Betyg"
+            variant="outlined"
+            density="compact"
+            :disabled="item.course.locked"
+            hide-details
+          />
+        </template>
 
-      <template #item.reason="{ item }">
-        <v-text-field
-          v-model="item.course.reason"
-          placeholder="Motivering"
-          variant="outlined"
-          density="compact"
-          hide-details
-        />
-      </template>
+        <template #item.reason="{ item }">
+          <v-text-field
+            v-model="item.course.reason"
+            placeholder="Motivering"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </template>
 
-      <template #item.comments="{ item }">
-        <v-textarea
-          v-model="item.course.comments"
-          placeholder="Kommentar"
-          auto-grow
-          variant="outlined"
-          density="compact"
-          hide-details
-        />
-      </template>
+        <template #item.comments="{ item }">
+          <v-textarea
+            v-model="item.course.comments"
+            placeholder="Kommentar"
+            auto-grow
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </template>
 
-      <template #item.save="{ item }">
-        <v-btn color="success" size="small" @click="saveGrade(item.student._id, item.course)">
-          Spara
-        </v-btn>
-      </template>
+        <template #item.save="{ item }">
+          <v-btn color="success" size="small" @click="saveGrade(item.student._id, item.course)">
+            Spara
+          </v-btn>
+        </template>
 
-      <template #item.lock="{ item }">
-        <v-checkbox
-          v-model="item.course.locked"
-          @change="toggleLock(item.student._id, item.course.refId, !item.course.locked)"
-          density="compact"
-          hide-details
-          variant="outlined"
-        />
-      </template>
-    </v-data-table>
-  </section>
+        <template #item.lock="{ item }">
+          <v-checkbox
+            v-model="item.course.locked"
+            @change="toggleLock(item.student._id, item.course.refId, !item.course.locked)"
+            density="compact"
+            hide-details
+            variant="outlined"
+          />
+        </template>
+      </v-data-table>
+    </section>
+  </div>
 </template>
 
 <script setup>

@@ -1,107 +1,109 @@
 <template>
-  <div
-    v-if="event"
-    class="modal fade show d-block"
-    tabindex="-1"
-    role="dialog"
-    style="background: rgba(0, 0, 0, 0.5)"
-  >
-    <div class="modal-dialog modal-lg" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">{{ event.teacher || 'Okänd lärare' }}</h5>
-          <button type="button" class="btn-close" @click="closeModal"></button>
-        </div>
-
-        <div class="modal-body">
-          <p>
-            <strong>Provdetaljer:</strong>
-            <br />
-            Tid: {{ examTime || 'Ej vald' }}
-            <br />
-            Kommun: {{ examMunicipality || 'Ej vald' }}
-            <br />
-            Plats: {{ examLocation || 'Ej vald' }}
-          </p>
-
-          <h5>Studenter kopplade till detta prov</h5>
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th>Namn</th>
-                <th>Personnummer</th>
-                <th>Kurs</th>
-                <th>Info</th>
-                <th>Närvaro</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(student, index) in (event.extendedProps?.students || event.students || [])" :key="index">
-                <td>{{ student.name }}</td>
-                <td>{{ student.personalNumber }}</td>
-                <td>{{ student.courseName || '-' }}</td>
-                <td>{{ student.additionalInfo || '-' }}</td>
-                <td>
-                  <input
-                    type="checkbox"
-                    v-model="student.attended"
-                    @change="markAttendance(student.personalNumber, student.attended)"
-                  />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="modal-footer">
-          <!-- Success Message -->
-          <div v-if="showSuccessMessage" class="success-message">
-            Prov sparat!
+  <div class="scrollable-view">
+    <div
+      v-if="event"
+      class="modal fade show d-block"
+      tabindex="-1"
+      role="dialog"
+      style="background: rgba(0, 0, 0, 0.5)"
+    >
+      <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">{{ event.teacher || 'Okänd lärare' }}</h5>
+            <button type="button" class="btn-close" @click="closeModal"></button>
           </div>
-          
-          <form @submit.prevent="submitExam" class="exam-form">
-            <label class="me-2">Välj provtid:</label>
-            <div class="time-picker-container me-3">
-              <select v-model="selectedHour" class="time-select" @change="updateTime">
-                <option v-for="hour in 24" :key="hour-1" :value="(hour-1).toString().padStart(2, '0')">
-                  {{ (hour-1).toString().padStart(2, '0') }}
-                </option>
-              </select>
-              <span class="time-separator">:</span>
-              <select v-model="selectedMinute" class="time-select" @change="updateTime">
-                <option v-for="minute in [0, 15, 30, 45]" :key="minute" :value="minute.toString().padStart(2, '0')">
-                  {{ minute.toString().padStart(2, '0') }}
-                </option>
-              </select>
+
+          <div class="modal-body">
+            <p>
+              <strong>Provdetaljer:</strong>
+              <br />
+              Tid: {{ examTime || 'Ej vald' }}
+              <br />
+              Kommun: {{ examMunicipality || 'Ej vald' }}
+              <br />
+              Plats: {{ examLocation || 'Ej vald' }}
+            </p>
+
+            <h5>Studenter kopplade till detta prov</h5>
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>Namn</th>
+                  <th>Personnummer</th>
+                  <th>Kurs</th>
+                  <th>Info</th>
+                  <th>Närvaro</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(student, index) in (event.extendedProps?.students || event.students || [])" :key="index">
+                  <td>{{ student.name }}</td>
+                  <td>{{ student.personalNumber }}</td>
+                  <td>{{ student.courseName || '-' }}</td>
+                  <td>{{ student.additionalInfo || '-' }}</td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      v-model="student.attended"
+                      @change="markAttendance(student.personalNumber, student.attended)"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="modal-footer">
+            <!-- Success Message -->
+            <div v-if="showSuccessMessage" class="success-message">
+              Prov sparat!
             </div>
-            <small class="text-muted">(24-timmars format)</small>
+            
+            <form @submit.prevent="submitExam" class="exam-form">
+              <label class="me-2">Välj provtid:</label>
+              <div class="time-picker-container me-3">
+                <select v-model="selectedHour" class="time-select" @change="updateTime">
+                  <option v-for="hour in 24" :key="hour-1" :value="(hour-1).toString().padStart(2, '0')">
+                    {{ (hour-1).toString().padStart(2, '0') }}
+                  </option>
+                </select>
+                <span class="time-separator">:</span>
+                <select v-model="selectedMinute" class="time-select" @change="updateTime">
+                  <option v-for="minute in [0, 15, 30, 45]" :key="minute" :value="minute.toString().padStart(2, '0')">
+                    {{ minute.toString().padStart(2, '0') }}
+                  </option>
+                </select>
+              </div>
+              <small class="text-muted">(24-timmars format)</small>
 
-            <label class="me-2">Kommun:</label>
-            <select v-model="examMunicipality" class="me-3">
-              <option
-                v-for="(locations, municipality) in examMunicipalities"
-                :key="municipality"
-                :value="municipality"
-              >
-                {{ municipality }}
-              </option>
-            </select>
+              <label class="me-2">Kommun:</label>
+              <select v-model="examMunicipality" class="me-3">
+                <option
+                  v-for="(locations, municipality) in examMunicipalities"
+                  :key="municipality"
+                  :value="municipality"
+                >
+                  {{ municipality }}
+                </option>
+              </select>
 
-            <label class="me-2">Plats:</label>
-            <select v-model="examLocation" class="me-3">
-              <option
-                v-for="location in examMunicipalities[examMunicipality]"
-                :key="location"
-                :value="location"
-              >
-                {{ location }}
-              </option>
-            </select>
+              <label class="me-2">Plats:</label>
+              <select v-model="examLocation" class="me-3">
+                <option
+                  v-for="location in examMunicipalities[examMunicipality]"
+                  :key="location"
+                  :value="location"
+                >
+                  {{ location }}
+                </option>
+              </select>
 
-            <button type="submit" class="btn btn-primary" :disabled="isSaving">
-              {{ isSaving ? 'Sparar...' : 'Spara prov' }}
-            </button>
-          </form>
+              <button type="submit" class="btn btn-primary" :disabled="isSaving">
+                {{ isSaving ? 'Sparar...' : 'Spara prov' }}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </div>

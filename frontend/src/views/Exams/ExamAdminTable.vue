@@ -1,91 +1,93 @@
 <template>
-  <div class="container my-5">
-    <h2 class="mb-4 text-center">📋 Prövningselever</h2>
+  <div class="scrollable-view">
+    <div class="container my-5">
+      <h2 class="mb-4 text-center">📋 Prövningselever</h2>
 
-    <!-- Filterfält -->
-    <div class="row g-3 mb-4">
-      <div class="col-md-4">
-        <input v-model="search" type="text" class="form-control shadow-sm" placeholder="🔍 Sök på namn" />
+      <!-- Filterfält -->
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <input v-model="search" type="text" class="form-control shadow-sm" placeholder="🔍 Sök på namn" />
+        </div>
+        <div class="col-md-4">
+          <select v-model="filterMonth" class="form-select shadow-sm">
+            <option value="">📅 Alla månader</option>
+            <option v-for="month in months" :key="month" :value="month">{{ month }}</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <select v-model="filterStatus" class="form-select shadow-sm">
+            <option value="">📌 Alla statusar</option>
+            <option value="intresse">Intresse</option>
+            <option value="scheduled">Godkänd</option>
+            <option value="denied">Nekad</option>
+          </select>
+        </div>
       </div>
-      <div class="col-md-4">
-        <select v-model="filterMonth" class="form-select shadow-sm">
-          <option value="">📅 Alla månader</option>
-          <option v-for="month in months" :key="month" :value="month">{{ month }}</option>
-        </select>
-      </div>
-      <div class="col-md-4">
-        <select v-model="filterStatus" class="form-select shadow-sm">
-          <option value="">📌 Alla statusar</option>
-          <option value="intresse">Intresse</option>
-          <option value="scheduled">Godkänd</option>
-          <option value="denied">Nekad</option>
-        </select>
-      </div>
-    </div>
 
-    <!-- Scrollbar & tabell -->
-    <div class="table-responsive">
-      <table class="table table-hover table-striped align-middle rounded shadow-sm overflow-hidden" style="min-width: 1200px;">
-        <thead class="table-primary">
-          <tr>
-            <th>Namn</th>
-            <th>Personnummer</th>
-            <th>Telefon</th>
-            <th>Email</th>
-            <th>Kurs</th>
-            <th>Kommun</th>
-            <th>Månad</th>
-            <th>Lärare</th>
-            <th>Status</th>
-            <th>Material</th>
-            <th>Betalning</th>
-            <th>Beslut</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="exam in filteredExams" :key="exam._id">
-            <td><strong>{{ exam.name }}</strong></td>
-            <td>{{ exam.personalNumber || '–' }}</td>
-            <td>{{ exam.phone || '–' }}</td>
-            <td>{{ exam.email || '–' }}</td>
-            <td>{{ exam.course || '–' }}</td>
-            <td>{{ exam.municipality || '–' }}</td>
-            <td>{{ exam.requestedMonthFormatted }}</td>
-            <td>{{ exam.teacherId?.userId?.username || '–' }}</td>
-            <td>
-              <span :class="['badge', statusColor(exam.status)]">{{ exam.status || '–' }}</span>
-            </td>
-            <td>
-              <span v-if="exam.materialReceived?.status" class="badge bg-success">Ja</span>
-              <span v-else class="badge bg-secondary">Nej</span>
-            </td>
-            <td>{{ formatDate(exam.paymentDate) }}</td>
-            <td style="min-width: 200px;">
-              <div class="mb-2">
-                <select v-model="decisions[exam._id].decision" class="form-select form-select-sm">
-                  <option value="">Välj</option>
-                  <option value="accept">Godkänn</option>
-                  <option value="deny">Neka</option>
-                </select>
-              </div>
-              <textarea
-                v-model="decisions[exam._id].comment"
-                rows="2"
-                class="form-control form-control-sm mb-2"
-                placeholder="Kommentar"
-              ></textarea>
-              <div class="d-flex justify-content-start flex-wrap gap-2">
-                <button class="btn btn-sm btn-success" @click="submitDecision(exam._id)">
-                  💾 Spara
-                </button>
-                <button class="btn btn-sm btn-outline-danger" @click="deleteExam(exam._id)">
-                  🗑️ Ta bort
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- Scrollbar & tabell -->
+      <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle rounded shadow-sm overflow-hidden" style="min-width: 1200px;">
+          <thead class="table-primary">
+            <tr>
+              <th>Namn</th>
+              <th>Personnummer</th>
+              <th>Telefon</th>
+              <th>Email</th>
+              <th>Kurs</th>
+              <th>Kommun</th>
+              <th>Månad</th>
+              <th>Lärare</th>
+              <th>Status</th>
+              <th>Material</th>
+              <th>Betalning</th>
+              <th>Beslut</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="exam in filteredExams" :key="exam._id">
+              <td><strong>{{ exam.name }}</strong></td>
+              <td>{{ exam.personalNumber || '–' }}</td>
+              <td>{{ exam.phone || '–' }}</td>
+              <td>{{ exam.email || '–' }}</td>
+              <td>{{ exam.course || '–' }}</td>
+              <td>{{ exam.municipality || '–' }}</td>
+              <td>{{ exam.requestedMonthFormatted }}</td>
+              <td>{{ exam.teacherId?.userId?.username || '–' }}</td>
+              <td>
+                <span :class="['badge', statusColor(exam.status)]">{{ exam.status || '–' }}</span>
+              </td>
+              <td>
+                <span v-if="exam.materialReceived?.status" class="badge bg-success">Ja</span>
+                <span v-else class="badge bg-secondary">Nej</span>
+              </td>
+              <td>{{ formatDate(exam.paymentDate) }}</td>
+              <td style="min-width: 200px;">
+                <div class="mb-2">
+                  <select v-model="decisions[exam._id].decision" class="form-select form-select-sm">
+                    <option value="">Välj</option>
+                    <option value="accept">Godkänn</option>
+                    <option value="deny">Neka</option>
+                  </select>
+                </div>
+                <textarea
+                  v-model="decisions[exam._id].comment"
+                  rows="2"
+                  class="form-control form-control-sm mb-2"
+                  placeholder="Kommentar"
+                ></textarea>
+                <div class="d-flex justify-content-start flex-wrap gap-2">
+                  <button class="btn btn-sm btn-success" @click="submitDecision(exam._id)">
+                    💾 Spara
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" @click="deleteExam(exam._id)">
+                    🗑️ Ta bort
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
