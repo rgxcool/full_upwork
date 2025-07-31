@@ -254,7 +254,8 @@ export const uploadStudentsForMatching = async (req, res) => {
                                     refId: pkg._id,
                                     name: pkg.coursePackageName,
                                     startDate: entry.startDate,
-                                    endDate: entry.endDate
+                                    endDate: entry.endDate,
+                                    slutprovDate: entry.slutprovDate // <-- PATCH: preserve explicit exam date
                                 }]
                             );
                             console.log(`[DEBUG] Enrollment result for student ${dbStudent.name || dbStudent.email}:`, result);
@@ -297,7 +298,8 @@ export const uploadStudentsForMatching = async (req, res) => {
                                 type: 'Course',
                                 name: entry.name,
                                 startDate: entry.startDate,
-                                endDate: entry.endDate
+                                endDate: entry.endDate,
+                                slutprovDate: entry.slutprovDate // <-- PATCH: preserve explicit exam date
                             }]
                         );
                         console.log(`[DEBUG] Course enrollment result for student ${dbStudent.name || dbStudent.email}:`, result);

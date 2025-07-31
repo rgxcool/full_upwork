@@ -97,26 +97,25 @@ class CourseMatchingService {
         startDate,
         endDate,
         userId = null,
-        responsibleTeacherId = null
+        responsibleTeacherId = null,
+        slutprovDate = null
     ) {
         const { default: CourseInstance } = await import("../models/CourseInstance.js");
         const { default: Course } = await import("../models/Course.js");
-        // First, try to find an existing instance that overlaps with the date range
+        // Only match on exact course + startDate + endDate
         const existingInstance = await CourseInstance.findOne({
             mainCourseId,
-            isActive: true,
-            $or: [
-                // Exact match
-                { startDate, endDate },
-                // Overlapping periods
-                {
-                    startDate: { $lte: endDate },
-                    endDate: { $gte: startDate },
-                },
-            ],
+            startDate,
+            endDate,
         });
 
         if (existingInstance) {
+            // Always set slutprovDate to the explicit value if provided
+            if (slutprovDate) {
+                existingInstance.slutprovDate = slutprovDate;
+                await existingInstance.save();
+                console.log(`[FORCE PATCH] Set slutprovDate for course instance: ${existingInstance.courseName} to ${slutprovDate}`);
+            }
             console.log(
                 `✅ Found existing course instance: ${
                     existingInstance.courseName
@@ -142,6 +141,7 @@ class CourseMatchingService {
             createdBy: userId,
             responsibleTeacher: responsibleTeacherId || undefined,
             notes: `Auto-created for student enrollment (${startDate.toDateString()} - ${endDate.toDateString()})`,
+            slutprovDate: slutprovDate || undefined,
         });
 
         await newInstance.save();
@@ -229,6 +229,17 @@ class CourseMatchingService {
                         continue;
                     }
 
+                    // Determine slutprovDate:
+                    console.log(`[DEBUG] entry.slutprovDate for course ${entry.name}:`, entry.slutprovDate);
+                    let slutprovDate;
+                    if (entry.slutprovDate) {
+                        slutprovDate = new Date(entry.slutprovDate);
+                        console.log(`[DEBUG] Using explicit slutprovDate for course ${entry.name}:`, slutprovDate);
+                    } else {
+                        slutprovDate = this.getWednesdayOfWeek(new Date(entry.startDate), 4);
+                        console.log(`[DEBUG] Using fallback slutprovDate for course ${entry.name}:`, slutprovDate);
+                    }
+
                     // Find or create course instance, pass responsibleTeacherId
                     const { instance, wasCreated } =
                         await this.findOrCreateCourseInstance(
@@ -236,8 +247,10 @@ class CourseMatchingService {
                             new Date(entry.startDate),
                             new Date(entry.endDate),
                             userId,
-                            entry.teacherId || null // <-- pass teacherId
+                            entry.teacherId || null,
+                            slutprovDate
                         );
+                    console.log(`[DEBUG] CourseInstance created/used for course ${entry.name}:`, instance && instance.slutprovDate);
 
                     if (wasCreated) {
                         results.warnings.push({
@@ -246,6 +259,19 @@ class CourseMatchingService {
                             instanceId: instance._id,
                             message: `Created new course instance for "${entry.name}" (${instance.startDate.toDateString()} - ${instance.endDate.toDateString()})`,
                         });
+                    }
+
+                    // Add this check before creating a new StudentEnrollment
+                    const existingEnrollment = await StudentEnrollment.findOne({
+                        studentId,
+                        courseInstanceId: instance._id,
+                        mainCourseId: match.course._id,
+                        startDate: new Date(entry.startDate),
+                        endDate: new Date(entry.endDate),
+                    });
+                    if (existingEnrollment) {
+                        console.log(`[DEDUP] Skipping duplicate enrollment for student ${studentId} in course ${match.course._id} (${entry.startDate} - ${entry.endDate})`);
+                        continue;
                     }
 
                     // Get student to find teacherId
@@ -442,6 +468,20 @@ class CourseMatchingService {
                             continue;
                         }
                         
+                        // Add this check before creating a new StudentEnrollment
+                        const existingEnrollment = await StudentEnrollment.findOne({
+                            studentId,
+                            courseInstanceId: courseInstance._id,
+                            mainCourseId: course._id,
+                            startDate: courseStart,
+                            endDate: courseEnd,
+                        });
+                        if (existingEnrollment) {
+                            console.log(`[DEDUP] Skipping duplicate enrollment for student ${studentId} in course ${course._id} (${courseStart} - ${courseEnd})`);
+                            i++;
+                            continue;
+                        }
+
                         // Get student to find teacherId
                         let studentDocB;
                         if (!global._StudentModel) {
@@ -544,6 +584,20 @@ class CourseMatchingService {
                             );
                             
                             if (nextCourseInstance && nextCourseInstance._id) {
+                                // Add this check before creating a new StudentEnrollment
+                                const existingEnrollment = await StudentEnrollment.findOne({
+                                    studentId,
+                                    courseInstanceId: nextCourseInstance._id,
+                                    mainCourseId: nextCourse._id,
+                                    startDate: courseStart,
+                                    endDate: courseEnd,
+                                });
+                                if (existingEnrollment) {
+                                    console.log(`[DEDUP] Skipping duplicate enrollment for student ${studentId} in course ${nextCourse._id} (${courseStart} - ${courseEnd})`);
+                                    i += 2;
+                                    continue;
+                                }
+
                                 // Create enrollment for next course
                                 const nextEnrollment = new StudentEnrollment({
                                     studentId,
@@ -729,6 +783,19 @@ class CourseMatchingService {
                         continue;
                     }
                     
+                    // Add this check before creating a new StudentEnrollment
+                    const existingEnrollment = await StudentEnrollment.findOne({
+                        studentId,
+                        courseInstanceId: courseInstance._id,
+                        mainCourseId: course._id,
+                        startDate: courseStart,
+                        endDate: courseEnd,
+                    });
+                    if (existingEnrollment) {
+                        console.log(`[DEDUP] Skipping duplicate enrollment for student ${studentId} in course ${course._id} (${courseStart} - ${courseEnd})`);
+                        continue;
+                    }
+
                     // Get student to find teacherId
                     let studentDoc;
                     if (!global._StudentModel) {
