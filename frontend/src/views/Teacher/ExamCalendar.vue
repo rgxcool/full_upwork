@@ -296,6 +296,10 @@ export default {
 
 
     openEventModal(info) {
+      console.log('🔍 Full event info:', info.event);
+      console.log('🔍 Event extendedProps:', info.event.extendedProps);
+      console.log('🔍 Event keys:', Object.keys(info.event));
+      
       const props = info.event.extendedProps || {};
       const isMeeting = props.isMeeting;
 
@@ -318,12 +322,14 @@ export default {
           isMeeting: false,
           student: props.student,
           teacher: props.teacher,
+          teacherId: props.teacherId,
           examMunicipality: props.examMunicipality,
           examLocation: props.examLocation,
           examTime: props.examTime,
           students: props.students || [],
           location: props.location,
-          role: props.role
+          role: props.role,
+          extendedProps: info.event.extendedProps
         };
       }
 
@@ -331,6 +337,7 @@ export default {
     },
 
       async handleExamUpdate() {
+      console.log("🔄 handleExamUpdate called - refreshing calendar data...");
       await this.fetchEvents(); // Hämta uppdaterade data från backend
       console.log("🔄 Kalendern har uppdaterats!");
     },
