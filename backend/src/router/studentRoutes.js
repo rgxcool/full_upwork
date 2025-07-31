@@ -102,7 +102,24 @@ router.put(
  */
 router.get("/students", authenticateUser, async (req, res) => {
   try {
-    const students = await Student.find().lean();
+    let query = {};
+    
+    // If user is a teacher, filter students by their teacherId
+    if (req.user.role === "teacher") {
+      // Find the teacher record for this user
+      const Teacher = mongoose.model('Teacher');
+      const teacher = await Teacher.findOne({ userId: req.user.userId });
+      
+      if (!teacher) {
+        return res.status(403).json({ error: "Teacher profile not found" });
+      }
+      
+      // Filter students by this teacher's ID
+      query.teacherId = teacher._id;
+      console.log(`🔍 Teacher ${teacher._id} fetching their students`);
+    }
+    
+    const students = await Student.find(query).lean();
     for (const student of students) {
       // Populate education refs as before
       for (const edu of student.education) {

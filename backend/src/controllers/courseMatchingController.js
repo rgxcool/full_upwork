@@ -6,7 +6,6 @@ import { parseStudentExcel } from "../utils/parseStudentExcel.js";
 import { createOrFindTeacher } from "../utils/teacherService.js";
 import { createGlobalNotification } from "../controllers/notificationController.js";
 import { normalizeMunicipalityName } from "./studentController.js";
-import CoursePackage from '../models/CoursePackage.js';
 
 /**
  * Course Matching Controller

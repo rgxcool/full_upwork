@@ -1,15 +1,33 @@
 import express from "express";
 import Student from "../models/Student.js";
 import Notification from "../models/Notification.js";
+import Teacher from "../models/Teacher.js";
+import { authenticateUser } from "../controllers/authController.js";
 const router = express.Router();
 
 import { evaluateActionPlanStatusAndNotify } from "../controllers/notificationController.js";
 
 
 
-router.get("/notifications", async (req, res) => {
+router.get("/notifications", authenticateUser, async (req, res) => {
   try {
-    const notes = await Notification.find({ resolved: false });
+    let query = { resolved: false };
+    
+    // If user is a teacher, filter notifications by their teacherId
+    if (req.user.role === "teacher") {
+      // Find the teacher record for this user
+      const teacher = await Teacher.findOne({ userId: req.user.userId });
+      
+      if (!teacher) {
+        return res.status(403).json({ error: "Teacher profile not found" });
+      }
+      
+      // Filter notifications by this teacher's ID
+      query.teacher = teacher._id;
+      console.log(`🔍 Teacher ${teacher._id} fetching their notifications`);
+    }
+    
+    const notes = await Notification.find(query);
 
     const uniqueNotes = [];
     const seenTypes = new Set();

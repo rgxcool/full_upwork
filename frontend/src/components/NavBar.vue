@@ -366,7 +366,7 @@
         'Stats',
       ];
       const menuItems = [
-        { name: 'APL', link: '/apl', role: 'admin' },
+        { name: 'APL', link: '/apl', role: ['admin', 'teacher'] },
         { name: 'Kalender', link: '/kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
@@ -374,7 +374,7 @@
         { name: 'Kursmatchning', link: '/course-matching', role: 'admin' },
         { name: 'Lägg till Lärare', link: '/lagg-till-larare', role: 'admin' },
         { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
-        { name: 'Elever', link: '/students', role: 'admin' },
+        { name: 'Elever', link: '/students', role: ['admin', 'teacher'] },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
       ];
