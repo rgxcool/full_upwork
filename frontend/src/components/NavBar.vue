@@ -282,6 +282,10 @@
             const formattedDate = date.toISOString().split('T')[0]
             params.append('type', 'Datum')
             params.append('date', formattedDate)
+          } else if (selectedSearchType.value === 'Alla' && searchQuery.value && /^\d{4}-\d{2}-\d{2}$/.test(searchQuery.value)) {
+            // If 'Alla' and input matches yyyy-mm-dd, treat as date search
+            params.append('type', 'Datum')
+            params.append('date', searchQuery.value)
           } else {
             if (!searchQuery.value || searchQuery.value.length < 3) {
               searchResults.value = []
@@ -292,7 +296,10 @@
             params.append('q', searchQuery.value)
           }
 
-          const res = await axios.get(`http://localhost:5001/api/search?${params.toString()}`)
+          const res = await axios.get(
+            `http://localhost:5001/api/search?${params.toString()}`,
+            { withCredentials: true }
+          )
           searchResults.value = res.data
           showResults.value = filteredResults.value.length > 0
         } catch (err) {
