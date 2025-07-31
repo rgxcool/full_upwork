@@ -1,134 +1,136 @@
 <template>
-  <div class="course-matching-container">
-    <div class="header-section">
-      <h3 class="page-title">Kursmatchning</h3>
-      <div class="breadcrumb">
-        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-          <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
-        </svg>
-        <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
-      </div>
-    </div>
-
-    <div class="content-grid">
-      <!-- Batch Processing -->
-      <div class="card">
-        <div class="card-header">
-          <h5>Batch-bearbetning av studenter</h5>
+  <div class="scrollable-view">
+    <div class="course-matching-container">
+      <div class="header-section">
+        <h3 class="page-title">Kursmatchning</h3>
+        <div class="breadcrumb">
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+            <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
+          </svg>
+          <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
         </div>
-        <div class="card-body">
-          <!-- Debug section -->
-          <div
-            class="debug-info"
-            style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px"
-          >
-            <h6>Debug Info:</h6>
-            <p>
-              <strong>Is Logged In:</strong>
-              {{ isLoggedIn }}
-            </p>
-            <p>
-              <strong>User Role:</strong>
-              {{ userRole }}
-            </p>
-            <p>
-              <strong>Is Admin:</strong>
-              {{ isAdmin }}
-            </p>
-            <p>
-              <strong>API Base URL:</strong>
-              {{ api.defaults.baseURL }}
-            </p>
+      </div>
+
+      <div class="content-grid">
+        <!-- Batch Processing -->
+        <div class="card">
+          <div class="card-header">
+            <h5>Batch-bearbetning av studenter</h5>
           </div>
-          <div class="form-group">
-            <label for="studentFile">Excel-fil med studenter:</label>
-            <input
-              type="file"
-              id="studentFile"
-              @change="handleFileChange"
-              accept=".xlsx,.xls"
-              class="form-control"
-            />
-          </div>
-
-          <div v-if="uploadedStudents.length > 0" class="upload-summary">
-            <h6>Uppladdade studenter ({{ uploadedStudents.length }}):</h6>
-            <div class="student-list scrollable-student-list">
-              <div
-                v-for="(student, index) in uploadedStudents"
-                :key="index"
-                class="student-item"
-              >
-                {{ student.name }} - {{ getEnrollmentCount(student.email) }} kurser
-              </div>
+          <div class="card-body">
+            <!-- Debug section -->
+            <div
+              class="debug-info"
+              style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px"
+            >
+              <h6>Debug Info:</h6>
+              <p>
+                <strong>Is Logged In:</strong>
+                {{ isLoggedIn }}
+              </p>
+              <p>
+                <strong>User Role:</strong>
+                {{ userRole }}
+              </p>
+              <p>
+                <strong>Is Admin:</strong>
+                {{ isAdmin }}
+              </p>
+              <p>
+                <strong>API Base URL:</strong>
+                {{ api.defaults.baseURL }}
+              </p>
             </div>
-            <div v-if="uploadedStudents.length > 5" class="more-students">
-              ... och {{ uploadedStudents.length - 5 }} till
-            </div>
-          </div>
-
-          <button
-            class="btn btn-success"
-            @click="processStudents"
-            :disabled="isProcessing || !selectedFile"
-          >
-            {{ isProcessing ? 'Bearbetar...' : 'Bearbeta studenter' }}
-          </button>
-
-          <div v-if="processingResults" class="processing-results">
-            <h6>Bearbetningsresultat:</h6>
-            <div class="result-stats">
-              <div class="stat-item">
-                <span class="stat-label">Inskrivningar skapade:</span>
-                <span class="stat-value success">{{ processingResults.enrollments.length }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Varningar:</span>
-                <span class="stat-value warning">{{ processingResults.warnings.length }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Fel:</span>
-                <span class="stat-value error">{{ processingResults.errors.length }}</span>
-              </div>
+            <div class="form-group">
+              <label for="studentFile">Excel-fil med studenter:</label>
+              <input
+                type="file"
+                id="studentFile"
+                @change="handleFileChange"
+                accept=".xlsx,.xls"
+                class="form-control"
+              />
             </div>
 
-            <!-- Scrollable list of created enrollments -->
-            <div v-if="processingResults.enrollments.length > 0" class="enrollments-scroll-list">
-              <h6>Skapade inskrivningar:</h6>
-              <ul>
-                <li v-for="(enrollment, idx) in processingResults.enrollments" :key="enrollment._id || idx">
-                  {{ enrollment.studentEmail }} –
-                  <span v-if="enrollment.courseInstanceName">{{ enrollment.courseInstanceName }}</span>
-                  <span v-else>kursinstans</span>
-                  – {{ enrollment.startDate ? (new Date(enrollment.startDate)).toLocaleDateString() : '' }} till {{ enrollment.endDate ? (new Date(enrollment.endDate)).toLocaleDateString() : '' }} – {{ enrollment.status }}
-                </li>
-              </ul>
-            </div>
-
-            <div v-if="processingResults.warnings.length > 0" class="warnings-section">
-              <h6>Varningar:</h6>
-              <div class="warning-list">
+            <div v-if="uploadedStudents.length > 0" class="upload-summary">
+              <h6>Uppladdade studenter ({{ uploadedStudents.length }}):</h6>
+              <div class="student-list scrollable-student-list">
                 <div
-                  v-for="(warning, index) in processingResults.warnings"
+                  v-for="(student, index) in uploadedStudents"
                   :key="index"
-                  class="warning-item"
+                  class="student-item"
                 >
-                  <strong>{{ warning.type }}:</strong>
-                  {{ warning.message }}
+                  {{ student.name }} - {{ getEnrollmentCount(student.email) }} kurser
                 </div>
               </div>
+              <div v-if="uploadedStudents.length > 5" class="more-students">
+                ... och {{ uploadedStudents.length - 5 }} till
+              </div>
             </div>
 
-            <div v-if="processingResults.errors.length > 0" class="errors-section">
-              <h6>Fel:</h6>
-              <div class="error-list">
-                <div
-                  v-for="(error, index) in processingResults.errors"
-                  :key="index"
-                  class="error-item"
-                >
-                  <strong>{{ error.courseName }}:</strong>
-                  {{ error.error }}
+            <button
+              class="btn btn-success"
+              @click="processStudents"
+              :disabled="isProcessing || !selectedFile"
+            >
+              {{ isProcessing ? 'Bearbetar...' : 'Bearbeta studenter' }}
+            </button>
+
+            <div v-if="processingResults" class="processing-results">
+              <h6>Bearbetningsresultat:</h6>
+              <div class="result-stats">
+                <div class="stat-item">
+                  <span class="stat-label">Inskrivningar skapade:</span>
+                  <span class="stat-value success">{{ processingResults.enrollments.length }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Varningar:</span>
+                  <span class="stat-value warning">{{ processingResults.warnings.length }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Fel:</span>
+                  <span class="stat-value error">{{ processingResults.errors.length }}</span>
+                </div>
+              </div>
+
+              <!-- Scrollable list of created enrollments -->
+              <div v-if="processingResults.enrollments.length > 0" class="enrollments-scroll-list">
+                <h6>Skapade inskrivningar:</h6>
+                <ul>
+                  <li v-for="(enrollment, idx) in processingResults.enrollments" :key="enrollment._id || idx">
+                    {{ enrollment.studentEmail }} –
+                    <span v-if="enrollment.courseInstanceName">{{ enrollment.courseInstanceName }}</span>
+                    <span v-else>kursinstans</span>
+                    – {{ enrollment.startDate ? (new Date(enrollment.startDate)).toLocaleDateString() : '' }} till {{ enrollment.endDate ? (new Date(enrollment.endDate)).toLocaleDateString() : '' }} – {{ enrollment.status }}
+                  </li>
+                </ul>
+              </div>
+
+              <div v-if="processingResults.warnings.length > 0" class="warnings-section">
+                <h6>Varningar:</h6>
+                <div class="warning-list">
+                  <div
+                    v-for="(warning, index) in processingResults.warnings"
+                    :key="index"
+                    class="warning-item"
+                  >
+                    <strong>{{ warning.type }}:</strong>
+                    {{ warning.message }}
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="processingResults.errors.length > 0" class="errors-section">
+                <h6>Fel:</h6>
+                <div class="error-list">
+                  <div
+                    v-for="(error, index) in processingResults.errors"
+                    :key="index"
+                    class="error-item"
+                  >
+                    <strong>{{ error.courseName }}:</strong>
+                    {{ error.error }}
+                  </div>
                 </div>
               </div>
             </div>
