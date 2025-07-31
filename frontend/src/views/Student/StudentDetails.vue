@@ -3,9 +3,7 @@
     <div class="student-details-container">
       <div class="header-section">
         <h1 class="page-title">Elevdetaljer</h1>
-        <div class="breadcrumb">
-          <router-link to="/admin/users" class="breadcrumb-link">← Tillbaka till Admin</router-link>
-        </div>
+        <!-- Removed Tillbaka till Admin link and breadcrumb -->
       </div>
 
       <div v-if="loading" class="loading">

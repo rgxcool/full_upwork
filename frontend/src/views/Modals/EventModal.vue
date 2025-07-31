@@ -75,7 +75,6 @@
                   </option>
                 </select>
               </div>
-              <small class="text-muted">(24-timmars format)</small>
 
               <label class="me-2">Kommun:</label>
               <select v-model="examMunicipality" class="me-3">

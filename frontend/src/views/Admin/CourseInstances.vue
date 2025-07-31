@@ -3,20 +3,12 @@
     <div class="course-instances-container">
       <div class="header-section">
         <h3 class="page-title">Kursinstanser</h3>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <div class="breadcrumb">
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-              <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
-            </svg>
-            <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
-          </div>
-          <button class="btn btn-danger" style="margin-left: 20px;" @click="deleteAllCourseInstances">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-            </svg>
-            Radera alla kursinstanser
-          </button>
-        </div>
+        <button class="btn btn-danger" style="margin-left: 20px;" @click="deleteAllCourseInstances">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+          Radera alla kursinstanser
+        </button>
       </div>
 
       <!-- Filters -->
@@ -80,20 +72,20 @@
         <table class="table">
           <thead>
             <tr>
-              <th>Kursnamn</th>
-              <th>Kurskod</th>
-              <th>Startdatum</th>
-              <th>Slutdatum</th>
-              <th>Slutprov datum</th>
-              <th>Inskrivningar</th>
-              <th>Status</th>
-              <th>Skapad av</th>
-              <th>Ansvarig lärare</th>
+              <th @click="setSort('courseName')">Kursnamn <span v-if="sortKey === 'courseName'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('courseCode')">Kurskod <span v-if="sortKey === 'courseCode'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('startDate')">Startdatum <span v-if="sortKey === 'startDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('endDate')">Slutdatum <span v-if="sortKey === 'endDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('slutprovDate')">Slutprov datum <span v-if="sortKey === 'slutprovDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('enrollmentCount')">Inskrivningar <span v-if="sortKey === 'enrollmentCount'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('isActive')">Status <span v-if="sortKey === 'isActive'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('createdBy')">Skapad av <span v-if="sortKey === 'createdBy'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('responsibleTeacher')">Ansvarig lärare <span v-if="sortKey === 'responsibleTeacher'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
               <th>Åtgärder</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="instance in instances" :key="instance._id">
+            <tr v-for="instance in sortedInstances" :key="instance._id">
               <td>{{ instance.courseName }}</td>
               <td>{{ instance.courseCode }}</td>
               <td>{{ formatDate(instance.startDate) }}</td>
@@ -447,6 +439,48 @@
         }
       })
 
+      const sortKey = ref('')
+      const sortOrder = ref('asc')
+
+      const setSort = (key) => {
+        if (sortKey.value === key) {
+          sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+        } else {
+          sortKey.value = key
+          sortOrder.value = 'asc'
+        }
+      }
+
+      const sortedInstances = computed(() => {
+        if (!sortKey.value) return instances.value
+        return [...instances.value].sort((a, b) => {
+          let aVal = a[sortKey.value]
+          let bVal = b[sortKey.value]
+          // Handle nested fields
+          if (sortKey.value === 'createdBy') {
+            aVal = a.createdBy?.username || ''
+            bVal = b.createdBy?.username || ''
+          } else if (sortKey.value === 'responsibleTeacher') {
+            aVal = a.responsibleTeacher?.userId?.username || ''
+            bVal = b.responsibleTeacher?.userId?.username || ''
+          } else if (sortKey.value === 'enrollmentCount') {
+            aVal = a.enrollmentCount || 0
+            bVal = b.enrollmentCount || 0
+          } else if (sortKey.value === 'isActive') {
+            aVal = a.isActive ? 1 : 0
+            bVal = b.isActive ? 1 : 0
+          }
+          // Date fields
+          if (sortKey.value === 'startDate' || sortKey.value === 'endDate' || sortKey.value === 'slutprovDate') {
+            aVal = aVal ? new Date(aVal) : new Date(0)
+            bVal = bVal ? new Date(bVal) : new Date(0)
+          }
+          if (aVal < bVal) return sortOrder.value === 'asc' ? -1 : 1
+          if (aVal > bVal) return sortOrder.value === 'asc' ? 1 : -1
+          return 0
+        })
+      })
+
       const loadCourses = async () => {
         try {
           const response = await api.get('/courses')
@@ -665,6 +699,10 @@
         deleteAllCourseInstances,
         deleteEnrollment,
         deleteUnknownEnrollments,
+        sortKey,
+        sortOrder,
+        setSort,
+        sortedInstances,
       }
     },
   }
