@@ -62,6 +62,26 @@ router.post('/meetings', authenticateUser, async (req, res) => {
   }
 });
 
+// PUT: Uppdatera möte (t.ex. för att ändra datum/tid via drag-n-drop)
+router.put('/meetings/:id', authenticateUser, async (req, res) => {
+  try {
+    const { start } = req.body;
+    const meeting = await Meeting.findByIdAndUpdate(
+      req.params.id,
+      { start },
+      { new: true }
+    );
+    if (!meeting) {
+      return res.status(404).json({ error: "Möte hittades inte" });
+    }
+    res.json(meeting);
+  } catch (err) {
+    console.error('❌ Kunde inte uppdatera möte:', err);
+    res.status(500).json({ error: 'Serverfel vid uppdatering av möte' });
+  }
+});
+
+
 
 
 export default router;
