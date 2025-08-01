@@ -170,43 +170,48 @@
             </div>
           </div>
           <div class="card-body">
-            <div v-if="student.education && student.education.length > 0" class="education-list">
-              <div
-                v-for="(edu, index) in student.education"
-                :key="edu._id || index"
-                class="education-item"
-                :class="{ 'enrollment-item': edu.isEnrollment }"
-              >
-                <div class="education-header">
-                  <span class="education-type">{{ edu.type }}</span>
-                  <span v-if="edu.isEnrollment" class="enrollment-badge">Inskriven</span>
-                  <span class="education-name">
-                    {{ getEducationName(edu) }}
-                  </span>
-                </div>
-
-                <div class="education-details">
-                  <div v-if="edu.startDate && edu.endDate" class="education-dates">
-                    {{ formatDate(edu.startDate) }} - {{ formatDate(edu.endDate) }}
+            <div 
+              class="education-scroll-container"
+              style="max-height: 400px; overflow-y: auto; border: 2px solid #007bff; background-color: #f8f9fa; padding: 10px; border-radius: 4px;"
+            >
+              <div v-if="student.education && student.education.length > 0" class="education-list">
+                <div
+                  v-for="(edu, index) in student.education"
+                  :key="edu._id || index"
+                  class="education-item"
+                  :class="{ 'enrollment-item': edu.isEnrollment }"
+                >
+                  <div class="education-header">
+                    <span class="education-type">{{ edu.type }}</span>
+                    <span v-if="edu.isEnrollment" class="enrollment-badge">Inskriven</span>
+                    <span class="education-name">
+                      {{ getEducationName(edu) }}
+                    </span>
                   </div>
 
-                  <div v-if="edu.status" class="education-status">
-                    Status:
-                    <span :class="'status-' + edu.status">{{ edu.status }}</span>
-                  </div>
+                  <div class="education-details">
+                    <div v-if="edu.startDate && edu.endDate" class="education-dates">
+                      {{ formatDate(edu.startDate) }} - {{ formatDate(edu.endDate) }}
+                    </div>
 
-                  <div v-if="edu.grade" class="education-grade">Betyg: {{ edu.grade }}</div>
+                    <div v-if="edu.status" class="education-status">
+                      Status:
+                      <span :class="'status-' + edu.status">{{ edu.status }}</span>
+                    </div>
 
-                  <div v-if="edu.isEnrollment && edu.courseInstance" class="course-instance-info">
-                    Kursinstans: {{ edu.courseInstance.courseName }} ({{
-                      formatDate(edu.courseInstance.startDate)
-                    }}
-                    - {{ formatDate(edu.courseInstance.endDate) }})
+                    <div v-if="edu.grade" class="education-grade">Betyg: {{ edu.grade }}</div>
+
+                    <div v-if="edu.isEnrollment && edu.courseInstance" class="course-instance-info">
+                      Kursinstans: {{ edu.courseInstance.courseName }} ({{
+                        formatDate(edu.courseInstance.startDate)
+                      }}
+                      - {{ formatDate(edu.courseInstance.endDate) }})
+                    </div>
                   </div>
                 </div>
               </div>
+              <div v-else class="no-education">Ingen utbildning registrerad</div>
             </div>
-            <div v-else class="no-education">Ingen utbildning registrerad</div>
           </div>
         </div>
 
