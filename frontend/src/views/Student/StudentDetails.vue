@@ -174,43 +174,51 @@
             </div>
           </div>
           <div class="card-body">
-            <div v-if="student.education && student.education.length > 0" class="education-list">
-              <div
-                v-for="(edu, index) in student.education"
-                :key="edu._id || index"
-                class="education-item"
-                :class="{ 'enrollment-item': edu.isEnrollment }"
-              >
-                <div class="education-header">
-                  <span class="education-type">{{ edu.type }}</span>
-                  <span v-if="edu.isEnrollment" class="enrollment-badge">Inskriven</span>
-                  <span class="education-name">
-                    {{ getEducationName(edu) }}
-                  </span>
-                </div>
-
-                <div class="education-details">
-                  <div v-if="edu.startDate && edu.endDate" class="education-dates">
-                    {{ formatDate(edu.startDate) }} - {{ formatDate(edu.endDate) }}
+            <div style="border: 3px solid blue; background: yellow; padding: 20px; margin: 10px;">
+              TEST CONTAINER - IF YOU SEE THIS, THE CHANGES ARE WORKING
+            </div>
+            <div 
+              class="education-scroll-container"
+              style="max-height: 200px; overflow-y: scroll; border: 2px solid red; background-color: #f0f0f0; padding: 10px;"
+            >
+              <div v-if="student.education && student.education.length > 0" class="education-list">
+                <div
+                  v-for="(edu, index) in student.education"
+                  :key="edu._id || index"
+                  class="education-item"
+                  :class="{ 'enrollment-item': edu.isEnrollment }"
+                >
+                  <div class="education-header">
+                    <span class="education-type">{{ edu.type }}</span>
+                    <span v-if="edu.isEnrollment" class="enrollment-badge">Inskriven</span>
+                    <span class="education-name">
+                      {{ getEducationName(edu) }}
+                    </span>
                   </div>
 
-                  <div v-if="edu.status" class="education-status">
-                    Status:
-                    <span :class="'status-' + edu.status">{{ edu.status }}</span>
-                  </div>
+                  <div class="education-details">
+                    <div v-if="edu.startDate && edu.endDate" class="education-dates">
+                      {{ formatDate(edu.startDate) }} - {{ formatDate(edu.endDate) }}
+                    </div>
 
-                  <div v-if="edu.grade" class="education-grade">Betyg: {{ edu.grade }}</div>
+                    <div v-if="edu.status" class="education-status">
+                      Status:
+                      <span :class="'status-' + edu.status">{{ edu.status }}</span>
+                    </div>
 
-                  <div v-if="edu.isEnrollment && edu.courseInstance" class="course-instance-info">
-                    Kursinstans: {{ edu.courseInstance.courseName }} ({{
-                      formatDate(edu.courseInstance.startDate)
-                    }}
-                    - {{ formatDate(edu.courseInstance.endDate) }})
+                    <div v-if="edu.grade" class="education-grade">Betyg: {{ edu.grade }}</div>
+
+                    <div v-if="edu.isEnrollment && edu.courseInstance" class="course-instance-info">
+                      Kursinstans: {{ edu.courseInstance.courseName }} ({{
+                        formatDate(edu.courseInstance.startDate)
+                      }}
+                      - {{ formatDate(edu.courseInstance.endDate) }})
+                    </div>
                   </div>
                 </div>
               </div>
+              <div v-else class="no-education">Ingen utbildning registrerad</div>
             </div>
-            <div v-else class="no-education">Ingen utbildning registrerad</div>
           </div>
         </div>
 
@@ -350,6 +358,7 @@
   export default {
     name: 'StudentDetails',
     setup() {
+      console.log('🔍 StudentDetails component setup - TESTING IF CHANGES WORK');
       const route = useRoute()
       const store = useStore()
 
@@ -630,6 +639,7 @@
 <style scoped>
   .student-details-container {
     padding: 20px;
+    padding-bottom: 200px;
     max-width: 1200px;
     margin: 0 auto;
   }
@@ -656,6 +666,8 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 20px;
+    padding-bottom: 100px;
+    min-height: auto;
   }
 
   .card {
@@ -1064,5 +1076,33 @@
     background: #f8f9fa;
     padding: 5px;
     border-radius: 4px;
+  }
+
+  .education-scroll-container {
+    max-height: 200px !important;
+    overflow-y: scroll !important;
+    padding-right: 10px;
+    border: 2px solid red !important;
+    border-radius: 4px;
+    height: 200px !important;
+    background-color: #f0f0f0 !important;
+  }
+
+  .education-scroll-container::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .education-scroll-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  .education-scroll-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+  }
+
+  .education-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
   }
 </style>
