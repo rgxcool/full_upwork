@@ -10,62 +10,6 @@ import { createGlobalNotification } from "../controllers/notificationController.
 
 import Notification from "../models/Notification.js";
 
-router.put("/exams/:id/decision", async (req, res) => {
-    try {
-        const { decision, comment } = req.body;
-        const examId = req.params.id;
-
-        console.log(`Hantera beslut: ${decision} för examId: ${examId}`);
-
-        // Hämta den befintliga prövningen
-        const exam = await Exam.findById(examId).populate("teacherId");
-        if (!exam) {
-            return res.status(404).json({ error: "Prövning hittades inte." });
-        }
-
-        const updateData = { decision, comment };
-
-        switch (decision) {
-            case "accept":
-                const finalExamDate = calculateExamDate(exam.requestedMonth);
-                if (!finalExamDate) {
-                    return res
-                        .status(400)
-                        .json({ error: "Ogiltigt datum för accept" });
-                }
-
-                const student = await Student.findOneAndUpdate(
-                    { personalNumber: exam.personalNumber },
-                    {
-                        personalNumber: exam.personalNumber,
-                        name: exam.name, // or whatever fields are relevant
-                        finalExamDate,
-                    },
-                    { upsert: true, new: true }
-                );
-
-                updateData.status = "scheduled";
-                updateData.studentId = student._id;
-                break;
-
-            case "deny":
-                updateData.status = "denied";
-                break;
-
-            default:
-                return res.status(400).json({ error: "Ogiltigt beslut." });
-        }
-
-        const updatedExam = await Exam.findByIdAndUpdate(examId, updateData, {
-            new: true,
-        });
-
-        res.json(updatedExam);
-    } catch (err) {
-        console.error("Fel vid uppdatering av beslut:", err);
-        res.status(500).json({ error: "Kunde inte spara beslut." });
-    }
-});
 
 function calculateExamDate(requestedMonth) {
     const months = {
@@ -251,7 +195,34 @@ router.get("/calendar-events", async (req, res) => {
     }
 });
 
+router.put("/calendar-events/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateFields = req.body;
+
+    const updatedEvent = await CalendarEvent.findByIdAndUpdate(
+      id,
+      updateFields,
+      { new: true }
+    );
+
+    if (!updatedEvent) {
+      return res.status(404).json({ error: "Event hittades inte" });
+    }
+
+    res.json({ message: "✅ Event uppdaterat", event: updatedEvent });
+  } catch (err) {
+    console.error("❌ Fel vid uppdatering av event:", err.message);
+    res.status(500).json({ error: "Kunde inte uppdatera event" });
+  }
+});
+
+
 router.get("/calendar-events/syncable", async (req, res) => {
+    function pickFirstNonEmpty(arr, field) {
+        return (arr.find(e => e[field] && e[field] !== "") || {})[field] || "";
+    }
+
     try {
         const students = await Student.find({
             finalExamDate: { $ne: null },
@@ -267,7 +238,6 @@ router.get("/calendar-events/syncable", async (req, res) => {
 
         for (const student of students) {
             if (!student.finalExamDate || !student.teacherId || !student.teacherId.userId) continue;
-            // Use only the date part (YYYY-MM-DD) for grouping
             const dateObj = new Date(student.finalExamDate);
             const dateKey = dateObj.toISOString().split("T")[0];
             const teacherId = student.teacherId._id.toString();
@@ -298,24 +268,32 @@ router.get("/calendar-events/syncable", async (req, res) => {
                 }
             }
 
-            // Load per-event attendance if present
             let attended = student.attendedExam || false;
-            // Try to find an existing event for this group and date
-            let eventDoc = await CalendarEvent.findOne({
-                title: { $regex: /^Slutprov/i },
-                start: new Date(dateKey + 'T00:00:00'),
-                'extendedProps.teacherId': student.teacherId._id,
-                'extendedProps.type': 'exam',
-            });
-            if (eventDoc && eventDoc.extendedProps && Array.isArray(eventDoc.extendedProps.students)) {
-                const found = eventDoc.extendedProps.students.find(s => s._id?.toString() === student._id.toString() || s.personalNumber === student.personalNumber);
-                if (found && typeof found.attended === 'boolean') {
-                    attended = found.attended;
-                }
-            }
 
             if (!grouped[key]) {
-                // Set event start to local midnight for the date
+                // Samla info från ALLA studenter i denna grupp
+                const sameTime = students
+                    .filter(s =>
+                        s.finalExamDate &&
+                        s.teacherId &&
+                        s.teacherId._id.toString() === teacherId &&
+                        new Date(s.finalExamDate).toISOString().split("T")[0] === dateKey
+                    )
+                    .map(s => ({
+                        time: s.examTime,
+                        municipality: s.examMunicipality,
+                        location: s.examLocation
+                    }));
+
+
+                // 🔥 ANVÄND DEN NYA LOGIKEN!
+                const examTime = pickFirstNonEmpty(sameTime, 'time');
+                const examMunicipality = pickFirstNonEmpty(sameTime, 'municipality');
+                const examLocation = pickFirstNonEmpty(sameTime, 'location');
+
+                console.log("sameTime:", sameTime);
+
+
                 const startDate = new Date(dateKey + 'T00:00:00');
                 grouped[key] = {
                     title: student.teacherId.userId.username,
@@ -325,9 +303,9 @@ router.get("/calendar-events/syncable", async (req, res) => {
                         teacher: student.teacherId.userId.username,
                         teacherId: student.teacherId._id,
                         type: "exam",
-                        examMunicipality: student.examMunicipality || "",
-                        examLocation: student.examLocation || "",
-                        examTime: student.examTime || "",
+                        examMunicipality,
+                        examLocation,
+                        examTime,
                         courseName: courseName || null,
                         students: [],
                     },
@@ -350,6 +328,7 @@ router.get("/calendar-events/syncable", async (req, res) => {
         res.status(500).json({ error: "Kunde inte hämta synkade events." });
     }
 });
+
 
 router.put("/update-exam/:id", async (req, res) => {
     const { id } = req.params;
@@ -453,33 +432,82 @@ router.delete("/exams/:id", async (req, res) => {
 // PATCH: Batch update attendance for a specific event (date + teacher)
 router.post('/calendar-events/mark-attendance', async (req, res) => {
   try {
-    const { date, teacherId, students } = req.body; // students: [{ _id, attended }]
-    if (!date || !teacherId || !Array.isArray(students)) {
-      return res.status(400).json({ error: 'Missing date, teacherId, or students array' });
+    const { students } = req.body;
+    if (!Array.isArray(students)) {
+      return res.status(400).json({ error: 'Invalid input' });
     }
-    const dateKey = new Date(date).toISOString().split('T')[0];
-    const eventDoc = await CalendarEvent.findOne({
-      title: { $regex: /^Slutprov/i },
-      start: new Date(dateKey + 'T00:00:00'),
-      'extendedProps.teacherId': teacherId,
-      'extendedProps.type': 'exam',
-    });
-    if (!eventDoc) {
-      return res.status(404).json({ error: 'Event not found' });
-    }
-    // Update attendance for each student in the event
+
     for (const s of students) {
-      const idx = eventDoc.extendedProps.students.findIndex(stu => stu._id?.toString() === s._id || stu.personalNumber === s.personalNumber);
-      if (idx !== -1) {
-        eventDoc.extendedProps.students[idx].attended = !!s.attended;
-      }
+      if (!s._id) continue;
+      await Student.findByIdAndUpdate(s._id, {
+        attendedExam: s.attended,
+        paidExamFee: s.paidExamFee,
+      });
     }
-    await eventDoc.save();
-    res.json({ message: 'Attendance updated for event', event: eventDoc });
+
+    res.json({ message: '✅ Attendance and fee saved' });
   } catch (err) {
-    console.error('❌ Error updating event attendance:', err);
-    res.status(500).json({ error: 'Failed to update event attendance' });
+    console.error('❌ Error updating attendance/fee:', err);
+    res.status(500).json({ error: 'Server error' });
   }
+});
+
+
+router.put("/exams/:id/decision", async (req, res) => {
+    try {
+        const { decision, comment } = req.body;
+        const examId = req.params.id;
+
+        console.log(`Hantera beslut: ${decision} för examId: ${examId}`);
+
+        // Hämta den befintliga prövningen
+        const exam = await Exam.findById(examId).populate("teacherId");
+        if (!exam) {
+            return res.status(404).json({ error: "Prövning hittades inte." });
+        }
+
+        const updateData = { decision, comment };
+
+        switch (decision) {
+            case "accept":
+                const finalExamDate = calculateExamDate(exam.requestedMonth);
+                if (!finalExamDate) {
+                    return res
+                        .status(400)
+                        .json({ error: "Ogiltigt datum för accept" });
+                }
+
+                const student = await Student.findOneAndUpdate(
+                    { personalNumber: exam.personalNumber },
+                    {
+                        personalNumber: exam.personalNumber,
+                        name: exam.name, // or whatever fields are relevant
+                        finalExamDate,
+                    },
+                    { upsert: true, new: true }
+                );
+
+                updateData.status = "scheduled";
+                updateData.studentId = student._id;
+                break;
+
+            case "deny":
+                updateData.status = "denied";
+                break;
+
+            default:
+                return res.status(400).json({ error: "Ogiltigt beslut." });
+        }
+
+        const updatedExam = await Exam.findByIdAndUpdate(examId, updateData, {
+            new: true,
+        });
+
+        res.json(updatedExam);
+    } catch (err) {
+        console.error("Fel vid uppdatering av beslut:", err);
+        res.status(500).json({ error: "Kunde inte spara beslut." });
+    }
 });
 
 export default router;

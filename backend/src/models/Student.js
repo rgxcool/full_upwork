@@ -98,6 +98,9 @@ const StudentSchema = new mongoose.Schema(
             ref: "Teacher",
         },
         dropout: { type: Boolean, default: false },
+        attendedExam: { type: Boolean, default: false },
+        paidExamFee: { type: Boolean, default: false },
+
 
         aplStatus: {
             type: String,

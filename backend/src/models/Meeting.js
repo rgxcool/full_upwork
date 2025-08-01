@@ -10,11 +10,11 @@ const meetingSchema = new mongoose.Schema({
     name: String,
     personalNumber: String
   },
-  bookedBy: {
-    type: String,
-    enum: ['syv', 'specped'],
-    required: true
-  },
+bookedBy: {
+  type: String,
+  enum: ['syv', 'specped', 'admin', 'systemadmin'],
+  required: true
+},
   createdAt: {
     type: Date,
     default: Date.now

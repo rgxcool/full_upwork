@@ -1,42 +1,42 @@
 <template>
-  <div
-    v-if="event"
-    class="modal fade show d-block"
-    tabindex="-1"
-    role="dialog"
-    style="background: rgba(0, 0, 0, 0.5)"
-  >
-    <div class="modal-dialog modal-lg" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">{{ event.teacher || 'Okänd lärare' }}</h5>
+  <div v-if="event" class="modal fade show d-block" tabindex="-1" role="dialog" style="background: rgba(0, 0, 0, 0.5)">
+    <div class="modal-dialog modal-xl" role="document">
+      <div class="modal-content p-4 rounded-lg shadow">
+        <div class="d-flex justify-content-between align-items-start mb-4">
+          <div>
+            <h5 class="modal-title fw-bold">{{ event.extendedProps?.teacher || event.teacher || 'Okänd lärare' }}</h5>
+            <p class="text-muted mb-1">Provdetaljer för alla studenter i detta prov:</p>
+          </div>
           <button type="button" class="btn-close" @click="closeModal"></button>
         </div>
 
-        <div class="modal-body">
-          <p>
-            <strong>Provdetaljer:</strong>
-            <br />
-            Tid: {{ examTime || 'Ej vald' }}
-            <br />
-            Kommun: {{ examMunicipality || 'Ej vald' }}
-            <br />
-            Plats: {{ examLocation || 'Ej vald' }}
-          </p>
+        <!-- Provdetaljer sektion -->
+        <div class="bg-white border rounded p-3 mb-4 shadow-sm">
+          <!-- Visa bara exam-info om type är 'exam' -->
+            <h6>📝 Provuppgifter</h6>
+            <div>
+              <strong>Tid:</strong> {{ examInfo.time }}
+              <strong>Kommun:</strong> {{ examInfo.municipality }}
+              <strong>Plats:</strong> {{ examInfo.location }}
+            </div>
+        </div>
 
-          <h5>Studenter kopplade till detta prov</h5>
-          <table class="table table-striped">
-            <thead>
+        <!-- Tabell -->
+        <h6 class="fw-semibold">Studenter kopplade till detta prov</h6>
+        <div class="table-responsive mb-4">
+          <table class="table table-striped align-middle">
+            <thead class="table-light">
               <tr>
                 <th>Namn</th>
                 <th>Personnummer</th>
                 <th>Kurs</th>
                 <th>Info</th>
                 <th>Närvaro</th>
+                <th>Prövning</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(student, index) in event.students || []" :key="index">
+              <tr v-for="(student, index) in students" :key="student._id || index">
                 <td>{{ student.name }}</td>
                 <td>{{ student.personalNumber }}</td>
                 <td>{{ student.courseName || '-' }}</td>
@@ -45,7 +45,18 @@
                   <input
                     type="checkbox"
                     v-model="student.attended"
-                    @change="markAttendance(student.personalNumber, student.attended)"
+                    :disabled="!canEdit"
+                    class="form-check-input"
+                    @change="markAttendance(student)"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    v-model="student.paidExamFee"
+                    @change="markAttendance(student)"
+                    :disabled="!canEdit"
+                    class="form-check-input"
                   />
                 </td>
               </tr>
@@ -53,13 +64,20 @@
           </table>
         </div>
 
-        <div class="modal-footer">
-          <form @submit.prevent="submitExam" class="exam-form">
-            <label class="me-2">Välj provtid:</label>
-            <input type="time" v-model="examTime" required class="me-3" />
+        <!-- Form för admin/lärare -->
+        <form
+          v-if="canEdit"
+          @submit.prevent="submitExamDetails"
+          class="d-flex flex-wrap align-items-center gap-3"
+        >
+          <div class="d-flex align-items-center gap-2">
+            <label class="mb-0 fw-semibold">Provtid:</label>
+            <input type="time" v-model="examInfoLocal.time" required class="form-control" />
+          </div>
 
-            <label class="me-2">Kommun:</label>
-            <select v-model="examMunicipality" class="me-3">
+          <div class="d-flex align-items-center gap-2">
+            <label class="mb-0 fw-semibold">Kommun:</label>
+            <select v-model="examInfoLocal.municipality" class="form-select">
               <option
                 v-for="(locations, municipality) in examMunicipalities"
                 :key="municipality"
@@ -68,118 +86,161 @@
                 {{ municipality }}
               </option>
             </select>
+          </div>
 
-            <label class="me-2">Plats:</label>
-            <select v-model="examLocation" class="me-3">
+          <div class="d-flex align-items-center gap-2">
+            <label class="mb-0 fw-semibold">Plats:</label>
+            <select v-model="examInfoLocal.location" class="form-select">
               <option
-                v-for="location in examMunicipalities[examMunicipality]"
+                v-for="location in examMunicipalities[examInfoLocal.municipality]"
                 :key="location"
                 :value="location"
               >
                 {{ location }}
               </option>
             </select>
+          </div>
 
-            <button type="submit" class="btn btn-primary">Spara prov</button>
-          </form>
-        </div>
+          <button type="submit" class="btn btn-primary ms-auto" :disabled="isSaving">
+            💾 {{ isSaving ? 'Sparar...' : 'Spara prov' }}
+          </button>
+        </form>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-  import axios from 'axios'
+import axios from 'axios'
 
-  export default {
-    props: ['event'],
-    data() {
+export default {
+  props: {
+    event: { type: Object, required: true }
+  },
+  emits: ['close', 'update'],
+  data() {
+    return {
+      isSaving: false,
+      examMunicipalities: {
+        Sollentuna: ['308', '310', 'lilla rummet', 'Aniara', 'Kung Agnes'],
+        Akalla: ['Vision', 'Hässja', 'Arkarli', '316'],
+      },
+      examInfoLocal: {
+        time: '',
+        municipality: '',
+        location: ''
+      },
+    }
+  },
+  watch: {
+    event: {
+      immediate: true,
+      handler(newEvent) {
+        console.log('🟢 NEW EVENT IN MODAL:', newEvent);
+
+        if (!newEvent || !newEvent.extendedProps) return;
+        this.examInfoLocal = {
+          time: newEvent.extendedProps.examTime || '',
+          municipality: newEvent.extendedProps.examMunicipality || '',
+          location: newEvent.extendedProps.examLocation || ''
+        };
+      }
+    }
+  },
+  computed: {
+    canEdit() {
+      const currentUser = this.$store?.state?.user;
+      if (!currentUser) return false;
+
+      const isAdmin = ['admin', 'systemadmin'].includes(currentUser.role);
+      const isEventTeacher =
+        currentUser._id === (this.event.extendedProps?.teacherId || this.event.teacherId);
+
+      return isAdmin || isEventTeacher;
+    },
+    students() {
+      return this.event.extendedProps?.students || [];
+    },
+    examInfo() {
       return {
-        examTime: '',
-        examMunicipality: '',
-        examLocation: '',
-        examMunicipalities: {
-          Sollentuna: ['308', '310', 'lilla rummet', 'Aniara', 'Kung Agnes'],
-          Akalla: ['Vision', 'Hässja', 'Arkarli', '316'],
-        },
+        time: this.examInfoLocal.time || 'Ej vald',
+        municipality: this.examInfoLocal.municipality || 'Ej vald',
+        location: this.examInfoLocal.location || 'Ej vald',
+      };
+    }
+  },
+  methods: {
+    closeModal() {
+      this.$emit('close');
+    },
+    async markAttendance(student) {
+      try {
+        await axios.post('/api/calendar-events/mark-attendance', {
+          date: this.event.start,
+          teacherId: this.event.extendedProps?.teacherId || this.event.teacherId,
+          students: this.students.map(s => ({
+            _id: s._id,
+            attended: s.attended,
+            paidExamFee: s.paidExamFee
+          }))
+        });
+        console.log(`✅ Närvaro uppdaterad för ${student.name}`);
+      } catch (error) {
+        console.error('❌ Fel vid närvaro-uppdatering:', error.response?.data || error.message);
       }
     },
-    watch: {
-      event: {
-        immediate: true,
-        handler(newEvent) {
-          if (newEvent) {
-            let time = newEvent.examTime || ''
-            this.examTime = time.includes(':') ? time.slice(0, 5) : time
-            this.examMunicipality = newEvent.examMunicipality || ''
-            this.examLocation = newEvent.examLocation || ''
-          }
-        },
-      },
-    },
-    methods: {
-      closeModal() {
-        this.$emit('close')
-      },
-      // Remove markAttendance API call from checkbox change
-      async markAttendance(studentId, attended) {
-        // No-op: handled in submitExam
-      },
-      async submitExam() {
-        if (!this.examTime || !this.examMunicipality || !this.examLocation) {
-          alert('Välj tid, kommun och plats för provet.')
-          return
-        }
-        try {
-          // Save attendance for all students via batch endpoint
-          await axios.post(
-            `${import.meta.env.VITE_API_URL}/api/calendar-events/mark-attendance`,
-            {
-              date: this.event.start,
-              teacherId: this.event.extendedProps?.teacherId || this.event.teacherId,
-              students: (this.event.students || []).map(s => ({ _id: s._id, attended: !!s.attended, personalNumber: s.personalNumber })),
-            },
-            { withCredentials: true }
-          )
-          // Save exam time, kommun, plats
-          const studentIds = (this.event.students || []).map((s) => s._id)
-          await axios.post(
-            `${import.meta.env.VITE_API_URL}/api/examtime-location`,
-            {
-              studentIds,
-              examTime: this.examTime,
-              examMunicipality: this.examMunicipality,
-              examLocation: this.examLocation,
-            },
-            { withCredentials: true }
-          )
-          this.event.examTime = this.examTime
-          this.event.examMunicipality = this.examMunicipality
-          this.event.examLocation = this.examLocation
-          console.log('✅ Slutprov och närvaro uppdaterat för alla studenter!')
-          this.$emit('update')
-          this.closeModal()
-        } catch (error) {
-          console.error('❌ Fel vid uppdatering av prov:', error.response?.data || error.message)
-        }
-      },
-    },
+    async submitExamDetails() {
+      const { time, municipality, location } = this.examInfoLocal;
+
+      if (!time || !municipality || !location) {
+        alert('Välj tid, kommun och plats för provet.');
+        return;
+      }
+
+      const studentIds = this.students.map(s => s._id).filter(Boolean);
+      if (studentIds.length === 0) {
+        alert('Inga studenter kopplade till detta prov.');
+        return;
+      }
+
+      this.isSaving = true;
+      try {
+        await axios.post(`${import.meta.env.VITE_API_URL}/api/examtime-location`, {
+          studentIds,
+          examTime: time,
+          examMunicipality: municipality,
+          examLocation: location,
+        }, { withCredentials: true });
+
+        // 🟢 Vi gör INGEN assignment till event.extendedProps här!
+        // Föräldern laddar om events, så du får alltid färsk info nästa gång modalen öppnas.
+
+        await this.$emit('update');
+        this.closeModal();
+
+        console.log('✅ Provinfo uppdaterad');
+      } catch (error) {
+        console.error('❌ Fel vid uppdatering:', error.response?.data || error.message);
+      } finally {
+        this.isSaving = false;
+      }
+    }
   }
+}
 </script>
 
 <style scoped>
-  .modal {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .table td {
-    vertical-align: middle;
-    white-space: pre-line;
-  }
-
-  .exam-form label {
-    margin-right: 8px;
-  }
+.modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.table td {
+  vertical-align: middle;
+  white-space: pre-line;
+}
+.modal-footer .form-select
+.modal-footer .form-control {
+  min-width: 120px;
+}
 </style>
