@@ -19,7 +19,7 @@ html, body, #app {
   height: calc(100vh - 166px);
   overflow: auto;
   box-sizing: border-box;
-  padding-bottom: 100px;
+  padding-bottom: 600px;
 }
 
 body {
