@@ -57,6 +57,24 @@ const StudentSchema = new mongoose.Schema(
         examLocation: String,
         examTime: String,
 
+        // Exam history tracking
+        examHistory: [
+            {
+                examDate: { type: Date, required: true },
+                courseName: { type: String, required: true },
+                courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+                teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+                attended: { type: Boolean, default: false },
+                examTime: String,
+                examMunicipality: String,
+                examLocation: String,
+                grade: String,
+                notes: String,
+                recordedAt: { type: Date, default: Date.now },
+                recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+            }
+        ],
+
         municipality: {
             type: {
                 type: String,
@@ -84,7 +102,7 @@ const StudentSchema = new mongoose.Schema(
                     "Växjö",
                     "Österåker",
                 ],
-                default: "Choose municipality",
+                // No default value; must be set explicitly
             },
         },
 

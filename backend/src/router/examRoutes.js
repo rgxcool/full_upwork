@@ -5,6 +5,7 @@ import Teacher from "../models/Teacher.js";
 import Exam from "../models/Provning.js";
 import CalendarEvent from "../models/Event.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
+import { authenticateUser } from "../controllers/authController.js";
 
 import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
 
@@ -107,9 +108,25 @@ router.post("/exams", async (req, res) => {
     }
 });
 
-router.get("/exams", async (req, res) => {
+router.get("/exams", authenticateUser, async (req, res) => {
     try {
-        const exams = await Exam.find().populate({
+        let query = {};
+        
+        // If user is a teacher, filter exams by their teacherId
+        if (req.user.role === "teacher") {
+            // Find the teacher record for this user
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            
+            // Filter exams by this teacher's ID
+            query.teacherId = teacher._id;
+            console.log(`🔍 Teacher ${teacher._id} fetching their exams`);
+        }
+        
+        const exams = await Exam.find(query).populate({
             path: "teacherId",
             populate: {
                 path: "userId",
@@ -185,9 +202,25 @@ router.post("/calendar-events", async (req, res) => {
     }
 });
 
-router.get("/calendar-events", async (req, res) => {
+router.get("/calendar-events", authenticateUser, async (req, res) => {
     try {
-        const events = await CalendarEvent.find();
+        let query = {};
+        
+        // If user is a teacher, filter events by their teacherId
+        if (req.user.role === "teacher") {
+            // Find the teacher record for this user
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            
+            // Filter events by this teacher's ID
+            query.teacherId = teacher._id;
+            console.log(`🔍 Teacher ${teacher._id} fetching their calendar events`);
+        }
+        
+        const events = await CalendarEvent.find(query);
         res.json(events);
     } catch (err) {
         console.error("❌ Fel vid hämtning:", err);
@@ -218,116 +251,270 @@ router.put("/calendar-events/:id", async (req, res) => {
 });
 
 
-router.get("/calendar-events/syncable", async (req, res) => {
-    function pickFirstNonEmpty(arr, field) {
-        return (arr.find(e => e[field] && e[field] !== "") || {})[field] || "";
+router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
+  function pickFirstNonEmpty(arr, field) {
+    return (arr.find(e => e[field] && e[field] !== "") || {})[field] || "";
+  }
+
+  try {
+    console.log("🔍 /calendar-events/syncable called");
+
+    let studentQuery = {
+      finalExamDate: { $ne: null },
+      dropout: { $ne: true },
+    };
+
+    let enrollmentQuery = {
+      slutprovDate: { $ne: null },
+      status: { $in: ['enrolled', 'active'] }
+    };
+
+    // Lärare: filtrera på deras elever
+    if (req.user.role === "teacher") {
+      const teacher = await Teacher.findOne({ userId: req.user.userId });
+      if (!teacher) {
+        return res.status(403).json({ error: "Teacher profile not found" });
+      }
+      studentQuery.teacherId = teacher._id;
+      enrollmentQuery.teacherId = teacher._id;
+      console.log(`🔍 Teacher ${teacher._id} fetching their syncable calendar events`);
     }
 
-    try {
-        const students = await Student.find({
-            finalExamDate: { $ne: null },
-            dropout: { $ne: true },
-        })
-        .populate({
-            path: "teacherId",
-            populate: { path: "userId", select: "username" },
-        });
-        await Student.populate(students, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });
+    // Manuellda slutprov (studenter med finalExamDate)
+    const studentsWithFinalExam = await Student.find(studentQuery)
+      .populate({
+        path: "teacherId",
+        populate: { path: "userId", select: "username" },
+      });
+    await Student.populate(studentsWithFinalExam, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });
+    console.log("📅 Students with finalExamDate:", studentsWithFinalExam.length);
 
-        const grouped = {};
+    // Automatiska kurs-slutprov (från enrollments)
+    const enrollmentsWithSlutprov = await StudentEnrollment.find(enrollmentQuery)
+      .populate('studentId')
+      .populate('mainCourseId')
+      .populate({
+        path: 'teacherId',
+        populate: { path: 'userId', select: 'username' }
+      });
+    console.log("📅 Enrollments with slutprovDate:", enrollmentsWithSlutprov.length);
+    enrollmentsWithSlutprov.forEach(e => {
+      console.log("  - Student:", e.studentId?.name, "Course:", e.mainCourseId?.courseName, "Date:", e.slutprovDate, "Teacher:", e.teacherId?.userId?.username || e.studentId?.teacherId?.userId?.username || "None");
+    });
 
-        for (const student of students) {
-            if (!student.finalExamDate || !student.teacherId || !student.teacherId.userId) continue;
-            const dateObj = new Date(student.finalExamDate);
-            const dateKey = dateObj.toISOString().split("T")[0];
-            const teacherId = student.teacherId._id.toString();
-            const key = `${teacherId}_${dateKey}`;
+    const grouped = {};
 
-            // Find course name from education array
-            let courseName = null;
-            if (Array.isArray(student.education)) {
-                const edu = student.education.find(e => {
-                    if (e.type !== "Course" || !e.startDate || !e.endDate) return false;
-                    const start = new Date(e.startDate).setHours(0,0,0,0);
-                    const end = new Date(e.endDate).setHours(0,0,0,0);
-                    const exam = new Date(dateKey).setHours(0,0,0,0);
-                    return exam >= start && exam <= end && e.refId && typeof e.refId === "object" && e.refId.courseName;
-                });
-                if (edu && edu.refId && typeof edu.refId === "object" && edu.refId.courseName) {
-                    courseName = edu.refId.courseName;
-                }
-            }
-            // If not found, try StudentEnrollment
-            if (!courseName) {
-                const enrollment = await StudentEnrollment.findOne({
-                    studentId: student._id,
-                    endDate: { $gte: new Date(dateKey), $lt: new Date(new Date(dateKey).getTime() + 24*60*60*1000) }
-                }).populate("mainCourseId");
-                if (enrollment && enrollment.mainCourseId && enrollment.mainCourseId.courseName) {
-                    courseName = enrollment.mainCourseId.courseName;
-                }
-            }
+    // ----------- GRUPPERA MANUELLA SLUTPROV -----------
+    for (const student of studentsWithFinalExam) {
+      try {
 
-            let attended = student.attendedExam || false;
-
-            if (!grouped[key]) {
-                // Samla info från ALLA studenter i denna grupp
-                const sameTime = students
-                    .filter(s =>
-                        s.finalExamDate &&
-                        s.teacherId &&
-                        s.teacherId._id.toString() === teacherId &&
-                        new Date(s.finalExamDate).toISOString().split("T")[0] === dateKey
-                    )
-                    .map(s => ({
-                        time: s.examTime,
-                        municipality: s.examMunicipality,
-                        location: s.examLocation
-                    }));
-
-
-                // 🔥 ANVÄND DEN NYA LOGIKEN!
-                const examTime = pickFirstNonEmpty(sameTime, 'time');
-                const examMunicipality = pickFirstNonEmpty(sameTime, 'municipality');
-                const examLocation = pickFirstNonEmpty(sameTime, 'location');
-
-                console.log("sameTime:", sameTime);
-
-
-                const startDate = new Date(dateKey + 'T00:00:00');
-                grouped[key] = {
-                    title: student.teacherId.userId.username,
-                    start: startDate,
-                    color: student.teacherId.colorCode || "#999999",
-                    extendedProps: {
-                        teacher: student.teacherId.userId.username,
-                        teacherId: student.teacherId._id,
-                        type: "exam",
-                        examMunicipality,
-                        examLocation,
-                        examTime,
-                        courseName: courseName || null,
-                        students: [],
-                    },
-                };
-            }
-
-            grouped[key].extendedProps.students.push({
-                _id: student._id,
-                name: student.name,
-                personalNumber: student.personalNumber,
-                additionalInfo: student.additionalInfo || "",
-                attended,
-                courseName: courseName || null,
-            });
+        if (!student.finalExamDate || !student.teacherId || !student.teacherId.userId) {
+          console.warn("skip, saknar fält", student);
+          continue;
         }
 
-        res.json(Object.values(grouped));
-    } catch (err) {
-        console.error("❌ Fel vid synk:", err.message);
-        res.status(500).json({ error: "Kunde inte hämta synkade events." });
+        const dateObj = new Date(student.finalExamDate);
+        const dateKey = dateObj.toISOString().split("T")[0];
+        const teacherId = student.teacherId._id.toString();
+        const key = `${teacherId}_${dateKey}`;
+
+        // Hitta kursnamn
+        let courseName = null;
+        if (Array.isArray(student.education)) {
+          const edu = student.education.find(e => {
+            if (e.type !== "Course" || !e.startDate || !e.endDate) return false;
+            const start = new Date(e.startDate).setHours(0, 0, 0, 0);
+            const end = new Date(e.endDate).setHours(0, 0, 0, 0);
+            const exam = new Date(dateKey).setHours(0, 0, 0, 0);
+            return exam >= start && exam <= end && e.refId && typeof e.refId === "object" && e.refId.courseName;
+          });
+          if (edu && edu.refId && typeof edu.refId === "object" && edu.refId.courseName) {
+            courseName = edu.refId.courseName;
+          }
+        }
+        if (!courseName) {
+          const enrollment = await StudentEnrollment.findOne({
+            studentId: student._id,
+            endDate: { $gte: new Date(dateKey), $lt: new Date(new Date(dateKey).getTime() + 24 * 60 * 60 * 1000) }
+          }).populate("mainCourseId");
+          if (enrollment && enrollment.mainCourseId && enrollment.mainCourseId.courseName) {
+            courseName = enrollment.mainCourseId.courseName;
+          }
+        }
+
+        // Exam-/närvaroinfo från student-dokumentet
+        const attended = student.attendedExam || false;
+        const paidExamFee = student.paidExamFee || false;
+        const studentExamTime = student.examTime || '';
+        const studentExamMunicipality = student.examMunicipality || '';
+        const studentExamLocation = student.examLocation || '';
+
+        if (!grouped[key]) {
+          // Samla samma tid/kommun/plats bland gruppen
+          const sameTime = studentsWithFinalExam
+            .filter(s =>
+              s.finalExamDate &&
+              s.teacherId &&
+              s.teacherId._id.toString() === teacherId &&
+              new Date(s.finalExamDate).toISOString().split("T")[0] === dateKey
+            )
+            .map(s => ({
+              time: s.examTime,
+              municipality: s.examMunicipality,
+              location: s.examLocation
+            }));
+
+          const examTime = pickFirstNonEmpty(sameTime, 'time') || studentExamTime || '';
+          const examMunicipality = pickFirstNonEmpty(sameTime, 'municipality') || studentExamMunicipality || '';
+          const examLocation = pickFirstNonEmpty(sameTime, 'location') || studentExamLocation || '';
+
+          const startDate = new Date(dateKey + 'T00:00:00');
+          grouped[key] = {
+            id: `${teacherId}_${dateKey}`,
+            title: student.teacherId.userId.username,
+            start: startDate,
+            color: student.teacherId.colorCode || "#999999",
+            extendedProps: {
+              teacher: student.teacherId.userId.username,
+              teacherId: student.teacherId._id,
+              type: "exam",
+              examMunicipality,
+              examLocation,
+              examTime,
+              courseName: courseName || null,
+              students: [],
+            },
+          };
+        }
+
+        grouped[key].extendedProps.students.push({
+          _id: student._id,
+          name: student.name,
+          personalNumber: student.personalNumber,
+          additionalInfo: student.additionalInfo || "",
+          attended,
+          paidExamFee,
+          examTime: studentExamTime,
+          examMunicipality: studentExamMunicipality,
+          examLocation: studentExamLocation,
+          courseName: courseName || null,
+        });
+      } catch (err) {
+        console.warn("Fel i studentsWithFinalExam-loopen:", err.message, student);
+      }
     }
+
+    // ----------- GRUPPERA AUTOMATISKA KURS-SLUTPROV -----------
+    for (const enrollment of enrollmentsWithSlutprov) {
+      try {
+        if (!enrollment.slutprovDate || !enrollment.studentId || !enrollment.mainCourseId) continue;
+
+        const student = enrollment.studentId;
+        const course = enrollment.mainCourseId;
+
+        const dateObj = new Date(enrollment.slutprovDate);
+        const dateKey = dateObj.toISOString().split("T")[0];
+
+        // Lärare: från enrollment eller fallback på student
+        let teacherId = enrollment.teacherId;
+        let teacherUsername = 'Unknown';
+        let teacherColor = "#999999";
+
+        if (teacherId && teacherId.userId) {
+          teacherUsername = teacherId.userId.username;
+          teacherColor = teacherId.colorCode || "#999999";
+        } else if (student.teacherId && student.teacherId.userId) {
+          teacherId = student.teacherId;
+          teacherUsername = student.teacherId.userId.username;
+          teacherColor = student.teacherId.colorCode || "#999999";
+        } else {
+          console.log(`⚠️ No teacher found for student ${student.name} in course ${course.courseName}`);
+          continue;
+        }
+
+        const key = `${teacherId._id.toString()}_${dateKey}`;
+
+        const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+
+        // Datumrange för att hantera timezone
+        const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
+        const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
+
+        const attendanceRecord = await ExamAttendance.findOne({
+          examDate: { $gte: startOfDay, $lte: endOfDay },
+          teacherId: teacherId._id,
+          studentId: student._id
+        });
+
+        const attended = attendanceRecord ? attendanceRecord.attended : false;
+        const paidExamFee = attendanceRecord ? attendanceRecord.paidExamFee : false;
+        const examTime = attendanceRecord ? attendanceRecord.examTime : '';
+        const examMunicipality = attendanceRecord ? attendanceRecord.examMunicipality : '';
+        const examLocation = attendanceRecord ? attendanceRecord.examLocation : '';
+
+        if (!grouped[key]) {
+          const startDate = new Date(dateKey + 'T00:00:00');
+          grouped[key] = {
+            id: `${teacherId._id}_${dateKey}`,
+            title: teacherUsername,
+            start: startDate,
+            color: teacherColor,
+            extendedProps: {
+              teacher: teacherUsername,
+              teacherId: teacherId._id,
+              examMunicipality: student.examMunicipality || "",
+              examLocation: student.examLocation || "",
+              examTime: student.examTime || "",
+              courseName: course.courseName,
+              students: [],
+            },
+          };
+        }
+
+        grouped[key].extendedProps.students.push({
+          _id: student._id,
+          name: student.name,
+          personalNumber: student.personalNumber,
+          additionalInfo: student.additionalInfo || "",
+          attended,
+          paidExamFee,
+          examTime,
+          examMunicipality,
+          examLocation,
+          courseName: course.courseName,
+        });
+      } catch (err) {
+        console.warn("Fel i enrollmentsWithSlutprov-loopen:", err.message, enrollment);
+      }
+    }
+
+    console.log("📅 Final grouped events:", Object.keys(grouped).length);
+    res.json(Object.values(grouped));
+  } catch (err) {
+    console.error("❌ Fel vid synk:", err.message, err.stack);
+    res.status(500).json({ error: "Kunde inte hämta synkade events." });
+  }
 });
+
+
+// GET specific calendar event by ID
+router.get("/calendar-events/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const event = await CalendarEvent.findById(id);
+
+    if (!event) {
+      return res.status(404).json({ error: "Event hittades inte" });
+    }
+
+    res.json(event);
+  } catch (err) {
+    console.error("❌ Fel vid hämtning av event:", err.message);
+    res.status(500).json({ error: "Kunde inte hämta event." });
+  }
+});
+
+
 
 
 router.put("/update-exam/:id", async (req, res) => {
@@ -415,6 +602,57 @@ router.post("/examtime-location", async (req, res) => {
     }
 });
 
+// Get attendance statistics for a student
+router.get("/attendance-stats/:studentId", async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+    
+    const attendanceRecords = await ExamAttendance.find({ studentId })
+      .populate('teacherId', 'userId')
+      .populate('courseId', 'courseName')
+      .sort({ examDate: -1 });
+
+      
+    
+    const totalExams = attendanceRecords.length;
+    const attendedExams = attendanceRecords.filter(r => r.attended).length;
+    const attendanceRate = totalExams > 0 ? (attendedExams / totalExams * 100).toFixed(1) : 0;
+    
+    const stats = {
+      totalExams,
+      attendedExams,
+      missedExams: totalExams - attendedExams,
+      attendanceRate: parseFloat(attendanceRate),
+      recentExams: attendanceRecords.slice(0, 10), // Last 10 exams
+      byCourse: {}
+    };
+    
+    // Group by course
+    attendanceRecords.forEach(record => {
+      const courseName = record.courseName;
+      if (!stats.byCourse[courseName]) {
+        stats.byCourse[courseName] = {
+          total: 0,
+          attended: 0,
+          missed: 0
+        };
+      }
+      stats.byCourse[courseName].total++;
+      if (record.attended) {
+        stats.byCourse[courseName].attended++;
+      } else {
+        stats.byCourse[courseName].missed++;
+      }
+    });
+    
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ Error getting attendance stats:', error);
+    res.status(500).json({ error: 'Failed to get attendance statistics' });
+  }
+});
+
 router.delete("/exams/:id", async (req, res) => {
     try {
         const examId = req.params.id;
@@ -431,21 +669,135 @@ router.delete("/exams/:id", async (req, res) => {
 
 // PATCH: Batch update attendance for a specific event (date + teacher)
 router.post('/calendar-events/mark-attendance', async (req, res) => {
+  console.log('🚀 mark-attendance endpoint called!');
+  console.log('📥 Request body:', req.body);
+  console.log('📥 Request method:', req.method);
+  console.log('📥 Request URL:', req.url);
+  console.log('📥 Request headers:', req.headers);
   try {
-    const { students } = req.body;
-    if (!Array.isArray(students)) {
-      return res.status(400).json({ error: 'Invalid input' });
+    const { date, teacherId, students, courseName, courseId } = req.body; // students: [{ _id, attended }]
+    console.log('🔍 mark-attendance called with:', { date, teacherId, students, courseName, courseId });
+    
+    if (!date || !teacherId || !Array.isArray(students)) {
+      return res.status(400).json({ error: 'Missing date, teacherId, or students array' });
     }
+    
+    // Import models
+    const { default: Student } = await import('../models/Student.js');
+    const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+    
+    // Handle date conversion properly to avoid timezone issues
+    const examDate = new Date(date);
+    // Use the local date from the frontend, not UTC
+    const dateKey = examDate.getFullYear() + '-' + 
+                   String(examDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(examDate.getDate()).padStart(2, '0');
+    console.log(`🔍 Original date: ${date}`);
+    console.log(`🔍 Parsed examDate: ${examDate}`);
+    console.log(`🔍 Generated dateKey: ${dateKey}`);
+    
+    const updatePromises = students.map(async (student) => {
+      try {
+        const studentDoc = await Student.findById(student._id);
+        if (!studentDoc) {
+          console.log(`❌ Student not found: ${student._id}`);
+          return { success: false, studentId: student._id, error: 'Student not found' };
+        }
+        
+                // Find or create exam attendance record
+        const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
+        const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
+        
+        let attendanceRecord = await ExamAttendance.findOne({
+            examDate: { $gte: startOfDay, $lte: endOfDay },
+            teacherId: teacherId,
+            studentId: student._id
+        });
+        
+        if (!attendanceRecord) {
+          // Create new attendance record
+          attendanceRecord = new ExamAttendance({
+            examDate: new Date(dateKey + 'T00:00:00.000Z'),
+            courseName: courseName || 'Unknown Course',
+            courseId: courseId,
+            teacherId: teacherId,
+            studentId: student._id,
+            studentName: studentDoc.name,
+            personalNumber: studentDoc.personalNumber,
+            attended: !!student.attended,
+            examTime: student.examTime || '',
+            examMunicipality: student.examMunicipality || '',
+            examLocation: student.examLocation || '',
+            recordedBy: req.user?._id
+          });
+        } else {
+          // Update existing record
+          attendanceRecord.attended = !!student.attended;
+          attendanceRecord.updatedAt = new Date();
+          attendanceRecord.updatedBy = req.user?._id;
+          if (student.examTime) attendanceRecord.examTime = student.examTime;
+          if (student.examMunicipality) attendanceRecord.examMunicipality = student.examMunicipality;
+          if (student.examLocation) attendanceRecord.examLocation = student.examLocation;
+        }
+        
+        await attendanceRecord.save();
+        console.log(`💾 Saved attendance record: ${attendanceRecord._id} for student ${studentDoc.name} - attended: ${attendanceRecord.attended}`);
+        console.log(`💾 Saved examDate: ${attendanceRecord.examDate}`);
+        console.log(`💾 Saved teacherId: ${attendanceRecord.teacherId}`);
+        console.log(`💾 Saved studentId: ${attendanceRecord.studentId}`);
+        
+                 // Update student's exam history
+         const existingHistoryIndex = studentDoc.examHistory.findIndex(h => {
+           const historyDate = h.examDate.toISOString().split('T')[0];
+           return historyDate === dateKey && h.teacherId.toString() === teacherId.toString();
+         });
+        
+        if (existingHistoryIndex >= 0) {
+          // Update existing history entry
+          studentDoc.examHistory[existingHistoryIndex].attended = !!student.attended;
+          studentDoc.examHistory[existingHistoryIndex].updatedAt = new Date();
+        } else {
+                     // Add new history entry
+           studentDoc.examHistory.push({
+             examDate: new Date(dateKey + 'T00:00:00.000Z'),
+            courseName: courseName || 'Unknown Course',
+            courseId: courseId,
+            teacherId: teacherId,
+            attended: !!student.attended,
+            examTime: student.examTime || '',
+            examMunicipality: student.examMunicipality || '',
+            examLocation: student.examLocation || '',
+            recordedAt: new Date(),
+            recordedBy: req.user?._id
+          });
+        }
 
-    for (const s of students) {
-      if (!s._id) continue;
-      await Student.findByIdAndUpdate(s._id, {
-        attendedExam: s.attended,
-        paidExamFee: s.paidExamFee,
-      });
-    }
-
-    res.json({ message: '✅ Attendance and fee saved' });
+        studentDoc.attendedExam = !!student.attended;
+        studentDoc.paidExamFee = !!student.paidExamFee;
+        
+        await studentDoc.save();
+        
+        console.log(`✅ Updated attendance for student ${studentDoc.name}: ${student.attended}`);
+        return { success: true, studentId: student._id, attendanceId: attendanceRecord._id };
+        
+      } catch (error) {
+        console.error(`❌ Error updating student ${student._id}:`, error);
+        return { success: false, studentId: student._id, error: error.message };
+      }
+    });
+    
+    const results = await Promise.all(updatePromises);
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.filter(r => !r.success).length;
+    
+    console.log(`📊 Attendance update results: ${successCount} successful, ${failureCount} failed`);
+    
+    res.json({ 
+      message: `Attendance updated for ${successCount} students`, 
+      results,
+      successCount,
+      failureCount
+    });
   } catch (err) {
     console.error('❌ Error updating attendance/fee:', err);
     res.status(500).json({ error: 'Server error' });

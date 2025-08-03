@@ -1,9 +1,11 @@
 <template>
-  <div class="unauthorized">
-    <div class="container">
-      <h1>Access Denied</h1>
-      <p>You do not have permission to view this page.</p>
-      <RouterLink to="/">Return to Home</RouterLink>
+  <div class="scrollable-view">
+    <div class="unauthorized">
+      <div class="container">
+        <h1>Access Denied</h1>
+        <p>You do not have permission to view this page.</p>
+        <RouterLink to="/">Return to Home</RouterLink>
+      </div>
     </div>
   </div>
 </template>

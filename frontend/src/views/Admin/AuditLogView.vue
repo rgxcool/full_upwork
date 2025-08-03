@@ -1,36 +1,38 @@
 <template>
-  <v-card outlined class="pa-4">
-    <h3>Audit Logs for {{ studentName }}</h3>
+  <div class="scrollable-view">
+    <v-card outlined class="pa-4">
+      <h3>Audit Logs for {{ studentName }}</h3>
 
-    <v-select v-model="filterAction" :items="actionOptions" item-title="label" item-value="value" />
+      <v-select v-model="filterAction" :items="actionOptions" item-title="label" item-value="value" />
 
-    <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
+      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 
-    <v-list dense>
-      <v-list-item v-for="log in flatLogs" :key="log._id">
-        <v-list-item-title>
-          <strong>{{ log.action }}</strong> - {{ log.filename }}
-        </v-list-item-title>
-        <v-list-item-subtitle>
-          By {{ log.performedByEmail }} ({{ log.performedByRole }}) at
-          {{ formatDate(log.timestamp) }}
-        </v-list-item-subtitle>
-      </v-list-item>
-    </v-list>
+      <v-list dense>
+        <v-list-item v-for="log in flatLogs" :key="log._id">
+          <v-list-item-title>
+            <strong>{{ log.action }}</strong> - {{ log.filename }}
+          </v-list-item-title>
+          <v-list-item-subtitle>
+            By {{ log.performedByEmail }} ({{ log.performedByRole }}) at
+            {{ formatDate(log.timestamp) }}
+          </v-list-item-subtitle>
+        </v-list-item>
+      </v-list>
 
-    <div v-if="!loading && !logs.length" class="grey--text text-center mt-4">
-      No audit logs found.
-    </div>
+      <div v-if="!loading && !logs.length" class="grey--text text-center mt-4">
+        No audit logs found.
+      </div>
 
-    <v-pagination
-      v-model="page"
-      :length="totalPages"
-      :total-visible="5"
-      class="mt-4"
-      circle
-      rounded
-    />
-  </v-card>
+      <v-pagination
+        v-model="page"
+        :length="totalPages"
+        :total-visible="5"
+        class="mt-4"
+        circle
+        rounded
+      />
+    </v-card>
+  </div>
 </template>
 
 <script setup>

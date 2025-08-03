@@ -1,22 +1,24 @@
 <template>
-  <div class="earnings-container">
-    <h2>Total Earnings: {{ totalEarnings }} kr</h2>
+  <div class="scrollable-view">
+    <div class="earnings-container">
+      <h2>Total Earnings: {{ totalEarnings }} kr</h2>
 
-    <h3>Earnings per Municipality</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Municipality</th>
-          <th>Earnings</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(amount, municipality) in earningsByMunicipality" :key="municipality">
-          <td>{{ municipality }}</td>
-          <td>{{ amount }} kr</td>
-        </tr>
-      </tbody>
-    </table>
+      <h3>Earnings per Municipality</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Municipality</th>
+            <th>Earnings</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(amount, municipality) in earningsByMunicipality" :key="municipality">
+            <td>{{ municipality }}</td>
+            <td>{{ amount }} kr</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 

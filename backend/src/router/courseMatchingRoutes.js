@@ -12,6 +12,7 @@ import {
     updateEnrollmentStatus,
     getCourseStatistics,
     createCourseInstance,
+    updateCourseInstance,
     deleteCourseInstance,
     deleteAllCourseInstances,
 } from "../controllers/courseMatchingController.js";
@@ -44,6 +45,12 @@ router.post(
     isAuthenticated,
     hasRole(["admin", "systemadmin"]),
     createCourseInstance
+);
+router.put(
+    "/course-instances/:instanceId",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    updateCourseInstance
 );
 
 // Bulk delete all course instances

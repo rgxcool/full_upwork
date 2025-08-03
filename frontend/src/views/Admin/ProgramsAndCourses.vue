@@ -30,59 +30,61 @@
 </script>
 
 <template>
-  <v-container class="no-scroll">
-    <v-card class="elevation-2 card-centered">
-      <!-- Title Centered -->
-      <v-card-title class="text-h5 title-center">Programs and Courses</v-card-title>
+  <div class="scrollable-view">
+    <v-container class="no-scroll">
+      <v-card class="elevation-2 card-centered">
+        <!-- Title Centered -->
+        <v-card-title class="text-h5 title-center">Programs and Courses</v-card-title>
 
-      <v-card-text class="table-container">
-        <!-- Loading Indicator -->
-        <v-progress-linear v-if="isLoading" indeterminate color="blue"></v-progress-linear>
+        <v-card-text class="table-container">
+          <!-- Loading Indicator -->
+          <v-progress-linear v-if="isLoading" indeterminate color="blue"></v-progress-linear>
 
-        <!-- Error Alert -->
-        <v-alert v-if="error" type="error" class="my-3">
-          {{ error }}
-        </v-alert>
+          <!-- Error Alert -->
+          <v-alert v-if="error" type="error" class="my-3">
+            {{ error }}
+          </v-alert>
 
-        <!-- Table Wrapper to Ensure Full Width Without Scrolling -->
-        <div class="table-wrapper">
-          <v-table class="fixed-table">
-            <thead>
-              <tr>
-                <th class="program-name-column">Program Name</th>
-                <th class="course-name-column">Course Name</th>
-                <th class="fixed-width">Code</th>
-                <th class="fixed-width">Points</th>
-                <th class="fixed-width">Extent</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="program in programs" :key="program._id">
-                <template v-if="program.programCourses.length">
-                  <tr v-for="(course, index) in program.programCourses" :key="course._id">
-                    <!-- Display Program Name only once per program using rowspan -->
-                    <td
-                      v-if="index === 0"
-                      :rowspan="program.programCourses.length"
-                      class="program-name-column align-top"
-                    >
-                      <strong>{{ program.programName }}</strong>
-                    </td>
-                    <td class="course-name-column">
-                      {{ course.courseName || 'No coursename found' }}
-                    </td>
-                    <td class="fixed-width">{{ course.courseCode || 'N/A' }}</td>
-                    <td class="fixed-width">{{ course.coursePoints || 'N/A' }}</td>
-                    <td class="fixed-width">{{ course.courseExtent || 'N/A' }}</td>
-                  </tr>
+          <!-- Table Wrapper to Ensure Full Width Without Scrolling -->
+          <div class="table-wrapper">
+            <v-table class="fixed-table">
+              <thead>
+                <tr>
+                  <th class="program-name-column">Program Name</th>
+                  <th class="course-name-column">Course Name</th>
+                  <th class="fixed-width">Code</th>
+                  <th class="fixed-width">Points</th>
+                  <th class="fixed-width">Extent</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="program in programs" :key="program._id">
+                  <template v-if="program.programCourses.length">
+                    <tr v-for="(course, index) in program.programCourses" :key="course._id">
+                      <!-- Display Program Name only once per program using rowspan -->
+                      <td
+                        v-if="index === 0"
+                        :rowspan="program.programCourses.length"
+                        class="program-name-column align-top"
+                      >
+                        <strong>{{ program.programName }}</strong>
+                      </td>
+                      <td class="course-name-column">
+                        {{ course.courseName || 'No coursename found' }}
+                      </td>
+                      <td class="fixed-width">{{ course.courseCode || 'N/A' }}</td>
+                      <td class="fixed-width">{{ course.coursePoints || 'N/A' }}</td>
+                      <td class="fixed-width">{{ course.courseExtent || 'N/A' }}</td>
+                    </tr>
+                  </template>
                 </template>
-              </template>
-            </tbody>
-          </v-table>
-        </div>
-      </v-card-text>
-    </v-card>
-  </v-container>
+              </tbody>
+            </v-table>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-container>
+  </div>
 </template>
 
 <style scoped>

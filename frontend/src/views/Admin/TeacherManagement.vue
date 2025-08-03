@@ -1,9 +1,39 @@
 <template>
-  <div class="teacher-management-container">
-    <div class="header-section">
-      <h3 class="page-title">Lärarhantering</h3>
-      <div class="header-actions">
-        <button class="btn btn-success" @click="showAddTeacherModal = true">
+  <div class="scrollable-view">
+    <div class="teacher-management-container">
+      <div class="header-section">
+        <h3 class="page-title">Lärarhantering</h3>
+        <div class="header-actions">
+          <button class="btn btn-success" @click="showAddTeacherModal = true">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="me-2"
+            >
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+            Lägg till lärare
+          </button>
+        </div>
+      </div>
+
+      <!-- Search and Filter Section -->
+      <div class="search-section">
+        <div class="search-box">
+          <input
+            type="text"
+            v-model="searchQuery"
+            placeholder="Sök efter lärare..."
+            class="form-control"
+          />
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="20"
@@ -14,466 +44,438 @@
             stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
-            class="me-2"
+            class="search-icon"
           >
-            <path d="M5 12h14" />
-            <path d="m12 5 7 7-7 7" />
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
           </svg>
-          Lägg till lärare
-        </button>
-      </div>
-    </div>
+        </div>
 
-    <!-- Search and Filter Section -->
-    <div class="search-section">
-      <div class="search-box">
-        <input
-          type="text"
-          v-model="searchQuery"
-          placeholder="Sök efter lärare..."
-          class="form-control"
-        />
+        <div class="filter-options">
+          <select v-model="subjectFilter" class="form-control">
+            <option value="">Alla ämnen</option>
+            <option value="Svenska">Svenska</option>
+            <option value="Engelska">Engelska</option>
+            <option value="Matematik">Matematik</option>
+            <option value="Historia">Historia</option>
+            <option value="Samhällskunskap">Samhällskunskap</option>
+            <option value="Naturkunskap">Naturkunskap</option>
+            <option value="Fysik">Fysik</option>
+            <option value="Kemi">Kemi</option>
+            <option value="Biologi">Biologi</option>
+            <option value="Idrott och hälsa">Idrott och hälsa</option>
+            <option value="Slöjd">Slöjd</option>
+            <option value="Bild">Bild</option>
+            <option value="Musik">Musik</option>
+            <option value="Specialpedagogik">Specialpedagogik</option>
+            <option value="Studievägledning">Studievägledning</option>
+            <option value="Övrigt">Övrigt</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Teachers List -->
+      <div class="teachers-grid" v-if="!isLoading">
+        <div
+          v-for="teacher in filteredTeachers"
+          :key="teacher._id"
+          class="teacher-card"
+          :style="{ borderLeftColor: teacher.colorCode }"
+        >
+          <div class="teacher-header">
+            <div class="teacher-avatar" :style="{ backgroundColor: teacher.colorCode }">
+              {{ getInitials(teacher.userId?.username || '') }}
+            </div>
+            <div class="teacher-info">
+              <h5 class="teacher-name">{{ teacher.userId?.username || 'Namnlös' }}</h5>
+              <p class="teacher-email">{{ teacher.userId?.email || 'Ingen e-post' }}</p>
+              <span class="teacher-subject">{{ teacher.subject || 'Övrigt' }}</span>
+            </div>
+            <div class="teacher-actions">
+              <button
+                class="btn btn-sm btn-outline-primary"
+                @click="editTeacher(teacher)"
+                title="Redigera lärare"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  <path d="m15 5 4 4" />
+                </svg>
+              </button>
+              <button
+                class="btn btn-sm btn-outline-warning"
+                @click="changePassword(teacher)"
+                title="Ändra lösenord"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <circle cx="12" cy="16" r="1" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </button>
+              <button
+                class="btn btn-sm btn-outline-secondary"
+                @click="unassignAllStudents(teacher)"
+                title="Ta bort alla kopplingar till elever"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M18 6L6 18" />
+                  <path d="M6 6l12 12" />
+                </svg>
+              </button>
+              <button
+                class="btn btn-sm btn-outline-danger"
+                @click="deleteTeacher(teacher)"
+                title="Ta bort lärare"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  <line x1="10" x2="10" y1="11" y2="17" />
+                  <line x1="14" x2="14" y1="11" y2="17" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="teacher-stats">
+            <div class="stat-item">
+              <span class="stat-label">Skapad:</span>
+              <span class="stat-value">{{ formatDate(teacher.createdAt) }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Senast uppdaterad:</span>
+              <span class="stat-value">{{ formatDate(teacher.updatedAt) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="isLoading" class="loading-state">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Laddar...</span>
+        </div>
+        <p>Laddar lärare...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div v-if="!isLoading && filteredTeachers.length === 0" class="empty-state">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
+          width="64"
+          height="64"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
+          stroke-width="1"
           stroke-linecap="round"
           stroke-linejoin="round"
-          class="search-icon"
+          class="empty-icon"
         >
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="m22 21-2-2" />
+          <path d="M16 16h6" />
         </svg>
+        <h4>Inga lärare hittades</h4>
+        <p>Det finns inga lärare som matchar din sökning.</p>
+        <button class="btn btn-primary" @click="showAddTeacherModal = true">
+          Lägg till första läraren
+        </button>
       </div>
 
-      <div class="filter-options">
-        <select v-model="subjectFilter" class="form-control">
-          <option value="">Alla ämnen</option>
-          <option value="Svenska">Svenska</option>
-          <option value="Engelska">Engelska</option>
-          <option value="Matematik">Matematik</option>
-          <option value="Historia">Historia</option>
-          <option value="Samhällskunskap">Samhällskunskap</option>
-          <option value="Naturkunskap">Naturkunskap</option>
-          <option value="Fysik">Fysik</option>
-          <option value="Kemi">Kemi</option>
-          <option value="Biologi">Biologi</option>
-          <option value="Idrott och hälsa">Idrott och hälsa</option>
-          <option value="Slöjd">Slöjd</option>
-          <option value="Bild">Bild</option>
-          <option value="Musik">Musik</option>
-          <option value="Specialpedagogik">Specialpedagogik</option>
-          <option value="Studievägledning">Studievägledning</option>
-          <option value="Övrigt">Övrigt</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Teachers List -->
-    <div class="teachers-grid" v-if="!isLoading">
-      <div
-        v-for="teacher in filteredTeachers"
-        :key="teacher._id"
-        class="teacher-card"
-        :style="{ borderLeftColor: teacher.colorCode }"
-      >
-        <div class="teacher-header">
-          <div class="teacher-avatar" :style="{ backgroundColor: teacher.colorCode }">
-            {{ getInitials(teacher.userId?.username || '') }}
-          </div>
-          <div class="teacher-info">
-            <h5 class="teacher-name">{{ teacher.userId?.username || 'Namnlös' }}</h5>
-            <p class="teacher-email">{{ teacher.userId?.email || 'Ingen e-post' }}</p>
-            <span class="teacher-subject">{{ teacher.subject || 'Övrigt' }}</span>
-          </div>
-          <div class="teacher-actions">
-            <button
-              class="btn btn-sm btn-outline-primary"
-              @click="editTeacher(teacher)"
-              title="Redigera lärare"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                <path d="m15 5 4 4" />
-              </svg>
-            </button>
-            <button
-              class="btn btn-sm btn-outline-warning"
-              @click="changePassword(teacher)"
-              title="Ändra lösenord"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-                <circle cx="12" cy="16" r="1" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            </button>
-            <button
-              class="btn btn-sm btn-outline-secondary"
-              @click="unassignAllStudents(teacher)"
-              title="Ta bort alla kopplingar till elever"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M18 6L6 18" />
-                <path d="M6 6l12 12" />
-              </svg>
-            </button>
-            <button
-              class="btn btn-sm btn-outline-danger"
-              @click="deleteTeacher(teacher)"
-              title="Ta bort lärare"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M3 6h18" />
-                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                <line x1="10" x2="10" y1="11" y2="17" />
-                <line x1="14" x2="14" y1="11" y2="17" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div class="teacher-stats">
-          <div class="stat-item">
-            <span class="stat-label">Skapad:</span>
-            <span class="stat-value">{{ formatDate(teacher.createdAt) }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Senast uppdaterad:</span>
-            <span class="stat-value">{{ formatDate(teacher.updatedAt) }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Loading State -->
-    <div v-if="isLoading" class="loading-state">
-      <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Laddar...</span>
-      </div>
-      <p>Laddar lärare...</p>
-    </div>
-
-    <!-- Empty State -->
-    <div v-if="!isLoading && filteredTeachers.length === 0" class="empty-state">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="64"
-        height="64"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="empty-icon"
-      >
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="m22 21-2-2" />
-        <path d="M16 16h6" />
-      </svg>
-      <h4>Inga lärare hittades</h4>
-      <p>Det finns inga lärare som matchar din sökning.</p>
-      <button class="btn btn-primary" @click="showAddTeacherModal = true">
-        Lägg till första läraren
-      </button>
-    </div>
-
-    <!-- Edit Teacher Modal -->
-    <div class="modal fade" id="editTeacherModal" tabindex="-1" ref="editTeacherModal">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Redigera lärare</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="saveTeacherChanges">
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label class="form-label">Namn</label>
-                    <input
-                      type="text"
-                      v-model="editingTeacher.username"
-                      class="form-control"
-                      required
-                    />
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label class="form-label">E-post</label>
-                    <input
-                      type="email"
-                      v-model="editingTeacher.email"
-                      class="form-control"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label class="form-label">Ämne</label>
-                    <select v-model="editingTeacher.subject" class="form-control" required>
-                      <option value="Svenska">Svenska</option>
-                      <option value="Engelska">Engelska</option>
-                      <option value="Matematik">Matematik</option>
-                      <option value="Historia">Historia</option>
-                      <option value="Samhällskunskap">Samhällskunskap</option>
-                      <option value="Naturkunskap">Naturkunskap</option>
-                      <option value="Fysik">Fysik</option>
-                      <option value="Kemi">Kemi</option>
-                      <option value="Biologi">Biologi</option>
-                      <option value="Idrott och hälsa">Idrott och hälsa</option>
-                      <option value="Slöjd">Slöjd</option>
-                      <option value="Bild">Bild</option>
-                      <option value="Musik">Musik</option>
-                      <option value="Specialpedagogik">Specialpedagogik</option>
-                      <option value="Studievägledning">Studievägledning</option>
-                      <option value="Övrigt">Övrigt</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label class="form-label">Färgkod</label>
-                    <div class="color-input-group">
-                      <input
-                        type="color"
-                        v-model="editingTeacher.colorCode"
-                        class="form-control color-picker"
-                      />
+      <!-- Edit Teacher Modal -->
+      <div class="modal fade" id="editTeacherModal" tabindex="-1" ref="editTeacherModal">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Redigera lärare</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <form @submit.prevent="saveTeacherChanges">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label class="form-label">Namn</label>
                       <input
                         type="text"
-                        v-model="editingTeacher.colorCode"
-                        class="form-control color-text"
-                        placeholder="#FF0000"
+                        v-model="editingTeacher.username"
+                        class="form-control"
+                        required
                       />
-                      <button
-                        type="button"
-                        class="btn btn-outline-secondary"
-                        @click="generateRandomColor"
-                      >
-                        Slumpa
-                      </button>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label class="form-label">E-post</label>
+                      <input
+                        type="email"
+                        v-model="editingTeacher.email"
+                        class="form-control"
+                        required
+                      />
                     </div>
                   </div>
                 </div>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              @click="saveTeacherChanges"
-              :disabled="isSaving"
-            >
-              <span v-if="isSaving" class="spinner-border spinner-border-sm me-2"></span>
-              {{ isSaving ? 'Sparar...' : 'Spara ändringar' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Change Password Modal -->
-    <div class="modal fade" id="changePasswordModal" tabindex="-1" ref="changePasswordModal">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Ändra lösenord</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="alert alert-info">
-              <strong>Lärare:</strong>
-              {{ changingPasswordTeacher?.userId?.username }}
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Nytt lösenord</label>
-              <div class="input-group">
-                <input type="text" v-model="newPassword" class="form-control" readonly />
-                <button
-                  type="button"
-                  class="btn btn-outline-secondary"
-                  @click="generateNewPassword"
-                >
-                  Generera
-                </button>
-                <button type="button" class="btn btn-outline-primary" @click="copyPassword">
-                  Kopiera
-                </button>
-              </div>
-            </div>
-
-            <div class="alert alert-warning">
-              <strong>Viktigt:</strong>
-              Dela det nya lösenordet säkert med läraren.
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              @click="saveNewPassword"
-              :disabled="isChangingPassword"
-            >
-              <span v-if="isChangingPassword" class="spinner-border spinner-border-sm me-2"></span>
-              {{ isChangingPassword ? 'Sparar...' : 'Spara nytt lösenord' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add Teacher Modal -->
-    <div class="modal fade" id="addTeacherModal" tabindex="-1" ref="addTeacherModal">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Lägg till ny lärare</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="createNewTeacher">
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label class="form-label">Namn *</label>
-                    <input
-                      type="text"
-                      v-model="newTeacher.username"
-                      class="form-control"
-                      required
-                    />
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label class="form-label">Ämne</label>
+                      <select v-model="editingTeacher.subject" class="form-control" required>
+                        <option value="Svenska">Svenska</option>
+                        <option value="Engelska">Engelska</option>
+                        <option value="Matematik">Matematik</option>
+                        <option value="Historia">Historia</option>
+                        <option value="Samhällskunskap">Samhällskunskap</option>
+                        <option value="Naturkunskap">Naturkunskap</option>
+                        <option value="Fysik">Fysik</option>
+                        <option value="Kemi">Kemi</option>
+                        <option value="Biologi">Biologi</option>
+                        <option value="Idrott och hälsa">Idrott och hälsa</option>
+                        <option value="Slöjd">Slöjd</option>
+                        <option value="Bild">Bild</option>
+                        <option value="Musik">Musik</option>
+                        <option value="Specialpedagogik">Specialpedagogik</option>
+                        <option value="Studievägledning">Studievägledning</option>
+                        <option value="Övrigt">Övrigt</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label class="form-label">E-post *</label>
-                    <input type="email" v-model="newTeacher.email" class="form-control" required />
-                  </div>
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label class="form-label">Ämne *</label>
-                    <select v-model="newTeacher.subject" class="form-control" required>
-                      <option value="">Välj ämne</option>
-                      <option value="Svenska">Svenska</option>
-                      <option value="Engelska">Engelska</option>
-                      <option value="Matematik">Matematik</option>
-                      <option value="Historia">Historia</option>
-                      <option value="Samhällskunskap">Samhällskunskap</option>
-                      <option value="Naturkunskap">Naturkunskap</option>
-                      <option value="Fysik">Fysik</option>
-                      <option value="Kemi">Kemi</option>
-                      <option value="Biologi">Biologi</option>
-                      <option value="Idrott och hälsa">Idrott och hälsa</option>
-                      <option value="Slöjd">Slöjd</option>
-                      <option value="Bild">Bild</option>
-                      <option value="Musik">Musik</option>
-                      <option value="Specialpedagogik">Specialpedagogik</option>
-                      <option value="Studievägledning">Studievägledning</option>
-                      <option value="Övrigt">Övrigt</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label class="form-label">Färgkod</label>
-                    <div class="color-input-group">
-                      <input
-                        type="color"
-                        v-model="newTeacher.colorCode"
-                        class="form-control color-picker"
-                      />
-                      <input
-                        type="text"
-                        v-model="newTeacher.colorCode"
-                        class="form-control color-text"
-                        placeholder="#FF0000"
-                      />
-                      <button
-                        type="button"
-                        class="btn btn-outline-secondary"
-                        @click="generateRandomColorForNew"
-                      >
-                        Slumpa
-                      </button>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label class="form-label">Färgkod</label>
+                      <div class="color-input-group">
+                        <input
+                          type="color"
+                          v-model="editingTeacher.colorCode"
+                          class="form-control color-picker"
+                        />
+                        <input
+                          type="text"
+                          v-model="editingTeacher.colorCode"
+                          class="form-control color-text"
+                          placeholder="#FF0000"
+                        />
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary"
+                          @click="generateRandomColor"
+                        >
+                          Slumpa
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </form>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                @click="saveTeacherChanges"
+                :disabled="isSaving"
+              >
+                <span v-if="isSaving" class="spinner-border spinner-border-sm me-2"></span>
+                {{ isSaving ? 'Sparar...' : 'Spara ändringar' }}
+              </button>
+            </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              @click="createNewTeacher"
-              :disabled="isCreatingTeacher"
-            >
-              <span v-if="isCreatingTeacher" class="spinner-border spinner-border-sm me-2"></span>
-              {{ isCreatingTeacher ? 'Skapar...' : 'Skapa lärare' }}
-            </button>
+        </div>
+      </div>
+
+      <!-- Change Password Modal -->
+      <div class="modal fade" id="changePasswordModal" tabindex="-1" ref="changePasswordModal">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Ändra lösenord</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="alert alert-info">
+                <strong>Lärare:</strong>
+                {{ changingPasswordTeacher?.userId?.username }}
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Nytt lösenord</label>
+                <div class="input-group">
+                  <input type="text" v-model="newPassword" class="form-control" readonly />
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary"
+                    @click="generateNewPassword"
+                  >
+                    Generera
+                  </button>
+                  <button type="button" class="btn btn-outline-primary" @click="copyPassword">
+                    Kopiera
+                  </button>
+                </div>
+              </div>
+
+              <div class="alert alert-warning">
+                <strong>Viktigt:</strong>
+                Dela det nya lösenordet säkert med läraren.
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                @click="saveNewPassword"
+                :disabled="isChangingPassword"
+              >
+                <span v-if="isChangingPassword" class="spinner-border spinner-border-sm me-2"></span>
+                {{ isChangingPassword ? 'Sparar...' : 'Spara nytt lösenord' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Teacher Modal -->
+      <div class="modal fade" id="addTeacherModal" tabindex="-1" ref="addTeacherModal">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Lägg till ny lärare</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <form @submit.prevent="createNewTeacher">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label class="form-label">Namn *</label>
+                      <input
+                        type="text"
+                        v-model="newTeacher.username"
+                        class="form-control"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label class="form-label">E-post *</label>
+                      <input type="email" v-model="newTeacher.email" class="form-control" required />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label class="form-label">Ämne *</label>
+                      <select v-model="newTeacher.subject" class="form-control" required>
+                        <option value="">Välj ämne</option>
+                        <option value="Svenska">Svenska</option>
+                        <option value="Engelska">Engelska</option>
+                        <option value="Matematik">Matematik</option>
+                        <option value="Historia">Historia</option>
+                        <option value="Samhällskunskap">Samhällskunskap</option>
+                        <option value="Naturkunskap">Naturkunskap</option>
+                        <option value="Fysik">Fysik</option>
+                        <option value="Kemi">Kemi</option>
+                        <option value="Biologi">Biologi</option>
+                        <option value="Idrott och hälsa">Idrott och hälsa</option>
+                        <option value="Slöjd">Slöjd</option>
+                        <option value="Bild">Bild</option>
+                        <option value="Musik">Musik</option>
+                        <option value="Specialpedagogik">Specialpedagogik</option>
+                        <option value="Studievägledning">Studievägledning</option>
+                        <option value="Övrigt">Övrigt</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label class="form-label">Färgkod</label>
+                      <div class="color-input-group">
+                        <input
+                          type="color"
+                          v-model="newTeacher.colorCode"
+                          class="form-control color-picker"
+                        />
+                        <input
+                          type="text"
+                          v-model="newTeacher.colorCode"
+                          class="form-control color-text"
+                          placeholder="#FF0000"
+                        />
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary"
+                          @click="generateRandomColorForNew"
+                        >
+                          Slumpa
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                @click="createNewTeacher"
+                :disabled="isCreatingTeacher"
+              >
+                <span v-if="isCreatingTeacher" class="spinner-border spinner-border-sm me-2"></span>
+                {{ isCreatingTeacher ? 'Skapar...' : 'Skapa lärare' }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

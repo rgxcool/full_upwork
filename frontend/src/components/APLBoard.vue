@@ -199,15 +199,31 @@
   // Only include students with a started course package
   const filteredStudents = computed(() => {
     const now = new Date()
-    return students.value.filter(student => {
+    
+    // First, let's see all students with CoursePackage entries regardless of date
+    const allStudentsWithPackages = students.value.filter(student => {
       if (!Array.isArray(student.education)) return false
       return student.education.some(edu => {
         if (edu.type !== 'CoursePackage') return false
-        if (!edu.startDate) return false
-        const start = new Date(edu.startDate)
-        return !isNaN(start) && start <= now
+        return true // Include all CoursePackage entries, regardless of startDate
       })
     })
+    
+    console.log(`[DEBUG] APL Filtering: Total students: ${students.value.length}, Students with CoursePackage entries: ${allStudentsWithPackages.length}`)
+    console.log(`[DEBUG] APL Filtering: All students with CoursePackage entries:`, allStudentsWithPackages.map(s => ({
+      name: s.name,
+      email: s.email,
+      coursePackages: s.education?.filter(e => e.type === 'CoursePackage').map(e => ({
+        name: e.name,
+        startDate: e.startDate,
+        hasStartDate: !!e.startDate,
+        startDateValid: e.startDate ? new Date(e.startDate) <= now : false
+      }))
+    })))
+    
+    // For now, return all students with CoursePackage entries (temporarily removing date restriction)
+    // TODO: Add a toggle to switch between "all CoursePackage students" and "only past startDate students"
+    return allStudentsWithPackages
   })
 
   // Update studentsByStatus and statusCounts to use filteredStudents
@@ -471,13 +487,20 @@
 
 <style scoped>
   .apl-board {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
     display: flex;
+    flex-direction: row;
     gap: 16px;
-    padding: 16px;
+    box-sizing: border-box;
   }
 
   .column {
-    flex: 1;
+    min-width: 300px;
+    flex: 1 1 0;
+    overflow-y: auto;
+    max-height: 80vh;
     padding: 10px;
     border-radius: 8px;
     min-height: 300px;

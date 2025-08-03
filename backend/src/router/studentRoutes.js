@@ -102,7 +102,24 @@ router.put(
  */
 router.get("/students", authenticateUser, async (req, res) => {
   try {
-    const students = await Student.find().lean();
+    let query = {};
+    
+    // If user is a teacher, filter students by their teacherId
+    if (req.user.role === "teacher") {
+      // Find the teacher record for this user
+      const Teacher = mongoose.model('Teacher');
+      const teacher = await Teacher.findOne({ userId: req.user.userId });
+      
+      if (!teacher) {
+        return res.status(403).json({ error: "Teacher profile not found" });
+      }
+      
+      // Filter students by this teacher's ID
+      query.teacherId = teacher._id;
+      console.log(`🔍 Teacher ${teacher._id} fetching their students`);
+    }
+    
+    const students = await Student.find(query).lean();
     for (const student of students) {
       // Populate education refs as before
       for (const edu of student.education) {
@@ -130,33 +147,69 @@ router.get("/students", authenticateUser, async (req, res) => {
       // Fetch enrollments and merge as education entries
       const enrollments = await mongoose.model('StudentEnrollment').find({ studentId: student._id })
         .populate('mainCourseId')
+        .populate('coursePackageId')
+        .populate('programId')
         .lean();
-      const enrollmentEducation = enrollments.map(enrollment => ({
-        _id: enrollment._id,
-        type: "Course",
-        refId: enrollment.mainCourseId,
-        startDate: enrollment.startDate,
-        endDate: enrollment.endDate,
-        status: enrollment.status,
-        grade: enrollment.grade,
-        enrollmentId: enrollment._id,
-        courseInstanceId: enrollment.courseInstanceId,
-        addedAt: enrollment.createdAt,
-        addedBy: enrollment.teacherId || "System",
-        isEnrollment: true,
-      }));
-      student.education = [...student.education, ...enrollmentEducation];
-    }
-    // Deduplicate education array
-    const seen = new Set();
-    students.forEach(student => {
-      student.education = student.education.filter(e => {
-        const key = [e.type, e.refId?._id?.toString() || e.refId?.toString(), new Date(e.startDate).getTime(), new Date(e.endDate).getTime()].join('-');
+      const enrollmentEducation = enrollments.map(enrollment => {
+        if (enrollment.mainCourseId) {
+          return {
+            _id: enrollment._id,
+            type: "Course",
+            refId: enrollment.mainCourseId,
+            startDate: enrollment.startDate,
+            endDate: enrollment.endDate,
+            status: enrollment.status,
+            grade: enrollment.grade,
+            enrollmentId: enrollment._id,
+            courseInstanceId: enrollment.courseInstanceId,
+            addedAt: enrollment.createdAt,
+            addedBy: enrollment.teacherId || "System",
+            isEnrollment: true,
+          };
+        } else if (enrollment.coursePackageId) {
+          return {
+            _id: enrollment._id,
+            type: "CoursePackage",
+            refId: enrollment.coursePackageId,
+            startDate: enrollment.startDate,
+            endDate: enrollment.endDate,
+            status: enrollment.status,
+            grade: enrollment.grade,
+            enrollmentId: enrollment._id,
+            courseInstanceId: enrollment.courseInstanceId,
+            addedAt: enrollment.createdAt,
+            addedBy: enrollment.teacherId || "System",
+            isEnrollment: true,
+          };
+        } else if (enrollment.programId) {
+          return {
+            _id: enrollment._id,
+            type: "Program",
+            refId: enrollment.programId,
+            startDate: enrollment.startDate,
+            endDate: enrollment.endDate,
+            status: enrollment.status,
+            grade: enrollment.grade,
+            enrollmentId: enrollment._id,
+            courseInstanceId: enrollment.courseInstanceId,
+            addedAt: enrollment.createdAt,
+            addedBy: enrollment.teacherId || "System",
+            isEnrollment: true,
+          };
+        }
+        return null;
+      }).filter(Boolean);
+      // Merge and deduplicate
+      const merged = [...student.education, ...enrollmentEducation];
+      // Deduplicate by type, refId, startDate, endDate
+      const seen = new Set();
+      student.education = merged.filter((edu) => {
+        const key = `${edu.type}-${edu.refId?._id || edu.refId}-${edu.startDate ? new Date(edu.startDate).getTime() : ''}-${edu.endDate ? new Date(edu.endDate).getTime() : ''}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
-    });
+    }
     res.status(200).json(students);
   } catch (error) {
     console.error("❌ Error fetching students:", error);

@@ -1,7 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* 🎨 EGEN DESIGN: färgteman & stilar */
 
 :root {
@@ -9,6 +5,21 @@
   --color-secondary: #10B981;  /* Grön */
   --color-bg: #F9FAFB;         /* Ljus bakgrund */
   --color-text: #1F2937;       /* Mörk text */
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.scrollable-view {
+  width: 100%;
+  height: calc(100vh - 166px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding-bottom: 600px;
 }
 
 body {
