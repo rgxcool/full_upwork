@@ -1,4 +1,5 @@
 <template>
+  <div class="scrollable-view">
     <body style="background-color: #f4f4f4; padding: 20px;">
         <h3 class="container p-4">Användare och åtkomstbehörigheter</h3>
 
@@ -60,6 +61,7 @@
           </form>
       </div>
       </body>
+  </div>
   </template>
   
    

@@ -94,6 +94,7 @@
 
             <!-- Mobilmeny under profilikonen -->
             <div v-if="showProfileMenu" class="profile-dropdown" ref="profileDropdown">
+              <router-link v-if="isLoggedIn" to="/profile" class="dropdown-link">Profil</router-link>
               <button v-if="isLoggedIn" @click="logout" class="logout-btn">Logga ut</button>
               <router-link v-else to="/login" class="dropdown-link">Logga in</router-link>
             </div>
@@ -282,6 +283,10 @@
             const formattedDate = date.toISOString().split('T')[0]
             params.append('type', 'Datum')
             params.append('date', formattedDate)
+          } else if (selectedSearchType.value === 'Alla' && searchQuery.value && /^\d{4}-\d{2}-\d{2}$/.test(searchQuery.value)) {
+            // If 'Alla' and input matches yyyy-mm-dd, treat as date search
+            params.append('type', 'Datum')
+            params.append('date', searchQuery.value)
           } else {
             if (!searchQuery.value || searchQuery.value.length < 3) {
               searchResults.value = []
@@ -292,7 +297,10 @@
             params.append('q', searchQuery.value)
           }
 
-          const res = await axios.get(`http://localhost:5001/api/search?${params.toString()}`)
+          const res = await axios.get(
+            `http://localhost:5001/api/search?${params.toString()}`,
+            { withCredentials: true }
+          )
           searchResults.value = res.data
           showResults.value = filteredResults.value.length > 0
         } catch (err) {
@@ -366,7 +374,7 @@
         'Stats',
       ];
       const menuItems = [
-        { name: 'APL', link: '/apl', role: 'admin' },
+        { name: 'APL', link: '/apl', role: ['admin', 'teacher'] },
         { name: 'Kalender', link: '/kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
@@ -374,7 +382,7 @@
         { name: 'Kursmatchning', link: '/course-matching', role: 'admin' },
         { name: 'Lägg till Lärare', link: '/lagg-till-larare', role: 'admin' },
         { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
-        { name: 'Elever', link: '/students', role: 'admin' },
+        { name: 'Elever', link: '/students', role: ['admin', 'teacher'] },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
       ];
@@ -1056,6 +1064,10 @@
     display: block;
   }
 
+  .profile-dropdown .dropdown-link {
+    text-decoration: none;
+  }
+
   .profile-dropdown .logout-btn:hover,
   .profile-dropdown .logout-btn:focus,
   .profile-dropdown .dropdown-link:hover,
@@ -1143,4 +1155,14 @@
   .secret-menu-dropdown li:last-child {
     margin-bottom: 0;
   }
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 100;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  height: 166px;
+}
 </style>

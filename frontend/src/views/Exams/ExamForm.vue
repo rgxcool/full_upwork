@@ -1,94 +1,96 @@
 <template>
-  <v-container class="my-5">
-    <h2 class="mb-4">Anmälan till prövning</h2>
-    <v-form @submit.prevent="submitForm" class="pa-4" elevation="1">
-      <v-row dense>
-        <!-- Elev -->
-        <v-col cols="12">
-          <v-autocomplete
-            v-model="selectedStudent"
-            :items="filteredStudents"
-            :search="searchQuery"
-            item-title="name"
-            item-value="_id"
-            label="Välj elev"
-            return-object
-            outlined
-            :no-data-text="'Skriv elevnamn'"
-            @update:search="searchQuery = $event"
-          />
-        </v-col>
+  <div class="scrollable-view">
+    <v-container class="my-5">
+      <h2 class="mb-4">Anmälan till prövning</h2>
+      <v-form @submit.prevent="submitForm" class="pa-4" elevation="1">
+        <v-row dense>
+          <!-- Elev -->
+          <v-col cols="12">
+            <v-autocomplete
+              v-model="selectedStudent"
+              :items="filteredStudents"
+              :search="searchQuery"
+              item-title="name"
+              item-value="_id"
+              label="Välj elev"
+              return-object
+              outlined
+              :no-data-text="'Skriv elevnamn'"
+              @update:search="searchQuery = $event"
+            />
+          </v-col>
 
-        <!-- Personnummer & Telefon -->
-        <v-col cols="12" md="6">
-          <v-text-field :model-value="form.personalNumber" label="Personnummer" readonly outlined />
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-text-field :model-value="form.phone" label="Telefonnummer" readonly outlined />
-        </v-col>
+          <!-- Personnummer & Telefon -->
+          <v-col cols="12" md="6">
+            <v-text-field :model-value="form.personalNumber" label="Personnummer" readonly outlined />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field :model-value="form.phone" label="Telefonnummer" readonly outlined />
+          </v-col>
 
-        <!-- Email -->
-        <v-col cols="12">
-          <v-text-field :model-value="form.email" label="E-post" readonly outlined />
-        </v-col>
+          <!-- Email -->
+          <v-col cols="12">
+            <v-text-field :model-value="form.email" label="E-post" readonly outlined />
+          </v-col>
 
-        <!-- Kurs -->
-        <v-col cols="12">
-          <v-autocomplete
-            v-model="selectedCourse"
-            :items="availableCourses"
-            item-title="title"
-            item-value="value"
-            label="Kurs"
-            outlined
-            disabled
-          />
-        </v-col>
+          <!-- Kurs -->
+          <v-col cols="12">
+            <v-autocomplete
+              v-model="selectedCourse"
+              :items="availableCourses"
+              item-title="title"
+              item-value="value"
+              label="Kurs"
+              outlined
+              disabled
+            />
+          </v-col>
 
-        <!-- Kommun & Lärare -->
-        <v-col cols="12" md="6">
-          <v-text-field v-model="form.municipality" label="Kommun" readonly outlined />
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-autocomplete
-            v-model="form.teacherId"
-            :items="teachers"
-            item-title="userId.username"
-            item-value="_id"
-            label="Ansvarig lärare"
-            outlined
-            disabled
-          />
-        </v-col>
+          <!-- Kommun & Lärare -->
+          <v-col cols="12" md="6">
+            <v-text-field v-model="form.municipality" label="Kommun" readonly outlined />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-autocomplete
+              v-model="form.teacherId"
+              :items="teachers"
+              item-title="userId.username"
+              item-value="_id"
+              label="Ansvarig lärare"
+              outlined
+              disabled
+            />
+          </v-col>
 
-        <!-- Månad & Betalningsdatum -->
-        <v-col cols="12" md="6">
-          <v-autocomplete
-            v-model="form.requestedMonth"
-            :items="months"
-            label="Önskad månad"
-            outlined
-          />
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-text-field v-model="form.paymentDate" label="Betalningsdatum" type="date" outlined />
-        </v-col>
+          <!-- Månad & Betalningsdatum -->
+          <v-col cols="12" md="6">
+            <v-autocomplete
+              v-model="form.requestedMonth"
+              :items="months"
+              label="Önskad månad"
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field v-model="form.paymentDate" label="Betalningsdatum" type="date" outlined />
+          </v-col>
 
-        <!-- Material checkbox -->
-        <v-col cols="12" v-if="showMaterialCheckbox">
-          <v-checkbox
-            v-model="form.materialReceived.status"
-            label="Material hämtat (SVE 1 eller 3)"
-          />
-        </v-col>
+          <!-- Material checkbox -->
+          <v-col cols="12" v-if="showMaterialCheckbox">
+            <v-checkbox
+              v-model="form.materialReceived.status"
+              label="Material hämtat (SVE 1 eller 3)"
+            />
+          </v-col>
 
-        <!-- Submit -->
-        <v-col cols="12" class="text-end mt-4">
-          <v-btn type="submit" color="primary">Registrera</v-btn>
-        </v-col>
-      </v-row>
-    </v-form>
-  </v-container>
+          <!-- Submit -->
+          <v-col cols="12" class="text-end mt-4">
+            <v-btn type="submit" color="primary">Registrera</v-btn>
+          </v-col>
+        </v-row>
+      </v-form>
+    </v-container>
+  </div>
 </template>
 
 <script setup>

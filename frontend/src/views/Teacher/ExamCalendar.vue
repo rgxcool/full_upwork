@@ -1,64 +1,62 @@
 <template>
-  <div class="calendar-container">
-    <aside class="sidebar">
-      <DatePicker 
-        v-model="selectedDate" 
-        @update:modelValue="onDateChange"
-        :auto-apply="true" 
-        inline 
-        :enable-time="false"
-        locale="sv"
-        :firstDayOfWeek="1"
-      />
-    </aside>
+  <div class="scrollable-view">
+    <div class="calendar-container">
+      <aside class="sidebar">
+        <DatePicker 
+          v-model="selectedDate" 
+          @update:modelValue="onDateChange"
+          :auto-apply="true" 
+          inline 
+          :enable-time="false"
+          locale="sv"
+          :firstDayOfWeek="1"
+        />
+      </aside>
 
-    <div class="main-calendar">
-      <div v-if="canBookEvent" class="admin-controls mb-3">
-        <button v-if="isAdminOrTeacher" @click="openAddEventModal('exam')">
-          📘 Lägg till slutprov
-        </button>
-        <button v-if="isSYVOrSpecped || isAdmin" @click="openAddEventModal('meeting')">
-          🗓️ Lägg till möte
-        </button>
+      <div class="main-calendar">
+        <div v-if="canBookEvent" class="admin-controls mb-3">
+          <button v-if="isAdminOrTeacher" @click="openAddEventModal('exam')">
+            📘 Lägg till slutprov
+          </button>
+          <button v-if="isSYVOrSpecped || isAdmin" @click="openAddEventModal('meeting')">
+            🗓️ Lägg till möte
+          </button>
+        </div>
+
+        <FullCalendar ref="fullCalendar" :options="calendarOptions" />
+
+        <AddEventModal
+          v-if="showAddEventModal && eventType === 'exam'"
+          :teachers="teachers"
+          @close="closeModal"
+          @event-added="addEventToCalendar"
+          @update="handleExamUpdate"
+        />
+
+        <AddMeetingModal
+          v-if="showAddEventModal && eventType === 'meeting'"
+          @close="closeModal"
+          @event-added="addEventToCalendar"
+        />
+
+        <EventModal 
+          v-if="selectedEvent && isExamEvent" 
+          :event="selectedEvent" 
+          @close="selectedEvent = null" 
+          @update="handleExamUpdate"
+        />
+
+        <MeetingModal
+          v-if="selectedEvent && isMeetingEvent"
+          :event="selectedEvent"
+          @close="selectedEvent = null"
+        />
       </div>
-
-      <FullCalendar ref="fullCalendar" :options="calendarOptions" />
-
-      <!-- Modal för slutprov -->
-      <AddEventModal
-        v-if="showAddEventModal && eventType === 'exam'"
-        :teachers="teachers"
-        @close="closeModal"
-        @event-added="addEventToCalendar"
-        @update="handleExamUpdate"
-      />
-
-      <!-- Modal för möte -->
-      <AddMeetingModal
-        v-if="showAddEventModal && eventType === 'meeting'"
-        @close="closeModal"
-        @event-added="addEventToCalendar"
-      />
-
-      <!-- Modal för event (slutprov eller möte) -->
-      <EventModal 
-        v-if="selectedEvent && isExamEvent" 
-        :event="selectedEvent" 
-        @close="selectedEvent = null" 
-        @update="handleExamUpdate"
-      />
-
-      <MeetingModal
-        v-if="selectedEvent && isMeetingEvent"
-        :event="selectedEvent"
-        @close="selectedEvent = null"
-      />
     </div>
   </div>
 </template>
 
 <script>
-//import { computed } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -178,14 +176,14 @@ export default {
         color: '#b0b0b0',
         extendedProps: {
           ...event.extendedProps,
+          students: event.extendedProps?.students || [],
           isMeeting: this.eventType === 'meeting',
           isExam: this.eventType === 'exam',
           role: this.userRole,
-          examTime: event.examTime,
-          examMunicipality: event.examMunicipality,
-          examLocation: event.examLocation,
-          type: this.eventType === 'exam' ? 'exam' : 'general', // <-- DEN HÄR RADEN!
-
+          examTime: event.extendedProps?.examTime,
+          examMunicipality: event.extendedProps?.examMunicipality,
+          examLocation: event.extendedProps?.examLocation,
+          type: this.eventType === 'exam' ? 'exam' : 'general',
         }
       });
 
@@ -209,8 +207,6 @@ export default {
           api.get('/meetings')
         ]);
 
-
-        // Samla ALLA events utan att filtrera på type!
         const allEvents = [
           ...savedEvents.data.map(event => ({
             id: event._id,
@@ -246,31 +242,39 @@ export default {
 
         this.calendarOptions.events = allEvents;
 
-
+        // Debug
         console.log("Alla events som skickas till kalendern:", allEvents);
         allEvents.forEach(e => {
           if (e.extendedProps && e.extendedProps.type === 'exam') {
             console.log('EXAM-EVENT:', e);
           }
         });
-        console.log("Events efter fetch:", this.calendarOptions.events);
-
-
 
       } catch (error) {
         console.error("❌ Kunde inte ladda kalender-events:", error.message);
       }
     },
     openEventModal(info) {
-      const eventId = info.event.id;
-      const match = this.calendarOptions.events.find(e => e.id === eventId);
+      const fcEvent = info.event;
 
-      // Klona objektet så Vue kan mutera det fritt i modalen
-      this.selectedEvent = match ? JSON.parse(JSON.stringify(match)) : null;
-      this.eventType = (match && match.extendedProps?.type === 'exam') ? 'exam' : 'meeting';
+      // Bygg ett plain object för modalen med deep copy
+      const eventObj = {
+        id: fcEvent.id,
+        _id: fcEvent.extendedProps?._id || fcEvent.id,
+        title: fcEvent.title,
+        start: fcEvent.start,
+        allDay: fcEvent.allDay,
+        color: fcEvent.backgroundColor || fcEvent.extendedProps?.color || '#999999',
+        extendedProps: {
+          ...fcEvent.extendedProps
+        }
+      };
 
-      console.log("OPEN EVENT MODAL:", this.selectedEvent);
+      console.log("extendedProps on click:", fcEvent.extendedProps);
+      this.selectedEvent = JSON.parse(JSON.stringify(eventObj));
+      this.eventType = (this.selectedEvent.extendedProps?.type === 'exam') ? 'exam' : 'meeting';
 
+      console.log("SKICKAR event till modal:", this.selectedEvent);
     },
     handleEventDrop(info) {
       const updatedEvent = {
@@ -285,7 +289,8 @@ export default {
         api
           .put(endpoint, updatedEvent, { withCredentials: true })
           .then(() => {
-            console.log(isMeeting ? "✅ Möte uppdaterat!" : "✅ Event uppdaterat!");          })
+            console.log(isMeeting ? "✅ Möte uppdaterat!" : "✅ Event uppdaterat!");          
+          })
           .catch((err) => {
             console.error(
               isMeeting
@@ -297,12 +302,10 @@ export default {
           });
       });
     },
-
-
     async handleExamUpdate() {
+      console.log("🔄 handleExamUpdate called - refreshing calendar data...");
       await this.fetchEvents();
       this.selectedEvent = null;
-
     }, 
   },
   async mounted() {

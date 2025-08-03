@@ -100,7 +100,7 @@ const routes = [
     path: '/students',
     name: 'Students',
     component: ExcelUpload,
-    meta: { title: 'Student List', role: 'admin' },
+    meta: { title: 'Student List', role: ['admin', 'teacher'] },
   },
   {
     path: '/education',
@@ -203,7 +203,7 @@ const routes = [
     path: '/apl',
     name: 'APLView',
     component: APLView,
-    meta: { title: 'APL List', role: 'admin' },
+    meta: { title: 'APL List', role: ['admin', 'teacher'] },
   },
   // Remove duplicate /betyg route
   // { path: '/betyg', name: 'Betyg', component: GradeStudent, meta: { title: 'Grade Student', role: 'teacher' } },

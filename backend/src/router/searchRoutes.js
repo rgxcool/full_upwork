@@ -6,15 +6,32 @@ import Program from "../models/Program.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Teacher from "../models/Teacher.js";
+import { authenticateUser } from "../controllers/authController.js";
 
 const router = express.Router();
 
-router.get("/courses", async (req, res) => {
+router.get("/courses", authenticateUser, async (req, res) => {
     try {
-        const students = await Student.find({
+        let query = {
             "education.type": "Course",
             "education.refId": { $exists: true },
-        })
+        };
+        
+        // If user is a teacher, filter students by their teacherId
+        if (req.user.role === "teacher") {
+            // Find the teacher record for this user
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            
+            // Filter students by this teacher's ID
+            query.teacherId = teacher._id;
+            console.log(`🔍 Teacher ${teacher._id} fetching their courses`);
+        }
+        
+        const students = await Student.find(query)
             .populate("education.refId", "courseName")
             .select("education");
 
@@ -49,11 +66,27 @@ router.get("/courses", async (req, res) => {
     }
 });
 
-router.get("/search", async (req, res) => {
+router.get("/search", authenticateUser, async (req, res) => {
     const { q, date, type } = req.query;
 
     try {
         const results = [];
+        
+        let studentQuery = {};
+        
+        // If user is a teacher, filter students by their teacherId
+        if (req.user.role === "teacher") {
+            // Find the teacher record for this user
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            
+            // Filter students by this teacher's ID
+            studentQuery.teacherId = teacher._id;
+            console.log(`🔍 Teacher ${teacher._id} searching their students`);
+        }
 
         if (type === "Datum" && date) {
             const parsedDate = new Date(date);
@@ -61,7 +94,11 @@ router.get("/search", async (req, res) => {
                 return res.status(400).json({ message: "Ogiltigt datum" });
             }
 
+            // Only include students whose startDate <= date <= endDate.
+            // Do NOT include students just because they have an exam (finalExamDate) on this date.
+            // This ensures the date search is strictly for enrollment period, not exam dates.
             const students = await Student.find({
+                ...studentQuery,
                 startDate: { $lte: parsedDate },
                 endDate: { $gte: parsedDate },
             }).select("_id name email");
@@ -83,7 +120,10 @@ router.get("/search", async (req, res) => {
 
         if (shouldSearchUsers) {
             const [students, users] = await Promise.all([
-                Student.find({ name: { $regex: q, $options: "i" } }).select(
+                Student.find({ 
+                    ...studentQuery,
+                    name: { $regex: q, $options: "i" } 
+                }).select(
                     "_id name email"
                 ),
                 User.find({
@@ -112,6 +152,7 @@ router.get("/search", async (req, res) => {
 
         if (shouldSearchCourses) {
             const students = await Student.find({
+                ...studentQuery,
                 "education.refId": { $ne: null },
             })
                 .populate("education.refId")

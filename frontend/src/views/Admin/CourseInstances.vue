@@ -1,14 +1,8 @@
 <template>
-  <div class="course-instances-container">
-    <div class="header-section">
-      <h3 class="page-title">Kursinstanser</h3>
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <div class="breadcrumb">
-          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-            <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
-          </svg>
-          <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
-        </div>
+  <div class="scrollable-view">
+    <div class="course-instances-container">
+      <div class="header-section">
+        <h3 class="page-title">Kursinstanser</h3>
         <button class="btn btn-danger" style="margin-left: 20px;" @click="deleteAllCourseInstances">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
             <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -16,368 +10,370 @@
           Radera alla kursinstanser
         </button>
       </div>
-    </div>
 
-    <!-- Filters -->
-    <div class="filters-section">
-      <div class="filter-group">
-        <label for="courseFilter">Kurs:</label>
-        <select id="courseFilter" v-model="filters.courseId" @change="loadInstances">
-          <option value="">Alla kurser</option>
-          <option v-for="course in courses" :key="course._id" :value="course._id">
-            {{ course.courseName }} ({{ course.courseCode }})
-          </option>
-        </select>
+      <!-- Filters -->
+      <div class="filters-section">
+        <div class="filter-group">
+          <label for="courseFilter">Kurs:</label>
+          <select id="courseFilter" v-model="filters.courseId" @change="loadInstances">
+            <option value="">Alla kurser</option>
+            <option v-for="course in courses" :key="course._id" :value="course._id">
+              {{ course.courseName }} ({{ course.courseCode }})
+            </option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="dateFilter">Period:</label>
+          <input type="date" id="startDate" v-model="filters.startDate" @change="loadInstances" />
+          <span>till</span>
+          <input type="date" id="endDate" v-model="filters.endDate" @change="loadInstances" />
+        </div>
+
+        <div class="filter-group">
+          <label for="statusFilter">Status:</label>
+          <select id="statusFilter" v-model="filters.isActive" @change="loadInstances">
+            <option value="">Alla</option>
+            <option value="true">Aktiva</option>
+            <option value="false">Inaktiva</option>
+          </select>
+        </div>
+
+        <button class="btn btn-primary" @click="showCreateModal = true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          </svg>
+          Skapa ny instans
+        </button>
       </div>
 
-      <div class="filter-group">
-        <label for="dateFilter">Period:</label>
-        <input type="date" id="startDate" v-model="filters.startDate" @change="loadInstances" />
-        <span>till</span>
-        <input type="date" id="endDate" v-model="filters.endDate" @change="loadInstances" />
+      <!-- Statistics -->
+      <div class="stats-section" v-if="statistics">
+        <div class="stat-card">
+          <h4>Totalt antal instanser</h4>
+          <p class="stat-number">{{ statistics.totalInstances }}</p>
+        </div>
+        <div class="stat-card">
+          <h4>Aktiva instanser</h4>
+          <p class="stat-number">{{ statistics.activeInstances }}</p>
+        </div>
+        <div class="stat-card">
+          <h4>Totalt antal inskrivningar</h4>
+          <p class="stat-number">{{ statistics.totalEnrollments }}</p>
+        </div>
+        <div class="stat-card">
+          <h4>Genomsnittlig inskrivning per instans</h4>
+          <p class="stat-number">{{ statistics.averageEnrollments }}</p>
+        </div>
       </div>
 
-      <div class="filter-group">
-        <label for="statusFilter">Status:</label>
-        <select id="statusFilter" v-model="filters.isActive" @change="loadInstances">
-          <option value="">Alla</option>
-          <option value="true">Aktiva</option>
-          <option value="false">Inaktiva</option>
-        </select>
+      <!-- Instances Table -->
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th @click="setSort('courseName')">Kursnamn <span v-if="sortKey === 'courseName'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('courseCode')">Kurskod <span v-if="sortKey === 'courseCode'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('startDate')">Startdatum <span v-if="sortKey === 'startDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('endDate')">Slutdatum <span v-if="sortKey === 'endDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('slutprovDate')">Slutprov datum <span v-if="sortKey === 'slutprovDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('enrollmentCount')">Inskrivningar <span v-if="sortKey === 'enrollmentCount'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('isActive')">Status <span v-if="sortKey === 'isActive'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('createdBy')">Skapad av <span v-if="sortKey === 'createdBy'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('responsibleTeacher')">Ansvarig lärare <span v-if="sortKey === 'responsibleTeacher'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th>Åtgärder</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="instance in sortedInstances" :key="instance._id">
+              <td>{{ instance.courseName }}</td>
+              <td>{{ instance.courseCode }}</td>
+              <td>{{ formatDate(instance.startDate) }}</td>
+              <td>{{ formatDate(instance.endDate) }}</td>
+              <td>{{ formatDate(instance.slutprovDate) || '-' }}</td>
+              <td>
+                <span class="enrollment-count">{{ instance.enrollmentCount }}</span>
+                <button
+                  class="btn btn-sm btn-outline-primary ms-2"
+                  @click="viewEnrollments(instance._id)"
+                  title="Visa inskrivningar"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                    />
+                  </svg>
+                </button>
+              </td>
+              <td>
+                <span :class="['status-badge', instance.isActive ? 'active' : 'inactive']">
+                  {{ instance.isActive ? 'Aktiv' : 'Inaktiv' }}
+                </span>
+              </td>
+              <td>{{ instance.createdBy?.username || 'System' }}</td>
+              <td>{{ instance.responsibleTeacher?.userId?.username || '-' }}</td>
+              <td>
+                <button
+                  class="btn btn-sm btn-outline-secondary me-1"
+                  @click="editInstance(instance)"
+                  title="Redigera"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+                    />
+                  </svg>
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-danger"
+                  @click="deleteInstance(instance._id)"
+                  title="Ta bort"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                    />
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <button class="btn btn-primary" @click="showCreateModal = true">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-          <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-        </svg>
-        Skapa ny instans
-      </button>
-    </div>
+      <!-- Create/Edit Modal -->
+      <div class="modal fade" id="instanceModal" tabindex="-1" ref="instanceModal">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">{{ editingInstance ? 'Redigera' : 'Skapa ny' }} kursinstans</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <form @submit.prevent="saveInstance">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="mainCourseId">Huvudkurs *</label>
+                      <select
+                        id="mainCourseId"
+                        v-model="instanceForm.mainCourseId"
+                        class="form-control"
+                        required
+                        :disabled="editingInstance"
+                      >
+                        <option value="">Välj kurs</option>
+                        <option v-for="course in courses" :key="course._id" :value="course._id">
+                          {{ course.courseName }} ({{ course.courseCode }})
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="version">Version</label>
+                      <input
+                        type="text"
+                        id="version"
+                        v-model="instanceForm.version"
+                        class="form-control"
+                        placeholder="1.0"
+                      />
+                    </div>
+                  </div>
+                </div>
 
-    <!-- Statistics -->
-    <div class="stats-section" v-if="statistics">
-      <div class="stat-card">
-        <h4>Totalt antal instanser</h4>
-        <p class="stat-number">{{ statistics.totalInstances }}</p>
-      </div>
-      <div class="stat-card">
-        <h4>Aktiva instanser</h4>
-        <p class="stat-number">{{ statistics.activeInstances }}</p>
-      </div>
-      <div class="stat-card">
-        <h4>Totalt antal inskrivningar</h4>
-        <p class="stat-number">{{ statistics.totalEnrollments }}</p>
-      </div>
-      <div class="stat-card">
-        <h4>Genomsnittlig inskrivning per instans</h4>
-        <p class="stat-number">{{ statistics.averageEnrollments }}</p>
-      </div>
-    </div>
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="startDate">Startdatum *</label>
+                      <input
+                        type="date"
+                        id="startDate"
+                        v-model="instanceForm.startDate"
+                        class="form-control"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="endDate">Slutdatum *</label>
+                      <input
+                        type="date"
+                        id="endDate"
+                        v-model="instanceForm.endDate"
+                        class="form-control"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
 
-    <!-- Instances Table -->
-    <div class="table-container">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Kursnamn</th>
-            <th>Kurskod</th>
-            <th>Startdatum</th>
-            <th>Slutdatum</th>
-            <th>Inskrivningar</th>
-            <th>Status</th>
-            <th>Skapad av</th>
-            <th>Ansvarig lärare</th>
-            <th>Åtgärder</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="instance in instances" :key="instance._id">
-            <td>{{ instance.courseName }}</td>
-            <td>{{ instance.courseCode }}</td>
-            <td>{{ formatDate(instance.startDate) }}</td>
-            <td>{{ formatDate(instance.endDate) }}</td>
-            <td>
-              <span class="enrollment-count">{{ instance.enrollmentCount }}</span>
-              <button
-                class="btn btn-sm btn-outline-primary ms-2"
-                @click="viewEnrollments(instance._id)"
-                title="Visa inskrivningar"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="courseName">Kursnamn</label>
+                      <input
+                        type="text"
+                        id="courseName"
+                        v-model="instanceForm.courseName"
+                        class="form-control"
+                        placeholder="Lämna tomt för att använda huvudkursens namn"
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="courseCode">Kurskod</label>
+                      <input
+                        type="text"
+                        id="courseCode"
+                        v-model="instanceForm.courseCode"
+                        class="form-control"
+                        placeholder="Lämna tomt för att använda huvudkursens kod"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="coursePoints">Poäng</label>
+                      <input
+                        type="text"
+                        id="coursePoints"
+                        v-model="instanceForm.coursePoints"
+                        class="form-control"
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="courseExtent">Omfattning</label>
+                      <input
+                        type="text"
+                        id="courseExtent"
+                        v-model="instanceForm.courseExtent"
+                        class="form-control"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="notes">Anteckningar</label>
+                  <textarea
+                    id="notes"
+                    v-model="instanceForm.notes"
+                    class="form-control"
+                    rows="3"
+                  ></textarea>
+                </div>
+
+                <div class="form-check">
+                  <input
+                    type="checkbox"
+                    id="isActive"
+                    v-model="instanceForm.isActive"
+                    class="form-check-input"
                   />
-                </svg>
-              </button>
-            </td>
-            <td>
-              <span :class="['status-badge', instance.isActive ? 'active' : 'inactive']">
-                {{ instance.isActive ? 'Aktiv' : 'Inaktiv' }}
-              </span>
-            </td>
-            <td>{{ instance.createdBy?.username || 'System' }}</td>
-            <td>{{ instance.responsibleTeacher?.userId?.username || '-' }}</td>
-            <td>
+                  <label class="form-check-label" for="isActive">Aktiv</label>
+                </div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
               <button
-                class="btn btn-sm btn-outline-secondary me-1"
-                @click="editInstance(instance)"
-                title="Redigera"
+                type="button"
+                class="btn btn-primary"
+                @click="saveInstance"
+                :disabled="isSaving"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-                  />
-                </svg>
+                {{ isSaving ? 'Sparar...' : editingInstance ? 'Uppdatera' : 'Skapa' }}
               </button>
-              <button
-                class="btn btn-sm btn-outline-danger"
-                @click="deleteInstance(instance._id)"
-                title="Ta bort"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
-                  />
-                </svg>
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Create/Edit Modal -->
-    <div class="modal fade" id="instanceModal" tabindex="-1" ref="instanceModal">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">{{ editingInstance ? 'Redigera' : 'Skapa ny' }} kursinstans</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="saveInstance">
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="mainCourseId">Huvudkurs *</label>
-                    <select
-                      id="mainCourseId"
-                      v-model="instanceForm.mainCourseId"
-                      class="form-control"
-                      required
-                      :disabled="editingInstance"
-                    >
-                      <option value="">Välj kurs</option>
-                      <option v-for="course in courses" :key="course._id" :value="course._id">
-                        {{ course.courseName }} ({{ course.courseCode }})
-                      </option>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="version">Version</label>
-                    <input
-                      type="text"
-                      id="version"
-                      v-model="instanceForm.version"
-                      class="form-control"
-                      placeholder="1.0"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="startDate">Startdatum *</label>
-                    <input
-                      type="date"
-                      id="startDate"
-                      v-model="instanceForm.startDate"
-                      class="form-control"
-                      required
-                    />
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="endDate">Slutdatum *</label>
-                    <input
-                      type="date"
-                      id="endDate"
-                      v-model="instanceForm.endDate"
-                      class="form-control"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="courseName">Kursnamn</label>
-                    <input
-                      type="text"
-                      id="courseName"
-                      v-model="instanceForm.courseName"
-                      class="form-control"
-                      placeholder="Lämna tomt för att använda huvudkursens namn"
-                    />
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="courseCode">Kurskod</label>
-                    <input
-                      type="text"
-                      id="courseCode"
-                      v-model="instanceForm.courseCode"
-                      class="form-control"
-                      placeholder="Lämna tomt för att använda huvudkursens kod"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="coursePoints">Poäng</label>
-                    <input
-                      type="text"
-                      id="coursePoints"
-                      v-model="instanceForm.coursePoints"
-                      class="form-control"
-                    />
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="courseExtent">Omfattning</label>
-                    <input
-                      type="text"
-                      id="courseExtent"
-                      v-model="instanceForm.courseExtent"
-                      class="form-control"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="notes">Anteckningar</label>
-                <textarea
-                  id="notes"
-                  v-model="instanceForm.notes"
-                  class="form-control"
-                  rows="3"
-                ></textarea>
-              </div>
-
-              <div class="form-check">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  v-model="instanceForm.isActive"
-                  class="form-check-input"
-                />
-                <label class="form-check-label" for="isActive">Aktiv</label>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              @click="saveInstance"
-              :disabled="isSaving"
-            >
-              {{ isSaving ? 'Sparar...' : editingInstance ? 'Uppdatera' : 'Skapa' }}
-            </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Enrollments Modal -->
-    <div class="modal fade" id="enrollmentsModal" tabindex="-1" ref="enrollmentsModal">
-      <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Inskrivningar för {{ selectedInstance?.courseName }}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <div v-if="enrollments.length === 0" class="text-center py-4">
-              <p>Inga inskrivningar för denna kursinstans.</p>
+      <!-- Enrollments Modal -->
+      <div class="modal fade" id="enrollmentsModal" tabindex="-1" ref="enrollmentsModal">
+        <div class="modal-dialog modal-xl">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Inskrivningar för {{ selectedInstance?.courseName }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div v-else>
-              <table class="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Status</th>
-                    <th>Startdatum</th>
-                    <th>Slutdatum</th>
-                    <th>Betyg</th>
-                    <th>Närvaro</th>
-                    <th>Åtgärder</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="enrollment in enrollments" :key="enrollment._id">
-                    <td>{{ enrollment.studentId?.name || 'Okänd student' }}</td>
-                    <td>
-                      <span :class="['status-badge', getStatusClass(enrollment.status)]">
-                        {{ getStatusText(enrollment.status) }}
-                      </span>
-                    </td>
-                    <td>{{ formatDate(enrollment.startDate) }}</td>
-                    <td>{{ formatDate(enrollment.endDate) }}</td>
-                    <td>{{ enrollment.grade || '-' }}</td>
-                    <td>
-                      {{
-                        enrollment.attendancePercentage
-                          ? `${enrollment.attendancePercentage}%`
-                          : '-'
-                      }}
-                    </td>
-                    <td>
-                      <button
-                        class="btn btn-sm btn-outline-primary"
-                        @click="viewStudentDetails(enrollment.studentId?._id)"
-                      >
-                        Visa student
-                      </button>
-                      <button
-                        v-if="enrollment.studentId && enrollment.studentId._id"
-                        class="btn btn-sm btn-outline-danger ms-2"
-                        @click="deleteEnrollment(enrollment._id)"
-                        title="Ta bort inskrivning"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                          <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="modal-body">
+              <div v-if="enrollments.length === 0" class="text-center py-4">
+                <p>Inga inskrivningar för denna kursinstans.</p>
+              </div>
+              <div v-else>
+                <table class="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>Status</th>
+                      <th>Startdatum</th>
+                      <th>Slutdatum</th>
+                      <th>Betyg</th>
+                      <th>Närvaro</th>
+                      <th>Åtgärder</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="enrollment in enrollments" :key="enrollment._id">
+                      <td>{{ enrollment.studentId?.name || 'Okänd student' }}</td>
+                      <td>
+                        <span :class="['status-badge', getStatusClass(enrollment.status)]">
+                          {{ getStatusText(enrollment.status) }}
+                        </span>
+                      </td>
+                      <td>{{ formatDate(enrollment.startDate) }}</td>
+                      <td>{{ formatDate(enrollment.endDate) }}</td>
+                      <td>{{ enrollment.grade || '-' }}</td>
+                      <td>
+                        {{
+                          enrollment.attendancePercentage
+                            ? `${enrollment.attendancePercentage}%`
+                            : '-'
+                        }}
+                      </td>
+                      <td>
+                        <button
+                          class="btn btn-sm btn-outline-primary"
+                          @click="viewStudentDetails(enrollment.studentId?._id)"
+                        >
+                          Visa student
+                        </button>
+                        <button
+                          v-if="enrollment.studentId && enrollment.studentId._id"
+                          class="btn btn-sm btn-outline-danger ms-2"
+                          @click="deleteEnrollment(enrollment._id)"
+                          title="Ta bort inskrivning"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+                            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <button
+                v-if="enrollments.some(e => !e.studentId || !e.studentId._id)"
+                class="btn btn-danger mt-3"
+                @click="deleteUnknownEnrollments"
+              >
+                Ta bort alla okända elever
+              </button>
             </div>
-            <button
-              v-if="enrollments.some(e => !e.studentId || !e.studentId._id)"
-              class="btn btn-danger mt-3"
-              @click="deleteUnknownEnrollments"
-            >
-              Ta bort alla okända elever
-            </button>
           </div>
         </div>
       </div>
@@ -386,7 +382,7 @@
 </template>
 
 <script>
-  import { ref, onMounted, computed } from 'vue'
+  import { ref, onMounted, computed, watch } from 'vue'
   import { useStore } from 'vuex'
   import { api } from '@/store/store.js'
 
@@ -441,6 +437,48 @@
           totalEnrollments,
           averageEnrollments,
         }
+      })
+
+      const sortKey = ref('')
+      const sortOrder = ref('asc')
+
+      const setSort = (key) => {
+        if (sortKey.value === key) {
+          sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+        } else {
+          sortKey.value = key
+          sortOrder.value = 'asc'
+        }
+      }
+
+      const sortedInstances = computed(() => {
+        if (!sortKey.value) return instances.value
+        return [...instances.value].sort((a, b) => {
+          let aVal = a[sortKey.value]
+          let bVal = b[sortKey.value]
+          // Handle nested fields
+          if (sortKey.value === 'createdBy') {
+            aVal = a.createdBy?.username || ''
+            bVal = b.createdBy?.username || ''
+          } else if (sortKey.value === 'responsibleTeacher') {
+            aVal = a.responsibleTeacher?.userId?.username || ''
+            bVal = b.responsibleTeacher?.userId?.username || ''
+          } else if (sortKey.value === 'enrollmentCount') {
+            aVal = a.enrollmentCount || 0
+            bVal = b.enrollmentCount || 0
+          } else if (sortKey.value === 'isActive') {
+            aVal = a.isActive ? 1 : 0
+            bVal = b.isActive ? 1 : 0
+          }
+          // Date fields
+          if (sortKey.value === 'startDate' || sortKey.value === 'endDate' || sortKey.value === 'slutprovDate') {
+            aVal = aVal ? new Date(aVal) : new Date(0)
+            bVal = bVal ? new Date(bVal) : new Date(0)
+          }
+          if (aVal < bVal) return sortOrder.value === 'asc' ? -1 : 1
+          if (aVal > bVal) return sortOrder.value === 'asc' ? 1 : -1
+          return 0
+        })
       })
 
       const loadCourses = async () => {
@@ -621,6 +659,22 @@
         loadInstances()
       })
 
+      // Watch for showCreateModal changes to show/hide the modal
+      watch(showCreateModal, (newValue) => {
+        if (newValue) {
+          const modal = new bootstrap.Modal(document.getElementById('instanceModal'))
+          modal.show()
+          
+          // Listen for modal hidden event to reset showCreateModal
+          const modalElement = document.getElementById('instanceModal')
+          const handleModalHidden = () => {
+            showCreateModal.value = false
+            modalElement.removeEventListener('hidden.bs.modal', handleModalHidden)
+          }
+          modalElement.addEventListener('hidden.bs.modal', handleModalHidden)
+        }
+      })
+
       return {
         instances,
         courses,
@@ -645,6 +699,10 @@
         deleteAllCourseInstances,
         deleteEnrollment,
         deleteUnknownEnrollments,
+        sortKey,
+        sortOrder,
+        setSort,
+        sortedInstances,
       }
     },
   }

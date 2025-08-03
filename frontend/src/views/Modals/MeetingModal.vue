@@ -1,11 +1,13 @@
 <template>
   <div class="modal-overlay">
     <div class="modal-content">
-      <p><strong>Elev:</strong> {{ event.extendedProps.studentName }}</p>
-      <p><strong>Datum:</strong> {{ formatDate(event.start) }}</p>
-      <p><strong>Tid:</strong> {{ formatTime(event.start) }}</p>
-      <p><strong>Plats:</strong> {{ event.extendedProps.location }}</p>
-      <p><strong>Bokad av:</strong> {{ event.extendedProps.bookedBy }}</p>
+      <div class="scrollable-view">
+        <p><strong>Elev:</strong> {{ event.extendedProps.studentName }}</p>
+        <p><strong>Datum:</strong> {{ formatDate(event.start) }}</p>
+        <p><strong>Tid:</strong> {{ formatTime(event.start) }}</p>
+        <p><strong>Plats:</strong> {{ event.extendedProps.location }}</p>
+        <p><strong>Bokad av:</strong> {{ event.extendedProps.bookedBy }}</p>
+      </div>
 
       <div class="buttons">
         <button @click="$emit('close')">Stäng</button>

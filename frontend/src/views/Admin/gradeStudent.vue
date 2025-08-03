@@ -1,117 +1,119 @@
 <template>
-  <section class="ungraded-section">
-    <v-card class="pa-5">
-      <v-card-title class="text-h5">📋 Elever med obetygsatta utbildningar</v-card-title>
+  <div class="scrollable-view">
+    <section class="ungraded-section">
+      <v-card class="pa-5">
+        <v-card-title class="text-h5">📋 Elever med obetygsatta utbildningar</v-card-title>
 
-      <v-alert type="info" class="mb-4" border="start" prominent>
-        <v-icon class="me-2">mdi-file-document-edit-outline</v-icon>
-        Signera betyg på
-        <a href="https://scrive.com" target="_blank" class="text-primary text-decoration-underline">
-          Scrive
-        </a>
-        och lås betyget efter signering.
-      </v-alert>
+        <v-alert type="info" class="mb-4" border="start" prominent>
+          <v-icon class="me-2">mdi-file-document-edit-outline</v-icon>
+          Signera betyg på
+          <a href="https://scrive.com" target="_blank" class="text-primary text-decoration-underline">
+            Scrive
+          </a>
+          och lås betyget efter signering.
+        </v-alert>
 
-      <div v-if="loading">Laddar...</div>
-      <div v-else-if="students.length === 0">Inga obetygsatta elever hittades.</div>
-      <v-data-table
-        v-if="!loading && flatRows.length"
-        :headers="headers"
-        :items="flatRows"
-        class="elevation-1"
-        item-value="refId"
-        disable-sort
-        dense
-      >
-        <template #item.grade="{ item }">
-          <v-chip v-if="item.grade" color="primary" text-color="white">{{ item.grade }}</v-chip>
-          <span v-else class="text-muted">Ej betygsatt</span>
-        </template>
+        <div v-if="loading">Laddar...</div>
+        <div v-else-if="students.length === 0">Inga obetygsatta elever hittades.</div>
+        <v-data-table
+          v-if="!loading && flatRows.length"
+          :headers="headers"
+          :items="flatRows"
+          class="elevation-1"
+          item-value="refId"
+          disable-sort
+          dense
+        >
+          <template #item.grade="{ item }">
+            <v-chip v-if="item.grade" color="primary" text-color="white">{{ item.grade }}</v-chip>
+            <span v-else class="text-muted">Ej betygsatt</span>
+          </template>
 
-        <template #item.actions="{ item }">
-          <v-btn
-            v-if="!item.grade"
-            color="primary"
-            size="small"
-            @click="setGrade(item)"
-            class="me-2"
-          >
-            Sätt betyg
-          </v-btn>
-          <v-btn
-            v-if="item.grade && !item.locked"
-            color="success"
-            size="small"
-            @click="lockGrade(item)"
-            class="me-2"
-          >
-            Lås betyg
-          </v-btn>
-          <v-btn
-            v-if="item.grade === 'F' && item.locked"
-            color="warning"
-            size="small"
-            @click="goToActionPlan(item)"
-          >
-            Skapa handlingsplan
-          </v-btn>
-        </template>
-      </v-data-table>
+          <template #item.actions="{ item }">
+            <v-btn
+              v-if="!item.grade"
+              color="primary"
+              size="small"
+              @click="setGrade(item)"
+              class="me-2"
+            >
+              Sätt betyg
+            </v-btn>
+            <v-btn
+              v-if="item.grade && !item.locked"
+              color="success"
+              size="small"
+              @click="lockGrade(item)"
+              class="me-2"
+            >
+              Lås betyg
+            </v-btn>
+            <v-btn
+              v-if="item.grade === 'F' && item.locked"
+              color="warning"
+              size="small"
+              @click="goToActionPlan(item)"
+            >
+              Skapa handlingsplan
+            </v-btn>
+          </template>
+        </v-data-table>
 
-      <v-alert v-else-if="!loading && !flatRows.length" type="info">
-        Inga obetygsatta elever hittades.
-      </v-alert>
+        <v-alert v-else-if="!loading && !flatRows.length" type="info">
+          Inga obetygsatta elever hittades.
+        </v-alert>
 
-      <v-progress-circular v-else indeterminate color="primary" size="32" />
-    </v-card>
-  </section>
+        <v-progress-circular v-else indeterminate color="primary" size="32" />
+      </v-card>
+    </section>
 
-  <v-dialog v-model="showGradeModal" max-width="600px">
-    <v-card>
-      <v-card-title>Sätt betyg</v-card-title>
-      <v-card-text>
-        <v-form @submit.prevent="saveGrade">
-          <v-select
-            v-model="gradeData.grade"
-            :items="['A', 'B', 'C', 'D', 'E', 'F']"
-            label="Betyg *"
-            required
-            color="primary"
-            variant="outlined"
-          />
-          <v-textarea
-            color="primary"
-            variant="outlined"
-            v-model="gradeData.reason"
-            label="Motivering *"
-            required
-          />
-          <v-textarea
-            color="primary"
-            variant="outlined"
-            v-model="gradeData.comments"
-            label="Kommentar"
-          />
+    <v-dialog v-model="showGradeModal" max-width="600px">
+      <v-card>
+        <v-card-title>Sätt betyg</v-card-title>
+        <v-card-text>
+          <v-form @submit.prevent="saveGrade">
+            <v-select
+              v-model="gradeData.grade"
+              :items="['A', 'B', 'C', 'D', 'E', 'F']"
+              label="Betyg *"
+              required
+              color="primary"
+              variant="outlined"
+            />
+            <v-textarea
+              color="primary"
+              variant="outlined"
+              v-model="gradeData.reason"
+              label="Motivering *"
+              required
+            />
+            <v-textarea
+              color="primary"
+              variant="outlined"
+              v-model="gradeData.comments"
+              label="Kommentar"
+            />
 
-          <v-text-field
-            v-if="isNationalCourse(gradeData.courseCode)"
-            v-model.number="gradeData.npScore"
-            label="Nationella prov-poäng *"
-            type="number"
-            min="0"
-            required
-            color="primary"
-            variant="outlined"
-          />
-        </v-form>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn text @click="showGradeModal = false">Avbryt</v-btn>
-        <v-btn color="primary" :disabled="!canSaveGrade()" @click="saveGrade">Spara betyg</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+            <v-text-field
+              v-if="isNationalCourse(gradeData.courseCode)"
+              v-model.number="gradeData.npScore"
+              label="Nationella prov-poäng *"
+              type="number"
+              min="0"
+              required
+              color="primary"
+              variant="outlined"
+            />
+          </v-form>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="showGradeModal = false">Avbryt</v-btn>
+          <v-btn color="primary" :disabled="!canSaveGrade()" @click="saveGrade">Spara betyg</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </div>
 </template>
 
 <script setup>

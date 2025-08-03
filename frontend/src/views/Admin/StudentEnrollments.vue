@@ -1,338 +1,340 @@
 <template>
-  <div class="student-enrollments-container">
-    <div class="header-section">
-      <h3 class="page-title">Student Inskrivningar</h3>
-      <div class="breadcrumb">
-        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-          <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
-        </svg>
-        <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
-      </div>
-    </div>
-
-    <!-- Search and Filters -->
-    <div class="filters-section">
-      <div class="search-group">
-        <label for="studentSearch">Sök student:</label>
-        <input
-          type="text"
-          id="studentSearch"
-          v-model="searchQuery"
-          class="form-control"
-          placeholder="Namn eller e-post"
-          @input="searchStudents"
-        />
-      </div>
-
-      <div class="filter-group">
-        <label for="statusFilter">Status:</label>
-        <select id="statusFilter" v-model="filters.status" @change="loadEnrollments">
-          <option value="">Alla statusar</option>
-          <option value="enrolled">Inskriven</option>
-          <option value="active">Aktiv</option>
-          <option value="completed">Slutförd</option>
-          <option value="dropped">Avbruten</option>
-          <option value="inactive">Inaktiv</option>
-          <option value="suspended">Avstängd</option>
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <label for="dateFilter">Period:</label>
-        <input type="date" id="startDate" v-model="filters.startDate" @change="loadEnrollments" />
-        <span>till</span>
-        <input type="date" id="endDate" v-model="filters.endDate" @change="loadEnrollments" />
-      </div>
-    </div>
-
-    <!-- Student Selection -->
-    <div v-if="searchResults.length > 0" class="search-results">
-      <h5>Sökresultat:</h5>
-      <div class="student-cards">
-        <div
-          v-for="student in searchResults"
-          :key="student._id"
-          class="student-card"
-          @click="selectStudent(student)"
-        >
-          <div class="student-info">
-            <h6>{{ student.name }}</h6>
-            <p>{{ student.email }}</p>
-            <small>{{ student.personalNumber }}</small>
-          </div>
+  <div class="scrollable-view">
+    <div class="student-enrollments-container">
+      <div class="header-section">
+        <h3 class="page-title">Student Inskrivningar</h3>
+        <div class="breadcrumb">
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+            <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
+          </svg>
+          <router-link to="/admin/users" class="breadcrumb-link">Tillbaka till Admin</router-link>
         </div>
       </div>
-    </div>
 
-    <!-- Selected Student Info -->
-    <div v-if="selectedStudent" class="selected-student">
-      <div class="student-header">
-        <h4>{{ selectedStudent.name }}</h4>
-        <p>{{ selectedStudent.email }} | {{ selectedStudent.personalNumber }}</p>
-        <div class="student-stats">
-          <span class="stat-item">
-            <strong>Totalt inskrivningar:</strong>
-            {{ enrollments.length }}
-          </span>
-          <span class="stat-item">
-            <strong>Aktiva:</strong>
-            {{ activeEnrollments }}
-          </span>
-          <span class="stat-item">
-            <strong>Slutförda:</strong>
-            {{ completedEnrollments }}
-          </span>
+      <!-- Search and Filters -->
+      <div class="filters-section">
+        <div class="search-group">
+          <label for="studentSearch">Sök student:</label>
+          <input
+            type="text"
+            id="studentSearch"
+            v-model="searchQuery"
+            class="form-control"
+            placeholder="Namn eller e-post"
+            @input="searchStudents"
+          />
+        </div>
+
+        <div class="filter-group">
+          <label for="statusFilter">Status:</label>
+          <select id="statusFilter" v-model="filters.status" @change="loadEnrollments">
+            <option value="">Alla statusar</option>
+            <option value="enrolled">Inskriven</option>
+            <option value="active">Aktiv</option>
+            <option value="completed">Slutförd</option>
+            <option value="dropped">Avbruten</option>
+            <option value="inactive">Inaktiv</option>
+            <option value="suspended">Avstängd</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="dateFilter">Period:</label>
+          <input type="date" id="startDate" v-model="filters.startDate" @change="loadEnrollments" />
+          <span>till</span>
+          <input type="date" id="endDate" v-model="filters.endDate" @change="loadEnrollments" />
         </div>
       </div>
-    </div>
 
-    <!-- Enrollments Table -->
-    <div v-if="selectedStudent && enrollments.length > 0" class="enrollments-section">
-      <h5>Inskrivningshistorik</h5>
-      <div class="table-container">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Kurs</th>
-              <th>Period</th>
-              <th>Status</th>
-              <th>Betyg</th>
-              <th>Närvaro</th>
-              <th>Betalning</th>
-              <th>Lärare</th>
-              <th>Åtgärder</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="enrollment in enrollments" :key="enrollment._id">
-              <td>
-                <div class="course-info">
-                  <strong>{{ enrollment.mainCourseId?.courseName }}</strong>
-                  <small>{{ enrollment.mainCourseId?.courseCode }}</small>
-                </div>
-              </td>
-              <td>
-                <div class="date-info">
-                  <div>{{ formatDate(enrollment.startDate) }}</div>
-                  <div>{{ formatDate(enrollment.endDate) }}</div>
-                </div>
-              </td>
-              <td>
-                <span :class="['status-badge', getStatusClass(enrollment.status)]">
-                  {{ getStatusText(enrollment.status) }}
-                </span>
-              </td>
-              <td>
-                <div v-if="enrollment.grade" class="grade-info">
-                  <span class="grade">{{ enrollment.grade }}</span>
-                  <small v-if="enrollment.gradeDate">{{ formatDate(enrollment.gradeDate) }}</small>
-                </div>
-                <span v-else>-</span>
-              </td>
-              <td>
-                <span v-if="enrollment.attendancePercentage">
-                  {{ enrollment.attendancePercentage }}%
-                </span>
-                <span v-else>-</span>
-              </td>
-              <td>
-                <span :class="['payment-badge', getPaymentClass(enrollment.paymentStatus)]">
-                  {{ getPaymentText(enrollment.paymentStatus) }}
-                </span>
-              </td>
-              <td>
-                <span v-if="enrollment.teacherId">
-                  {{ enrollment.teacherId.username }}
-                </span>
-                <span v-else>-</span>
-              </td>
-              <td>
-                <button
-                  class="btn btn-sm btn-outline-primary me-1"
-                  @click="editEnrollment(enrollment)"
-                  title="Redigera"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      fill="currentColor"
-                      d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  class="btn btn-sm btn-outline-info"
-                  @click="viewHistory(enrollment)"
-                  title="Visa historik"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      fill="currentColor"
-                      d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"
-                    />
-                  </svg>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Edit Enrollment Modal -->
-    <div class="modal fade" id="enrollmentModal" tabindex="-1" ref="enrollmentModal">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Redigera inskrivning</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="saveEnrollment">
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="enrollmentStatus">Status:</label>
-                    <select
-                      id="enrollmentStatus"
-                      v-model="enrollmentForm.status"
-                      class="form-control"
-                      required
-                    >
-                      <option value="enrolled">Inskriven</option>
-                      <option value="active">Aktiv</option>
-                      <option value="completed">Slutförd</option>
-                      <option value="dropped">Avbruten</option>
-                      <option value="inactive">Inaktiv</option>
-                      <option value="suspended">Avstängd</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="enrollmentGrade">Betyg:</label>
-                    <input
-                      type="text"
-                      id="enrollmentGrade"
-                      v-model="enrollmentForm.grade"
-                      class="form-control"
-                      placeholder="A, B, C, etc."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="enrollmentAttendance">Närvaro (%):</label>
-                    <input
-                      type="number"
-                      id="enrollmentAttendance"
-                      v-model="enrollmentForm.attendancePercentage"
-                      class="form-control"
-                      min="0"
-                      max="100"
-                    />
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="enrollmentPayment">Betalningsstatus:</label>
-                    <select
-                      id="enrollmentPayment"
-                      v-model="enrollmentForm.paymentStatus"
-                      class="form-control"
-                    >
-                      <option value="pending">Väntande</option>
-                      <option value="paid">Betald</option>
-                      <option value="partial">Delvis betald</option>
-                      <option value="overdue">Förfallen</option>
-                      <option value="waived">Eftergiven</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="enrollmentNotes">Anteckningar:</label>
-                <textarea
-                  id="enrollmentNotes"
-                  v-model="enrollmentForm.notes"
-                  class="form-control"
-                  rows="3"
-                ></textarea>
-              </div>
-
-              <div class="form-group">
-                <label for="statusReason">Anledning till statusändring:</label>
-                <input
-                  type="text"
-                  id="statusReason"
-                  v-model="enrollmentForm.statusChangeReason"
-                  class="form-control"
-                  placeholder="Valfritt"
-                />
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              @click="saveEnrollment"
-              :disabled="isSaving"
-            >
-              {{ isSaving ? 'Sparar...' : 'Spara ändringar' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- History Modal -->
-    <div class="modal fade" id="historyModal" tabindex="-1" ref="historyModal">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Statushistorik</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <div v-if="selectedEnrollmentHistory.length > 0" class="history-list">
-              <div
-                v-for="(entry, index) in selectedEnrollmentHistory"
-                :key="index"
-                class="history-item"
-              >
-                <div class="history-header">
-                  <span :class="['status-badge', getStatusClass(entry.status)]">
-                    {{ getStatusText(entry.status) }}
-                  </span>
-                  <small>{{ formatDate(entry.changedAt) }}</small>
-                </div>
-                <div v-if="entry.reason" class="history-reason">
-                  <strong>Anledning:</strong>
-                  {{ entry.reason }}
-                </div>
-                <div v-if="entry.notes" class="history-notes">
-                  <strong>Anteckningar:</strong>
-                  {{ entry.notes }}
-                </div>
-              </div>
+      <!-- Student Selection -->
+      <div v-if="searchResults.length > 0" class="search-results">
+        <h5>Sökresultat:</h5>
+        <div class="student-cards">
+          <div
+            v-for="student in searchResults"
+            :key="student._id"
+            class="student-card"
+            @click="selectStudent(student)"
+          >
+            <div class="student-info">
+              <h6>{{ student.name }}</h6>
+              <p>{{ student.email }}</p>
+              <small>{{ student.personalNumber }}</small>
             </div>
-            <div v-else class="text-center">
-              <p>Ingen historik tillgänglig.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selected Student Info -->
+      <div v-if="selectedStudent" class="selected-student">
+        <div class="student-header">
+          <h4>{{ selectedStudent.name }}</h4>
+          <p>{{ selectedStudent.email }} | {{ selectedStudent.personalNumber }}</p>
+          <div class="student-stats">
+            <span class="stat-item">
+              <strong>Totalt inskrivningar:</strong>
+              {{ enrollments.length }}
+            </span>
+            <span class="stat-item">
+              <strong>Aktiva:</strong>
+              {{ activeEnrollments }}
+            </span>
+            <span class="stat-item">
+              <strong>Slutförda:</strong>
+              {{ completedEnrollments }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enrollments Table -->
+      <div v-if="selectedStudent && enrollments.length > 0" class="enrollments-section">
+        <h5>Inskrivningshistorik</h5>
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Kurs</th>
+                <th>Period</th>
+                <th>Status</th>
+                <th>Betyg</th>
+                <th>Närvaro</th>
+                <th>Betalning</th>
+                <th>Lärare</th>
+                <th>Åtgärder</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="enrollment in enrollments" :key="enrollment._id">
+                <td>
+                  <div class="course-info">
+                    <strong>{{ enrollment.mainCourseId?.courseName }}</strong>
+                    <small>{{ enrollment.mainCourseId?.courseCode }}</small>
+                  </div>
+                </td>
+                <td>
+                  <div class="date-info">
+                    <div>{{ formatDate(enrollment.startDate) }}</div>
+                    <div>{{ formatDate(enrollment.endDate) }}</div>
+                  </div>
+                </td>
+                <td>
+                  <span :class="['status-badge', getStatusClass(enrollment.status)]">
+                    {{ getStatusText(enrollment.status) }}
+                  </span>
+                </td>
+                <td>
+                  <div v-if="enrollment.grade" class="grade-info">
+                    <span class="grade">{{ enrollment.grade }}</span>
+                    <small v-if="enrollment.gradeDate">{{ formatDate(enrollment.gradeDate) }}</small>
+                  </div>
+                  <span v-else>-</span>
+                </td>
+                <td>
+                  <span v-if="enrollment.attendancePercentage">
+                    {{ enrollment.attendancePercentage }}%
+                  </span>
+                  <span v-else>-</span>
+                </td>
+                <td>
+                  <span :class="['payment-badge', getPaymentClass(enrollment.paymentStatus)]">
+                    {{ getPaymentText(enrollment.paymentStatus) }}
+                  </span>
+                </td>
+                <td>
+                  <span v-if="enrollment.teacherId">
+                    {{ enrollment.teacherId.username }}
+                  </span>
+                  <span v-else>-</span>
+                </td>
+                <td>
+                  <button
+                    class="btn btn-sm btn-outline-primary me-1"
+                    @click="editEnrollment(enrollment)"
+                    title="Redigera"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-info"
+                    @click="viewHistory(enrollment)"
+                    title="Visa historik"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"
+                      />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Edit Enrollment Modal -->
+      <div class="modal fade" id="enrollmentModal" tabindex="-1" ref="enrollmentModal">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Redigera inskrivning</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <form @submit.prevent="saveEnrollment">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="enrollmentStatus">Status:</label>
+                      <select
+                        id="enrollmentStatus"
+                        v-model="enrollmentForm.status"
+                        class="form-control"
+                        required
+                      >
+                        <option value="enrolled">Inskriven</option>
+                        <option value="active">Aktiv</option>
+                        <option value="completed">Slutförd</option>
+                        <option value="dropped">Avbruten</option>
+                        <option value="inactive">Inaktiv</option>
+                        <option value="suspended">Avstängd</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="enrollmentGrade">Betyg:</label>
+                      <input
+                        type="text"
+                        id="enrollmentGrade"
+                        v-model="enrollmentForm.grade"
+                        class="form-control"
+                        placeholder="A, B, C, etc."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="enrollmentAttendance">Närvaro (%):</label>
+                      <input
+                        type="number"
+                        id="enrollmentAttendance"
+                        v-model="enrollmentForm.attendancePercentage"
+                        class="form-control"
+                        min="0"
+                        max="100"
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="enrollmentPayment">Betalningsstatus:</label>
+                      <select
+                        id="enrollmentPayment"
+                        v-model="enrollmentForm.paymentStatus"
+                        class="form-control"
+                      >
+                        <option value="pending">Väntande</option>
+                        <option value="paid">Betald</option>
+                        <option value="partial">Delvis betald</option>
+                        <option value="overdue">Förfallen</option>
+                        <option value="waived">Eftergiven</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="enrollmentNotes">Anteckningar:</label>
+                  <textarea
+                    id="enrollmentNotes"
+                    v-model="enrollmentForm.notes"
+                    class="form-control"
+                    rows="3"
+                  ></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label for="statusReason">Anledning till statusändring:</label>
+                  <input
+                    type="text"
+                    id="statusReason"
+                    v-model="enrollmentForm.statusChangeReason"
+                    class="form-control"
+                    placeholder="Valfritt"
+                  />
+                </div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                @click="saveEnrollment"
+                :disabled="isSaving"
+              >
+                {{ isSaving ? 'Sparar...' : 'Spara ändringar' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- History Modal -->
+      <div class="modal fade" id="historyModal" tabindex="-1" ref="historyModal">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Statushistorik</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div v-if="selectedEnrollmentHistory.length > 0" class="history-list">
+                <div
+                  v-for="(entry, index) in selectedEnrollmentHistory"
+                  :key="index"
+                  class="history-item"
+                >
+                  <div class="history-header">
+                    <span :class="['status-badge', getStatusClass(entry.status)]">
+                      {{ getStatusText(entry.status) }}
+                    </span>
+                    <small>{{ formatDate(entry.changedAt) }}</small>
+                  </div>
+                  <div v-if="entry.reason" class="history-reason">
+                    <strong>Anledning:</strong>
+                    {{ entry.reason }}
+                  </div>
+                  <div v-if="entry.notes" class="history-notes">
+                    <strong>Anteckningar:</strong>
+                    {{ entry.notes }}
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-center">
+                <p>Ingen historik tillgänglig.</p>
+              </div>
             </div>
           </div>
         </div>

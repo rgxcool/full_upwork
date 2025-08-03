@@ -20,7 +20,19 @@ const studentEnrollmentSchema = new mongoose.Schema(
         mainCourseId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Course",
-            required: true,
+            required: false,
+        },
+        // Course package reference (for package enrollments)
+        coursePackageId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "CoursePackage",
+            required: false,
+        },
+        // Program reference (for program enrollments)
+        programId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Program",
+            required: false,
         },
 
         // Enrollment dates
@@ -79,6 +91,9 @@ const studentEnrollmentSchema = new mongoose.Schema(
         grade: { type: String, default: null },
         gradeDate: { type: Date, default: null },
         gradeBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        
+        // Slutprov (final exam) date
+        slutprovDate: { type: Date, default: null },
 
         // Attendance tracking
         attendancePercentage: { type: Number, min: 0, max: 100, default: null },

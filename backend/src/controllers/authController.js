@@ -10,6 +10,11 @@ if (!process.env.JWT_SECRET) {
   throw new Error("🚨 Missing `JWT_SECRET` in environment variables!");
 }
 
+/**
+ * Authentication Controller
+ * Handles user registration, login, authentication, session, and logout.
+ * Uses JWT for authentication and bcrypt for password hashing.
+ */
 export const register = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
@@ -41,6 +46,13 @@ export const register = async (req, res) => {
   }
 };
 
+/**
+ * Logs in a user and sets a JWT token cookie.
+ * @async
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -99,6 +111,13 @@ export const login = async (req, res) => {
   }
 };
 
+/**
+ * Middleware to authenticate a user using JWT from cookie or Authorization header.
+ * Sets req.user and req.userId if valid.
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
 export const authenticateUser = (req, res, next) => {
   let token = req.cookies?.token;
 
@@ -137,6 +156,13 @@ export const authenticateUser = (req, res, next) => {
   }
 };
 
+/**
+ * Logs out the user by clearing the token cookie.
+ * @async
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
 export const logout = async (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
@@ -147,6 +173,13 @@ export const logout = async (req, res) => {
   res.json({ message: "Logged out successfully" });
 };
 
+/**
+ * Gets the current session user if a valid token is present.
+ * @async
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
 export const getSession = async (req, res) => {
   console.log("🔹 Incoming Session Request...");
   console.log("🔍 Cookies Received:", req.cookies);

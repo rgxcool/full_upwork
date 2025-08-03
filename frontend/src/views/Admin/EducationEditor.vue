@@ -1,64 +1,66 @@
 <template>
-  <div class="hierarchy-wrapper">
-    <div class="hierarchy-manager">
-      <h3 class="title">Education Editor</h3>
+  <div class="scrollable-view">
+    <div class="hierarchy-wrapper">
+      <div class="hierarchy-manager">
+        <h3 class="title">Education Editor</h3>
 
-      <!-- Flash message -->
-      <div
-        v-if="successMessage"
-        class="alert alert-success alert-dismissible fade show"
-        role="alert"
-      >
-        {{ successMessage }}
-        <button type="button" class="btn-close" @click="successMessage = ''"></button>
-      </div>
+        <!-- Flash message -->
+        <div
+          v-if="successMessage"
+          class="alert alert-success alert-dismissible fade show"
+          role="alert"
+        >
+          {{ successMessage }}
+          <button type="button" class="btn-close" @click="successMessage = ''"></button>
+        </div>
 
-      <!-- All form fields -->
-      <div class="form-row">
-        <v-select
-          v-model="selectedProgram"
-          :items="programs"
-          item-title="programName"
-          item-value="_id"
-          placeholder="Select program"
-          class="styled-select"
-          @update:modelValue="fetchAllCourses"
-        />
-      </div>
+        <!-- All form fields -->
+        <div class="form-row">
+          <v-select
+            v-model="selectedProgram"
+            :items="programs"
+            item-title="programName"
+            item-value="_id"
+            placeholder="Select program"
+            class="styled-select"
+            @update:modelValue="fetchAllCourses"
+          />
+        </div>
 
-      <div class="form-row">
-        <v-select
-          v-model="selectedIndividualCourse"
-          :items="allCourses"
-          item-title="displayText"
-          item-value="_id"
-          placeholder="Select course"
-          class="styled-select"
-        />
-      </div>
+        <div class="form-row">
+          <v-select
+            v-model="selectedIndividualCourse"
+            :items="allCourses"
+            item-title="displayText"
+            item-value="_id"
+            placeholder="Select course"
+            class="styled-select"
+          />
+        </div>
 
-      <div class="form-row">
-        <v-autocomplete
-          v-model="selectedStudent"
-          :items="filteredStudents"
-          :search="searchQuery"
-          item-title="name"
-          item-value="_id"
-          label="Select a student"
-          return-object
-          outlined
-          :menu-props="{ closeOnContentClick: false }"
-          attach
-          :no-data-text="'Please write student name'"
-          @update:search="searchQuery = $event"
-          class="styled-select"
-        />
-      </div>
+        <div class="form-row">
+          <v-autocomplete
+            v-model="selectedStudent"
+            :items="filteredStudents"
+            :search="searchQuery"
+            item-title="name"
+            item-value="_id"
+            label="Select a student"
+            return-object
+            outlined
+            :menu-props="{ closeOnContentClick: false }"
+            attach
+            :no-data-text="'Please write student name'"
+            @update:search="searchQuery = $event"
+            class="styled-select"
+          />
+        </div>
 
-      <div class="form-row">
-        <button class="btn btn-primary styled-button" @click="handleAddCourse">
-          Add Course to Student
-        </button>
+        <div class="form-row">
+          <button class="btn btn-primary styled-button" @click="handleAddCourse">
+            Add Course to Student
+          </button>
+        </div>
       </div>
     </div>
   </div>

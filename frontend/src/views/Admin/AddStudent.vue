@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="scrollable-view">
     <br />
     <h1>Lägg till ny elev</h1>
     <br />

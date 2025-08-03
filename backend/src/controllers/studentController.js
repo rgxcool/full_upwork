@@ -1,3 +1,8 @@
+/**
+ * Student Controller
+ * Handles student data, normalization, municipality matching, and related utilities.
+ * Uses Student, Program, Course, User, Teacher, and CoursePackage models.
+ */
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
@@ -7,7 +12,13 @@ import CoursePackage from "../models/CoursePackage.js";
 import { parseStudentExcel } from "../utils/parseStudentExcel.js";
 import { distance } from "fastest-levenshtein";
 
-// Normalize a string
+console.log('[DEBUG] studentController.js loaded');
+
+/**
+ * Normalizes a string by removing special characters, accents, and converting to lowercase.
+ * @param {string} value - The string to normalize
+ * @returns {string} The normalized string
+ */
 function normalize(value) {
     if (!value) return "";
     return value
@@ -20,6 +31,13 @@ function normalize(value) {
         .toLowerCase();
 }
 
+/**
+ * Finds the best fuzzy match for a target string among candidates using Levenshtein distance.
+ * @param {string} target - The string to match
+ * @param {string[]} candidates - Array of candidate strings
+ * @param {number} [maxRatio=0.3] - Maximum allowed ratio for a match
+ * @returns {string|null} The best match or null if none found
+ */
 function getBestFuzzyMatch(target, candidates, maxRatio = 0.3) {
     let best = null;
     let minDistance = Infinity;
@@ -61,6 +79,11 @@ const VALID_MUNICIPALITIES = [
     "Österåker",
 ];
 
+/**
+ * Returns the closest valid municipality name to the input using Levenshtein distance.
+ * @param {string} input - The input municipality name
+ * @returns {string|null} The closest valid municipality or null
+ */
 function getClosestMunicipality(input) {
     if (!input) return null;
     let bestMatch = null;
@@ -75,6 +98,11 @@ function getClosestMunicipality(input) {
     return minDistance <= 4 ? bestMatch : null;
 }
 
+/**
+ * Builds a normalized map from an array of original names.
+ * @param {string[]} originals - Array of original names
+ * @returns {Object} Map of normalized names to original names
+ */
 function buildNormalizedMap(originals) {
     const map = {};
     for (const name of originals) {
@@ -83,6 +111,11 @@ function buildNormalizedMap(originals) {
     return map;
 }
 
+/**
+ * Normalizes a municipality name, handling common aliases.
+ * @param {string} name - The municipality name
+ * @returns {string} The normalized municipality name
+ */
 export function normalizeMunicipalityName(name) {
     if (!name) return name;
     const trimmed = name.trim().toLowerCase();
@@ -109,6 +142,7 @@ export function normalizeMunicipalityName(name) {
 
 // ✅ Main upload function
 async function uploadXlsx(req, res) {
+    console.log('[DEBUG] uploadXlsx called');
     console.log("🟢 Received XLSX file upload request");
 
     if (!req.file) {
@@ -169,6 +203,7 @@ async function uploadXlsx(req, res) {
 
         const now = new Date();
 
+        const warnings = [];
         const bulkOps = await Promise.all(
             mergedStudents.map(async (student) => {
                 const existing = existingMap.get(student.email);
@@ -188,39 +223,95 @@ async function uploadXlsx(req, res) {
                 }
 
                 // Convert education entries → { refId, type, ... }
+                const studentWarnings = [];
                 const newEducation = student.education.map((entry) => {
-                    const normalized = normalize(entry.name);
+                    let normalized = normalize(entry.name);
 
-                    const matchProgram = getBestFuzzyMatch(
+                    // Remove trailing week extent patterns for package matching
+                    normalized = normalized.replace(/[-\s]*\d+\s*v$/i, '');
+                    normalized = normalized.replace(/[-\s]*\d+v$/i, '');
+                    normalized = normalized.replace(/\d+v$/i, '');
+
+                    // Distinguish course vs package by name ending
+                    const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
+                    let type = isCourse ? "Course" : "CoursePackage";
+
+                    // Always log normalized input and all normalized package keys
+                    console.log("[DEBUG] Normalized input:", normalized, "Normalized package keys:", Object.keys(normalizedPackageMap));
+
+                    // Require exact match for packages/courses, allow fuzzy only for long names
+                    function strictMatch(target, candidates) {
+                        if (candidates.includes(target)) return target;
+                        // Only allow fuzzy match for long names (length > 12) and distance = 1
+                        let best = null;
+                        let minDistance = Infinity;
+                        for (const candidate of candidates) {
+                            const d = distance(target, candidate);
+                            if (d < minDistance) {
+                                minDistance = d;
+                                best = candidate;
+                            }
+                        }
+                        if (target.length > 12 && minDistance === 1) return best;
+                        return null;
+                    }
+
+                    const matchProgram = strictMatch(
                         normalized,
                         Object.keys(normalizedProgramMap)
                     );
-                    const matchPackage = getBestFuzzyMatch(
+                    const matchPackage = strictMatch(
                         normalized,
                         Object.keys(normalizedPackageMap)
                     );
-                    const matchCourse = getBestFuzzyMatch(
+                    const matchCourse = strictMatch(
                         normalized,
                         Object.keys(normalizedCourseMap)
                     );
 
                     let refId = null;
-                    let type = entry.type;
 
                     if (matchProgram) {
                         refId = programMap[normalizedProgramMap[matchProgram]];
                         type = "Program";
-                    } else if (matchPackage) {
+                    } else if (type === "CoursePackage" && matchPackage) {
                         refId = packageMap[normalizedPackageMap[matchPackage]];
                         type = "CoursePackage";
-                    } else if (matchCourse) {
+                    } else if (type === "Course" && matchCourse) {
                         refId = courseMap[normalizedCourseMap[matchCourse]];
                         type = "Course";
                     } else {
                         if (!type || type === "Auto") type = "Course";
+                        // Log for debugging
+                        let bestPkg = null, bestPkgDist = Infinity;
+                        for (const candidate of Object.keys(normalizedPackageMap)) {
+                            const d = distance(normalized, candidate);
+                            if (d < bestPkgDist) { bestPkgDist = d; bestPkg = candidate; }
+                        }
+                        let bestCourse = null, bestCourseDist = Infinity;
+                        for (const candidate of Object.keys(normalizedCourseMap)) {
+                            const d = distance(normalized, candidate);
+                            if (d < bestCourseDist) { bestCourseDist = d; bestCourse = candidate; }
+                        }
                         console.warn(
-                            `🟡 No match for: "${entry.name}" → "${normalized}"`
+                            `🟡 No match for: "${entry.name}" → "${normalized}". Best package: ${bestPkg} (d=${bestPkgDist}), best course: ${bestCourse} (d=${bestCourseDist}). Normalized package keys:`,
+                            Object.keys(normalizedPackageMap)
                         );
+                        // Only push warning for unmatched courses, unless the name matches a known package
+                        if (type === 'Course' && !matchPackage) {
+                            console.warn('[DEBUG] Pushing no_match warning:', {
+                                entryName: entry.name,
+                                type,
+                                matchPackage,
+                                normalized,
+                                packageKeys: Object.keys(normalizedPackageMap)
+                            });
+                            studentWarnings.push({
+                                type: 'no_match',
+                                courseName: entry.name,
+                                message: `No matching course found for \"${entry.name}\"`,
+                            });
+                        }
                     }
 
                     return {
@@ -233,6 +324,8 @@ async function uploadXlsx(req, res) {
                         removedAt: null,
                     };
                 });
+                // After processing this student, add their warnings to the global array
+                warnings.push(...studentWarnings);
 
                 // Merge new education with existing
                 const mergedEducation = [...existingEdu];
@@ -303,6 +396,7 @@ async function uploadXlsx(req, res) {
         res.status(200).json({
             message: "Upload successful",
             students: mergedStudents,
+            warnings,
         });
     } catch (err) {
         console.error("❌ Upload failed:", err);

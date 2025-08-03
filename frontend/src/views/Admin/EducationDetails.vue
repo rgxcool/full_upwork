@@ -1,21 +1,23 @@
 <template>
-  <div class="course-details">
-    <h1>{{ course.courseName }}</h1>
-    <div class="teacher-info">
-      Lärare: 
-      <router-link :to="`/detaljer/Lärare/${course.teacher._id}`">
-        {{ course.teacher.username }}
-      </router-link>
-    </div>
-
-    <h2>Elever</h2>
-    <ul>
-      <li v-for="student in course.students" :key="student._id">
-        <router-link :to="`/detaljer/Elev/${student._id}`">
-          {{ student.name }}
+  <div class="scrollable-view">
+    <div class="course-details">
+      <h1>{{ course.courseName }}</h1>
+      <div class="teacher-info">
+        Lärare: 
+        <router-link :to="`/detaljer/Lärare/${course.teacher._id}`">
+          {{ course.teacher.username }}
         </router-link>
-      </li>
-    </ul>
+      </div>
+
+      <h2>Elever</h2>
+      <ul>
+        <li v-for="student in course.students" :key="student._id">
+          <router-link :to="`/detaljer/Elev/${student._id}`">
+            {{ student.name }}
+          </router-link>
+        </li>
+      </ul>
+    </div>
   </div>
 </template>
 

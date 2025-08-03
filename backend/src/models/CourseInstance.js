@@ -47,6 +47,7 @@ const courseInstanceSchema = new mongoose.Schema(
             ref: "Teacher",
         },
         notes: String,
+        slutprovDate: Date,
 
         // Statistics tracking
         enrollmentCount: {
