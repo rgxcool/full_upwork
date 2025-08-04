@@ -43,7 +43,7 @@
       // Fetch students data (use your actual API here)
       onMounted(async () => {
         try {
-          const response = await fetch('http://localhost:5001/api/student')
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/student`)
           const data = await response.json()
           students.value = data // Assuming the response has a list of students
         } catch (error) {
