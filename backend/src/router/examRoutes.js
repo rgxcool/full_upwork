@@ -349,6 +349,25 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         const studentExamMunicipality = student.examMunicipality || '';
         const studentExamLocation = student.examLocation || '';
 
+                 // Get attendance data for this specific student and event
+         const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+         const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
+         const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
+         
+         // Look for attendance record for this student's exam date
+         const attendanceRecord = await ExamAttendance.findOne({
+           examDate: { $gte: startOfDay, $lte: endOfDay },
+           teacherId: student.teacherId._id,
+           studentId: student._id
+         });
+
+        // Use attendance data if available, otherwise fallback to student data
+        const finalAttended = attendanceRecord ? attendanceRecord.attended : attended;
+        const finalPaidExamFee = attendanceRecord ? attendanceRecord.paidExamFee : paidExamFee;
+        const finalExamTime = attendanceRecord ? attendanceRecord.examTime : studentExamTime;
+        const finalExamMunicipality = attendanceRecord ? attendanceRecord.examMunicipality : studentExamMunicipality;
+        const finalExamLocation = attendanceRecord ? attendanceRecord.examLocation : studentExamLocation;
+
         if (!grouped[key]) {
           // Samla samma tid/kommun/plats bland gruppen
           const sameTime = studentsWithFinalExam
@@ -364,9 +383,45 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
               location: s.examLocation
             }));
 
-          const examTime = pickFirstNonEmpty(sameTime, 'time') || studentExamTime || '';
-          const examMunicipality = pickFirstNonEmpty(sameTime, 'municipality') || studentExamMunicipality || '';
-          const examLocation = pickFirstNonEmpty(sameTime, 'location') || studentExamLocation || '';
+          // Get the most common exam info from attendance records for this event
+          const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+          const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
+          const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
+          
+          // Debug the query parameters
+          console.log(`🔍 Querying ExamAttendance with:`);
+          console.log(`🔍   dateKey: ${dateKey}`);
+          console.log(`🔍   startOfDay: ${startOfDay}`);
+          console.log(`🔍   endOfDay: ${endOfDay}`);
+          console.log(`🔍   teacherId: ${student.teacherId._id} (type: ${typeof student.teacherId._id})`);
+          
+          const attendanceRecords = await ExamAttendance.find({
+            examDate: { $gte: startOfDay, $lte: endOfDay },
+            teacherId: student.teacherId._id
+          });
+          
+
+          
+                     // Get the most common exam info from attendance records or fallback to student data
+           const recordsWithTime = attendanceRecords.filter(r => r.examTime && r.examTime.trim() !== '');
+           const recordsWithMunicipality = attendanceRecords.filter(r => r.examMunicipality && r.examMunicipality.trim() !== '');
+           const recordsWithLocation = attendanceRecords.filter(r => r.examLocation && r.examLocation.trim() !== '');
+           
+           // Debug logging
+           console.log(`🔍 Event ${key} - Found ${attendanceRecords.length} attendance records`);
+           console.log(`🔍 Records with time: ${recordsWithTime.length}, with municipality: ${recordsWithMunicipality.length}, with location: ${recordsWithLocation.length}`);
+           if (recordsWithTime.length > 0) console.log(`🔍 First time record: ${recordsWithTime[0].examTime}`);
+           if (recordsWithMunicipality.length > 0) console.log(`🔍 First municipality record: ${recordsWithMunicipality[0].examMunicipality}`);
+           if (recordsWithLocation.length > 0) console.log(`🔍 First location record: ${recordsWithLocation[0].examLocation}`);
+           
+           // Get the most common values (or first if all are the same)
+           const eventExamTime = recordsWithTime.length > 0 ? recordsWithTime[0].examTime : (pickFirstNonEmpty(sameTime, 'time') || studentExamTime || '');
+           const eventExamMunicipality = recordsWithMunicipality.length > 0 ? recordsWithMunicipality[0].examMunicipality : (pickFirstNonEmpty(sameTime, 'municipality') || studentExamMunicipality || '');
+           const eventExamLocation = recordsWithLocation.length > 0 ? recordsWithLocation[0].examLocation : (pickFirstNonEmpty(sameTime, 'location') || studentExamLocation || '');
+           
+           console.log(`🔍 Final event exam info - Time: "${eventExamTime}", Municipality: "${eventExamMunicipality}", Location: "${eventExamLocation}"`);
+          
+
 
           const startDate = new Date(dateKey + 'T00:00:00');
           grouped[key] = {
@@ -378,9 +433,9 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
               teacher: student.teacherId.userId.username,
               teacherId: student.teacherId._id,
               type: "exam",
-              examMunicipality,
-              examLocation,
-              examTime,
+              examMunicipality: eventExamMunicipality,
+              examLocation: eventExamLocation,
+              examTime: eventExamTime,
               courseName: courseName || null,
               students: [],
             },
@@ -392,13 +447,16 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
           name: student.name,
           personalNumber: student.personalNumber,
           additionalInfo: student.additionalInfo || "",
-          attended,
-          paidExamFee,
-          examTime: studentExamTime,
-          examMunicipality: studentExamMunicipality,
-          examLocation: studentExamLocation,
+          attended: finalAttended,
+          paidExamFee: finalPaidExamFee,
+          examTime: finalExamTime,
+          examMunicipality: finalExamMunicipality,
+          examLocation: finalExamLocation,
           courseName: courseName || null,
+          finalExamDate: student.finalExamDate,
         });
+        
+        console.log(`🔍 Manual - Added student ${student.name} with finalExamDate: ${student.finalExamDate}`);
       } catch (err) {
         console.warn("Fel i studentsWithFinalExam-loopen:", err.message, student);
       }
@@ -454,6 +512,46 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
 
         if (!grouped[key]) {
           const startDate = new Date(dateKey + 'T00:00:00');
+          
+          // Get the most common exam info from attendance records for this event
+          const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+          const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
+          const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
+          
+          // Debug the query parameters for auto events
+          console.log(`🔍 Auto Querying ExamAttendance with:`);
+          console.log(`🔍   dateKey: ${dateKey}`);
+          console.log(`🔍   startOfDay: ${startOfDay}`);
+          console.log(`🔍   endOfDay: ${endOfDay}`);
+          console.log(`🔍   teacherId: ${teacherId._id} (type: ${typeof teacherId._id})`);
+          
+          const attendanceRecords = await ExamAttendance.find({
+            examDate: { $gte: startOfDay, $lte: endOfDay },
+            teacherId: teacherId._id
+          });
+          
+
+          
+                     // Get the most common exam info from attendance records
+           const recordsWithTime = attendanceRecords.filter(r => r.examTime && r.examTime.trim() !== '');
+           const recordsWithMunicipality = attendanceRecords.filter(r => r.examMunicipality && r.examMunicipality.trim() !== '');
+           const recordsWithLocation = attendanceRecords.filter(r => r.examLocation && r.examLocation.trim() !== '');
+           
+           // Debug logging
+           console.log(`🔍 Auto Event ${key} - Found ${attendanceRecords.length} attendance records`);
+           console.log(`🔍 Auto Records with time: ${recordsWithTime.length}, with municipality: ${recordsWithMunicipality.length}, with location: ${recordsWithLocation.length}`);
+           if (recordsWithTime.length > 0) console.log(`🔍 Auto First time record: ${recordsWithTime[0].examTime}`);
+           if (recordsWithMunicipality.length > 0) console.log(`🔍 Auto First municipality record: ${recordsWithMunicipality[0].examMunicipality}`);
+           if (recordsWithLocation.length > 0) console.log(`🔍 Auto First location record: ${recordsWithLocation[0].examLocation}`);
+           
+           const eventExamTime = recordsWithTime.length > 0 ? recordsWithTime[0].examTime : (student.examTime || "");
+           const eventExamMunicipality = recordsWithMunicipality.length > 0 ? recordsWithMunicipality[0].examMunicipality : (student.examMunicipality || "");
+           const eventExamLocation = recordsWithLocation.length > 0 ? recordsWithLocation[0].examLocation : (student.examLocation || "");
+           
+           console.log(`🔍 Auto Final event exam info - Time: "${eventExamTime}", Municipality: "${eventExamMunicipality}", Location: "${eventExamLocation}"`);
+          
+
+          
           grouped[key] = {
             id: `${teacherId._id}_${dateKey}`,
             title: teacherUsername,
@@ -462,9 +560,9 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
             extendedProps: {
               teacher: teacherUsername,
               teacherId: teacherId._id,
-              examMunicipality: student.examMunicipality || "",
-              examLocation: student.examLocation || "",
-              examTime: student.examTime || "",
+              examMunicipality: eventExamMunicipality,
+              examLocation: eventExamLocation,
+              examTime: eventExamTime,
               courseName: course.courseName,
               students: [],
             },
@@ -482,7 +580,10 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
           examMunicipality,
           examLocation,
           courseName: course.courseName,
+          finalExamDate: enrollment.slutprovDate, // Use the enrollment's exam date
         });
+        
+        console.log(`🔍 Auto - Added student ${student.name} with finalExamDate: ${enrollment.slutprovDate}`);
       } catch (err) {
         console.warn("Fel i enrollmentsWithSlutprov-loopen:", err.message, enrollment);
       }
@@ -514,7 +615,33 @@ router.get("/calendar-events/:id", async (req, res) => {
   }
 });
 
-
+// GET attendance data for a specific event (date + teacher)
+router.get("/calendar-events/attendance/:date/:teacherId", async (req, res) => {
+  try {
+    const { date, teacherId } = req.params;
+    
+    // Handle date conversion properly to avoid timezone issues
+    const examDate = new Date(date);
+    const dateKey = examDate.getFullYear() + '-' + 
+                   String(examDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(examDate.getDate()).padStart(2, '0');
+    
+    const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
+    const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
+    
+    const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+    
+    const attendanceRecords = await ExamAttendance.find({
+      examDate: { $gte: startOfDay, $lte: endOfDay },
+      teacherId: teacherId
+    }).select('studentId attended paidExamFee examTime examMunicipality examLocation');
+    
+    res.json(attendanceRecords);
+  } catch (error) {
+    console.error('❌ Error fetching attendance data:', error);
+    res.status(500).json({ error: 'Failed to fetch attendance data' });
+  }
+});
 
 
 router.put("/update-exam/:id", async (req, res) => {
@@ -696,6 +823,9 @@ router.post('/calendar-events/mark-attendance', async (req, res) => {
     console.log(`🔍 Parsed examDate: ${examDate}`);
     console.log(`🔍 Generated dateKey: ${dateKey}`);
     
+    // Note: Events are dynamic and not stored in CalendarEvent collection
+    // Exam info is stored in ExamAttendance records and retrieved via /calendar-events/syncable
+    
     const updatePromises = students.map(async (student) => {
       try {
         const studentDoc = await Student.findById(student._id);
@@ -704,49 +834,67 @@ router.post('/calendar-events/mark-attendance', async (req, res) => {
           return { success: false, studentId: student._id, error: 'Student not found' };
         }
         
-                // Find or create exam attendance record
+        // Find or create exam attendance record
         const startOfDay = new Date(dateKey + 'T00:00:00.000Z');
         const endOfDay = new Date(dateKey + 'T23:59:59.999Z');
         
-        let attendanceRecord = await ExamAttendance.findOne({
-            examDate: { $gte: startOfDay, $lte: endOfDay },
-            teacherId: teacherId,
-            studentId: student._id
-        });
-        
-        if (!attendanceRecord) {
-          // Create new attendance record
-          attendanceRecord = new ExamAttendance({
-            examDate: new Date(dateKey + 'T00:00:00.000Z'),
-            courseName: courseName || 'Unknown Course',
-            courseId: courseId,
-            teacherId: teacherId,
-            studentId: student._id,
-            studentName: studentDoc.name,
-            personalNumber: studentDoc.personalNumber,
-            attended: !!student.attended,
-            examTime: student.examTime || '',
-            examMunicipality: student.examMunicipality || '',
-            examLocation: student.examLocation || '',
-            recordedBy: req.user?._id
-          });
-        } else {
-          // Update existing record
-          attendanceRecord.attended = !!student.attended;
-          attendanceRecord.updatedAt = new Date();
-          attendanceRecord.updatedBy = req.user?._id;
-          if (student.examTime) attendanceRecord.examTime = student.examTime;
-          if (student.examMunicipality) attendanceRecord.examMunicipality = student.examMunicipality;
-          if (student.examLocation) attendanceRecord.examLocation = student.examLocation;
-        }
-        
-        await attendanceRecord.save();
+                 console.log(`🔍 Looking for existing attendance record for student ${student._id} on date ${dateKey} with teacher ${teacherId}`);
+         let attendanceRecord = await ExamAttendance.findOne({
+             examDate: { $gte: startOfDay, $lte: endOfDay },
+             teacherId: teacherId,
+             studentId: student._id
+         });
+         
+         if (!attendanceRecord) {
+           console.log(`🔍 No existing record found, creating new ExamAttendance record`);
+           // Create new attendance record
+           attendanceRecord = new ExamAttendance({
+             examDate: new Date(dateKey + 'T00:00:00.000Z'),
+             courseName: courseName || 'Unknown Course',
+             courseId: courseId,
+             teacherId: teacherId,
+             studentId: student._id,
+             studentName: studentDoc.name,
+             personalNumber: studentDoc.personalNumber,
+             attended: !!student.attended,
+             paidExamFee: !!student.paidExamFee,
+             examTime: student.examTime || '',
+             examMunicipality: student.examMunicipality || '',
+             examLocation: student.examLocation || '',
+             recordedBy: req.user?._id
+           });
+           console.log(`🔍 Created new ExamAttendance record:`, {
+             examDate: attendanceRecord.examDate,
+             teacherId: attendanceRecord.teacherId,
+             studentId: attendanceRecord.studentId,
+             examTime: attendanceRecord.examTime,
+             examMunicipality: attendanceRecord.examMunicipality,
+             examLocation: attendanceRecord.examLocation
+           });
+         } else {
+           console.log(`🔍 Found existing record, updating it`);
+           // Update existing record
+           attendanceRecord.attended = !!student.attended;
+           attendanceRecord.paidExamFee = !!student.paidExamFee;
+           attendanceRecord.updatedAt = new Date();
+           attendanceRecord.updatedBy = req.user?._id;
+           if (student.examTime) attendanceRecord.examTime = student.examTime;
+           if (student.examMunicipality) attendanceRecord.examMunicipality = student.examMunicipality;
+           if (student.examLocation) attendanceRecord.examLocation = student.examLocation;
+         }
+         
+         console.log(`🔍 About to save attendance record...`);
+         await attendanceRecord.save();
+         console.log(`🔍 Successfully saved attendance record with ID: ${attendanceRecord._id}`);
         console.log(`💾 Saved attendance record: ${attendanceRecord._id} for student ${studentDoc.name} - attended: ${attendanceRecord.attended}`);
         console.log(`💾 Saved examDate: ${attendanceRecord.examDate}`);
         console.log(`💾 Saved teacherId: ${attendanceRecord.teacherId}`);
         console.log(`💾 Saved studentId: ${attendanceRecord.studentId}`);
         
-                 // Update student's exam history
+        // Note: Exam info is stored in ExamAttendance records
+        // Event-level info is retrieved via /calendar-events/syncable endpoint
+        
+        // Update student's exam history
          const existingHistoryIndex = studentDoc.examHistory.findIndex(h => {
            const historyDate = h.examDate.toISOString().split('T')[0];
            return historyDate === dateKey && h.teacherId.toString() === teacherId.toString();
@@ -791,6 +939,9 @@ router.post('/calendar-events/mark-attendance', async (req, res) => {
     const failureCount = results.filter(r => !r.success).length;
     
     console.log(`📊 Attendance update results: ${successCount} successful, ${failureCount} failed`);
+    
+    // Note: Events are dynamic and not stored in CalendarEvent collection
+    // Exam info is stored in ExamAttendance records and will be retrieved via /calendar-events/syncable
     
     res.json({ 
       message: `Attendance updated for ${successCount} students`, 
