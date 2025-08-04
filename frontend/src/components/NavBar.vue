@@ -298,7 +298,7 @@
           }
 
           const res = await axios.get(
-            `http://localhost:5001/api/search?${params.toString()}`,
+            `${import.meta.env.VITE_API_URL}/api/search?${params.toString()}`,
             { withCredentials: true }
           )
           searchResults.value = res.data
@@ -349,7 +349,7 @@
 
       const fetchCourses = async () => {
         try {
-          const res = await axios.get('http://localhost:5001/api/courses')
+          const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/courses`)
           allCourses.value = res.data
         } catch (err) {
           console.error('❌ Kunde inte hämta kurser:', err)

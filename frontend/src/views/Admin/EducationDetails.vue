@@ -33,7 +33,7 @@ export default {
 
     const fetchCourse = async () => {
       try {
-        const { data } = await axios.get(`http://localhost:5001/api/details/Kurs/${route.params.id}`)
+        const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/details/Kurs/${route.params.id}`)
         course.value = data
       } catch (err) {
         console.error("❌ Kunde inte hämta kurs:", err)
