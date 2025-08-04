@@ -28,6 +28,7 @@
       <div class="controls">
         <h2>Elever</h2>
         <input type="text" v-model="searchQuery" placeholder="Sök" class="mb-3 search-input" />
+        <!-- 
         <button 
           v-if="$store.getters.isSystemAdmin" 
           class="btn btn-danger delete-all-btn" 
@@ -35,6 +36,7 @@
         >
           Delete All Students
         </button>
+        --> 
       </div>
 
       <!-- Student table -->
