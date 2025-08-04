@@ -13,10 +13,13 @@
         <!-- Provdetaljer sektion -->
         <div class="bg-white border rounded p-3 mb-4 shadow-sm">
           <h6>📝 Provuppgifter</h6>
-          <div>
-            <strong>Tid:</strong> {{ examTime || 'Ej vald' }}
-            <strong>Kommun:</strong> {{ examMunicipality || 'Ej vald' }}
-            <strong>Plats:</strong> {{ examLocation || 'Ej vald' }}
+          <div v-if="examTime && examMunicipality && examLocation">
+            <strong>Tid:</strong> {{ examTime }}
+            <strong>Kommun:</strong> {{ examMunicipality }}
+            <strong>Plats:</strong> {{ examLocation }}
+          </div>
+          <div v-else class="text-muted">
+            <em>Inga provuppgifter satta ännu. Använd formuläret nedan för att sätta tid, kommun och plats.</em>
           </div>
         </div>
 
@@ -46,6 +49,7 @@
                     v-model="student.attended"
                     :disabled="!canEdit"
                     class="form-check-input"
+                    @change="saveAttendance(student)"
                   />
                 </td>
                 <td>
@@ -54,6 +58,7 @@
                     v-model="student.paidExamFee"
                     :disabled="!canEdit"
                     class="form-check-input"
+                    @change="saveAttendance(student)"
                   />
                 </td>
               </tr>
@@ -131,10 +136,12 @@ export default {
     event: {
       immediate: true,
       async handler(newEvent) {
+        if (!newEvent) return;
+        
         const exProps = newEvent.extendedProps || {};
 
-        if (exProps.students && Array.isArray(exProps.students)) {
-          this.setStudentsFromProps(exProps);
+        if (exProps.students && Array.isArray(exProps.students) && exProps.students.length > 0) {
+          await this.setStudentsFromProps(exProps);
         } else {
           console.warn("🟠 Inga students i extendedProps – försöker hämta manuellt...");
           try {
@@ -143,21 +150,54 @@ export default {
             const match = allEvents.find(e => e._id === newEvent.id || e.id === newEvent.id);
 
             if (match?.extendedProps?.students) {
-              this.setStudentsFromProps(match.extendedProps);
+              await this.setStudentsFromProps(match.extendedProps);
             } else {
               console.error("❌ Ingen matchande event hittades för ID:", newEvent.id);
               this.studentsData = [];
             }
           } catch (err) {
             console.error("❌ Kunde inte hämta event från API:", err);
+            this.studentsData = [];
           }
         }
       }
     }
   },
+  mounted() {
+    this.refreshEventData();
+  },
   methods: {
-    setStudentsFromProps(exProps) {
-      this.studentsData = (exProps.students || []).map(s => ({
+    async refreshEventData() {
+      if (!this.event) return;
+      
+      try {
+        // Always fetch fresh data from syncable endpoint
+        const response = await axios.get("/api/calendar-events/syncable");
+        const allEvents = response.data;
+ 
+        const teacherId = this.event.extendedProps?.teacherId || this.event.teacherId;
+        const eventDate = new Date(this.event.start).toISOString().split("T")[0];
+        
+        const match = allEvents.find(e => {
+          const ep = e.extendedProps || {};
+          const matchDate = new Date(e.start).toISOString().split("T")[0];
+          return ep.teacherId === teacherId && matchDate === eventDate;
+        });
+
+        if (match?.extendedProps?.students) {
+          await this.setStudentsFromProps(match.extendedProps);
+        } else {
+          console.warn("No matching event found in syncable data, using original event data");
+          const exProps = this.event.extendedProps || {};
+        }
+      } catch (error) {
+        console.error("Error refreshing event data:", error);
+
+      }
+    },
+    async setStudentsFromProps(exProps) {
+      // First, get the base student data from extendedProps
+      const baseStudents = (exProps.students || []).map(s => ({
         _id: s._id,
         name: s.name,
         personalNumber: s.personalNumber,
@@ -167,14 +207,83 @@ export default {
         paidExamFee: s.paidExamFee ?? false,
         examTime: s.examTime || '',
         examMunicipality: s.examMunicipality || '',
-        examLocation: s.examLocation || ''
+        examLocation: s.examLocation || '',
+        finalExamDate: s.finalExamDate || null
       }));
 
-      this.examTime = exProps.examTime || `${this.selectedHour}:${this.selectedMinute}`;
-      this.examMunicipality = exProps.examMunicipality || '';
-      this.examLocation = exProps.examLocation || '';
+      // Fetch the latest attendance data for this event
+      try {
+        const eventDate = this.event.start;
+        const teacherId = exProps.teacherId;
+        
+        if (eventDate && teacherId && baseStudents.length > 0) {
+          const response = await axios.get(`/api/calendar-events/attendance/${encodeURIComponent(eventDate)}/${teacherId}`);
+          const attendanceData = response.data;
+          
+          // Merge attendance data with base student data
+          this.studentsData = baseStudents.map(student => {
+            const attendance = attendanceData.find(a => a.studentId === student._id);
+            if (attendance) {
+              return {
+                ...student,
+                attended: attendance.attended ?? student.attended,
+                paidExamFee: attendance.paidExamFee ?? student.paidExamFee,
+                examTime: attendance.examTime || student.examTime,
+                examMunicipality: attendance.examMunicipality || student.examMunicipality,
+                examLocation: attendance.examLocation || student.examLocation,
+                finalExamDate: student.finalExamDate // Preserve the finalExamDate
+              };
+            }
+            return student;
+          });
+        } else {
+          this.studentsData = baseStudents;
+        }
+      } catch (error) {
+        console.warn("Could not fetch attendance data, using base data:", error);
+        this.studentsData = baseStudents;
+      }
 
-      console.log("✅ FINAL studentsData med attended:", this.studentsData);
+      // Set exam info from extendedProps or from the first student with exam info
+      this.examTime = exProps.examTime || this.studentsData.find(s => s.examTime)?.examTime || `${this.selectedHour}:${this.selectedMinute}`;
+      this.examMunicipality = exProps.examMunicipality || this.studentsData.find(s => s.examMunicipality)?.examMunicipality || '';
+      this.examLocation = exProps.examLocation || this.studentsData.find(s => s.examLocation)?.examLocation || '';
+      
+      // Debug logging
+      console.log('🔍 Frontend - ExtendedProps exam info:', {
+        examTime: exProps.examTime,
+        examMunicipality: exProps.examMunicipality,
+        examLocation: exProps.examLocation
+      });
+      console.log('🔍 Frontend - Final exam info:', {
+        examTime: this.examTime,
+        examMunicipality: this.examMunicipality,
+        examLocation: this.examLocation
+      });
+      
+      // Debug logging for students and finalExamDate
+      console.log('🔍 Frontend - Students data:', this.studentsData.map(s => ({
+        name: s.name,
+        finalExamDate: s.finalExamDate,
+        attended: s.attended,
+        paidExamFee: s.paidExamFee
+      })));
+
+      // If no exam info exists yet, set default time
+      if (!this.examTime || this.examTime === '') {
+        this.examTime = `${this.selectedHour}:${this.selectedMinute}`;
+      }
+
+
+
+      // Update time selectors if examTime is set
+      if (this.examTime && this.examTime.includes(':')) {
+        const [hour, minute] = this.examTime.split(':');
+        this.selectedHour = hour;
+        this.selectedMinute = minute;
+      }
+
+
     },
     updateTime() {
       this.examTime = `${this.selectedHour}:${this.selectedMinute}`;
@@ -184,10 +293,20 @@ export default {
     },
     async saveAttendance(student) {
       try {
+        // Use the student's exam date if available, otherwise use the event date
+        const examDate = student.finalExamDate || this.event.start;
+        
+        console.log('🔍 Frontend - saveAttendance called for student:', {
+          name: student.name,
+          finalExamDate: student.finalExamDate,
+          eventStart: this.event.start,
+          examDate: examDate
+        });
+        
         await axios.post(
           `${import.meta.env.VITE_API_URL}/api/calendar-events/mark-attendance`,
           {
-            date: this.event.start,
+            date: examDate,
             teacherId: this.event.extendedProps?.teacherId || this.event.teacherId,
             students: [{
               _id: student._id,
@@ -201,7 +320,8 @@ export default {
           },
           { withCredentials: true }
         );
-        this.$emit('update');
+        // Refresh the event data to show the updated information
+        await this.refreshEventData();
       } catch (error) {
         console.error("❌ Kunde inte spara närvaro:", error.response?.data || error.message);
         alert("Kunde inte spara närvaro, försök igen.");
@@ -218,10 +338,20 @@ export default {
         const students = this.studentsData;
         const teacherId = this.event.extendedProps?.teacherId || this.event.teacherId;
 
+        // Use the first student's exam date if available, otherwise use the event date
+        const examDate = students[0]?.finalExamDate || this.event.start;
+        
+        console.log('🔍 Frontend - submitExam called with:', {
+          firstStudentName: students[0]?.name,
+          firstStudentFinalExamDate: students[0]?.finalExamDate,
+          eventStart: this.event.start,
+          examDate: examDate
+        });
+        
         await axios.post(
           `${import.meta.env.VITE_API_URL}/api/calendar-events/mark-attendance`,
           {
-            date: this.event.start,
+            date: examDate,
             teacherId,
             students: students.map(s => ({
               _id: s._id,
@@ -248,6 +378,8 @@ export default {
         );
 
         this.showSuccessMessage = true;
+        await this.refreshEventData();
+
         setTimeout(() => {
           this.showSuccessMessage = false;
           this.$emit('update');

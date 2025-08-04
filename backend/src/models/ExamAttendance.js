@@ -15,6 +15,7 @@ const examAttendanceSchema = new mongoose.Schema(
         
         // Attendance status
         attended: { type: Boolean, default: false },
+        paidExamFee: { type: Boolean, default: false },
         
         // Exam details
         examTime: String,

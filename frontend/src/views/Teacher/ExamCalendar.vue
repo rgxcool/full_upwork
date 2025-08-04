@@ -173,7 +173,7 @@ export default {
         ...event,
         title,
         allDay: true,
-        color: '#b0b0b0',
+        color: event.extendedProps?.teacherId?.colorCode || event.color || '#999999',
         extendedProps: {
           ...event.extendedProps,
           students: event.extendedProps?.students || [],
