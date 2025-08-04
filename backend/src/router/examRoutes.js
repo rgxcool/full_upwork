@@ -802,8 +802,11 @@ router.post('/calendar-events/mark-attendance', async (req, res) => {
   console.log('📥 Request URL:', req.url);
   console.log('📥 Request headers:', req.headers);
   try {
-    const { date, teacherId, students, courseName, courseId } = req.body; // students: [{ _id, attended }]
-    console.log('🔍 mark-attendance called with:', { date, teacherId, students, courseName, courseId });
+const { date, teacherId, students, courseName, courseId,
+        examTime: eventExamTime,
+        examMunicipality: eventExamMunicipality,
+        examLocation: eventExamLocation } = req.body;    
+        console.log('🔍 mark-attendance called with:', { date, teacherId, students, courseName, courseId });
     
     if (!date || !teacherId || !Array.isArray(students)) {
       return res.status(400).json({ error: 'Missing date, teacherId, or students array' });
@@ -858,9 +861,9 @@ router.post('/calendar-events/mark-attendance', async (req, res) => {
              personalNumber: studentDoc.personalNumber,
              attended: !!student.attended,
              paidExamFee: !!student.paidExamFee,
-             examTime: student.examTime || '',
-             examMunicipality: student.examMunicipality || '',
-             examLocation: student.examLocation || '',
+             examTime: (student.examTime || eventExamTime || ''),
+             examMunicipality: (student.examMunicipality || eventExamMunicipality || ''),
+             examLocation: (student.examLocation || eventExamLocation || ''),
              recordedBy: req.user?._id
            });
            console.log(`🔍 Created new ExamAttendance record:`, {
@@ -878,9 +881,13 @@ router.post('/calendar-events/mark-attendance', async (req, res) => {
            attendanceRecord.paidExamFee = !!student.paidExamFee;
            attendanceRecord.updatedAt = new Date();
            attendanceRecord.updatedBy = req.user?._id;
-           if (student.examTime) attendanceRecord.examTime = student.examTime;
-           if (student.examMunicipality) attendanceRecord.examMunicipality = student.examMunicipality;
-           if (student.examLocation) attendanceRecord.examLocation = student.examLocation;
+           // Tillåt event-nivå override om student-fält saknas
+           if (student.examTime || eventExamTime)
+            attendanceRecord.examTime = student.examTime || eventExamTime;
+          if (student.examMunicipality || eventExamMunicipality)
+            attendanceRecord.examMunicipality = student.examMunicipality || eventExamMunicipality;
+          if (student.examLocation || eventExamLocation)
+            attendanceRecord.examLocation = student.examLocation || eventExamLocation;
          }
          
          console.log(`🔍 About to save attendance record...`);
@@ -912,9 +919,9 @@ router.post('/calendar-events/mark-attendance', async (req, res) => {
             courseId: courseId,
             teacherId: teacherId,
             attended: !!student.attended,
-            examTime: student.examTime || '',
-            examMunicipality: student.examMunicipality || '',
-            examLocation: student.examLocation || '',
+            examTime: student.examTime || eventExamTime || '',
+            examMunicipality: student.examMunicipality || eventExamMunicipality || '',
+            examLocation: student.examLocation || eventExamLocation || '',
             recordedAt: new Date(),
             recordedBy: req.user?._id
           });

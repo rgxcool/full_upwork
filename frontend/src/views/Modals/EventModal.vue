@@ -169,30 +169,44 @@ export default {
   methods: {
     async refreshEventData() {
       if (!this.event) return;
-      
+
       try {
-        // Always fetch fresh data from syncable endpoint
         const response = await axios.get("/api/calendar-events/syncable");
         const allEvents = response.data;
- 
-        const teacherId = this.event.extendedProps?.teacherId || this.event.teacherId;
+
+        const teacherId = (this.event.extendedProps?.teacherId || this.event.teacherId)?.toString?.();
         const eventDate = new Date(this.event.start).toISOString().split("T")[0];
-        
+
+        console.log("🔍 refreshEventData – searching for match:");
+        console.log("  TeacherId:", teacherId);
+        console.log("  EventDate:", eventDate);
+
         const match = allEvents.find(e => {
           const ep = e.extendedProps || {};
+          const matchTeacherId = ep.teacherId?.toString?.();
           const matchDate = new Date(e.start).toISOString().split("T")[0];
-          return ep.teacherId === teacherId && matchDate === eventDate;
+          return matchTeacherId === teacherId && matchDate === eventDate;
         });
 
         if (match?.extendedProps?.students) {
           await this.setStudentsFromProps(match.extendedProps);
         } else {
-          console.warn("No matching event found in syncable data, using original event data");
+          console.warn("⚠️ Ingen matchande event hittades i syncable – använder originaldata istället");
           const exProps = this.event.extendedProps || {};
+          if (exProps.students && Array.isArray(exProps.students)) {
+            await this.setStudentsFromProps(exProps);
+          } else {
+            this.studentsData = [];
+          }
         }
       } catch (error) {
-        console.error("Error refreshing event data:", error);
-
+        console.error("❌ Fel vid refreshEventData:", error);
+        const exProps = this.event.extendedProps || {};
+        if (exProps.students && Array.isArray(exProps.students)) {
+          await this.setStudentsFromProps(exProps);
+        } else {
+          this.studentsData = [];
+        }
       }
     },
     async setStudentsFromProps(exProps) {
@@ -222,7 +236,9 @@ export default {
           
           // Merge attendance data with base student data
           this.studentsData = baseStudents.map(student => {
-            const attendance = attendanceData.find(a => a.studentId === student._id);
+          const attendance = attendanceData.find(
+            a => (a.studentId?._id || a.studentId)?.toString() === (student._id || '').toString()
+          );            
             if (attendance) {
               return {
                 ...student,
@@ -313,10 +329,13 @@ export default {
               attended: !!student.attended,
               paidExamFee: !!student.paidExamFee,
               personalNumber: student.personalNumber,
-              examTime: student.examTime || '',
-              examMunicipality: student.examMunicipality || '',
-              examLocation: student.examLocation || '',
-            }]
+              examTime: student.examTime || this.examTime || '',
+              examMunicipality: student.examMunicipality || this.examMunicipality || '',
+              examLocation: student.examLocation || this.examLocation || '',
+            }],
+            examTime: this.examTime,
+            examMunicipality: this.examMunicipality,
+            examLocation: this.examLocation,
           },
           { withCredentials: true }
         );
@@ -358,10 +377,13 @@ export default {
               attended: !!s.attended,
               paidExamFee: !!s.paidExamFee,
               personalNumber: s.personalNumber,
-              examTime: s.examTime || '',
-              examMunicipality: s.examMunicipality || '',
-              examLocation: s.examLocation || '',
+              examTime: this.examTime,
+              examMunicipality: this.examMunicipality,
+              examLocation: this.examLocation,
             })),
+            examTime: this.examTime,
+            examMunicipality: this.examMunicipality,
+            examLocation: this.examLocation,
           },
           { withCredentials: true }
         );
@@ -376,6 +398,9 @@ export default {
           },
           { withCredentials: true }
         );
+        this.event.extendedProps.examTime = this.examTime;
+this.event.extendedProps.examMunicipality = this.examMunicipality;
+this.event.extendedProps.examLocation = this.examLocation;
 
         this.showSuccessMessage = true;
         await this.refreshEventData();
