@@ -17,7 +17,7 @@ cd ../frontend
 npm install
 
 echo "🏗️ Building frontend for production..."
-export VITE_API_URL=https://mindfullearning.se/api
+export VITE_API_URL=""
 npm run build
 
 echo "✅ Deployment complete. App is live at https://mindfullearning.se"
