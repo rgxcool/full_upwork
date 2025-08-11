@@ -12,6 +12,7 @@
       </div>
 
       <!-- File upload -->
+      <!--
       <div class="form-container">
         <form @submit.prevent="uploadFile">
           <div class="file-input-wrapper">
@@ -22,7 +23,7 @@
           </div>
         </form>
       </div>
-
+      -->
       <br />
 
       <div class="controls">
@@ -47,7 +48,7 @@
               <th>Namn</th>
               <th>Personnummer</th>
               <th>Utbildning</th>
-              <th>Edit</th>
+              <!-- <th>Edit</th> -->
               <th>Startdatum</th>
               <th>Slutdatum</th>
               <th>Slutprov</th>
@@ -56,8 +57,8 @@
               <th>Email</th>
               <th>Övrigt</th>
               <th>Lärare</th>
-              <th class="dropout-column">Avhopp</th>
-              <th></th>
+              <!-- <th class="dropout-column">Avhopp</th> -->
+              <!-- <th></th> -->
             </tr>
           </thead>
           <tbody>
@@ -79,11 +80,13 @@
                   </ul>
                 </div>
               </td>
-              <td>
+              <!-- EDIT BUTTON
+              <td>  
                 <button class="btn btn-secondary btn-xs" @click="openEditStudent(student)">
                   Edit
                 </button>
               </td>
+              -->
               <td>{{ formatDate(student.startDate) }}</td>
               <td>{{ formatDate(student.endDate) }}</td>
               <td>{{ formatDate(student.finalExamDate) }}</td>
@@ -111,6 +114,7 @@
               </td>
 
               <td>{{ student.teacher }}</td>
+              <!-- DROP OUT BUTTON
               <td class="dropout-column">
                 <button
                   :class="['dropout-btn', student.dropout ? 'dropout-active' : 'dropout-inactive']"
@@ -127,6 +131,7 @@
                   Delete
                 </button>
               </td>
+              -->
             </tr>
           </tbody>
         </table>
