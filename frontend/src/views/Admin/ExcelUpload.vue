@@ -538,7 +538,12 @@
         } catch (error) {
           console.error('❌ Error uploading file:', error.response?.data?.error || error)
 
-          if (error.response?.status === 409) {
+          if (error.response?.status === 422 && Array.isArray(error.response?.data?.reasons)) {
+            const reasons = error.response.data.reasons
+              .map(r => `- ${r.student}: ${r.message}`)
+              .join('\n')
+            alert(`❌ Upload aborted due to unmatched courses:\n${reasons}`)
+          } else if (error.response?.status === 409) {
             alert('⚠️ Some students were already in the system and were not added.')
           } else if (error.response?.status === 401) {
             alert('❌ Du är inte inloggad. Vänligen logga in igen.')
