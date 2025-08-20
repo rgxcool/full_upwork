@@ -93,7 +93,7 @@
               <td>{{ student.municipality?.type || 'Ingen kommun' }}</td>
               <td>{{ student.phone }}</td>
               <td>{{ student.email }}</td>
-              <td>
+              <td class="ovrigt-cell">
                 <div class="comment-container" @click="toggleComment(student._id)">
                   <span
                     class="comment-text"
@@ -753,7 +753,7 @@
   }
 
   .comment-container {
-    max-width: 200px;
+    max-width: none;
     cursor: pointer;
     position: relative;
     color: #333;
@@ -761,6 +761,7 @@
 
   .comment-text.truncated {
     display: inline;
+    white-space: nowrap;
   }
 
   .dots {
@@ -859,7 +860,8 @@
   }
 
   .dynamic-table {
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
     table-layout: auto;
     border-collapse: collapse;
   }
@@ -872,12 +874,17 @@
     /* Slightly tighter spacing */
     text-align: left;
     /* Ensure left alignment */
-    vertical-align: middle;
-    /* Center content vertically */
+    vertical-align: top;
+    /* Align to top so multi-line Övrigt expands downward */
     white-space: nowrap;
-    /* Prevents unwanted wrapping */
+    /* Prevents unwanted wrapping by default */
     border: 1px solid #ddd;
     /* Add border */
+  }
+
+  /* Do not wrap inside the Övrigt column */
+  td.ovrigt-cell, td.ovrigt-cell * {
+    white-space: nowrap !important;
   }
 
   .course-list ul,

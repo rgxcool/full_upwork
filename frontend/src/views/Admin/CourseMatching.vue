@@ -192,9 +192,9 @@
           console.error('Error processing students:', error)
           if (error.response?.status === 422 && Array.isArray(error.response?.data?.reasons)) {
             const reasons = error.response.data.reasons
-              .map(r => `- ${r.student}: ${r.message}`)
+              .map(r => `- ${r.student || ''} ${r.field ? '(' + r.field + ')' : ''}: ${r.message}`.trim())
               .join('\n')
-            alert(`Uppladdning avbröts p.g.a. omatchade kurser:\n${reasons}`)
+            alert(`Uppladdning avbröts p.g.a. valideringsfel:\n${reasons}`)
           } else {
             alert('Ett fel uppstod vid bearbetning av studenter.')
           }

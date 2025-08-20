@@ -61,6 +61,73 @@ export const uploadStudentsForMatching = async (req, res) => {
             enrollments: [], // <-- add this line
         };
 
+        // ---------------------------------------------
+        // Sanitize and pre-validate parsed data before any DB writes
+        // - Convert Excel richText objects to strings
+        // - Ensure education entry names are strings
+        // - Collect reasons and abort with 422 if any unconvertible values exist
+        // ---------------------------------------------
+        (function sanitizeAndValidateParsedStudents() {
+            const reasons = [];
+
+            function coerceToString(value) {
+                if (value === undefined || value === null) return '';
+                if (typeof value === 'string') return value;
+                if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+                if (typeof value === 'object') {
+                    // xlsx richText object: { richText: [ { text: '...' }, ... ] }
+                    if (Array.isArray(value.richText)) {
+                        return value.richText.map(part => (typeof part?.text === 'string' ? part.text : '')).join('');
+                    }
+                    if (typeof value.text === 'string') {
+                        return value.text;
+                    }
+                }
+                return null; // not safely convertible
+            }
+
+            for (const student of parsedStudents) {
+                const studentIdLabel = student.email || student.name || 'unknown';
+
+                // additionalInfo
+                const coercedAdditional = coerceToString(student.additionalInfo);
+                if (coercedAdditional === null) {
+                    reasons.push({
+                        type: 'invalid_field',
+                        student: studentIdLabel,
+                        field: 'additionalInfo',
+                        message: `Unable to convert 'additionalInfo' to text for student ${studentIdLabel}.`,
+                    });
+                } else {
+                    student.additionalInfo = coercedAdditional;
+                }
+
+                // education entry names
+                if (Array.isArray(student.education)) {
+                    for (const entry of student.education) {
+                        const coercedName = coerceToString(entry?.name);
+                        if (coercedName === null || coercedName.trim() === '') {
+                            reasons.push({
+                                type: 'invalid_field',
+                                student: studentIdLabel,
+                                field: 'education.name',
+                                message: `Invalid course/package name in education for student ${studentIdLabel}.`,
+                            });
+                        } else {
+                            entry.name = coercedName;
+                        }
+                    }
+                }
+            }
+
+            if (reasons.length > 0) {
+                const error = new Error('Data validation failed; upload aborted.');
+                error.statusCode = 422;
+                error.reasons = reasons;
+                throw error;
+            }
+        })();
+
         // Handle teacher creation if needed
         let teacherInfo = null;
         try {
