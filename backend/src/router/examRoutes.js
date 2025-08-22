@@ -255,13 +255,20 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
   function pickFirstNonEmpty(arr, field) {
     return (arr.find(e => e[field] && e[field] !== "") || {})[field] || "";
   }
+  function localDateKey(dateInput) {
+    const d = new Date(dateInput);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
 
-  try {
-    console.log("🔍 /calendar-events/syncable called");
-
+    try {
+        console.log("🔍 /calendar-events/syncable called");
+        
     let studentQuery = {
-      finalExamDate: { $ne: null },
-      dropout: { $ne: true },
+            finalExamDate: { $ne: null },
+            dropout: { $ne: true },
     };
 
     let enrollmentQuery = {
@@ -282,30 +289,30 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
 
     // Manuellda slutprov (studenter med finalExamDate)
     const studentsWithFinalExam = await Student.find(studentQuery)
-      .populate({
-        path: "teacherId",
-        populate: { path: "userId", select: "username" },
-      });
-    await Student.populate(studentsWithFinalExam, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });
-    console.log("📅 Students with finalExamDate:", studentsWithFinalExam.length);
+        .populate({
+            path: "teacherId",
+            populate: { path: "userId", select: "username" },
+        });
+        await Student.populate(studentsWithFinalExam, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });
+        console.log("📅 Students with finalExamDate:", studentsWithFinalExam.length);
 
     // Automatiska kurs-slutprov (från enrollments)
     const enrollmentsWithSlutprov = await StudentEnrollment.find(enrollmentQuery)
-      .populate('studentId')
-      .populate('mainCourseId')
-      .populate({
-        path: 'teacherId',
-        populate: { path: 'userId', select: 'username' }
-      });
-    console.log("📅 Enrollments with slutprovDate:", enrollmentsWithSlutprov.length);
-    enrollmentsWithSlutprov.forEach(e => {
-      console.log("  - Student:", e.studentId?.name, "Course:", e.mainCourseId?.courseName, "Date:", e.slutprovDate, "Teacher:", e.teacherId?.userId?.username || e.studentId?.teacherId?.userId?.username || "None");
-    });
+        .populate('studentId')
+        .populate('mainCourseId')
+        .populate({
+            path: 'teacherId',
+            populate: { path: 'userId', select: 'username' }
+        });
+        console.log("📅 Enrollments with slutprovDate:", enrollmentsWithSlutprov.length);
+        enrollmentsWithSlutprov.forEach(e => {
+            console.log("  - Student:", e.studentId?.name, "Course:", e.mainCourseId?.courseName, "Date:", e.slutprovDate, "Teacher:", e.teacherId?.userId?.username || e.studentId?.teacherId?.userId?.username || "None");
+        });
 
-    const grouped = {};
+        const grouped = {};
 
     // ----------- GRUPPERA MANUELLA SLUTPROV -----------
-    for (const student of studentsWithFinalExam) {
+        for (const student of studentsWithFinalExam) {
       try {
 
         if (!student.finalExamDate || !student.teacherId || !student.teacherId.userId) {
@@ -313,34 +320,33 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
           continue;
         }
 
-        const dateObj = new Date(student.finalExamDate);
-        const dateKey = dateObj.toISOString().split("T")[0];
-        const teacherId = student.teacherId._id.toString();
-        const key = `${teacherId}_${dateKey}`;
+            const dateKey = localDateKey(student.finalExamDate);
+            const teacherId = student.teacherId._id.toString();
+            const key = `${teacherId}_${dateKey}`;
 
         // Hitta kursnamn
-        let courseName = null;
-        if (Array.isArray(student.education)) {
-          const edu = student.education.find(e => {
-            if (e.type !== "Course" || !e.startDate || !e.endDate) return false;
+            let courseName = null;
+            if (Array.isArray(student.education)) {
+                const edu = student.education.find(e => {
+                    if (e.type !== "Course" || !e.startDate || !e.endDate) return false;
             const start = new Date(e.startDate).setHours(0, 0, 0, 0);
             const end = new Date(e.endDate).setHours(0, 0, 0, 0);
             const exam = new Date(dateKey).setHours(0, 0, 0, 0);
-            return exam >= start && exam <= end && e.refId && typeof e.refId === "object" && e.refId.courseName;
-          });
-          if (edu && edu.refId && typeof edu.refId === "object" && edu.refId.courseName) {
-            courseName = edu.refId.courseName;
-          }
-        }
-        if (!courseName) {
-          const enrollment = await StudentEnrollment.findOne({
-            studentId: student._id,
+                    return exam >= start && exam <= end && e.refId && typeof e.refId === "object" && e.refId.courseName;
+                });
+                if (edu && edu.refId && typeof edu.refId === "object" && edu.refId.courseName) {
+                    courseName = edu.refId.courseName;
+                }
+            }
+            if (!courseName) {
+                const enrollment = await StudentEnrollment.findOne({
+                    studentId: student._id,
             endDate: { $gte: new Date(dateKey), $lt: new Date(new Date(dateKey).getTime() + 24 * 60 * 60 * 1000) }
-          }).populate("mainCourseId");
-          if (enrollment && enrollment.mainCourseId && enrollment.mainCourseId.courseName) {
-            courseName = enrollment.mainCourseId.courseName;
-          }
-        }
+                }).populate("mainCourseId");
+                if (enrollment && enrollment.mainCourseId && enrollment.mainCourseId.courseName) {
+                    courseName = enrollment.mainCourseId.courseName;
+                }
+            }
 
         // Exam-/närvaroinfo från student-dokumentet
         const attended = student.attendedExam || false;
@@ -368,7 +374,7 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         const finalExamMunicipality = attendanceRecord ? attendanceRecord.examMunicipality : studentExamMunicipality;
         const finalExamLocation = attendanceRecord ? attendanceRecord.examLocation : studentExamLocation;
 
-        if (!grouped[key]) {
+            if (!grouped[key]) {
           // Samla samma tid/kommun/plats bland gruppen
           const sameTime = studentsWithFinalExam
             .filter(s =>
@@ -423,74 +429,73 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
           
 
 
-          const startDate = new Date(dateKey + 'T00:00:00');
-          grouped[key] = {
+                const startDate = new Date(dateKey + 'T00:00:00');
+                grouped[key] = {
             id: `${teacherId}_${dateKey}`,
-            title: student.teacherId.userId.username,
-            start: startDate,
-            color: student.teacherId.colorCode || "#999999",
-            extendedProps: {
-              teacher: student.teacherId.userId.username,
-              teacherId: student.teacherId._id,
-              type: "exam",
+                    title: student.teacherId.userId.username,
+                    start: dateKey,
+                    color: student.teacherId.colorCode || "#999999",
+                    extendedProps: {
+                        teacher: student.teacherId.userId.username,
+                        teacherId: student.teacherId._id,
+                        type: "exam",
               examMunicipality: eventExamMunicipality,
               examLocation: eventExamLocation,
               examTime: eventExamTime,
-              courseName: courseName || null,
-              students: [],
-            },
-          };
-        }
+                        courseName: courseName || null,
+                        students: [],
+                    },
+                };
+            }
 
-        grouped[key].extendedProps.students.push({
-          _id: student._id,
-          name: student.name,
-          personalNumber: student.personalNumber,
-          additionalInfo: student.additionalInfo || "",
+            grouped[key].extendedProps.students.push({
+                _id: student._id,
+                name: student.name,
+                personalNumber: student.personalNumber,
+                additionalInfo: student.additionalInfo || "",
           attended: finalAttended,
           paidExamFee: finalPaidExamFee,
           examTime: finalExamTime,
           examMunicipality: finalExamMunicipality,
           examLocation: finalExamLocation,
-          courseName: courseName || null,
+                courseName: courseName || null,
           finalExamDate: student.finalExamDate,
-        });
+            });
         
         console.log(`🔍 Manual - Added student ${student.name} with finalExamDate: ${student.finalExamDate}`);
       } catch (err) {
         console.warn("Fel i studentsWithFinalExam-loopen:", err.message, student);
       }
-    }
-
-    // ----------- GRUPPERA AUTOMATISKA KURS-SLUTPROV -----------
-    for (const enrollment of enrollmentsWithSlutprov) {
-      try {
-        if (!enrollment.slutprovDate || !enrollment.studentId || !enrollment.mainCourseId) continue;
-
-        const student = enrollment.studentId;
-        const course = enrollment.mainCourseId;
-
-        const dateObj = new Date(enrollment.slutprovDate);
-        const dateKey = dateObj.toISOString().split("T")[0];
-
-        // Lärare: från enrollment eller fallback på student
-        let teacherId = enrollment.teacherId;
-        let teacherUsername = 'Unknown';
-        let teacherColor = "#999999";
-
-        if (teacherId && teacherId.userId) {
-          teacherUsername = teacherId.userId.username;
-          teacherColor = teacherId.colorCode || "#999999";
-        } else if (student.teacherId && student.teacherId.userId) {
-          teacherId = student.teacherId;
-          teacherUsername = student.teacherId.userId.username;
-          teacherColor = student.teacherId.colorCode || "#999999";
-        } else {
-          console.log(`⚠️ No teacher found for student ${student.name} in course ${course.courseName}`);
-          continue;
         }
 
-        const key = `${teacherId._id.toString()}_${dateKey}`;
+    // ----------- GRUPPERA AUTOMATISKA KURS-SLUTPROV -----------
+        for (const enrollment of enrollmentsWithSlutprov) {
+      try {
+            if (!enrollment.slutprovDate || !enrollment.studentId || !enrollment.mainCourseId) continue;
+            
+            const student = enrollment.studentId;
+            const course = enrollment.mainCourseId;
+            
+            const dateKey = localDateKey(enrollment.slutprovDate);
+            
+        // Lärare: från enrollment eller fallback på student
+            let teacherId = enrollment.teacherId;
+            let teacherUsername = 'Unknown';
+            let teacherColor = "#999999";
+            
+            if (teacherId && teacherId.userId) {
+                teacherUsername = teacherId.userId.username;
+                teacherColor = teacherId.colorCode || "#999999";
+            } else if (student.teacherId && student.teacherId.userId) {
+                teacherId = student.teacherId;
+                teacherUsername = student.teacherId.userId.username;
+                teacherColor = student.teacherId.colorCode || "#999999";
+            } else {
+                console.log(`⚠️ No teacher found for student ${student.name} in course ${course.courseName}`);
+          continue;
+            }
+            
+            const key = `${teacherId._id.toString()}_${dateKey}`;
 
         const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
 
@@ -510,8 +515,8 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         const examMunicipality = attendanceRecord ? attendanceRecord.examMunicipality : '';
         const examLocation = attendanceRecord ? attendanceRecord.examLocation : '';
 
-        if (!grouped[key]) {
-          const startDate = new Date(dateKey + 'T00:00:00');
+            if (!grouped[key]) {
+                const startDate = new Date(dateKey + 'T00:00:00');
           
           // Get the most common exam info from attendance records for this event
           const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
@@ -552,49 +557,50 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
           
 
           
-          grouped[key] = {
+                grouped[key] = {
             id: `${teacherId._id}_${dateKey}`,
-            title: teacherUsername,
-            start: startDate,
-            color: teacherColor,
-            extendedProps: {
-              teacher: teacherUsername,
-              teacherId: teacherId._id,
+                    title: teacherUsername,
+                    start: dateKey,
+                    color: teacherColor,
+                    extendedProps: {
+                        teacher: teacherUsername,
+                        teacherId: teacherId._id,
+                        type: "exam",
               examMunicipality: eventExamMunicipality,
               examLocation: eventExamLocation,
               examTime: eventExamTime,
-              courseName: course.courseName,
-              students: [],
-            },
-          };
-        }
+                        courseName: course.courseName,
+                        students: [],
+                    },
+                };
+            }
 
-        grouped[key].extendedProps.students.push({
-          _id: student._id,
-          name: student.name,
-          personalNumber: student.personalNumber,
-          additionalInfo: student.additionalInfo || "",
-          attended,
+            grouped[key].extendedProps.students.push({
+                _id: student._id,
+                name: student.name,
+                personalNumber: student.personalNumber,
+                additionalInfo: student.additionalInfo || "",
+                attended,
           paidExamFee,
           examTime,
           examMunicipality,
           examLocation,
-          courseName: course.courseName,
+                courseName: course.courseName,
           finalExamDate: enrollment.slutprovDate, // Use the enrollment's exam date
-        });
+            });
         
         console.log(`🔍 Auto - Added student ${student.name} with finalExamDate: ${enrollment.slutprovDate}`);
       } catch (err) {
         console.warn("Fel i enrollmentsWithSlutprov-loopen:", err.message, enrollment);
       }
-    }
+        }
 
-    console.log("📅 Final grouped events:", Object.keys(grouped).length);
-    res.json(Object.values(grouped));
-  } catch (err) {
+        console.log("📅 Final grouped events:", Object.keys(grouped).length);
+        res.json(Object.values(grouped));
+    } catch (err) {
     console.error("❌ Fel vid synk:", err.message, err.stack);
-    res.status(500).json({ error: "Kunde inte hämta synkade events." });
-  }
+        res.status(500).json({ error: "Kunde inte hämta synkade events." });
+    }
 });
 
 
@@ -777,7 +783,7 @@ router.get("/attendance-stats/:studentId", async (req, res) => {
   } catch (error) {
     console.error('❌ Error getting attendance stats:', error);
     res.status(500).json({ error: 'Failed to get attendance statistics' });
-  }
+    }
 });
 
 router.delete("/exams/:id", async (req, res) => {
@@ -1017,7 +1023,88 @@ router.put("/exams/:id/decision", async (req, res) => {
     } catch (err) {
         console.error("Fel vid uppdatering av beslut:", err);
         res.status(500).json({ error: "Kunde inte spara beslut." });
-    }
+  }
 });
 
 export default router;
+
+// --- Student exam instances listing ---
+// List all exam instances (manual + course-linked) recorded for a student
+router.get('/exams/student/:studentId', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { default: ExamAttendance } = await import('../models/ExamAttendance.js');
+
+    const records = await ExamAttendance.find({ studentId })
+      .populate('teacherId', 'userId colorCode')
+      .populate({ path: 'teacherId.userId', select: 'username' })
+      .populate('courseId', 'courseName')
+      .sort({ examDate: -1 })
+      .lean();
+
+    const items = records.map(r => ({
+      id: r._id,
+      examDate: r.examDate,
+      courseName: r.courseName || r.courseId?.courseName || 'Okänd kurs',
+      attended: !!r.attended,
+      examTime: r.examTime || '',
+      examMunicipality: r.examMunicipality || '',
+      examLocation: r.examLocation || '',
+      teacher: r.teacherId?.userId?.username || 'Okänd lärare'
+    }));
+
+    res.json(items);
+  } catch (error) {
+    console.error('❌ Failed to list student exams:', error);
+    res.status(500).json({ error: 'Failed to list student exams' });
+  }
+});
+
+// --- Move grouped exams (teacher + date -> newDate) ---
+router.put('/calendar-events/move-group', authenticateUser, async (req, res) => {
+  try {
+    const { teacherId, fromDate, toDate } = req.body;
+    if (!teacherId || !fromDate || !toDate) {
+      return res.status(400).json({ error: 'Missing teacherId, fromDate or toDate' });
+    }
+
+    const fromKey = new Date(fromDate);
+    const toKey = new Date(toDate);
+    const fromLocal = new Date(fromKey.getFullYear(), fromKey.getMonth(), fromKey.getDate());
+    const toLocal = new Date(toKey.getFullYear(), toKey.getMonth(), toKey.getDate());
+
+    // Update enrollments for this teacher on fromDate
+    const enrollmentsUpdated = await StudentEnrollment.updateMany(
+      {
+        teacherId,
+        slutprovDate: {
+          $gte: new Date(fromLocal.toISOString().split('T')[0] + 'T00:00:00.000Z'),
+          $lte: new Date(fromLocal.toISOString().split('T')[0] + 'T23:59:59.999Z')
+        }
+      },
+      { $set: { slutprovDate: toLocal } }
+    );
+
+    // Update students with manual finalExamDate for this teacher on fromDate
+    const students = await Student.find({
+      teacherId,
+      finalExamDate: {
+        $gte: new Date(fromLocal.toISOString().split('T')[0] + 'T00:00:00.000Z'),
+        $lte: new Date(fromLocal.toISOString().split('T')[0] + 'T23:59:59.999Z')
+      }
+    });
+    for (const s of students) {
+      s.finalExamDate = toLocal;
+      await s.save();
+    }
+
+    res.json({
+      message: 'Group moved',
+      enrollmentsModified: enrollmentsUpdated.modifiedCount,
+      studentsModified: students.length
+    });
+  } catch (error) {
+    console.error('❌ Failed to move group:', error);
+    res.status(500).json({ error: 'Failed to move group' });
+  }
+});

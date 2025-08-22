@@ -1,61 +1,319 @@
 <template>
-  <div class="scrollable-view">
-    <v-container>
-      <v-form>
-        <!-- Autocomplete for selecting a student -->
-        <v-autocomplete
-          v-model="selectedStudent"
-          :items="students"
-          item-title="namn"
-          item-value="_id"
-          label="Select a student"
-          return-object
-          outlined
-          clearable
-          search-input
-          hide-details
-          dense
-        />
+  <div class="scrollable-view p-4">
+    <div v-if="successMessage" class="alert alert-success" role="alert">
+      {{ successMessage }}
+    </div>
+    <div v-if="errorMessage" class="alert alert-danger" role="alert">
+      {{ errorMessage }}
+    </div>
 
-        <!-- Display student details if one is selected -->
-        <v-row v-if="selectedStudent">
-          <v-col cols="12" md="6">
-            <v-text-field label="Full Name" v-model="selectedStudent.namn" readonly />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field label="Personal Number" v-model="selectedStudent.personnummer" readonly />
-          </v-col>
-        </v-row>
-      </v-form>
-    </v-container>
+    <div class="mb-3 position-relative">
+      <label class="form-label">Välj elev</label>
+      <input
+        type="text"
+        class="form-control"
+        v-model="searchQuery"
+        placeholder="Sök namn eller personnummer"
+        @input="onSearch"
+        @focus="onSearch"
+      />
+      <ul
+        v-if="showSuggestions && filteredStudents.length"
+        class="list-group position-absolute w-100 autocomplete-list"
+      >
+        <li
+          v-for="s in filteredStudents"
+          :key="s._id"
+          class="list-group-item list-group-item-action"
+          @click="selectStudent(s)"
+        >
+          {{ s.name }} ({{ s.personalNumber }})
+        </li>
+      </ul>
+    </div>
+
+    <div v-if="form" class="card p-3">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Namn</label>
+          <input class="form-control" v-model="form.name" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Personnummer</label>
+          <input class="form-control" v-model="form.personalNumber" />
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Lärare</label>
+          <select class="form-select" v-model="form.teacherId">
+            <option :value="null">— Ingen —</option>
+            <option v-for="t in teachers" :key="t._id || t.id" :value="t._id || t.id">
+              {{ (t.userId && t.userId.username) || t.name || t.subject || 'Teacher' }}
+            </option>
+          </select>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">APL status</label>
+          <select class="form-select" v-model="form.aplStatus">
+            <option value="GRAY">GRAY</option>
+            <option value="RED">RED</option>
+            <option value="BLUE">BLUE</option>
+            <option value="YELLOW">YELLOW</option>
+            <option value="GREEN">GREEN</option>
+          </select>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Startdatum</label>
+          <input class="form-control" type="date" v-model="dateFields.startDate" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Slutdatum</label>
+          <input class="form-control" type="date" v-model="dateFields.endDate" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Slutprov (datum)</label>
+          <input class="form-control" type="date" v-model="dateFields.finalExamDate" />
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Provtid (24h)</label>
+          <select class="form-select" v-model="form.examTime">
+            <option v-for="h in hours" :key="h" :value="h + ':00'">{{ h }}:00</option>
+            <option v-for="h in hours" :key="h+'-30'" :value="h + ':30'">{{ h }}:30</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Prov kommun</label>
+          <input class="form-control" v-model="form.examMunicipality" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Provlokal</label>
+          <input class="form-control" v-model="form.examLocation" />
+        </div>
+
+        <div class="col-md-4 form-check mt-4">
+          <input id="dropout" class="form-check-input" type="checkbox" v-model="form.dropout" />
+          <label class="form-check-label" for="dropout">Avbrott</label>
+        </div>
+      </div>
+
+      <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary" :disabled="saving" @click="save">{{ saving ? 'Sparar...' : 'Spara' }}</button>
+        <button class="btn btn-secondary" @click="reload">Ladda om</button>
+      </div>
+
+      <hr class="my-4" />
+      <h5>Elevens slutprov (alla tillfällen)</h5>
+      <div v-if="loadingExams" class="text-muted">Laddar...</div>
+      <div v-else>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Kurs</th>
+              <th>Tid</th>
+              <th>Kommun</th>
+              <th>Plats</th>
+              <th>Lärare</th>
+              <th>Närvaro</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="e in examInstances" :key="e.id">
+              <td>{{ formatDate(e.examDate) }}</td>
+              <td>{{ e.courseName }}</td>
+              <td>{{ e.examTime || '-' }}</td>
+              <td>{{ e.examMunicipality || '-' }}</td>
+              <td>{{ e.examLocation || '-' }}</td>
+              <td>{{ e.teacher }}</td>
+              <td>
+                <span :class="e.attended ? 'text-success' : 'text-danger'">
+                  {{ e.attended ? 'Närvarande' : 'Frånvarande' }}
+                </span>
+              </td>
+            </tr>
+            <tr v-if="!examInstances.length">
+              <td colspan="7" class="text-muted">Inga registrerade slutprov.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-  import { ref, onMounted } from 'vue'
+  import axios from 'axios'
+  import { ref, reactive, watch, computed, onMounted } from 'vue'
 
   export default {
     name: 'EditStudent',
     setup() {
       const students = ref([])
-      const selectedStudent = ref(null)
+      const teachers = ref([])
+      const selectedId = ref('')
+      const searchQuery = ref('')
+      const showSuggestions = ref(false)
+      const form = ref(null)
+      const dateFields = reactive({ startDate: '', endDate: '', finalExamDate: '' })
+      const examInstances = ref([])
+      const loadingExams = ref(false)
+      const saving = ref(false)
+      const successMessage = ref('')
+      const errorMessage = ref('')
 
-      // Fetch students data (use your actual API here)
-      onMounted(async () => {
+      const hours = computed(() => Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')))
+
+      async function loadStudents() {
         try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/student`)
-          const data = await response.json()
-          students.value = data // Assuming the response has a list of students
-        } catch (error) {
-          console.error('Error fetching students:', error)
+          const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, { withCredentials: true })
+          students.value = res.data
+        } catch (e) {
+          console.error('❌ Failed to load students', e)
+        }
+      }
+
+      async function loadTeachers() {
+        try {
+          const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`, { withCredentials: true })
+          teachers.value = res.data
+        } catch (e) {
+          console.error('❌ Failed to load teachers', e)
+        }
+      }
+
+      async function loadStudent(id) {
+        try {
+          if (!id) return
+          // Use lightweight endpoint to avoid populate issues
+          const url = `${import.meta.env.VITE_API_URL}/api/student/${encodeURIComponent(id)}/basic`
+          const res = await axios.get(url, { withCredentials: true })
+          const s = res.data
+          form.value = {
+            _id: s._id,
+            name: s.name || s.namn || '',
+            personalNumber: s.personalNumber || s.personnummer || '',
+            teacherId: s.teacherId || null,
+            aplStatus: s.aplStatus || 'GRAY',
+            startDate: s.startDate || null,
+            endDate: s.endDate || null,
+            finalExamDate: s.finalExamDate || null,
+            examTime: s.examTime || '',
+            examMunicipality: s.examMunicipality || '',
+            examLocation: s.examLocation || '',
+            dropout: !!s.dropout,
+          }
+          dateFields.startDate = s.startDate ? new Date(s.startDate).toISOString().slice(0, 10) : ''
+          dateFields.endDate = s.endDate ? new Date(s.endDate).toISOString().slice(0, 10) : ''
+          dateFields.finalExamDate = s.finalExamDate ? new Date(s.finalExamDate).toISOString().slice(0, 10) : ''
+
+          // Fetch exam instances
+          await loadExamInstances(id)
+        } catch (e) {
+          console.error('❌ Failed to load student', e?.response?.data || e)
+          const serverMsg = e?.response?.data?.error || e?.response?.data?.message
+          errorMessage.value = serverMsg ? `Kunde inte ladda elev: ${serverMsg}` : 'Kunde inte ladda elev.'
+        }
+      }
+
+      async function loadExamInstances(id) {
+        try {
+          loadingExams.value = true
+          examInstances.value = []
+          const url = `${import.meta.env.VITE_API_URL}/api/exams/student/${encodeURIComponent(id)}`
+          const res = await axios.get(url, { withCredentials: true })
+          examInstances.value = Array.isArray(res.data) ? res.data : []
+        } catch (e) {
+          console.error('❌ Failed to load exam instances', e?.response?.data || e)
+        } finally {
+          loadingExams.value = false
+        }
+      }
+
+      async function save() {
+        if (!form.value?._id) return
+        saving.value = true
+        successMessage.value = ''
+        errorMessage.value = ''
+        try {
+          const payload = {
+            name: form.value.name,
+            personalNumber: form.value.personalNumber,
+            teacherId: form.value.teacherId || null,
+            aplStatus: form.value.aplStatus,
+            startDate: dateFields.startDate ? new Date(dateFields.startDate) : null,
+            endDate: dateFields.endDate ? new Date(dateFields.endDate) : null,
+            finalExamDate: dateFields.finalExamDate ? new Date(dateFields.finalExamDate) : null,
+            examTime: form.value.examTime,
+            examMunicipality: form.value.examMunicipality,
+            examLocation: form.value.examLocation,
+            dropout: !!form.value.dropout,
+          }
+          await axios.put(`${import.meta.env.VITE_API_URL}/api/student/${form.value._id}`, payload)
+          successMessage.value = 'Elev sparad!'
+        } catch (e) {
+          console.error('❌ Failed to save student', e)
+          errorMessage.value = 'Misslyckades att spara elev.'
+        } finally {
+          saving.value = false
+        }
+      }
+
+      function reload() {
+        if (selectedId.value) loadStudent(selectedId.value)
+      }
+
+      const filteredStudents = computed(() => {
+        const q = (searchQuery.value || '').toLowerCase().trim()
+        if (!q) return []
+        return students.value
+          .filter((s) =>
+            (s.name || '').toLowerCase().includes(q) || (s.personalNumber || '').toLowerCase().includes(q)
+          )
+          .slice(0, 10)
+      })
+
+      function onSearch() {
+        showSuggestions.value = filteredStudents.value.length > 0
+      }
+
+      function selectStudent(s) {
+        selectedId.value = s._id
+        searchQuery.value = `${s.name} (${s.personalNumber})`
+        showSuggestions.value = false
+      }
+
+      watch(selectedId, (id) => {
+        if (id) {
+          loadStudent(id)
+          const s = students.value.find((x) => x._id === id)
+          if (s) searchQuery.value = `${s.name} (${s.personalNumber})`
+        } else {
+          form.value = null
+          searchQuery.value = ''
         }
       })
 
-      return { students, selectedStudent }
+      onMounted(() => {
+        loadStudents()
+        loadTeachers()
+      })
+
+      function formatDate(d) {
+        if (!d) return '-'
+        const dt = new Date(d)
+        if (isNaN(dt)) return '-'
+        return dt.toISOString().slice(0, 10)
+      }
+
+      return { students, teachers, selectedId, searchQuery, showSuggestions, filteredStudents, onSearch, selectStudent, form, dateFields, hours, saving, successMessage, errorMessage, examInstances, loadingExams, save, reload, formatDate }
     },
   }
 </script>
 
 <style scoped>
-  /* Custom styles (if necessary) */
+  .gap-2 { gap: .5rem; }
+  .autocomplete-list { z-index: 1050; max-height: 260px; overflow-y: auto; }
 </style>

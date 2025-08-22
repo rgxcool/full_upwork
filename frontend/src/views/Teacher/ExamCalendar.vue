@@ -207,24 +207,40 @@ export default {
           api.get('/meetings')
         ]);
 
-        const allEvents = [
-          ...savedEvents.data.map(event => ({
-            id: event._id,
-            title: event.title,
-            start: event.start,
-            allDay: true,
-            color: event.color || "#999999",
-            extendedProps: event.extendedProps || {}
-          })),
-          ...syncedEvents.data.map(event => ({
-            id: event._id,
-            title: event.title,
-            start: event.start,
-            allDay: true,
-            color: event.color || "#999999",
-            extendedProps: event.extendedProps || {}
-          })),
-          ...meetings.data.map(meeting => ({
+        const saved = savedEvents.data || []
+        const synced = syncedEvents.data || []
+
+        // If we have grouped synced exams, hide saved exam-like entries to avoid duplicates.
+        // Otherwise, fall back to showing all saved events (including exam-like ones)
+        const shouldHideSavedExams = Array.isArray(synced) && synced.length > 0
+        const filteredSaved = shouldHideSavedExams
+          ? saved.filter(e => {
+              const type = e?.extendedProps?.type || e?.type || ''
+              const title = e?.title || ''
+              const looksLikeExam = type === 'exam' || /^Slutprov/i.test(title)
+              return !looksLikeExam
+            })
+          : saved
+
+        const mappedSaved = filteredSaved.map(event => ({
+          id: event.id || event._id || `${event.title || 'event'}-${event.start}`,
+          title: event.title,
+          start: event.start,
+          allDay: true,
+          color: event.color || "#999999",
+          extendedProps: event.extendedProps || {}
+        }))
+
+        const mappedSynced = synced.map(event => ({
+          id: event.id || event._id || `${event.title || 'synced'}-${event.start}`,
+          title: event.title,
+          start: event.start,
+          allDay: true,
+          color: event.color || "#999999",
+          extendedProps: event.extendedProps || {}
+        }))
+
+        const mappedMeetings = meetings.data.map(meeting => ({
             id: meeting._id,
             title: meeting.title,
             start: meeting.start,
@@ -238,8 +254,10 @@ export default {
               bookedBy: meeting.bookedBy || ''
             }
           }))
-        ];
 
+        const allEvents = [...mappedSaved, ...mappedSynced, ...mappedMeetings]
+
+        console.log(`📆 Events - saved:${mappedSaved.length}, synced:${mappedSynced.length}, meetings:${mappedMeetings.length}, total:${allEvents.length}`)
         this.calendarOptions.events = allEvents;
 
         // Debug
@@ -276,31 +294,39 @@ export default {
 
       console.log("SKICKAR event till modal:", this.selectedEvent);
     },
-    handleEventDrop(info) {
-      const updatedEvent = {
-        start: info.event.start,
-      };
+    async handleEventDrop(info) {
+      try {
+        const isMeeting = info.event.extendedProps?.isMeeting
+        const isExam = info.event.extendedProps?.type === 'exam'
 
-      const eventId = info.event.id;
-      const isMeeting = info.event.extendedProps?.isMeeting;
+        const newStart = info.event.start
+        const toDate = newStart ? new Date(newStart) : null
+        const toKey = toDate ? `${toDate.getFullYear()}-${String(toDate.getMonth()+1).padStart(2,'0')}-${String(toDate.getDate()).padStart(2,'0')}` : null
 
-      import('@/store/store.js').then(({ api }) => {
-        const endpoint = isMeeting ? `/meetings/${eventId}` : `/calendar-events/${eventId}`;
-        api
-          .put(endpoint, updatedEvent, { withCredentials: true })
-          .then(() => {
-            console.log(isMeeting ? "✅ Möte uppdaterat!" : "✅ Event uppdaterat!");          
-          })
-          .catch((err) => {
-            console.error(
-              isMeeting
-                ? "❌ Kunde inte uppdatera möte:"
-                : "❌ Kunde inte uppdatera event:",
-              err.response?.data || err.message
-            );
-            info.revert();
-          });
-      });
+        if (isExam && info.oldEvent) {
+          const teacherId = info.event.extendedProps?.teacherId
+          const oldStart = info.oldEvent.start || info.event.start
+          const old = new Date(oldStart)
+          const fromKey = `${old.getFullYear()}-${String(old.getMonth()+1).padStart(2,'0')}-${String(old.getDate()).padStart(2,'0')}`
+          if (!teacherId || !toKey) { info.revert(); return }
+          const { api } = await import('@/store/store.js')
+          await api.put('/calendar-events/move-group', { teacherId, fromDate: fromKey, toDate: toKey }, { withCredentials: true })
+          console.log('✅ Moved grouped exam from', fromKey, 'to', toKey)
+          await this.fetchEvents()
+          return
+        }
+
+        // Default behavior for saved events/meetings
+        const updatedEvent = { start: info.event.start }
+        const eventId = info.event.id
+        const { api } = await import('@/store/store.js')
+        const endpoint = isMeeting ? `/meetings/${eventId}` : `/calendar-events/${eventId}`
+        await api.put(endpoint, updatedEvent, { withCredentials: true })
+        console.log(isMeeting ? '✅ Möte uppdaterat!' : '✅ Event uppdaterat!')
+      } catch (err) {
+        console.error('❌ Kunde inte uppdatera (drag-drop):', err.response?.data || err.message)
+        info.revert()
+      }
     },
     async handleExamUpdate() {
       console.log("🔄 handleExamUpdate called - refreshing calendar data...");
