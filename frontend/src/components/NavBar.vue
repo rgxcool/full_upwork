@@ -7,6 +7,13 @@
         </router-link>
         <span class="build-counter" @click="toggleSecretMenu" ref="versionRef" style="cursor:pointer;">v. {{ buildVersion }}</span>
       </div>
+      
+      <!-- Mobile menu button -->
+      <button class="burger-menu" @click="toggleMobileMenu" aria-label="Toggle mobile menu">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+          <path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+        </svg>
+      </button>
       <div v-if="canSeeSearch" class="search-wrapper">
         <div class="search-bar-enhanced">
           <div class="search-type" @click="toggleSearchTypeDropdown">
@@ -124,6 +131,32 @@
         </ul>
       </div>
     </div>
+    
+    <!-- Mobile menu overlay -->
+    <div v-if="isMobileMenuOpen" class="mobile-overlay" @click="toggleMobileMenu"></div>
+    
+    <!-- Mobile menu -->
+    <div class="mobile-menu" :class="{ open: isMobileMenuOpen }">
+      <div class="mobile-menu-header">
+        <h3>Meny</h3>
+        <button class="mobile-menu-close" @click="toggleMobileMenu">✕</button>
+      </div>
+      <ul class="mobile-nav-links">
+        <li v-for="item in filteredMenuItems" :key="item.link">
+          <router-link 
+            :to="item.link" 
+            class="nav-link"
+            @click="toggleMobileMenu"
+          >
+            {{ item.name }}
+          </router-link>
+        </li>
+        <li v-if="isLoggedIn">
+          <button @click="logout" class="logout-btn">Logga ut</button>
+        </li>
+      </ul>
+    </div>
+    
     <!-- Always show login/register buttons at far right if not logged in -->
     <div v-if="!isLoggedIn" class="auth-buttons navbar-auth-buttons">
       <router-link to="/login" class="login-btn">Logga in</router-link>
@@ -927,6 +960,14 @@
     display: none;
     border: none;
     cursor: pointer;
+    background: none;
+    padding: 8px;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
+
+  .burger-menu:hover {
+    background: #f0f0f0;
   }
 
   @media (min-width: 769px) {
@@ -936,7 +977,7 @@
     }
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 480px) {
     .burger-menu {
       display: block;
       background: none;
@@ -970,6 +1011,36 @@
       transform: translateX(0); /* Detta visar menyn */
     }
 
+    .mobile-menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .mobile-menu-header h3 {
+      margin: 0;
+      color: #333;
+      font-size: 18px;
+    }
+
+    .mobile-menu-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: #666;
+      padding: 5px;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .mobile-menu-close:hover {
+      background: #f0f0f0;
+    }
+
     .mobile-overlay {
       position: fixed;
       top: 0;
@@ -995,6 +1066,13 @@
       padding: 10px;
       display: block;
       color: #333;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .mobile-nav-links .nav-link:hover {
+      background: #f5f5f5;
     }
 
     .logout-btn {
@@ -1005,7 +1083,7 @@
     }
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 480px) {
     .nav-links {
       display: none;
       flex-direction: column;
