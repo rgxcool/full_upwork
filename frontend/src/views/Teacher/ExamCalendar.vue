@@ -82,6 +82,7 @@ export default {
         plugins: [dayGridPlugin, interactionPlugin],
         initialView: 'dayGridWeek',
         editable: true,
+        eventStartEditable: true,
         selectable: true,
         events: [],
         eventClick: this.openEventModal,
@@ -167,7 +168,7 @@ export default {
         ? this.userRole === 'syv'
           ? 'Möte SYV & elev'
           : 'Möte Specped & elev'
-        : `Slutprov: ${event.extendedProps?.teacher || 'Okänd lärare'}`;
+        : (event.title || (event.extendedProps?.teacher || 'Okänd lärare'));
 
       calendarApi.addEvent({
         ...event,
@@ -230,6 +231,7 @@ export default {
             title: meeting.title,
             start: meeting.start,
             allDay: false,
+            editable: true,
             color: '#999999',
             extendedProps: {
               isMeeting: true,
@@ -239,8 +241,7 @@ export default {
               bookedBy: meeting.bookedBy || ''
             }
           }))
-
-        const allEvents = [...mappedSaved, ...mappedSynced, ...mappedMeetings]
+        ];
 
         // Use FullCalendar API to ensure DnD works immediately without page refresh
         const calendarApi = this.$refs.fullCalendar.getApi();
