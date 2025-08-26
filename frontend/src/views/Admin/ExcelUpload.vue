@@ -12,6 +12,7 @@
       </div>
 
       <!-- File upload -->
+      <!--
       <div class="form-container">
         <form @submit.prevent="uploadFile">
           <div class="file-input-wrapper">
@@ -22,12 +23,13 @@
           </div>
         </form>
       </div>
-
+      -->
       <br />
 
       <div class="controls">
         <h2>Elever</h2>
         <input type="text" v-model="searchQuery" placeholder="Sök" class="mb-3 search-input" />
+        <!-- 
         <button 
           v-if="$store.getters.isSystemAdmin" 
           class="btn btn-danger delete-all-btn" 
@@ -35,6 +37,7 @@
         >
           Delete All Students
         </button>
+        --> 
       </div>
 
       <!-- Student table -->
@@ -45,7 +48,7 @@
               <th>Namn</th>
               <th>Personnummer</th>
               <th>Utbildning</th>
-              <th>Edit</th>
+              <!-- <th>Edit</th> -->
               <th>Startdatum</th>
               <th>Slutdatum</th>
               <th>Slutprov</th>
@@ -54,8 +57,8 @@
               <th>Email</th>
               <th>Övrigt</th>
               <th>Lärare</th>
-              <th class="dropout-column">Avhopp</th>
-              <th></th>
+              <!-- <th class="dropout-column">Avhopp</th> -->
+              <!-- <th></th> -->
             </tr>
           </thead>
           <tbody>
@@ -77,18 +80,20 @@
                   </ul>
                 </div>
               </td>
-              <td>
+              <!-- EDIT BUTTON
+              <td>  
                 <button class="btn btn-secondary btn-xs" @click="openEditStudent(student)">
                   Edit
                 </button>
               </td>
+              -->
               <td>{{ formatDate(student.startDate) }}</td>
               <td>{{ formatDate(student.endDate) }}</td>
               <td>{{ formatDate(student.finalExamDate) }}</td>
               <td>{{ student.municipality?.type || 'Ingen kommun' }}</td>
               <td>{{ student.phone }}</td>
               <td>{{ student.email }}</td>
-              <td>
+              <td class="ovrigt-cell">
                 <div class="comment-container" @click="toggleComment(student._id)">
                   <span
                     class="comment-text"
@@ -109,6 +114,7 @@
               </td>
 
               <td>{{ student.teacher }}</td>
+              <!-- DROP OUT BUTTON
               <td class="dropout-column">
                 <button
                   :class="['dropout-btn', student.dropout ? 'dropout-active' : 'dropout-inactive']"
@@ -125,6 +131,7 @@
                   Delete
                 </button>
               </td>
+              -->
             </tr>
           </tbody>
         </table>
@@ -531,7 +538,12 @@
         } catch (error) {
           console.error('❌ Error uploading file:', error.response?.data?.error || error)
 
-          if (error.response?.status === 409) {
+          if (error.response?.status === 422 && Array.isArray(error.response?.data?.reasons)) {
+            const reasons = error.response.data.reasons
+              .map(r => `- ${r.student}: ${r.message}`)
+              .join('\n')
+            alert(`❌ Upload aborted due to unmatched courses:\n${reasons}`)
+          } else if (error.response?.status === 409) {
             alert('⚠️ Some students were already in the system and were not added.')
           } else if (error.response?.status === 401) {
             alert('❌ Du är inte inloggad. Vänligen logga in igen.')
@@ -741,7 +753,7 @@
   }
 
   .comment-container {
-    max-width: 200px;
+    max-width: none;
     cursor: pointer;
     position: relative;
     color: #333;
@@ -749,6 +761,7 @@
 
   .comment-text.truncated {
     display: inline;
+    white-space: nowrap;
   }
 
   .dots {
@@ -847,7 +860,8 @@
   }
 
   .dynamic-table {
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
     table-layout: auto;
     border-collapse: collapse;
   }
@@ -860,12 +874,17 @@
     /* Slightly tighter spacing */
     text-align: left;
     /* Ensure left alignment */
-    vertical-align: middle;
-    /* Center content vertically */
+    vertical-align: top;
+    /* Align to top so multi-line Övrigt expands downward */
     white-space: nowrap;
-    /* Prevents unwanted wrapping */
+    /* Prevents unwanted wrapping by default */
     border: 1px solid #ddd;
     /* Add border */
+  }
+
+  /* Do not wrap inside the Övrigt column */
+  td.ovrigt-cell, td.ovrigt-cell * {
+    white-space: nowrap !important;
   }
 
   .course-list ul,

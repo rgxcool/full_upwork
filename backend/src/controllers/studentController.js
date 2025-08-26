@@ -203,6 +203,68 @@ async function uploadXlsx(req, res) {
 
         const now = new Date();
 
+        // ---------------------------------------------
+        // Pre-validation: abort upload if any course cannot be matched
+        // ---------------------------------------------
+        (function prevalidateUnmatchedCourses() {
+            const reasons = [];
+
+            function strictMatch(target, candidates) {
+                if (candidates.includes(target)) return target;
+                let best = null;
+                let minDistance = Infinity;
+                for (const candidate of candidates) {
+                    const d = distance(target, candidate);
+                    if (d < minDistance) {
+                        minDistance = d;
+                        best = candidate;
+                    }
+                }
+                if (target.length > 12 && minDistance === 1) return best;
+                return null;
+            }
+
+            for (const student of mergedStudents) {
+                const studentIdLabel = student.email || student.name || "unknown";
+                const entries = Array.isArray(student.education) ? student.education : [];
+                for (const entry of entries) {
+                    let normalizedName = normalize(entry.name);
+                    normalizedName = normalizedName.replace(/[-\s]*\d+\s*v$/i, '');
+                    normalizedName = normalizedName.replace(/[-\s]*\d+v$/i, '');
+                    normalizedName = normalizedName.replace(/\d+v$/i, '');
+
+                    const isCourse = /NIVÅ\s*\d+$/i.test(normalizedName);
+                    let type = isCourse ? "Course" : "CoursePackage";
+
+                    const matchPackage = strictMatch(
+                        normalizedName,
+                        Object.keys(normalizedPackageMap)
+                    );
+                    const matchCourse = strictMatch(
+                        normalizedName,
+                        Object.keys(normalizedCourseMap)
+                    );
+
+                    // Treat as failure when an entry is a course and neither a course nor package match exists
+                    if (type === 'Course' && !matchCourse && !matchPackage) {
+                        reasons.push({
+                            type: 'no_match',
+                            student: studentIdLabel,
+                            courseName: entry.name,
+                            message: `No matching course found for "${entry.name}" for student ${studentIdLabel}`,
+                        });
+                    }
+                }
+            }
+
+            if (reasons.length > 0) {
+                throw Object.assign(new Error('Unmatched courses found; upload aborted.'), {
+                    statusCode: 422,
+                    reasons,
+                });
+            }
+        })();
+
         const warnings = [];
         const bulkOps = await Promise.all(
             mergedStudents.map(async (student) => {
@@ -400,10 +462,11 @@ async function uploadXlsx(req, res) {
         });
     } catch (err) {
         console.error("❌ Upload failed:", err);
-        res.status(500).json({
-            error: "Failed to process file",
-            details: err.message,
-        });
+        const status = err.statusCode || 500;
+        const payload = err.statusCode === 422
+            ? { error: "Unmatched courses found; upload aborted.", reasons: err.reasons }
+            : { error: "Failed to process file", details: err.message };
+        res.status(status).json(payload);
     }
 }
 

@@ -41,7 +41,7 @@
       const refId = typeof education.refId === 'object' ? education.refId._id : education.refId
 
       const res = await axios.put(
-        `http://localhost:5001/api/students/${student.value._id}/education/${refId}/status`,
+        `${import.meta.env.VITE_API_URL}/api/students/${student.value._id}/education/${refId}/status`,
         { status: education.status }
       )
       console.log('✅ Uppdaterad:', res.data)

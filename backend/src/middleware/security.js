@@ -389,6 +389,8 @@ export const corsConfig = {
         const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
             "http://localhost:5173",
             "http://localhost:3000",
+            "https://mindfullearning.se",
+            "https://www.mindfullearning.se",
         ];
 
         // Allow requests with no origin (like mobile apps or curl requests)

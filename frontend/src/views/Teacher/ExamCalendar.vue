@@ -239,7 +239,8 @@ export default {
               bookedBy: meeting.bookedBy || ''
             }
           }))
-        ];
+
+        const allEvents = [...mappedSaved, ...mappedSynced, ...mappedMeetings]
 
         // Use FullCalendar API to ensure DnD works immediately without page refresh
         const calendarApi = this.$refs.fullCalendar.getApi();

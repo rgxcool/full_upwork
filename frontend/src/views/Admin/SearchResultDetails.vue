@@ -59,7 +59,7 @@ export default {
       console.log("🔍 Requesting details for:", type, id);
 
       try {
-        const response = await axios.get(`http://localhost:5001/api/details/${type}/${id}`);
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/details/${type}/${id}`);
         data.value = response.data;
         console.log("✅ Data received:", response.data);
       } catch (error) {
