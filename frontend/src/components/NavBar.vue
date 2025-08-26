@@ -133,7 +133,7 @@
     </div>
     
     <!-- Mobile menu overlay -->
-    <div v-if="isMobileMenuOpen" class="mobile-overlay" @click="toggleMobileMenu"></div>
+    <div class="mobile-overlay" :class="{ active: isMobileMenuOpen }" @click="toggleMobileMenu"></div>
     
     <!-- Mobile menu -->
     <div class="mobile-menu" :class="{ open: isMobileMenuOpen }">
@@ -964,6 +964,8 @@
     padding: 8px;
     border-radius: 4px;
     transition: background 0.2s;
+    position: relative;
+    z-index: 1001;
   }
 
   .burger-menu:hover {
@@ -973,6 +975,17 @@
   @media (min-width: 769px) {
     .mobile-menu,
     .mobile-overlay {
+      display: none !important;
+    }
+  }
+
+  @media (min-width: 481px) and (max-width: 768px) {
+    .mobile-menu,
+    .mobile-overlay {
+      display: none !important;
+    }
+    
+    .burger-menu {
       display: none !important;
     }
   }
@@ -1000,15 +1013,20 @@
       background-color: #fff;
       box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
       transform: translateX(100%);
-      transition: transform 0.3s ease;
+      transition: all 0.3s ease;
       padding: 20px;
       z-index: 2000;
       display: flex;
       flex-direction: column;
+      visibility: hidden;
+      opacity: 0;
+      overflow-y: auto;
     }
 
     .mobile-menu.open {
       transform: translateX(0); /* Detta visar menyn */
+      visibility: visible;
+      opacity: 1;
     }
 
     .mobile-menu-header {
@@ -1049,6 +1067,14 @@
       height: 100vh;
       background: rgba(0, 0, 0, 0.4);
       z-index: 1500;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .mobile-overlay.active {
+      opacity: 1;
+      visibility: visible;
     }
 
     .mobile-nav-links {
