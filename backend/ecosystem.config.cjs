@@ -16,6 +16,7 @@ module.exports = {
                 JWT_SECRET: "jwt_mindful",
                 GOOGLE_PWD: "adyf munl feof bwgj",
                 CLIENT_URL: "https://mindfullearning.se",
+                ALLOWED_ORIGINS: "https://mindfullearning.se,https://www.mindfullearning.se,http://localhost:5173",
             },
         },
     ],

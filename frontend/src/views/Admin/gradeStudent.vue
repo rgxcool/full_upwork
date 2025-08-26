@@ -160,7 +160,7 @@
 
   const fetchUngraded = async () => {
     try {
-      const response = await axios.get('http://localhost:5001/api/students/ungraded')
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/students/ungraded`)
       students.value = response.data
     } catch (err) {
       console.error('Fel vid hämtning:', err)
@@ -199,7 +199,7 @@
       const { studentId, courseId, grade, reason, comments, npScore } = gradeData.value
 
       // Sending the grade data to the backend
-      await axios.post('http://localhost:5001/api/teacher/save-grade', gradeData.value, {
+              await axios.post(`${import.meta.env.VITE_API_URL}/api/teacher/save-grade`, gradeData.value, {
         withCredentials: true,
       })
 
@@ -230,7 +230,7 @@
   const lockGrade = async (row) => {
     try {
       await axios.post(
-        'http://localhost:5001/api/teacher/lock-grade',
+        `${import.meta.env.VITE_API_URL}/api/teacher/lock-grade`,
         {
           studentId: row.studentId,
           courseId: row.refId,

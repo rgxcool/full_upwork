@@ -6,6 +6,8 @@ import { parseStudentExcel } from "../utils/parseStudentExcel.js";
 import { createOrFindTeacher } from "../utils/teacherService.js";
 import { createGlobalNotification } from "../controllers/notificationController.js";
 import { normalizeMunicipalityName } from "./studentController.js";
+import Course from "../models/Course.js";
+import { distance } from "fastest-levenshtein";
 
 /**
  * Course Matching Controller
@@ -58,6 +60,73 @@ export const uploadStudentsForMatching = async (req, res) => {
             createdTeachers: [],
             enrollments: [], // <-- add this line
         };
+
+        // ---------------------------------------------
+        // Sanitize and pre-validate parsed data before any DB writes
+        // - Convert Excel richText objects to strings
+        // - Ensure education entry names are strings
+        // - Collect reasons and abort with 422 if any unconvertible values exist
+        // ---------------------------------------------
+        (function sanitizeAndValidateParsedStudents() {
+            const reasons = [];
+
+            function coerceToString(value) {
+                if (value === undefined || value === null) return '';
+                if (typeof value === 'string') return value;
+                if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+                if (typeof value === 'object') {
+                    // xlsx richText object: { richText: [ { text: '...' }, ... ] }
+                    if (Array.isArray(value.richText)) {
+                        return value.richText.map(part => (typeof part?.text === 'string' ? part.text : '')).join('');
+                    }
+                    if (typeof value.text === 'string') {
+                        return value.text;
+                    }
+                }
+                return null; // not safely convertible
+            }
+
+            for (const student of parsedStudents) {
+                const studentIdLabel = student.email || student.name || 'unknown';
+
+                // additionalInfo
+                const coercedAdditional = coerceToString(student.additionalInfo);
+                if (coercedAdditional === null) {
+                    reasons.push({
+                        type: 'invalid_field',
+                        student: studentIdLabel,
+                        field: 'additionalInfo',
+                        message: `Unable to convert 'additionalInfo' to text for student ${studentIdLabel}.`,
+                    });
+                } else {
+                    student.additionalInfo = coercedAdditional;
+                }
+
+                // education entry names
+                if (Array.isArray(student.education)) {
+                    for (const entry of student.education) {
+                        const coercedName = coerceToString(entry?.name);
+                        if (coercedName === null || coercedName.trim() === '') {
+                            reasons.push({
+                                type: 'invalid_field',
+                                student: studentIdLabel,
+                                field: 'education.name',
+                                message: `Invalid course/package name in education for student ${studentIdLabel}.`,
+                            });
+                        } else {
+                            entry.name = coercedName;
+                        }
+                    }
+                }
+            }
+
+            if (reasons.length > 0) {
+                const error = new Error('Data validation failed; upload aborted.');
+                error.statusCode = 422;
+                error.reasons = reasons;
+                throw error;
+            }
+        })();
 
         // Handle teacher creation if needed
         let teacherInfo = null;
@@ -112,6 +181,83 @@ export const uploadStudentsForMatching = async (req, res) => {
             const norm = (pkg.coursePackageName || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
             normalizedPackageMap[norm] = pkg;
         }
+
+        // Build normalized course map
+        const allCourses = await Course.find({}).lean();
+        const normalizedCourseMap = {};
+        for (const c of allCourses) {
+            const norm = (c.courseName || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
+            normalizedCourseMap[norm] = c;
+        }
+
+        // Pre-validation: if any course or package entry cannot be matched, abort upload
+        (function prevalidateUnmatchedCourses() {
+            const reasons = [];
+
+            function strictMatch(target, candidates) {
+                if (candidates.includes(target)) return target;
+                let best = null;
+                let minDistance = Infinity;
+                for (const candidate of candidates) {
+                    const d = distance(target, candidate);
+                    if (d < minDistance) {
+                        minDistance = d;
+                        best = candidate;
+                    }
+                }
+                if (target.length > 12 && minDistance === 1) return best;
+                return null;
+            }
+
+            for (const student of parsedStudents) {
+                const studentIdLabel = student.email || student.name || 'unknown';
+                const entries = Array.isArray(student.education) ? student.education : [];
+                for (const entry of entries) {
+                    let normalized = (entry.name || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
+                    normalized = normalized.replace(/[-\s]*\d+\s*v$/i, '');
+                    normalized = normalized.replace(/[-\s]*\d+v$/i, '');
+                    normalized = normalized.replace(/\d+v$/i, '');
+                    const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
+
+                    let type = null;
+                    if (normalizedPackageMap[normalized]) {
+                        type = 'CoursePackage';
+                    } else {
+                        type = isCourse ? 'Course' : 'CoursePackage';
+                    }
+
+                    const matchPkg = strictMatch(normalized, Object.keys(normalizedPackageMap));
+                    const matchCourse = strictMatch(normalized, Object.keys(normalizedCourseMap));
+
+                    if (type === 'Course') {
+                        if (!matchCourse && !matchPkg) {
+                            reasons.push({
+                                type: 'no_match',
+                                student: studentIdLabel,
+                                courseName: entry.name,
+                                message: `No matching course found for "${entry.name}" for student ${studentIdLabel}`,
+                            });
+                        }
+                    } else if (type === 'CoursePackage') {
+                        if (!matchPkg) {
+                            reasons.push({
+                                type: 'no_package_match',
+                                student: studentIdLabel,
+                                courseName: entry.name,
+                                message: `No matching course package found for "${entry.name}" for student ${studentIdLabel}`,
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (reasons.length > 0) {
+                const error = new Error('Unmatched courses found; upload aborted.');
+                error.statusCode = 422;
+                error.reasons = reasons;
+                throw error;
+            }
+        })();
 
         // Process each student with the new course versioning system
         for (const studentData of parsedStudents) {
@@ -369,6 +515,13 @@ export const uploadStudentsForMatching = async (req, res) => {
         });
     } catch (error) {
         console.error("Error uploading students for matching:", error);
+        const status = error.statusCode || 500;
+        if (status === 422) {
+            return res.status(422).json({
+                error: "Unmatched courses found; upload aborted.",
+                reasons: error.reasons || [],
+            });
+        }
         res.status(500).json({ error: "Internal server error" });
     }
 };

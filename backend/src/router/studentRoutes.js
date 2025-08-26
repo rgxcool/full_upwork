@@ -382,6 +382,28 @@ router.get("/student/:id", async (req, res) => {
 });
 
 /**
+ * @route   GET /student/:id/basic
+ * @desc    Fetches a single student with only basic fields (no populate).
+ * @access  Public
+ */
+router.get("/student/:id/basic", async (req, res) => {
+  try {
+    const student = await Student.findById(req.params.id)
+      .select(
+        "name personalNumber teacherId aplStatus startDate endDate finalExamDate examTime examMunicipality examLocation dropout"
+      )
+      .lean();
+
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    res.json(student);
+  } catch (error) {
+    console.error("❌ Error fetching basic student:", error);
+    res.status(500).json({ error: "Failed to fetch basic student details" });
+  }
+});
+
+/**
  * @route   DELETE /student/:id
  * @desc    Deletes a specific student.
  * @access  Public
@@ -551,6 +573,7 @@ router.put("/student/:id", async (req, res) => {
     "email",
     "exam",
     "teacher",
+    "teacherId",
     "dropout",
     "startDate",
     "endDate",

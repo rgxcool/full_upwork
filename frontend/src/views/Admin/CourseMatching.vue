@@ -12,8 +12,9 @@
           <div class="card-header">
             <h5>Batch-bearbetning av studenter</h5>
           </div>
+          
           <div class="card-body">
-            <!-- Debug section -->
+          <!--   Debug section
             <div
               class="debug-info"
               style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px"
@@ -36,15 +37,24 @@
                 {{ api.defaults.baseURL }}
               </p>
             </div>
+            -->
             <div class="form-group">
               <label for="studentFile">Excel-fil med studenter:</label>
               <input
                 type="file"
                 id="studentFile"
+                ref="studentFileInput"
                 @change="handleFileChange"
                 accept=".xlsx,.xls"
                 class="form-control"
+                style="display: none;"
               />
+              <button type="button" class="btn btn-logo" @click="triggerFileSelect">
+                Välj fil
+              </button>
+              <span class="selected-file-name" v-if="selectedFile">
+                {{ selectedFile.name }}
+              </span>
             </div>
 
             <div v-if="uploadedStudents.length > 0" class="upload-summary">
@@ -152,6 +162,12 @@
       const courses = ref([])
       // Remove statistics and statsFilters
 
+      const studentFileInput = ref(null)
+
+      const triggerFileSelect = () => {
+        if (studentFileInput.value) studentFileInput.value.click()
+      }
+
       const handleFileChange = (event) => {
         const file = event.target.files[0]
         if (!file) return
@@ -174,7 +190,14 @@
           processingResults.value = response.data.results || null
         } catch (error) {
           console.error('Error processing students:', error)
-          alert('Ett fel uppstod vid bearbetning av studenter.')
+          if (error.response?.status === 422 && Array.isArray(error.response?.data?.reasons)) {
+            const reasons = error.response.data.reasons
+              .map(r => `- ${r.student || ''} ${r.field ? '(' + r.field + ')' : ''}: ${r.message}`.trim())
+              .join('\n')
+            alert(`Uppladdning avbröts p.g.a. valideringsfel:\n${reasons}`)
+          } else {
+            alert('Ett fel uppstod vid bearbetning av studenter.')
+          }
         } finally {
           isProcessing.value = false
         }
@@ -211,6 +234,7 @@
         userRole,
         isAdmin,
         api,
+        studentFileInput,
         selectedFile,
         uploadedStudents,
         isProcessing,
@@ -218,6 +242,7 @@
         courses,
         // Remove statistics and statsFilters from returned object
         handleFileChange,
+        triggerFileSelect,
         processStudents,
         // Remove loadStatistics,
         getEnrollmentCount,
@@ -449,6 +474,20 @@
   .btn-primary {
     background: #2c9316;
     color: white;
+  }
+
+  /* Logo blue button */
+  .btn-logo {
+    background: #2b5cab; /* approximate Mindful logo blue */
+    color: #ffffff;
+  }
+  .btn-logo:hover {
+    filter: brightness(0.95);
+  }
+  .selected-file-name {
+    margin-left: 8px;
+    font-size: 13px;
+    color: #2c3e50;
   }
 
   .btn-success {

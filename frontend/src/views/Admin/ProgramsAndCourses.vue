@@ -7,7 +7,7 @@
   const error = ref(null)
 
   // API Base URL - Change this if necessary
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001'
+  const API_BASE_URL = import.meta.env.VITE_API_URL
 
   const fetchPrograms = async () => {
     try {

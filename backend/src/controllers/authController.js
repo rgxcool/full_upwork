@@ -56,23 +56,16 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log(`🔹 Backend: Attempting login with email: ${email}`);
 
     const user = await User.findOne({ email });
     if (!user) {
-      console.log("❌ User not found:", email);
       return res.status(401).json({ error: "Fel email eller lösenord!" });
     }
-
-    console.log(`✅ User found: ${user.email} (Role: ${user.role})`);
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      console.log("❌ Passwords do NOT match!");
       return res.status(401).json({ error: "Fel email eller lösenord!" });
     }
-
-    console.log("✅ Password match! Generating token...");
 
     const token = jwt.sign(
       {
@@ -85,16 +78,12 @@ export const login = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    console.log("🔹 Backend: Setting token cookie...");
-
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-
-    console.log("🔍 Set-Cookie Header:", res.getHeaders()["set-cookie"]);
 
     res.json({
       message: "Login successful",
@@ -122,7 +111,6 @@ export const authenticateUser = (req, res, next) => {
   let token = req.cookies?.token;
 
   if (!token) {
-    console.log("Didn't find cookie, checking Authorization header...");
     const authHeader = req.headers.authorization;
 
     if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -135,7 +123,6 @@ export const authenticateUser = (req, res, next) => {
   }
 
   try {
-    console.log("Verifying token");
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // 🛠 Set full decoded user with fallback `id`
@@ -148,7 +135,6 @@ export const authenticateUser = (req, res, next) => {
         .json({ error: "Autentisering saknas (No userId in token)." });
     }
 
-    console.log("✅ Token verified, userId:", req.userId);
     next();
   } catch (error) {
     console.error("❌ JWT verification error:", error.message);

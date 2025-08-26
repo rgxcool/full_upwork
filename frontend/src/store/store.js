@@ -85,8 +85,6 @@ export default createStore({
 
   actions: {
     async login({ dispatch }, credentials) {
-      console.log('🔹 Vuex: Attempting login with:', credentials)
-
       try {
         await api.post('/auth/login', {
           email: credentials.email.trim(),
