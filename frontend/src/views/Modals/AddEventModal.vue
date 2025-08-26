@@ -57,7 +57,7 @@ export default {
           additionalInfo: s.additionalInfo || "",
           attended: false,
         }));
-        const event = {
+        const payload = {
           title: this.selectedTeacher?.name || "Okänd lärare",
           start: this.date,
           color: this.selectedTeacher?.color || "grey",
@@ -71,8 +71,16 @@ export default {
             students: formattedStudents,
           },
         };
-        await axios.post(`${import.meta.env.VITE_API_URL}/api/calendar-events`, event);
-        this.$emit("event-added", event);
+        const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/calendar-events`, payload);
+        const saved = data?.event || {};
+        const emittedEvent = {
+          id: saved._id, // ensure we have a real DB id for immediate DnD
+          title: saved.title || payload.title,
+          start: saved.start || payload.start,
+          color: saved.color || payload.color,
+          extendedProps: { ...(saved.extendedProps || payload.extendedProps), saved: true, isExam: true, type: 'exam' },
+        };
+        this.$emit("event-added", emittedEvent);
         this.$emit("close");
       } catch (err) {
         alert("Kunde inte spara event. Kontrollera konsolen för mer info.");

@@ -214,15 +214,16 @@ export default {
             start: event.start,
             allDay: true,
             color: event.color || "#999999",
-            extendedProps: event.extendedProps || {}
+            extendedProps: { ...(event.extendedProps || {}), saved: true }
           })),
           ...syncedEvents.data.map(event => ({
-            id: event._id,
+            id: event.id, // comes from /calendar-events/syncable
             title: event.title,
             start: event.start,
             allDay: true,
             color: event.color || "#999999",
-            extendedProps: event.extendedProps || {}
+            editable: false, // prevent drag on synced (derived) events
+            extendedProps: { ...(event.extendedProps || {}), synced: true }
           })),
           ...meetings.data.map(meeting => ({
             id: meeting._id,
@@ -240,7 +241,10 @@ export default {
           }))
         ];
 
-        this.calendarOptions.events = allEvents;
+        // Use FullCalendar API to ensure DnD works immediately without page refresh
+        const calendarApi = this.$refs.fullCalendar.getApi();
+        calendarApi.removeAllEvents();
+        allEvents.forEach(e => calendarApi.addEvent(e));
 
         // Debug
         console.log("Alla events som skickas till kalendern:", allEvents);
@@ -283,6 +287,15 @@ export default {
 
       const eventId = info.event.id;
       const isMeeting = info.event.extendedProps?.isMeeting;
+      const isSavedCalendarEvent = info.event.extendedProps?.saved === true;
+      const isSynced = info.event.extendedProps?.synced === true;
+
+      // Guard: do not allow dragging of synced (derived) events without a real DB id
+      if (!isMeeting && !isSavedCalendarEvent) {
+        console.warn('🟠 Dragging is only allowed for sparade kalender-händelser och möten.');
+        info.revert();
+        return;
+      }
 
       import('@/store/store.js').then(({ api }) => {
         const endpoint = isMeeting ? `/meetings/${eventId}` : `/calendar-events/${eventId}`;
