@@ -354,7 +354,23 @@ export default {
 
       this.isSaving = true;
       try {
-        const students = this.studentsData;
+        // Prefer locally loaded students; fallback to event props
+        const students = (this.studentsData && this.studentsData.length > 0)
+          ? this.studentsData
+          : Array.isArray(this.event?.extendedProps?.students)
+            ? this.event.extendedProps.students
+            : [];
+
+        const studentIds = students
+          .map(s => s?._id)
+          .filter(id => !!id);
+
+        if (studentIds.length === 0) {
+          this.isSaving = false;
+          console.error('❌ Inga student-ID:n tillgängliga för uppdatering.');
+          alert('Inga studenter kopplade till detta prov kunde hittas. Försök ladda om sidan eller öppna eventet igen.');
+          return;
+        }
         const teacherId = this.event.extendedProps?.teacherId || this.event.teacherId;
 
         // Use the first student's exam date if available, otherwise use the event date
@@ -391,7 +407,7 @@ export default {
         await axios.post(
           `${import.meta.env.VITE_API_URL}/api/examtime-location`,
           {
-            studentIds: students.map(s => s._id),
+            studentIds,
             examTime: this.examTime,
             examMunicipality: this.examMunicipality,
             examLocation: this.examLocation,
