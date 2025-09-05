@@ -111,6 +111,10 @@
           <i class="fas fa-info-circle me-2"></i>
           <strong>Betygssättning:</strong> Elever som läggs till här kommer automatiskt att visas i betygsmodulen 1 vecka innan kursen slutar för betygsättning.
         </div>
+        <div class="alert alert-success mb-3">
+          <i class="fas fa-check-circle me-2"></i>
+          <strong>APL Integration:</strong> Elever med kurspaket kommer automatiskt att visas på APL-listan med status "Ej börjat" (GRAY).
+        </div>
         
         <!-- Program Selection -->
         <div class="mb-3">
@@ -387,6 +391,10 @@ import axios from 'axios'
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
 import { ref, reactive, watch, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+// Router
+const router = useRouter()
 
 // Reactive data
 const programs = ref([])
@@ -782,16 +790,24 @@ const submitStudentForm = async () => {
       education: education,
     }
     
-    await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, payload, {
+    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, payload, {
       withCredentials: true,
     })
     
+    console.log('✅ Student created successfully:', response.data)
+    console.log('📋 Education entries:', response.data.education)
+    
     successMessage.value = '✅ Eleven har lagts till framgångsrikt!'
+    
+    // Reset form immediately
     resetForm()
     
+    // Show success message and then navigate to APL list
     setTimeout(() => {
       successMessage.value = ''
-    }, 5000)
+      // Navigate to APL list to see the newly added student
+      router.push('/apl')
+    }, 2000)
     
   } catch (error) {
     console.error('❌ Backend error:', error.response?.data || error)
@@ -963,6 +979,16 @@ onMounted(fetchInitialData)
 
 .alert-info .fas {
   color: #0c5460;
+}
+
+.alert-success {
+  background-color: #d4edda;
+  border-color: #c3e6cb;
+  color: #155724;
+}
+
+.alert-success .fas {
+  color: #155724;
 }
 
 @media (max-width: 768px) {
