@@ -979,7 +979,7 @@
     }
   }
 
-  @media (min-width: 481px) and (max-width: 768px) {
+  @media (min-width: 300px) and (max-width: 768px) {
     .mobile-menu,
     .mobile-overlay {
       display: none !important;
@@ -990,7 +990,7 @@
     }
   }
 
-  @media (max-width: 480px) {
+  @media (max-width: 300px) {
     .burger-menu {
       display: block;
       background: none;
@@ -1109,7 +1109,7 @@
     }
   }
 
-  @media (max-width: 480px) {
+  @media (max-width: 300px) {
     .nav-links {
       display: none;
       flex-direction: column;
