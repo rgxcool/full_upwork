@@ -219,13 +219,32 @@ router.get("/students", authenticateUser, async (req, res) => {
 
 /**
  * @route   POST /student
- * @desc    Adds a new student to the database.
+ * @desc    Adds a new student to the database and creates enrollments for grading.
  * @access  Public
  */
 router.post("/student", async (req, res) => {
   try {
     const student = new Student(req.body);
     const savedStudent = await student.save();
+    
+    // If education entries exist, create StudentEnrollment records for grading
+    if (req.body.education && req.body.education.length > 0) {
+      const CourseMatchingService = await import('../utils/courseMatchingService.js');
+      
+      try {
+        const enrollmentResult = await CourseMatchingService.default.processStudentEducation(
+          savedStudent._id,
+          req.body.education,
+          req.body.createdBy || null
+        );
+        
+        console.log(`✅ Created ${enrollmentResult?.enrollments?.length || 0} enrollments for student ${savedStudent.name}`);
+      } catch (enrollmentError) {
+        console.error("❌ Error creating enrollments:", enrollmentError);
+        // Don't fail the student creation if enrollment creation fails
+      }
+    }
+    
     res.status(201).json(savedStudent);
   } catch (error) {
     console.error("❌ Error adding student:", error.message);
