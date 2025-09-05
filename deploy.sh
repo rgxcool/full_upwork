@@ -16,6 +16,11 @@ echo "📦 Installing frontend dependencies..."
 cd ../frontend
 npm install
 
+# Ensure higher heap size just for this command (4–6 GB is typical; pick what your box can spare)
+export NODE_OPTIONS="--max-old-space-size=6144"
+NODE_OPTIONS="--max-old-space-size=4096" npm --prefix frontend run build
+unset NODE_OPTIONS
+
 echo "🏗️ Building frontend for production..."
 export VITE_API_URL=""
 npm run build
