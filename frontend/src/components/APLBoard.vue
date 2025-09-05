@@ -1,6 +1,11 @@
 <template>
   <div class="summary centered">
-    <h2>📊 APL Statusöversikt</h2>
+    <div class="summary-header">
+      <h2>📊 APL Statusöversikt</h2>
+      <button @click="fetchStudents" class="refresh-btn" title="Uppdatera data">
+        <i class="fas fa-sync-alt"></i>
+      </button>
+    </div>
     <table>
       <tbody>
         <tr v-for="status in statusMap" :key="status.key">
@@ -31,6 +36,15 @@
     >
       Kopierat
     </div>
+    <!-- Debug info 
+    <div style="background: yellow; padding: 10px; margin: 10px; border: 2px solid red;">
+      <strong>🔍 DEBUG INFO:</strong><br>
+      StatusMap length: {{ statusMap.length }}<br>
+      StudentsByStatus keys: {{ Object.keys(studentsByStatus) }}<br>
+      FilteredStudents length: {{ filteredStudents.length }}<br>
+      StudentsByStatus: {{ JSON.stringify(studentsByStatus, null, 2) }}
+    </div>
+    -->
     <div
       v-for="status in statusMap"
       :key="status.key"
@@ -39,7 +53,9 @@
       @dragover.prevent
       @drop="handleDrop($event, status.key)"
     >
-      <h3>{{ status.label }}</h3>
+      <h3>
+        {{ status.label }} ({{ studentsByStatus[status.key]?.length || 0 }})
+      </h3>
       <div
         v-for="student in studentsByStatus[status.key] || []"
         :key="student._id"
@@ -58,6 +74,9 @@
         >
           {{ commentStatus(student) === 'unseen' ? 'mdi-note-text' : 'mdi-pencil' }}
         </v-icon>
+      </div>
+      <div v-if="(studentsByStatus[status.key] || []).length === 0" style="color: #666; font-style: italic; text-align: center; padding: 20px;">
+        Inga studenter i denna kolumn
       </div>
     </div>
     <v-dialog v-model="dialog" max-width="600px">
@@ -169,12 +188,14 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted, nextTick } from 'vue'
-  import axios from 'axios'
-  import { useStore } from 'vuex'
-  import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
+  import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import axios from 'axios'
+import { useStore } from 'vuex'
+import { useRoute } from 'vue-router'
+import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
 
   const store = useStore()
+  const route = useRoute()
   const currentUser = computed(() => store.state.user)
   console.log('Current user:', currentUser.value)
 
@@ -202,33 +223,35 @@
     
     // First, let's see all students with CoursePackage entries regardless of date
     const allStudentsWithPackages = students.value.filter(student => {
-      if (!Array.isArray(student.education)) return false
-      return student.education.some(edu => {
+      if (!Array.isArray(student.education)) {
+        return false
+      }
+      
+      const hasCoursePackage = student.education.some(edu => {
         if (edu.type !== 'CoursePackage') return false
         return true // Include all CoursePackage entries, regardless of startDate
       })
+      
+      return hasCoursePackage
     })
-    
-    console.log(`[DEBUG] APL Filtering: Total students: ${students.value.length}, Students with CoursePackage entries: ${allStudentsWithPackages.length}`)
-    console.log(`[DEBUG] APL Filtering: All students with CoursePackage entries:`, allStudentsWithPackages.map(s => ({
-      name: s.name,
-      email: s.email,
-      coursePackages: s.education?.filter(e => e.type === 'CoursePackage').map(e => ({
-        name: e.name,
-        startDate: e.startDate,
-        hasStartDate: !!e.startDate,
-        startDateValid: e.startDate ? new Date(e.startDate) <= now : false
-      }))
-    })))
     
     // For now, return all students with CoursePackage entries (temporarily removing date restriction)
     // TODO: Add a toggle to switch between "all CoursePackage students" and "only past startDate students"
+    
+    // If no students with course packages found, show all students for debugging
+    if (allStudentsWithPackages.length === 0) {
+      return students.value
+    }
+    
     return allStudentsWithPackages
   })
 
   // Update studentsByStatus and statusCounts to use filteredStudents
   const studentsByStatus = computed(() => {
-    if (!Array.isArray(filteredStudents.value)) return {}
+    if (!Array.isArray(filteredStudents.value)) {
+      return {}
+    }
+    
     return statusMap.reduce((acc, status) => {
       acc[status.key] = filteredStudents.value.filter((s) => s.aplStatus === status.key)
       return acc
@@ -293,6 +316,7 @@
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
         withCredentials: true,
       })
+      
       students.value = res.data.map((student) => ({
         ...student,
         commentHistory: (student.commentHistory || []).map((comment) => ({
@@ -307,6 +331,14 @@
 
   onMounted(() => {
     fetchStudents()
+  })
+
+  // Watch for route changes to refresh data
+  watch(() => route.path, () => {
+    if (route.path === '/apl') {
+      console.log('🔄 APL route detected, refreshing student data...')
+      fetchStudents()
+    }
   })
 
   const handleDragStart = (e, student) => {
@@ -488,12 +520,14 @@
 <style scoped>
   .apl-board {
     width: 100%;
-    height: 100%;
+    min-height: 600px;
+    height: auto;
     overflow: auto;
     display: flex;
     flex-direction: row;
     gap: 16px;
     box-sizing: border-box;
+    padding: 20px;
   }
 
   .column {
@@ -501,10 +535,12 @@
     flex: 1 1 0;
     overflow-y: auto;
     max-height: 80vh;
-    padding: 10px;
+    padding: 15px;
     border-radius: 8px;
-    min-height: 300px;
+    min-height: 400px;
     background-color: #f1f1f1;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   }
 
   .column.gray {
@@ -781,5 +817,35 @@
     justify-content: center;
     margin-bottom: 16px;
     text-align: center;
+  }
+
+  .summary-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+
+  .refresh-btn {
+    background: #007dc3;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+  }
+
+  .refresh-btn:hover {
+    background: #005a8b;
+  }
+
+  .refresh-btn i {
+    font-size: 16px;
   }
 </style>

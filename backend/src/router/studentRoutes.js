@@ -224,8 +224,18 @@ router.get("/students", authenticateUser, async (req, res) => {
  */
 router.post("/student", async (req, res) => {
   try {
+    console.log('📥 Creating student with payload:', JSON.stringify(req.body, null, 2));
+    
     const student = new Student(req.body);
     const savedStudent = await student.save();
+    
+    console.log('✅ Student saved:', {
+      id: savedStudent._id,
+      name: savedStudent.name,
+      email: savedStudent.email,
+      aplStatus: savedStudent.aplStatus,
+      education: savedStudent.education
+    });
     
     // If education entries exist, create StudentEnrollment records for grading
     if (req.body.education && req.body.education.length > 0) {
