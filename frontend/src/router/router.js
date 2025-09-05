@@ -10,6 +10,7 @@ import Register from '@/views/Auth/Register.vue'
 // Lazy-loaded Admin Views
 const ExcelUpload = () => import('@/views/Admin/ExcelUpload.vue')
 const AddStudent = () => import('@/views/Admin/AddStudent.vue')
+const ManualAddStudent = () => import('@/views/Admin/ManualAddStudent.vue')
 const AddTeacher = () => import('@/views/Admin/AddTeacher.vue')
 const EducationEditor = () => import('@/views/Admin/EducationEditor.vue')
 const ProgramsAndCourses = () => import('@/views/Admin/ProgramsAndCourses.vue')
@@ -82,6 +83,12 @@ const routes = [
     name: 'AddStudent',
     component: AddStudent,
     meta: { title: 'Add Student', role: 'admin' },
+  },
+  {
+    path: '/manual-add-student',
+    name: 'ManualAddStudent',
+    component: ManualAddStudent,
+    meta: { title: 'Manual Add Student', role: 'admin' },
   },
   {
     path: '/detaljer/:type/:id',
