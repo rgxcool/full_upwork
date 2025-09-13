@@ -12,6 +12,7 @@ const EducationEntrySchema = new mongoose.Schema(
             required: true,
             refPath: "education.type",
         },
+        name: { type: String }, // Course/CoursePackage/Program name for display
 
         // Grading fields only relevant when type === 'Course'
         grade: { type: String, default: null },
@@ -62,8 +63,14 @@ const StudentSchema = new mongoose.Schema(
             {
                 examDate: { type: Date, required: true },
                 courseName: { type: String, required: true },
-                courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
-                teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+                courseId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "Course",
+                },
+                teacherId: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "Teacher",
+                },
                 attended: { type: Boolean, default: false },
                 examTime: String,
                 examMunicipality: String,
@@ -71,8 +78,11 @@ const StudentSchema = new mongoose.Schema(
                 grade: String,
                 notes: String,
                 recordedAt: { type: Date, default: Date.now },
-                recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
-            }
+                recordedBy: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "User",
+                },
+            },
         ],
 
         municipality: {
@@ -118,7 +128,6 @@ const StudentSchema = new mongoose.Schema(
         dropout: { type: Boolean, default: false },
         attendedExam: { type: Boolean, default: false },
         paidExamFee: { type: Boolean, default: false },
-
 
         aplStatus: {
             type: String,
