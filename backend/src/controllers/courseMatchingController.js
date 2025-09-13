@@ -52,7 +52,30 @@ export const uploadStudentsForMatching = async (req, res) => {
             parsedStudents.map((s) => s.name || s.email || "unknown")
         );
 
-        if (parsedStudents.length === 0) {
+        // ✅ Group by email and merge multiple entries (same logic as studentController.js)
+        const grouped = new Map();
+        for (const s of parsedStudents) {
+            if (!s.email) continue;
+            if (grouped.has(s.email)) {
+                grouped.get(s.email).education.push(...(s.education || []));
+            } else {
+                grouped.set(s.email, {
+                    ...s,
+                    education: [...(s.education || [])],
+                });
+            }
+        }
+
+        const mergedStudents = [...grouped.values()];
+        console.log(
+            `[DEBUG] 📊 After deduplication: ${mergedStudents.length} unique students`
+        );
+        console.log(
+            `[DEBUG] Merged student names:`,
+            mergedStudents.map((s) => s.name || s.email || "unknown")
+        );
+
+        if (mergedStudents.length === 0) {
             return res
                 .status(400)
                 .json({ error: "No valid data found in file." });
@@ -96,7 +119,7 @@ export const uploadStudentsForMatching = async (req, res) => {
                 return null; // not safely convertible
             }
 
-            for (const student of parsedStudents) {
+            for (const student of mergedStudents) {
                 const studentIdLabel =
                     student.email || student.name || "unknown";
 
@@ -243,7 +266,7 @@ export const uploadStudentsForMatching = async (req, res) => {
                 return null;
             }
 
-            for (const student of parsedStudents) {
+            for (const student of mergedStudents) {
                 const studentIdLabel =
                     student.email || student.name || "unknown";
                 const entries = Array.isArray(student.education)
@@ -293,7 +316,7 @@ export const uploadStudentsForMatching = async (req, res) => {
         })();
 
         // Process each student with the new course versioning system
-        for (const studentData of parsedStudents) {
+        for (const studentData of mergedStudents) {
             console.log(
                 `[DEBUG] Processing student: ${
                     studentData.name || studentData.email || "unknown"
