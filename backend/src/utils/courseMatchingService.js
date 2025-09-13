@@ -200,6 +200,7 @@ class CourseMatchingService {
                     .replace(/[-\s]*\d+\s*v$/i, "")
                     .replace(/[-\s]*\d+v$/i, "")
                     .replace(/\d+v$/i, "");
+
                 // Try exact match first
                 let packageMatch = allPackages.find(
                     (pkg) =>
@@ -326,6 +327,23 @@ class CourseMatchingService {
                     studentDocA = await global._StudentModel.findById(
                         studentId
                     );
+
+                    console.log(
+                        `[DEBUG] 🔍 Loading student document for ${studentId}:`
+                    );
+                    console.log(
+                        `[DEBUG] 🔍 studentDocA exists: ${!!studentDocA}`
+                    );
+                    if (studentDocA) {
+                        console.log(
+                            `[DEBUG] 🔍 Student name: ${studentDocA.name}`
+                        );
+                        console.log(
+                            `[DEBUG] 🔍 Current education entries: ${
+                                studentDocA.education?.length || 0
+                            }`
+                        );
+                    }
 
                     // Create enrollment
                     const enrollment = new StudentEnrollment({
@@ -455,7 +473,22 @@ class CourseMatchingService {
                     }
 
                     // --- PATCH: Update student's education array for ALL types ---
+                    console.log(
+                        `[DEBUG] 🔍 About to update education array for student ${studentId}`
+                    );
+                    console.log(
+                        `[DEBUG] 🔍 studentDocA exists: ${!!studentDocA}`
+                    );
                     if (studentDocA) {
+                        console.log(
+                            `[DEBUG] 🔍 Student name: ${studentDocA.name}`
+                        );
+                        console.log(
+                            `[DEBUG] 🔍 Current education entries: ${
+                                studentDocA.education?.length || 0
+                            }`
+                        );
+
                         // Remove any existing education entry for this course and date range
                         studentDocA.education = (
                             studentDocA.education || []
@@ -471,8 +504,13 @@ class CourseMatchingService {
                                     new Date(entry.endDate).getTime()
                             );
                         });
+
+                        console.log(
+                            `[DEBUG] 🔍 After filtering, education entries: ${studentDocA.education.length}`
+                        );
+
                         // Add the new education entry (always, regardless of type)
-                        studentDocA.education.push({
+                        const newEducationEntry = {
                             type: "Course",
                             refId: match.course._id,
                             name: match.course.courseName,
@@ -482,8 +520,26 @@ class CourseMatchingService {
                             addedAt: new Date(),
                             addedBy: userId,
                             removedAt: null,
-                        });
+                        };
+
+                        console.log(
+                            `[DEBUG] 🔍 Adding education entry:`,
+                            newEducationEntry
+                        );
+                        studentDocA.education.push(newEducationEntry);
+                        console.log(
+                            `[DEBUG] 🔍 After adding, education entries: ${studentDocA.education.length}`
+                        );
+
+                        console.log(`[DEBUG] 🔍 Saving student document...`);
                         await studentDocA.save();
+                        console.log(
+                            `[DEBUG] ✅ Student document saved successfully`
+                        );
+                    } else {
+                        console.log(
+                            `[DEBUG] ❌ studentDocA is null/undefined, cannot update education array`
+                        );
                     }
                     // --- END PATCH ---
                 }

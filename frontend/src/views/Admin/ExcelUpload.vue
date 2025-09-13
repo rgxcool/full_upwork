@@ -37,7 +37,7 @@
         >
           Delete All Students
         </button>
-        --> 
+        -->
       </div>
 
       <!-- Student table -->
@@ -104,7 +104,8 @@
                   ></span>
                   <span
                     v-if="
-                      !expandedComments.includes(student._id) && student.additionalInfo?.length > 100
+                      !expandedComments.includes(student._id) &&
+                      student.additionalInfo?.length > 100
                     "
                     class="dots"
                   >
@@ -338,9 +339,16 @@
       },
 
       getEducationLabel(edu) {
+        // First try to use the name field (which we populated in the schema)
+        if (edu.name) {
+          return edu.name
+        }
+
+        // Fallback to refId if name is not available
         if (!edu.refId) return '(missing)'
         if (edu.type === 'Course') return edu.refId.courseName || '(no name)'
-        if (edu.type === 'CoursePackage') return 'CoursePackage: ' + (edu.refId.coursePackageName || '(no name)')
+        if (edu.type === 'CoursePackage')
+          return 'CoursePackage: ' + (edu.refId.coursePackageName || '(no name)')
         if (edu.type === 'Program') return edu.refId.programName || '(no name)'
         return '(invalid type)'
       },
@@ -540,7 +548,7 @@
 
           if (error.response?.status === 422 && Array.isArray(error.response?.data?.reasons)) {
             const reasons = error.response.data.reasons
-              .map(r => `- ${r.student}: ${r.message}`)
+              .map((r) => `- ${r.student}: ${r.message}`)
               .join('\n')
             alert(`❌ Upload aborted due to unmatched courses:\n${reasons}`)
           } else if (error.response?.status === 409) {
@@ -883,7 +891,8 @@
   }
 
   /* Do not wrap inside the Övrigt column */
-  td.ovrigt-cell, td.ovrigt-cell * {
+  td.ovrigt-cell,
+  td.ovrigt-cell * {
     white-space: nowrap !important;
   }
 

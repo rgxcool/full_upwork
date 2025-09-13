@@ -519,7 +519,12 @@ export const uploadStudentsForMatching = async (req, res) => {
                 normalized = normalized.replace(/[-\s]*\d+\s*v$/i, "");
                 normalized = normalized.replace(/[-\s]*\d+v$/i, "");
                 normalized = normalized.replace(/\d+v$/i, "");
-                const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
+                // Check if it's a course (ends with NIVÅ + number, or contains common course keywords)
+                const isCourse =
+                    /NIVÅ\s*\d+$/i.test(normalized) ||
+                    /SPRÅK|PEDAGOGIK|SPECIALPEDAGOGIK|KOST|FÖRSKOLAN|GRUNDLÄGGANDE/i.test(
+                        normalized
+                    );
 
                 // --- PATCH: Always prefer CoursePackage if name matches a package ---
                 let type = null;
