@@ -1,55 +1,13 @@
 import mongoose from "mongoose";
 
-const EducationEntrySchema = new mongoose.Schema(
-    {
-        type: {
-            type: String,
-            enum: ["Program", "CoursePackage", "Course"],
-            required: true,
-        },
-        refId: {
-            type: mongoose.Schema.Types.ObjectId,
-            required: true,
-            refPath: "education.type",
-        },
-        name: { type: String }, // Course/CoursePackage/Program name for display
-
-        // Grading fields only relevant when type === 'Course'
-        grade: { type: String, default: null },
-        reason: { type: String, default: null },
-        comments: { type: String, default: null },
-        npScore: { type: Number, default: null },
-        locked: { type: Boolean, default: false },
-
-        // Metadata
-        addedAt: { type: Date, default: Date.now },
-        addedBy: { type: String },
-        removedAt: { type: Date, default: null },
-        status: { type: String, default: "" },
-        startDate: { type: Date },
-        endDate: { type: Date },
-    },
-    { _id: false }
-);
-
-// Pre-save cleanup: strip grade fields if type !== 'Course'
-EducationEntrySchema.pre("validate", function (next) {
-    if (this.type !== "Course") {
-        this.grade = null;
-        this.reason = null;
-        this.comments = null;
-        this.npScore = null;
-        this.locked = false;
-    }
-    next();
-});
+// REMOVED: EducationEntrySchema - Using StudentEnrollment system instead
 
 const StudentSchema = new mongoose.Schema(
     {
         name: { type: String, required: true },
         personalNumber: { type: String, required: true },
 
-        education: [EducationEntrySchema],
+        // education: [EducationEntrySchema], // REMOVED: Using StudentEnrollment system instead
 
         startDate: Date,
         endDate: Date,
