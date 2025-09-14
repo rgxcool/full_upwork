@@ -75,10 +75,12 @@ export const getStudentDetails = async (req, res) => {
             _id: enrollment._id,
             type: "Course",
             refId: enrollment.mainCourseId,
+            name: enrollment.mainCourseId?.courseName,
             startDate: enrollment.startDate,
             endDate: enrollment.endDate,
             status: enrollment.status,
             grade: enrollment.grade,
+            comments: enrollment.notes,
             enrollmentId: enrollment._id,
             courseInstanceId: enrollment.courseInstanceId?._id,
             courseInstance: enrollment.courseInstanceId,
@@ -87,11 +89,8 @@ export const getStudentDetails = async (req, res) => {
             isEnrollment: true, // Flag to identify this came from enrollment system
         }));
 
-        // Combine both education arrays (old system + new enrollment system)
-        populatedStudent.education = [
-            ...populatedStudent.education,
-            ...enrollmentEducation,
-        ];
+        // Use only enrollment data as education entries
+        populatedStudent.education = enrollmentEducation;
 
         // Add enrollment statistics
         populatedStudent.enrollmentStats = {
