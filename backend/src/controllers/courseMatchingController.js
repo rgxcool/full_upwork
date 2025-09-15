@@ -231,7 +231,9 @@ export const uploadStudentsForMatching = async (req, res) => {
                 .toString()
                 .trim()
                 .toUpperCase()
-                .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "");
+                .replace(/\(.*?\)/g, "")
+                .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
+                .replace(/\s+/g, " ");
             normalizedPackageMap[norm] = pkg;
         }
 
@@ -243,7 +245,9 @@ export const uploadStudentsForMatching = async (req, res) => {
                 .toString()
                 .trim()
                 .toUpperCase()
-                .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "");
+                .replace(/\(.*?\)/g, "")
+                .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
+                .replace(/\s+/g, " ");
             normalizedCourseMap[norm] = c;
         }
 
@@ -253,6 +257,12 @@ export const uploadStudentsForMatching = async (req, res) => {
 
             function strictMatch(target, candidates) {
                 if (candidates.includes(target)) return target;
+                // containment fallback (handles minor suffix/prefix differences)
+                const contain = candidates.find(
+                    (c) => c.includes(target) || target.includes(c)
+                );
+                if (contain) return contain;
+                // fuzzy fallback
                 let best = null;
                 let minDistance = Infinity;
                 for (const candidate of candidates) {
@@ -262,7 +272,8 @@ export const uploadStudentsForMatching = async (req, res) => {
                         best = candidate;
                     }
                 }
-                if (target.length > 12 && minDistance === 1) return best;
+                if (minDistance === 1) return best;
+                if (target.length >= 8 && minDistance <= 2) return best;
                 return null;
             }
 
@@ -277,7 +288,9 @@ export const uploadStudentsForMatching = async (req, res) => {
                         .toString()
                         .trim()
                         .toUpperCase()
-                        .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "");
+                        .replace(/\(.*?\)/g, "")
+                        .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
+                        .replace(/\s+/g, " ");
                     normalized = normalized.replace(/[-\s]*\d+\s*v$/i, "");
                     normalized = normalized.replace(/[-\s]*\d+v$/i, "");
                     normalized = normalized.replace(/\d+v$/i, "");
@@ -316,6 +329,8 @@ export const uploadStudentsForMatching = async (req, res) => {
         })();
 
         // Process each student with the new course versioning system
+        let zeroEnrollmentErrors = [];
+        const createdStudentIds = [];
         for (const studentData of mergedStudents) {
             console.log(
                 `[DEBUG] Processing student: ${
@@ -326,6 +341,7 @@ export const uploadStudentsForMatching = async (req, res) => {
 
             // First, create or find the student
             let dbStudent = null;
+            let wasStudentCreated = false;
             try {
                 // Normalize municipality before any DB operation
                 if (
@@ -465,6 +481,8 @@ export const uploadStudentsForMatching = async (req, res) => {
                     });
 
                     await dbStudent.save();
+                    wasStudentCreated = true;
+                    createdStudentIds.push(dbStudent._id.toString());
                     console.log(
                         `✅ Created new student: ${dbStudent.name} (${
                             dbStudent.email
@@ -508,6 +526,11 @@ export const uploadStudentsForMatching = async (req, res) => {
                 continue;
             }
 
+            // Track enrollments at DB-level and in-memory results
+            const dbEnrollmentsBefore = await StudentEnrollment.countDocuments({
+                studentId: dbStudent._id,
+            });
+            const enrollmentsBefore = results.enrollments.length;
             for (const entry of studentData.education) {
                 console.log(`[DEBUG] Education entry (raw):`, entry);
                 let normalized = (entry.name || "")
@@ -541,7 +564,34 @@ export const uploadStudentsForMatching = async (req, res) => {
                 );
 
                 if (type === "CoursePackage") {
-                    const pkg = normalizedPackageMap[normalized];
+                    let pkg = normalizedPackageMap[normalized];
+                    if (!pkg) {
+                        // Fallback: try containment or small-distance fuzzy match against available package keys
+                        const keys = Object.keys(normalizedPackageMap);
+                        // containment first
+                        let key = keys.find(
+                            (k) =>
+                                k.includes(normalized) || normalized.includes(k)
+                        );
+                        if (!key) {
+                            let best = null;
+                            let minDist = Infinity;
+                            for (const k of keys) {
+                                const d = distance(normalized, k);
+                                if (d < minDist) {
+                                    minDist = d;
+                                    best = k;
+                                }
+                            }
+                            if (minDist <= 2) key = best;
+                        }
+                        if (key) {
+                            pkg = normalizedPackageMap[key];
+                            console.log(
+                                `[DEBUG] Fallback matched package: '${normalized}' → '${key}'`
+                            );
+                        }
+                    }
                     if (pkg) {
                         console.log(
                             `[DEBUG] Matched package: '${normalized}' → '${pkg.coursePackageName}'`
@@ -697,6 +747,50 @@ export const uploadStudentsForMatching = async (req, res) => {
                     }
                 }
             }
+
+            const enrollmentsAfter = results.enrollments.length;
+            const dbEnrollmentsAfter = await StudentEnrollment.countDocuments({
+                studentId: dbStudent._id,
+            });
+
+            // Consider it a success if either enrollments increased or the student has a CoursePackage in education
+            const refreshedStudent = await Student.findById(
+                dbStudent._id
+            ).lean();
+            const hasAnyCoursePackage = Array.isArray(
+                refreshedStudent?.education
+            )
+                ? refreshedStudent.education.some(
+                      (e) => e?.type === "CoursePackage"
+                  )
+                : false;
+
+            // Treat as success if the student has any enrollments at all after processing
+            const noNewEnrollments =
+                enrollmentsAfter === enrollmentsBefore &&
+                dbEnrollmentsAfter === dbEnrollmentsBefore &&
+                dbEnrollmentsAfter === 0;
+
+            if (noNewEnrollments && !hasAnyCoursePackage) {
+                // No enrollments created for this student → treat as fatal error
+                zeroEnrollmentErrors.push({
+                    type: "no_enrollments_created",
+                    student: dbStudent.name || dbStudent.email || "unknown",
+                    message:
+                        "No courses could be matched or created for this student; upload refused.",
+                });
+                // Cleanup newly created student to avoid dangling records
+                if (wasStudentCreated && dbStudent?._id) {
+                    try {
+                        await Student.findByIdAndDelete(dbStudent._id);
+                    } catch (e) {
+                        console.error(
+                            "[CLEANUP] Failed to delete student with zero enrollments:",
+                            e
+                        );
+                    }
+                }
+            }
         }
 
         console.log(`[DEBUG] 📊 Processing results:`);
@@ -724,6 +818,12 @@ export const uploadStudentsForMatching = async (req, res) => {
             results.errors.filter((e) => e.type === "missing_package")
         );
 
+        // Normalize error shape for frontend (use 'error' property, not 'message')
+        results.errors = (results.errors || []).map((e) => ({
+            ...e,
+            error: e.error || e.message || "",
+        }));
+
         console.log("📊 Final results:", {
             students: results.students.length,
             enrollments: results.enrollments?.length || 0,
@@ -731,6 +831,16 @@ export const uploadStudentsForMatching = async (req, res) => {
             errors: results.errors?.length || 0,
             createdTeachers: results.createdTeachers.length,
         });
+
+        // If any student ended with zero enrollments, abort entire upload
+        if (zeroEnrollmentErrors.length > 0) {
+            const error = new Error(
+                "No enrollments created for one or more students; upload aborted."
+            );
+            error.statusCode = 422;
+            error.reasons = zeroEnrollmentErrors;
+            throw error;
+        }
 
         // Prepare response message
         let message = `Processed ${results.students.length} students`;
