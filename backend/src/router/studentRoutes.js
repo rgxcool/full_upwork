@@ -193,8 +193,96 @@ router.get("/students", authenticateUser, async (req, res) => {
                 })
                 .filter(Boolean);
 
-            // Use only enrollment data as education entries
-            student.education = enrollmentEducation;
+            // Merge in any CoursePackage entries stored on the student (for APL filtering)
+            const originalEducation = Array.isArray(student.education)
+                ? student.education
+                : [];
+            const packageEntries = originalEducation
+                .filter((e) => e && e.type === "CoursePackage" && e.refId)
+                .map((e) => ({
+                    _id: e._id,
+                    type: "CoursePackage",
+                    refId: e.refId,
+                    name: e.name,
+                    startDate: e.startDate,
+                    endDate: e.endDate,
+                    finalExamDate: e.finalExamDate,
+                    status: e.status,
+                    grade: e.grade,
+                    comments: e.comments,
+                    enrollmentId: e.enrollmentId,
+                    courseInstanceId: e.courseInstanceId,
+                    addedAt: e.addedAt,
+                    addedBy: e.addedBy,
+                    isEnrollment: false,
+                }));
+
+            // Deduplicate by type+refId+dates
+            const mergedEducation = [...enrollmentEducation];
+            for (const pkg of packageEntries) {
+                const exists = mergedEducation.some(
+                    (x) =>
+                        x.type === "CoursePackage" &&
+                        String(x.refId?._id || x.refId) === String(pkg.refId) &&
+                        String(new Date(x.startDate).getTime() || "") ===
+                            String(new Date(pkg.startDate).getTime() || "") &&
+                        String(new Date(x.endDate).getTime() || "") ===
+                            String(new Date(pkg.endDate).getTime() || "")
+                );
+                if (!exists) mergedEducation.push(pkg);
+            }
+
+            // Synthesize CoursePackage entries from enrollments referencing a package (fallback)
+            const enrollmentsWithPackage = enrollments.filter(
+                (enr) => !!enr.coursePackageId
+            );
+            if (
+                enrollmentsWithPackage.length > 0 &&
+                !mergedEducation.some((e) => e.type === "CoursePackage")
+            ) {
+                const byPkg = new Map();
+                for (const enr of enrollmentsWithPackage) {
+                    const key = String(
+                        enr.coursePackageId._id || enr.coursePackageId
+                    );
+                    if (!byPkg.has(key)) byPkg.set(key, []);
+                    byPkg.get(key).push(enr);
+                }
+                for (const [pkgId, arr] of byPkg.entries()) {
+                    const startMs = Math.min(
+                        ...arr
+                            .map((e) => new Date(e.startDate || 0).getTime())
+                            .filter((n) => !isNaN(n))
+                    );
+                    const endMs = Math.max(
+                        ...arr
+                            .map((e) => new Date(e.endDate || 0).getTime())
+                            .filter((n) => !isNaN(n))
+                    );
+                    const pkgDoc = await CoursePackage.findById(pkgId).lean();
+                    mergedEducation.push({
+                        _id: undefined,
+                        type: "CoursePackage",
+                        refId: pkgDoc || pkgId,
+                        name: pkgDoc?.coursePackageName,
+                        startDate: isFinite(startMs)
+                            ? new Date(startMs)
+                            : undefined,
+                        endDate: isFinite(endMs) ? new Date(endMs) : undefined,
+                        status: arr[0]?.status,
+                        grade: null,
+                        comments: undefined,
+                        enrollmentId: undefined,
+                        courseInstanceId: undefined,
+                        addedAt: undefined,
+                        addedBy: undefined,
+                        isEnrollment: false,
+                    });
+                }
+            }
+
+            // Final education list
+            student.education = mergedEducation;
         }
         res.status(200).json(students);
     } catch (error) {
