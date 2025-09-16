@@ -170,9 +170,16 @@
             </div>
           </div>
           <div class="card-body">
-            <div 
+            <div
               class="education-scroll-container"
-              style="max-height: 400px; overflow-y: auto; border: 2px solid #007bff; background-color: #f8f9fa; padding: 10px; border-radius: 4px;"
+              style="
+                max-height: 400px;
+                overflow-y: auto;
+                border: 2px solid #007bff;
+                background-color: #f8f9fa;
+                padding: 10px;
+                border-radius: 4px;
+              "
             >
               <div v-if="student.education && student.education.length > 0" class="education-list">
                 <div
@@ -624,6 +631,12 @@
       }
 
       const getEducationName = (edu) => {
+        // First try to use the name field (which we populated in the schema)
+        if (edu.name) {
+          return edu.name
+        }
+
+        // Fallback to refId if name is not available
         if (!edu.refId) return 'Okänd'
 
         if (edu.type === 'Course') {

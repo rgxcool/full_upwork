@@ -8,6 +8,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import Student from "../models/Student.js";
+import StudentEnrollment from "../models/StudentEnrollment.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
 import Notification from "../models/Notification.js";
@@ -19,30 +20,27 @@ import { sendDropoutNotification } from "../controllers/notificationController.j
 
 const router = Router();
 
-
 router.get("/students/by-teacher/:teacherId", async (req, res) => {
-  try {
+    try {
+        const students = await Student.find({
+            teacherId: req.params.teacherId,
+            dropout: { $ne: true }, // 👈 Lägg till detta filter!
+        });
 
-    const students = await Student.find({
-      teacherId: req.params.teacherId,
-      dropout: { $ne: true }, // 👈 Lägg till detta filter!
-    });
-
-    res.json(
-      students.map((s) => ({
-        _id: s._id,
-        name: s.name,
-        personalNumber: s.personalNumber,
-        attended: s.attendedExam || false,
-        additionalInfo: s.additionalInfo || '',
-      }))
-    );
-  } catch (error) {
-    console.error("❌ Error fetching students by teacher:", error.message);
-    res.status(500).json({ message: "Server error" });
-  }
+        res.json(
+            students.map((s) => ({
+                _id: s._id,
+                name: s.name,
+                personalNumber: s.personalNumber,
+                attended: s.attendedExam || false,
+                additionalInfo: s.additionalInfo || "",
+            }))
+        );
+    } catch (error) {
+        console.error("❌ Error fetching students by teacher:", error.message);
+        res.status(500).json({ message: "Server error" });
+    }
 });
-
 
 /**
  * @route   PUT /students/:studentId/education/:educationId/status
@@ -50,49 +48,51 @@ router.get("/students/by-teacher/:teacherId", async (req, res) => {
  * @access  Public
  */
 router.put(
-  "/students/:studentId/education/:educationId/status",
-  async (req, res) => {
-    const { studentId, educationId } = req.params;
-    const { status } = req.body;
+    "/students/:studentId/education/:educationId/status",
+    async (req, res) => {
+        const { studentId, educationId } = req.params;
+        const { status } = req.body;
 
-    try {
-      const student = await Student.findById(studentId);
-      if (!student)
-        return res.status(404).json({ message: "Student not found" });
+        try {
+            const student = await Student.findById(studentId);
+            if (!student)
+                return res.status(404).json({ message: "Student not found" });
 
-      const education = student.education.find(
-        (e) => e.refId.toString() === educationId
-      );
-      if (!education)
-        return res
-          .status(404)
-          .json({ message: "Education not found for student" });
+            const education = student.education.find(
+                (e) => e.refId.toString() === educationId
+            );
+            if (!education)
+                return res
+                    .status(404)
+                    .json({ message: "Education not found for student" });
 
-      education.status = status;
+            education.status = status;
 
-      if (status === "Avbrott") {
-        student.dropout = true;
+            if (status === "Avbrott") {
+                student.dropout = true;
 
-        const notification = await sendDropoutNotification({
-          student,
-          education,
-        });
-        console.log("Notification sent:", notification);
-        await student.save();
-        return res.status(200).json({
-          message: "Status updated and notification sent",
-          notification,
-        });
-      } else {
-        student.dropout = false; // (om du vill nollställa annars)
-        await student.save();
-        return res.status(200).json({ message: "Status updated successfully" });
-      }
-    } catch (error) {
-      console.error("Error updating status:", error);
-      res.status(500).json({ message: "Server error" });
+                const notification = await sendDropoutNotification({
+                    student,
+                    education,
+                });
+                console.log("Notification sent:", notification);
+                await student.save();
+                return res.status(200).json({
+                    message: "Status updated and notification sent",
+                    notification,
+                });
+            } else {
+                student.dropout = false; // (om du vill nollställa annars)
+                await student.save();
+                return res
+                    .status(200)
+                    .json({ message: "Status updated successfully" });
+            }
+        } catch (error) {
+            console.error("Error updating status:", error);
+            res.status(500).json({ message: "Server error" });
+        }
     }
-  }
 );
 
 /**
@@ -101,120 +101,194 @@ router.put(
  * @access  Protected
  */
 router.get("/students", authenticateUser, async (req, res) => {
-  try {
-    let query = {};
-    
-    // If user is a teacher, filter students by their teacherId
-    if (req.user.role === "teacher") {
-      // Find the teacher record for this user
-      const Teacher = mongoose.model('Teacher');
-      const teacher = await Teacher.findOne({ userId: req.user.userId });
-      
-      if (!teacher) {
-        return res.status(403).json({ error: "Teacher profile not found" });
-      }
-      
-      // Filter students by this teacher's ID
-      query.teacherId = teacher._id;
-      console.log(`🔍 Teacher ${teacher._id} fetching their students`);
-    }
-    
-    const students = await Student.find(query).lean();
-    for (const student of students) {
-      // Populate education refs as before
-      for (const edu of student.education) {
-        if (!edu.refId) continue;
-        const Model =
-          edu.type === "Course"
-            ? Course
-            : edu.type === "CoursePackage"
-            ? CoursePackage
-            : edu.type === "Program"
-            ? Program
-            : null;
-        if (Model) {
-          edu.refId = await Model.findById(edu.refId)
-            .lean()
-            .select(
-              edu.type === "Course"
-                ? "courseName courseCode"
-                : edu.type === "CoursePackage"
-                ? "coursePackageName coursePackageCode"
-                : "programName"
+    try {
+        let query = {};
+
+        // If user is a teacher, filter students by their teacherId
+        if (req.user.role === "teacher") {
+            // Find the teacher record for this user
+            const Teacher = mongoose.model("Teacher");
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+
+            if (!teacher) {
+                return res
+                    .status(403)
+                    .json({ error: "Teacher profile not found" });
+            }
+
+            // Filter students by this teacher's ID
+            query.teacherId = teacher._id;
+            console.log(`🔍 Teacher ${teacher._id} fetching their students`);
+        }
+
+        const students = await Student.find(query).lean();
+        for (const student of students) {
+            // Fetch enrollments and use them as the education entries
+            const enrollments = await mongoose
+                .model("StudentEnrollment")
+                .find({ studentId: student._id })
+                .populate("mainCourseId")
+                .populate("coursePackageId")
+                .populate("programId")
+                .lean();
+
+            const enrollmentEducation = enrollments
+                .map((enrollment) => {
+                    if (enrollment.mainCourseId) {
+                        return {
+                            _id: enrollment._id,
+                            type: "Course",
+                            refId: enrollment.mainCourseId,
+                            name: enrollment.mainCourseId.courseName,
+                            startDate: enrollment.startDate,
+                            endDate: enrollment.endDate,
+                            finalExamDate: enrollment.slutprovDate,
+                            status: enrollment.status,
+                            grade: enrollment.grade,
+                            comments: enrollment.notes,
+                            enrollmentId: enrollment._id,
+                            courseInstanceId: enrollment.courseInstanceId,
+                            addedAt: enrollment.createdAt,
+                            addedBy: enrollment.teacherId || "System",
+                            isEnrollment: true,
+                        };
+                    } else if (enrollment.coursePackageId) {
+                        return {
+                            _id: enrollment._id,
+                            type: "CoursePackage",
+                            refId: enrollment.coursePackageId,
+                            name: enrollment.coursePackageId.coursePackageName,
+                            startDate: enrollment.startDate,
+                            endDate: enrollment.endDate,
+                            finalExamDate: enrollment.slutprovDate,
+                            status: enrollment.status,
+                            grade: enrollment.grade,
+                            comments: enrollment.notes,
+                            enrollmentId: enrollment._id,
+                            courseInstanceId: enrollment.courseInstanceId,
+                            addedAt: enrollment.createdAt,
+                            addedBy: enrollment.teacherId || "System",
+                            isEnrollment: true,
+                        };
+                    } else if (enrollment.programId) {
+                        return {
+                            _id: enrollment._id,
+                            type: "Program",
+                            refId: enrollment.programId,
+                            name: enrollment.programId.programName,
+                            startDate: enrollment.startDate,
+                            endDate: enrollment.endDate,
+                            finalExamDate: enrollment.slutprovDate,
+                            status: enrollment.status,
+                            grade: enrollment.grade,
+                            comments: enrollment.notes,
+                            enrollmentId: enrollment._id,
+                            courseInstanceId: enrollment.courseInstanceId,
+                            addedAt: enrollment.createdAt,
+                            addedBy: enrollment.teacherId || "System",
+                            isEnrollment: true,
+                        };
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+
+            // Merge in any CoursePackage entries stored on the student (for APL filtering)
+            const originalEducation = Array.isArray(student.education)
+                ? student.education
+                : [];
+            const packageEntries = originalEducation
+                .filter((e) => e && e.type === "CoursePackage" && e.refId)
+                .map((e) => ({
+                    _id: e._id,
+                    type: "CoursePackage",
+                    refId: e.refId,
+                    name: e.name,
+                    startDate: e.startDate,
+                    endDate: e.endDate,
+                    finalExamDate: e.finalExamDate,
+                    status: e.status,
+                    grade: e.grade,
+                    comments: e.comments,
+                    enrollmentId: e.enrollmentId,
+                    courseInstanceId: e.courseInstanceId,
+                    addedAt: e.addedAt,
+                    addedBy: e.addedBy,
+                    isEnrollment: false,
+                }));
+
+            // Deduplicate by type+refId+dates
+            const mergedEducation = [...enrollmentEducation];
+            for (const pkg of packageEntries) {
+                const exists = mergedEducation.some(
+                    (x) =>
+                        x.type === "CoursePackage" &&
+                        String(x.refId?._id || x.refId) === String(pkg.refId) &&
+                        String(new Date(x.startDate).getTime() || "") ===
+                            String(new Date(pkg.startDate).getTime() || "") &&
+                        String(new Date(x.endDate).getTime() || "") ===
+                            String(new Date(pkg.endDate).getTime() || "")
+                );
+                if (!exists) mergedEducation.push(pkg);
+            }
+
+            // Synthesize CoursePackage entries from enrollments referencing a package (fallback)
+            const enrollmentsWithPackage = enrollments.filter(
+                (enr) => !!enr.coursePackageId
             );
+            if (
+                enrollmentsWithPackage.length > 0 &&
+                !mergedEducation.some((e) => e.type === "CoursePackage")
+            ) {
+                const byPkg = new Map();
+                for (const enr of enrollmentsWithPackage) {
+                    const key = String(
+                        enr.coursePackageId._id || enr.coursePackageId
+                    );
+                    if (!byPkg.has(key)) byPkg.set(key, []);
+                    byPkg.get(key).push(enr);
+                }
+                for (const [pkgId, arr] of byPkg.entries()) {
+                    const startMs = Math.min(
+                        ...arr
+                            .map((e) => new Date(e.startDate || 0).getTime())
+                            .filter((n) => !isNaN(n))
+                    );
+                    const endMs = Math.max(
+                        ...arr
+                            .map((e) => new Date(e.endDate || 0).getTime())
+                            .filter((n) => !isNaN(n))
+                    );
+                    const pkgDoc = await CoursePackage.findById(pkgId).lean();
+                    mergedEducation.push({
+                        _id: undefined,
+                        type: "CoursePackage",
+                        refId: pkgDoc || pkgId,
+                        name: pkgDoc?.coursePackageName,
+                        startDate: isFinite(startMs)
+                            ? new Date(startMs)
+                            : undefined,
+                        endDate: isFinite(endMs) ? new Date(endMs) : undefined,
+                        status: arr[0]?.status,
+                        grade: null,
+                        comments: undefined,
+                        enrollmentId: undefined,
+                        courseInstanceId: undefined,
+                        addedAt: undefined,
+                        addedBy: undefined,
+                        isEnrollment: false,
+                    });
+                }
+            }
+
+            // Final education list
+            student.education = mergedEducation;
         }
-      }
-      // Fetch enrollments and merge as education entries
-      const enrollments = await mongoose.model('StudentEnrollment').find({ studentId: student._id })
-        .populate('mainCourseId')
-        .populate('coursePackageId')
-        .populate('programId')
-        .lean();
-      const enrollmentEducation = enrollments.map(enrollment => {
-        if (enrollment.mainCourseId) {
-          return {
-            _id: enrollment._id,
-            type: "Course",
-            refId: enrollment.mainCourseId,
-            startDate: enrollment.startDate,
-            endDate: enrollment.endDate,
-            status: enrollment.status,
-            grade: enrollment.grade,
-            enrollmentId: enrollment._id,
-            courseInstanceId: enrollment.courseInstanceId,
-            addedAt: enrollment.createdAt,
-            addedBy: enrollment.teacherId || "System",
-            isEnrollment: true,
-          };
-        } else if (enrollment.coursePackageId) {
-          return {
-            _id: enrollment._id,
-            type: "CoursePackage",
-            refId: enrollment.coursePackageId,
-            startDate: enrollment.startDate,
-            endDate: enrollment.endDate,
-            status: enrollment.status,
-            grade: enrollment.grade,
-            enrollmentId: enrollment._id,
-            courseInstanceId: enrollment.courseInstanceId,
-            addedAt: enrollment.createdAt,
-            addedBy: enrollment.teacherId || "System",
-            isEnrollment: true,
-          };
-        } else if (enrollment.programId) {
-          return {
-            _id: enrollment._id,
-            type: "Program",
-            refId: enrollment.programId,
-            startDate: enrollment.startDate,
-            endDate: enrollment.endDate,
-            status: enrollment.status,
-            grade: enrollment.grade,
-            enrollmentId: enrollment._id,
-            courseInstanceId: enrollment.courseInstanceId,
-            addedAt: enrollment.createdAt,
-            addedBy: enrollment.teacherId || "System",
-            isEnrollment: true,
-          };
-        }
-        return null;
-      }).filter(Boolean);
-      // Merge and deduplicate
-      const merged = [...student.education, ...enrollmentEducation];
-      // Deduplicate by type, refId, startDate, endDate
-      const seen = new Set();
-      student.education = merged.filter((edu) => {
-        const key = `${edu.type}-${edu.refId?._id || edu.refId}-${edu.startDate ? new Date(edu.startDate).getTime() : ''}-${edu.endDate ? new Date(edu.endDate).getTime() : ''}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+        res.status(200).json(students);
+    } catch (error) {
+        console.error("❌ Error fetching students:", error);
+        res.status(500).json({ error: "Server error" });
     }
-    res.status(200).json(students);
-  } catch (error) {
-    console.error("❌ Error fetching students:", error);
-    res.status(500).json({ error: "Server error" });
-  }
 });
 
 /**
@@ -223,43 +297,56 @@ router.get("/students", authenticateUser, async (req, res) => {
  * @access  Public
  */
 router.post("/student", async (req, res) => {
-  try {
-    console.log('📥 Creating student with payload:', JSON.stringify(req.body, null, 2));
-    
-    const student = new Student(req.body);
-    const savedStudent = await student.save();
-    
-    console.log('✅ Student saved:', {
-      id: savedStudent._id,
-      name: savedStudent.name,
-      email: savedStudent.email,
-      aplStatus: savedStudent.aplStatus,
-      education: savedStudent.education
-    });
-    
-    // If education entries exist, create StudentEnrollment records for grading
-    if (req.body.education && req.body.education.length > 0) {
-      const CourseMatchingService = await import('../utils/courseMatchingService.js');
-      
-      try {
-        const enrollmentResult = await CourseMatchingService.default.processStudentEducation(
-          savedStudent._id,
-          req.body.education,
-          req.body.createdBy || null
+    try {
+        console.log(
+            "📥 Creating student with payload:",
+            JSON.stringify(req.body, null, 2)
         );
-        
-        console.log(`✅ Created ${enrollmentResult?.enrollments?.length || 0} enrollments for student ${savedStudent.name}`);
-      } catch (enrollmentError) {
-        console.error("❌ Error creating enrollments:", enrollmentError);
-        // Don't fail the student creation if enrollment creation fails
-      }
+
+        const student = new Student(req.body);
+        const savedStudent = await student.save();
+
+        console.log("✅ Student saved:", {
+            id: savedStudent._id,
+            name: savedStudent.name,
+            email: savedStudent.email,
+            aplStatus: savedStudent.aplStatus,
+            education: savedStudent.education,
+        });
+
+        // If education entries exist, create StudentEnrollment records for grading
+        if (req.body.education && req.body.education.length > 0) {
+            const CourseMatchingService = await import(
+                "../utils/courseMatchingService.js"
+            );
+
+            try {
+                const enrollmentResult =
+                    await CourseMatchingService.default.processStudentEducation(
+                        savedStudent._id,
+                        req.body.education,
+                        req.body.createdBy || null
+                    );
+
+                console.log(
+                    `✅ Created ${
+                        enrollmentResult?.enrollments?.length || 0
+                    } enrollments for student ${savedStudent.name}`
+                );
+            } catch (enrollmentError) {
+                console.error(
+                    "❌ Error creating enrollments:",
+                    enrollmentError
+                );
+                // Don't fail the student creation if enrollment creation fails
+            }
+        }
+
+        res.status(201).json(savedStudent);
+    } catch (error) {
+        console.error("❌ Error adding student:", error.message);
+        res.status(500).json({ error: "Failed to add student" });
     }
-    
-    res.status(201).json(savedStudent);
-  } catch (error) {
-    console.error("❌ Error adding student:", error.message);
-    res.status(500).json({ error: "Failed to add student" });
-  }
 });
 
 /**
@@ -268,47 +355,49 @@ router.post("/student", async (req, res) => {
  * @access  Public
  */
 router.post("/student/:studentId/addcourse", async (req, res) => {
-  const { studentId } = req.params;
-  const { courseId } = req.body;
+    const { studentId } = req.params;
+    const { courseId } = req.body;
 
-  try {
-    const student = await Student.findById(studentId);
-    if (!student) return res.status(404).json({ error: "Student not found" });
+    try {
+        const student = await Student.findById(studentId);
+        if (!student)
+            return res.status(404).json({ error: "Student not found" });
 
-    const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ error: "Course not found" });
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ error: "Course not found" });
 
-    // Check if the course already exists in the student's education
-    const alreadyExists = student.education.some(
-      (entry) => entry.type === "Course" && entry.refId.toString() === courseId
-    );
+        // Check if the course already exists in the student's education
+        const alreadyExists = student.education.some(
+            (entry) =>
+                entry.type === "Course" && entry.refId.toString() === courseId
+        );
 
-    if (alreadyExists) {
-      return res.status(400).json({ error: "Course already exists" });
+        if (alreadyExists) {
+            return res.status(400).json({ error: "Course already exists" });
+        }
+
+        // Add course to the student's education
+        student.education.push({
+            type: "Course",
+            refId: course._id,
+            grade: "", // Default grade if needed
+        });
+
+        // Save the updated student document
+        await student.save();
+
+        // Return the updated student with populated education references
+        const updatedStudent = await Student.findById(studentId).populate({
+            path: "education.refId",
+            model: "Course", // populate the course details
+            select: "courseName courseCode coursePoints courseExtent",
+        });
+
+        res.status(200).json(updatedStudent);
+    } catch (error) {
+        console.error("❌ Error adding course to student:", error);
+        res.status(500).json({ error: "Server error" });
     }
-
-    // Add course to the student's education
-    student.education.push({
-      type: "Course",
-      refId: course._id,
-      grade: "", // Default grade if needed
-    });
-
-    // Save the updated student document
-    await student.save();
-
-    // Return the updated student with populated education references
-    const updatedStudent = await Student.findById(studentId).populate({
-      path: "education.refId",
-      model: "Course", // populate the course details
-      select: "courseName courseCode coursePoints courseExtent",
-    });
-
-    res.status(200).json(updatedStudent);
-  } catch (error) {
-    console.error("❌ Error adding course to student:", error);
-    res.status(500).json({ error: "Server error" });
-  }
 });
 
 /**
@@ -317,21 +406,22 @@ router.post("/student/:studentId/addcourse", async (req, res) => {
  * @access  Public
  */
 router.post("/student/:studentId/setprogram", async (req, res) => {
-  const { studentId } = req.params;
-  const { programId } = req.body;
+    const { studentId } = req.params;
+    const { programId } = req.body;
 
-  try {
-    const student = await Student.findById(studentId);
-    if (!student) return res.status(404).json({ error: "Student not found" });
+    try {
+        const student = await Student.findById(studentId);
+        if (!student)
+            return res.status(404).json({ error: "Student not found" });
 
-    student.program = { programId, grade: null };
-    await student.save();
+        student.program = { programId, grade: null };
+        await student.save();
 
-    res.status(200).json(student);
-  } catch (error) {
-    console.error("❌ Error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
+        res.status(200).json(student);
+    } catch (error) {
+        console.error("❌ Error:", error);
+        res.status(500).json({ error: "Server error" });
+    }
 });
 
 /**
@@ -340,22 +430,23 @@ router.post("/student/:studentId/setprogram", async (req, res) => {
  * @access  Public
  */
 router.post("/student/:studentId/addcoursepackage", async (req, res) => {
-  const { studentId } = req.params;
-  const { coursePackageId } = req.body;
+    const { studentId } = req.params;
+    const { coursePackageId } = req.body;
 
-  try {
-    const student = await Student.findById(studentId);
+    try {
+        const student = await Student.findById(studentId);
 
-    if (!student) return res.status(404).json({ error: "Student not found" });
+        if (!student)
+            return res.status(404).json({ error: "Student not found" });
 
-    student.coursePackages.push({ coursePackageId, grade: null });
-    await student.save();
+        student.coursePackages.push({ coursePackageId, grade: null });
+        await student.save();
 
-    res.status(200).json(student);
-  } catch (error) {
-    console.error("❌ Error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
+        res.status(200).json(student);
+    } catch (error) {
+        console.error("❌ Error:", error);
+        res.status(500).json({ error: "Server error" });
+    }
 });
 
 /**
@@ -364,20 +455,21 @@ router.post("/student/:studentId/addcoursepackage", async (req, res) => {
  * @access  Public
  */
 router.delete("/student/:id/courses/:courseId", async (req, res) => {
-  try {
-    const student = await Student.findById(req.params.id);
-    if (!student) return res.status(404).json({ error: "Student not found" });
+    try {
+        const student = await Student.findById(req.params.id);
+        if (!student)
+            return res.status(404).json({ error: "Student not found" });
 
-    student.courses = student.courses.filter(
-      (course) => course.courseId.toString() !== req.params.courseId
-    );
-    await student.save();
+        student.courses = student.courses.filter(
+            (course) => course.courseId.toString() !== req.params.courseId
+        );
+        await student.save();
 
-    res.json({ message: "Course removed successfully" });
-  } catch (error) {
-    console.error("❌ Error removing course:", error);
-    res.status(500).json({ error: "Failed to remove course." });
-  }
+        res.json({ message: "Course removed successfully" });
+    } catch (error) {
+        console.error("❌ Error removing course:", error);
+        res.status(500).json({ error: "Failed to remove course." });
+    }
 });
 
 /**
@@ -386,28 +478,28 @@ router.delete("/student/:id/courses/:courseId", async (req, res) => {
  * @access  Public
  */
 router.get("/student/:id", async (req, res) => {
-  try {
-    const student = await Student.findById(req.params.id)
-      .populate({
-        path: "education.refId",
-        model: function (doc) {
-          if (doc.type === "Course") return "Course"; // populate Course model
-          if (doc.type === "CoursePackage") return "CoursePackage"; // populate CoursePackage model
-          if (doc.type === "Program") return "Program"; // populate Program model
-          return null; // In case of an invalid type, we don’t populate anything
-        },
-        select:
-          "courseName courseCode coursePackageName coursePackageCode programName", // Adjust selection based on type
-      })
-      .select("+commentHistory.seenBy");
+    try {
+        const student = await Student.findById(req.params.id)
+            .populate({
+                path: "education.refId",
+                model: function (doc) {
+                    if (doc.type === "Course") return "Course"; // populate Course model
+                    if (doc.type === "CoursePackage") return "CoursePackage"; // populate CoursePackage model
+                    if (doc.type === "Program") return "Program"; // populate Program model
+                    return null; // In case of an invalid type, we don’t populate anything
+                },
+                select: "courseName courseCode coursePackageName coursePackageCode programName", // Adjust selection based on type
+            })
+            .select("+commentHistory.seenBy");
 
-    if (!student) return res.status(404).json({ error: "Student not found" });
+        if (!student)
+            return res.status(404).json({ error: "Student not found" });
 
-    res.json(student);
-  } catch (error) {
-    console.error("❌ Error fetching student:", error);
-    res.status(500).json({ error: "Failed to fetch student details" });
-  }
+        res.json(student);
+    } catch (error) {
+        console.error("❌ Error fetching student:", error);
+        res.status(500).json({ error: "Failed to fetch student details" });
+    }
 });
 
 /**
@@ -416,20 +508,23 @@ router.get("/student/:id", async (req, res) => {
  * @access  Public
  */
 router.get("/student/:id/basic", async (req, res) => {
-  try {
-    const student = await Student.findById(req.params.id)
-      .select(
-        "name personalNumber teacherId aplStatus startDate endDate finalExamDate examTime examMunicipality examLocation dropout"
-      )
-      .lean();
+    try {
+        const student = await Student.findById(req.params.id)
+            .select(
+                "name personalNumber teacherId aplStatus startDate endDate finalExamDate examTime examMunicipality examLocation dropout"
+            )
+            .lean();
 
-    if (!student) return res.status(404).json({ error: "Student not found" });
+        if (!student)
+            return res.status(404).json({ error: "Student not found" });
 
-    res.json(student);
-  } catch (error) {
-    console.error("❌ Error fetching basic student:", error);
-    res.status(500).json({ error: "Failed to fetch basic student details" });
-  }
+        res.json(student);
+    } catch (error) {
+        console.error("❌ Error fetching basic student:", error);
+        res.status(500).json({
+            error: "Failed to fetch basic student details",
+        });
+    }
 });
 
 /**
@@ -438,17 +533,17 @@ router.get("/student/:id/basic", async (req, res) => {
  * @access  Public
  */
 router.delete("/student/:id", async (req, res) => {
-  try {
-    const deletedStudent = await Student.findByIdAndDelete(req.params.id);
-    if (!deletedStudent) {
-      return res.status(404).json({ error: "Student not found" });
-    }
+    try {
+        const deletedStudent = await Student.findByIdAndDelete(req.params.id);
+        if (!deletedStudent) {
+            return res.status(404).json({ error: "Student not found" });
+        }
 
-    res.json({ message: "Student deleted successfully" });
-  } catch (error) {
-    console.error("❌ Error deleting student:", error);
-    res.status(500).json({ error: "Failed to delete student" });
-  }
+        res.json({ message: "Student deleted successfully" });
+    } catch (error) {
+        console.error("❌ Error deleting student:", error);
+        res.status(500).json({ error: "Failed to delete student" });
+    }
 });
 
 /**
@@ -457,13 +552,13 @@ router.delete("/student/:id", async (req, res) => {
  * @access  Public
  */
 router.delete("/students", async (req, res) => {
-  try {
-    await Student.deleteMany({});
-    res.json({ message: "All students deleted successfully" });
-  } catch (error) {
-    console.error("❌ Error deleting all students:", error);
-    res.status(500).json({ error: "Failed to delete all students" });
-  }
+    try {
+        await Student.deleteMany({});
+        res.json({ message: "All students deleted successfully" });
+    } catch (error) {
+        console.error("❌ Error deleting all students:", error);
+        res.status(500).json({ error: "Failed to delete all students" });
+    }
 });
 
 /**
@@ -472,33 +567,33 @@ router.delete("/students", async (req, res) => {
  * @access  Protected
  */
 router.patch("/students/:id", authenticateUser, async (req, res) => {
-  const { aplStatus } = req.body;
-  const userId = req.user?.userId;
+    const { aplStatus } = req.body;
+    const userId = req.user?.userId;
 
-  try {
-    const student = await Student.findById(req.params.id);
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
+    try {
+        const student = await Student.findById(req.params.id);
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        // 🔒 Only allow aplStatus to be changed
+        if (typeof aplStatus === "string") {
+            student.aplStatus = aplStatus;
+            student.aplStatusHistory.push({
+                status: aplStatus,
+                changedAt: new Date(),
+                changedBy: userId,
+            });
+
+            await student.save();
+            return res.json(student);
+        } else {
+            return res.status(400).json({ error: "Invalid APL status update" });
+        }
+    } catch (err) {
+        console.error("❌ Failed to update APL status:", err);
+        return res.status(500).json({ error: "Failed to update APL status" });
     }
-
-    // 🔒 Only allow aplStatus to be changed
-    if (typeof aplStatus === "string") {
-      student.aplStatus = aplStatus;
-      student.aplStatusHistory.push({
-        status: aplStatus,
-        changedAt: new Date(),
-        changedBy: userId,
-      });
-
-      await student.save();
-      return res.json(student);
-    } else {
-      return res.status(400).json({ error: "Invalid APL status update" });
-    }
-  } catch (err) {
-    console.error("❌ Failed to update APL status:", err);
-    return res.status(500).json({ error: "Failed to update APL status" });
-  }
 });
 
 /**
@@ -507,32 +602,33 @@ router.patch("/students/:id", authenticateUser, async (req, res) => {
  * @access  Protected
  */
 router.post("/students/:id/comment", authenticateUser, async (req, res) => {
-  const { comment } = req.body;
-  const { userId, role, name } = req.user;
+    const { comment } = req.body;
+    const { userId, role, name } = req.user;
 
-  if (!hasCommentPermission(role)) {
-    return res
-      .status(403)
-      .json({ error: "Insufficient permissions to comment." });
-  }
+    if (!hasCommentPermission(role)) {
+        return res
+            .status(403)
+            .json({ error: "Insufficient permissions to comment." });
+    }
 
-  try {
-    const student = await Student.findById(req.params.id);
-    if (!student) return res.status(404).json({ error: "Student not found" });
+    try {
+        const student = await Student.findById(req.params.id);
+        if (!student)
+            return res.status(404).json({ error: "Student not found" });
 
-    student.commentHistory.unshift({
-      comment,
-      author: name,
-      date: new Date(),
-      seenBy: [new mongoose.Types.ObjectId(userId)],
-    });
+        student.commentHistory.unshift({
+            comment,
+            author: name,
+            date: new Date(),
+            seenBy: [new mongoose.Types.ObjectId(userId)],
+        });
 
-    await student.save();
-    res.status(200).json({ commentHistory: student.commentHistory });
-  } catch (err) {
-    console.error("❌ Failed to save comment:", err);
-    res.status(500).json({ error: "Failed to add comment" });
-  }
+        await student.save();
+        res.status(200).json({ commentHistory: student.commentHistory });
+    } catch (err) {
+        console.error("❌ Failed to save comment:", err);
+        res.status(500).json({ error: "Failed to add comment" });
+    }
 });
 
 /**
@@ -541,23 +637,23 @@ router.post("/students/:id/comment", authenticateUser, async (req, res) => {
  * @access  Protected (admin/systemadmin only)
  */
 router.put("/students/:id/comment", authenticateUser, async (req, res) => {
-  const { index, updatedEntry } = req.body;
-  const { role } = req.user;
+    const { index, updatedEntry } = req.body;
+    const { role } = req.user;
 
-  if (!["admin", "systemadmin"].includes(role)) {
-    return res
-      .status(403)
-      .json({ error: "You don't have permission to edit comments." });
-  }
+    if (!["admin", "systemadmin"].includes(role)) {
+        return res
+            .status(403)
+            .json({ error: "You don't have permission to edit comments." });
+    }
 
-  const student = await Student.findById(req.params.id);
-  if (!student || !student.commentHistory[index]) {
-    return res.status(404).json({ error: "Comment not found." });
-  }
+    const student = await Student.findById(req.params.id);
+    if (!student || !student.commentHistory[index]) {
+        return res.status(404).json({ error: "Comment not found." });
+    }
 
-  student.commentHistory[index] = updatedEntry;
-  await student.save();
-  res.json({ success: true });
+    student.commentHistory[index] = updatedEntry;
+    await student.save();
+    res.json({ success: true });
 });
 
 /**
@@ -566,23 +662,23 @@ router.put("/students/:id/comment", authenticateUser, async (req, res) => {
  * @access  Protected (admin/systemadmin only)
  */
 router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
-  const { index } = req.body;
-  const { role } = req.user;
+    const { index } = req.body;
+    const { role } = req.user;
 
-  if (!["admin", "systemadmin"].includes(role)) {
-    return res
-      .status(403)
-      .json({ error: "You don't have permission to delete comments." });
-  }
+    if (!["admin", "systemadmin"].includes(role)) {
+        return res
+            .status(403)
+            .json({ error: "You don't have permission to delete comments." });
+    }
 
-  const student = await Student.findById(req.params.id);
-  if (!student || !student.commentHistory[index]) {
-    return res.status(404).json({ error: "Comment not found." });
-  }
+    const student = await Student.findById(req.params.id);
+    if (!student || !student.commentHistory[index]) {
+        return res.status(404).json({ error: "Comment not found." });
+    }
 
-  student.commentHistory.splice(index, 1);
-  await student.save();
-  res.json({ success: true });
+    student.commentHistory.splice(index, 1);
+    await student.save();
+    res.json({ success: true });
 });
 
 /**
@@ -591,110 +687,239 @@ router.delete("/students/:id/comment", authenticateUser, async (req, res) => {
  * @access  Public
  */
 router.put("/student/:id", async (req, res) => {
-  console.log("📥 Received payload:", req.body);
+    console.log("📥 Received payload:", req.body);
 
-  const allowedFields = [
-    "name",
-    "personalNumber",
-    "additionalInfo",
-    "aplStatus",
-    "phone",
-    "email",
-    "exam",
-    "teacher",
-    "teacherId",
-    "dropout",
-    "startDate",
-    "endDate",
-    "finalExamDate",
-    "examMunicipality",
-    "examLocation",
-    "examTime",
-    "education", // This will now be processed separately for course, coursePackage, program
-  ];
+    const allowedFields = [
+        "name",
+        "personalNumber",
+        "additionalInfo",
+        "aplStatus",
+        "phone",
+        "email",
+        "exam",
+        "teacher",
+        "teacherId",
+        "dropout",
+        "attendedExam",
+        "paidExamFee",
+        "startDate",
+        "endDate",
+        "finalExamDate",
+        "examMunicipality",
+        "examLocation",
+        "examTime",
+        "education", // This will now be processed separately for course, coursePackage, program
+    ];
 
-  const updates = {};
+    const updates = {};
 
-  // Process the allowed fields and populate the updates object
-  for (const field of allowedFields) {
-    if (req.body[field] !== undefined) {
-      updates[field] = req.body[field];
-    }
-  }
-
-  // 🛡️ Special handling for municipality
-  if (
-    req.body.municipality &&
-    typeof req.body.municipality === "object" &&
-    typeof req.body.municipality.type === "string"
-  ) {
-    updates["municipality"] = { type: req.body.municipality.type };
-  }
-
-  try {
-    const student = await Student.findById(req.params.id);
-
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
+    // Process the allowed fields and populate the updates object
+    for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+            updates[field] = req.body[field];
+        }
     }
 
-    // Special handling for education field
-    if (req.body.education) {
-      // We need to process each education entry separately based on type
-      const updatedEducation = student.education.map((edu) => {
-        const updateData = req.body.education.find(
-          (newEdu) => newEdu.refId.toString() === edu.refId.toString()
-        );
+    // 🛡️ Special handling for municipality
+    if (
+        req.body.municipality &&
+        typeof req.body.municipality === "object" &&
+        typeof req.body.municipality.type === "string"
+    ) {
+        updates["municipality"] = { type: req.body.municipality.type };
+    }
 
-        if (updateData) {
-          if (updateData.type === "Course") {
-            edu.grade = updateData.grade || edu.grade;
-            edu.locked = updateData.locked || edu.locked;
-            edu.comments = updateData.comments || edu.comments;
-          }
+    try {
+        const student = await Student.findById(req.params.id);
 
-          // Apply other potential changes from the request
-          edu.status = updateData.status || edu.status;
-          edu.addedBy = updateData.addedBy || edu.addedBy;
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
         }
 
-        return edu;
-      });
+        // Handle education updates through the enrollment system only
+        if (req.body.education) {
+            const StudentEnrollment = mongoose.model("StudentEnrollment");
 
-      updates.education = updatedEducation;
+            // Process each education entry
+            for (const eduData of req.body.education) {
+                if (eduData.type === "Course") {
+                    // Find existing enrollment for this course
+                    const courseId =
+                        typeof eduData.refId === "object"
+                            ? eduData.refId._id
+                            : eduData.refId;
+                    const existingEnrollment = await StudentEnrollment.findOne({
+                        studentId: student._id,
+                        mainCourseId: courseId,
+                    });
+
+                    if (existingEnrollment) {
+                        // Check if course is being removed
+                        if (eduData.removedAt) {
+                            // Delete the enrollment
+                            await StudentEnrollment.findByIdAndDelete(
+                                existingEnrollment._id
+                            );
+                            console.log(
+                                `🗑️ Deleted enrollment for course ${eduData.name}`
+                            );
+                            continue; // Skip to next course
+                        }
+
+                        // Update existing enrollment
+                        if (eduData.grade !== undefined)
+                            existingEnrollment.grade = eduData.grade;
+                        if (
+                            eduData.status !== undefined &&
+                            eduData.status !== ""
+                        )
+                            existingEnrollment.status = eduData.status;
+                        if (eduData.startDate !== undefined)
+                            existingEnrollment.startDate = new Date(
+                                eduData.startDate
+                            );
+                        if (eduData.endDate !== undefined)
+                            existingEnrollment.endDate = new Date(
+                                eduData.endDate
+                            );
+                        if (eduData.comments !== undefined)
+                            existingEnrollment.notes = eduData.comments;
+                        if (eduData.finalExamDate !== undefined)
+                            existingEnrollment.slutprovDate = new Date(
+                                eduData.finalExamDate
+                            );
+
+                        await existingEnrollment.save();
+                        console.log(
+                            `✅ Updated enrollment for course ${eduData.name}`
+                        );
+                    } else {
+                        // Don't create new enrollment if course is being removed
+                        if (eduData.removedAt) {
+                            console.log(
+                                `⚠️ Course ${eduData.name} marked as removed but no enrollment found - skipping`
+                            );
+                            continue;
+                        }
+
+                        // Create new enrollment
+                        try {
+                            const CourseMatchingService = await import(
+                                "../utils/courseMatchingService.js"
+                            );
+
+                            // Ensure refId is in the correct format for CourseMatchingService
+                            const eduDataForService = {
+                                ...eduData,
+                                refId: courseId,
+                            };
+
+                            const enrollmentResult =
+                                await CourseMatchingService.default.processStudentEducation(
+                                    student._id,
+                                    [eduDataForService],
+                                    req.user?.userId || null
+                                );
+
+                            console.log(
+                                `✅ Created new enrollment for course ${eduData.name}`
+                            );
+                        } catch (enrollmentError) {
+                            console.error(
+                                `❌ Error creating enrollment for course ${eduData.name}:`,
+                                enrollmentError
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Clear the old education array since we're using enrollments now
+            updates.education = [];
+        }
+
+        if (!student.teacherId && student.teacher) {
+            // Försök hitta en Teacher med samma namn
+            const foundTeacher = await Teacher.findOne({
+                name: student.teacher.trim(),
+            });
+            if (foundTeacher) {
+                updates.teacherId = foundTeacher._id;
+                console.log(
+                    `🔗 Kopplar ${student.name} till TeacherId: ${foundTeacher._id}`
+                );
+            } else {
+                console.warn(
+                    `⚠️ Ingen matchande lärare hittades för namn: ${student.teacher}`
+                );
+            }
+        }
+
+        // Perform the update operation
+        const updatedStudent = await Student.findByIdAndUpdate(
+            req.params.id,
+            { $set: updates },
+            { new: true }
+        );
+
+        if (!updatedStudent) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        // Fetch the education data from StudentEnrollment to include in response
+        const enrollments = await StudentEnrollment.find({
+            studentId: updatedStudent._id,
+        })
+            .populate("mainCourseId", "courseName")
+            .populate("coursePackageId", "packageName")
+            .populate("programId", "programName")
+            .populate("courseInstanceId", "startDate endDate")
+            .sort({ addedAt: 1 });
+
+        // Convert enrollments to education format for frontend compatibility
+        const enrollmentEducation = enrollments.map((enrollment) => {
+            const baseData = {
+                _id: enrollment._id,
+                type: enrollment.mainCourseId
+                    ? "Course"
+                    : enrollment.coursePackageId
+                    ? "CoursePackage"
+                    : "Program",
+                refId:
+                    enrollment.mainCourseId ||
+                    enrollment.coursePackageId ||
+                    enrollment.programId,
+                name:
+                    enrollment.mainCourseId?.courseName ||
+                    enrollment.coursePackageId?.packageName ||
+                    enrollment.programId?.programName,
+                startDate: enrollment.startDate,
+                endDate: enrollment.endDate,
+                finalExamDate: enrollment.slutprovDate,
+                status: enrollment.status,
+                grade: enrollment.grade,
+                comments: enrollment.notes,
+                enrollmentId: enrollment._id,
+                courseInstanceId: enrollment.courseInstanceId?._id,
+                addedAt: enrollment.enrollmentDate,
+                addedBy: enrollment.teacherId,
+                isEnrollment: true,
+            };
+
+            return baseData;
+        });
+
+        // Add education data to the response
+        const responseData = {
+            ...updatedStudent.toObject(),
+            education: enrollmentEducation,
+        };
+
+        res.status(200).json(responseData);
+    } catch (error) {
+        console.error("❌ Error updating student:", error);
+        res.status(500).json({ error: "Failed to update student" });
     }
-
-    if (!student.teacherId && student.teacher) {
-      // Försök hitta en Teacher med samma namn
-      const foundTeacher = await Teacher.findOne({ name: student.teacher.trim() });
-      if (foundTeacher) {
-        updates.teacherId = foundTeacher._id;
-        console.log(`🔗 Kopplar ${student.name} till TeacherId: ${foundTeacher._id}`);
-      } else {
-        console.warn(`⚠️ Ingen matchande lärare hittades för namn: ${student.teacher}`);
-      }
-    }
-    
-
-    // Perform the update operation
-    const updatedStudent = await Student.findByIdAndUpdate(
-      req.params.id,
-      { $set: updates },
-      { new: true }
-    ).populate(
-      "education.refId",
-      "courseName courseCode coursePackageName coursePackageCode programName"
-    );
-
-    if (!updatedStudent) {
-      return res.status(404).json({ error: "Student not found" });
-    }
-
-    res.status(200).json(updatedStudent);
-  } catch (error) {
-    console.error("❌ Error updating student:", error);
-    res.status(500).json({ error: "Failed to update student" });
-  }
 });
 
 /**
@@ -703,48 +928,49 @@ router.put("/student/:id", async (req, res) => {
  * @access  Protected
  */
 router.post(
-  "/students/:id/mark-comments-seen",
-  authenticateUser,
-  async (req, res) => {
-    try {
-      const student = await Student.findById(req.params.id);
-      if (!student) return res.status(404).json({ error: "Student not found" });
+    "/students/:id/mark-comments-seen",
+    authenticateUser,
+    async (req, res) => {
+        try {
+            const student = await Student.findById(req.params.id);
+            if (!student)
+                return res.status(404).json({ error: "Student not found" });
 
-      const userId = req.userId;
-      console.log("🔑 userId from session:", userId);
-      console.log(
-        "🎯 seenBy BEFORE update:",
-        student.commentHistory.map((c) => c.seenBy)
-      );
+            const userId = req.userId;
+            console.log("🔑 userId from session:", userId);
+            console.log(
+                "🎯 seenBy BEFORE update:",
+                student.commentHistory.map((c) => c.seenBy)
+            );
 
-      const objectId = new mongoose.Types.ObjectId(userId);
-      let updated = false;
+            const objectId = new mongoose.Types.ObjectId(userId);
+            let updated = false;
 
-      student.commentHistory.forEach((entry, i) => {
-        const alreadySeen = (entry.seenBy || []).some((id) =>
-          id.equals(objectId)
-        );
-        if (!alreadySeen) {
-          entry.seenBy.push(objectId);
-          updated = true;
+            student.commentHistory.forEach((entry, i) => {
+                const alreadySeen = (entry.seenBy || []).some((id) =>
+                    id.equals(objectId)
+                );
+                if (!alreadySeen) {
+                    entry.seenBy.push(objectId);
+                    updated = true;
+                }
+            });
+
+            if (updated) {
+                student.markModified("commentHistory");
+                await student.save();
+                console.log(
+                    "✅ Final seenBy in DB:",
+                    student.commentHistory.map((c) => c.seenBy)
+                );
+            }
+
+            res.json({ message: "Marked as seen", updatedStudent: student });
+        } catch (err) {
+            console.error("❌ Error in mark-comments-seen:", err);
+            res.status(500).json({ error: "Failed to mark comments as seen." });
         }
-      });
-
-      if (updated) {
-        student.markModified("commentHistory");
-        await student.save();
-        console.log(
-          "✅ Final seenBy in DB:",
-          student.commentHistory.map((c) => c.seenBy)
-        );
-      }
-
-      res.json({ message: "Marked as seen", updatedStudent: student });
-    } catch (err) {
-      console.error("❌ Error in mark-comments-seen:", err);
-      res.status(500).json({ error: "Failed to mark comments as seen." });
     }
-  }
 );
 
 /**
@@ -753,49 +979,51 @@ router.post(
  * @access  Public
  */
 router.patch(
-  "/student/:studentId/education/:educationId/grade",
-  async (req, res) => {
-    const { studentId, educationId } = req.params;
-    const { grade } = req.body;
+    "/student/:studentId/education/:educationId/grade",
+    async (req, res) => {
+        const { studentId, educationId } = req.params;
+        const { grade } = req.body;
 
-    if (!["A", "B", "C", "D", "E", "F"].includes(grade)) {
-      return res.status(400).json({ error: "Invalid grade." });
+        if (!["A", "B", "C", "D", "E", "F"].includes(grade)) {
+            return res.status(400).json({ error: "Invalid grade." });
+        }
+
+        try {
+            const student = await Student.findById(studentId);
+            if (!student) {
+                return res.status(404).json({ error: "Student not found" });
+            }
+
+            // Find the education entry to update based on educationId
+            const education = student.education.find(
+                (edu) => edu._id.toString() === educationId
+            );
+
+            if (!education) {
+                return res
+                    .status(404)
+                    .json({ error: "Education entry not found" });
+            }
+
+            // Only update the grade if the type is "Course"
+            if (education.type === "Course") {
+                education.grade = grade;
+            }
+
+            await student.save();
+
+            // Fetch the updated student and populate education data
+            const updatedStudent = await Student.findById(studentId).populate(
+                "education.refId",
+                "courseName courseCode coursePackageName coursePackageCode programName"
+            );
+
+            res.status(200).json(updatedStudent);
+        } catch (error) {
+            console.error("❌ Error updating grade:", error);
+            res.status(500).json({ error: "Server error" });
+        }
     }
-
-    try {
-      const student = await Student.findById(studentId);
-      if (!student) {
-        return res.status(404).json({ error: "Student not found" });
-      }
-
-      // Find the education entry to update based on educationId
-      const education = student.education.find(
-        (edu) => edu._id.toString() === educationId
-      );
-
-      if (!education) {
-        return res.status(404).json({ error: "Education entry not found" });
-      }
-
-      // Only update the grade if the type is "Course"
-      if (education.type === "Course") {
-        education.grade = grade;
-      }
-
-      await student.save();
-
-      // Fetch the updated student and populate education data
-      const updatedStudent = await Student.findById(studentId).populate(
-        "education.refId",
-        "courseName courseCode coursePackageName coursePackageCode programName"
-      );
-
-      res.status(200).json(updatedStudent);
-    } catch (error) {
-      console.error("❌ Error updating grade:", error);
-      res.status(500).json({ error: "Server error" });
-    }
-  }
 );
 
 /**
@@ -804,8 +1032,8 @@ router.patch(
  * @access  Public
  */
 router.get("/all-programs", async (req, res) => {
-  const programs = await Program.find().select("programName");
-  res.json(programs);
+    const programs = await Program.find().select("programName");
+    res.json(programs);
 });
 /**
  * @route   GET /all-course-packages
@@ -813,8 +1041,8 @@ router.get("/all-programs", async (req, res) => {
  * @access  Public
  */
 router.get("/all-course-packages", async (req, res) => {
-  const packages = await CoursePackage.find().select("coursePackageName");
-  res.json(packages);
+    const packages = await CoursePackage.find().select("coursePackageName");
+    res.json(packages);
 });
 /**
  * @route   GET /all-courses
@@ -822,8 +1050,8 @@ router.get("/all-course-packages", async (req, res) => {
  * @access  Public
  */
 router.get("/all-courses", async (req, res) => {
-  const courses = await Course.find().select("courseName courseCode");
-  res.json(courses);
+    const courses = await Course.find().select("courseName courseCode");
+    res.json(courses);
 });
 
 /**
@@ -832,38 +1060,38 @@ router.get("/all-courses", async (req, res) => {
  * @access  Public
  */
 router.put("/student/:id/education/:courseId/grade", async (req, res) => {
-  const { id, courseId } = req.params;
-  const { grade } = req.body;
+    const { id, courseId } = req.params;
+    const { grade } = req.body;
 
-  try {
-    // Find the student by ID
-    const student = await Student.findById(id);
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
+    try {
+        // Find the student by ID
+        const student = await Student.findById(id);
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        // Find the course in the student's education array
+        const courseIndex = student.education.findIndex(
+            (edu) => edu.refId.toString() === courseId
+        );
+
+        if (courseIndex === -1) {
+            return res
+                .status(404)
+                .json({ error: "Course not found in student's education" });
+        }
+
+        // Update the grade of the course
+        student.education[courseIndex].grade = grade;
+        student.updatedAt = new Date(); // Update modified date
+
+        await student.save();
+
+        res.status(200).json(student);
+    } catch (err) {
+        console.error("❌ Error updating grade:", err);
+        res.status(500).json({ error: "Failed to update grade" });
     }
-
-    // Find the course in the student's education array
-    const courseIndex = student.education.findIndex(
-      (edu) => edu.refId.toString() === courseId
-    );
-
-    if (courseIndex === -1) {
-      return res
-        .status(404)
-        .json({ error: "Course not found in student's education" });
-    }
-
-    // Update the grade of the course
-    student.education[courseIndex].grade = grade;
-    student.updatedAt = new Date(); // Update modified date
-
-    await student.save();
-
-    res.status(200).json(student);
-  } catch (err) {
-    console.error("❌ Error updating grade:", err);
-    res.status(500).json({ error: "Failed to update grade" });
-  }
 });
 
 /**
@@ -872,19 +1100,19 @@ router.put("/student/:id/education/:courseId/grade", async (req, res) => {
  * @access  Public
  */
 router.get("/students/earnings", async (req, res) => {
-  try {
-    const students = await Student.find(
-      { "education.grade": { $ne: null } }, // only students with grades
-      {
-        municipality: 1,
-        education: 1,
-      }
-    );
-    res.json(students);
-  } catch (err) {
-    console.error("❌ Failed to fetch earnings students", err);
-    res.status(500).json({ error: "Server error" });
-  }
+    try {
+        const students = await Student.find(
+            { "education.grade": { $ne: null } }, // only students with grades
+            {
+                municipality: 1,
+                education: 1,
+            }
+        );
+        res.json(students);
+    } catch (err) {
+        console.error("❌ Failed to fetch earnings students", err);
+        res.status(500).json({ error: "Server error" });
+    }
 });
 
 export default router;

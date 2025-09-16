@@ -16,37 +16,40 @@ router.get("/courses", authenticateUser, async (req, res) => {
             "education.type": "Course",
             "education.refId": { $exists: true },
         };
-        
+
         // If user is a teacher, filter students by their teacherId
         if (req.user.role === "teacher") {
             // Find the teacher record for this user
             const teacher = await Teacher.findOne({ userId: req.user.userId });
-            
+
             if (!teacher) {
-                return res.status(403).json({ error: "Teacher profile not found" });
+                return res
+                    .status(403)
+                    .json({ error: "Teacher profile not found" });
             }
-            
+
             // Filter students by this teacher's ID
             query.teacherId = teacher._id;
             console.log(`🔍 Teacher ${teacher._id} fetching their courses`);
         }
-        
-        const students = await Student.find(query)
-            .populate("education.refId", "courseName")
-            .select("education");
+
+        const students = await Student.find(query);
 
         const allCourseRefs = [];
 
         for (const student of students) {
-            for (const edu of student.education) {
-                if (
-                    edu.type === "Course" &&
-                    edu.refId?._id &&
-                    edu.refId?.courseName
-                ) {
+            // Get enrollments for this student
+            const studentEnrollments = await mongoose
+                .model("StudentEnrollment")
+                .find({ studentId: student._id })
+                .populate("mainCourseId", "courseName")
+                .lean();
+
+            for (const enrollment of studentEnrollments) {
+                if (enrollment.mainCourseId) {
                     allCourseRefs.push({
-                        _id: edu.refId._id.toString(),
-                        name: edu.refId.courseName,
+                        _id: enrollment.mainCourseId._id.toString(),
+                        name: enrollment.mainCourseId.courseName,
                     });
                 }
             }
@@ -71,18 +74,20 @@ router.get("/search", authenticateUser, async (req, res) => {
 
     try {
         const results = [];
-        
+
         let studentQuery = {};
-        
+
         // If user is a teacher, filter students by their teacherId
         if (req.user.role === "teacher") {
             // Find the teacher record for this user
             const teacher = await Teacher.findOne({ userId: req.user.userId });
-            
+
             if (!teacher) {
-                return res.status(403).json({ error: "Teacher profile not found" });
+                return res
+                    .status(403)
+                    .json({ error: "Teacher profile not found" });
             }
-            
+
             // Filter students by this teacher's ID
             studentQuery.teacherId = teacher._id;
             console.log(`🔍 Teacher ${teacher._id} searching their students`);
@@ -120,12 +125,10 @@ router.get("/search", authenticateUser, async (req, res) => {
 
         if (shouldSearchUsers) {
             const [students, users] = await Promise.all([
-                Student.find({ 
+                Student.find({
                     ...studentQuery,
-                    name: { $regex: q, $options: "i" } 
-                }).select(
-                    "_id name email"
-                ),
+                    name: { $regex: q, $options: "i" },
+                }).select("_id name email"),
                 User.find({
                     $or: [
                         { username: { $regex: q, $options: "i" } },
@@ -151,33 +154,46 @@ router.get("/search", authenticateUser, async (req, res) => {
         }
 
         if (shouldSearchCourses) {
-            const students = await Student.find({
-                ...studentQuery,
-                "education.refId": { $ne: null },
-            })
-                .populate("education.refId")
-                .lean();
+            const students = await Student.find(studentQuery).lean();
 
             const courseMap = new Map();
 
             for (const student of students) {
-                for (const edu of student.education) {
-                    if (!edu.refId) continue;
+                // Get enrollments for this student
+                const searchEnrollments = await mongoose
+                    .model("StudentEnrollment")
+                    .find({ studentId: student._id })
+                    .populate("mainCourseId", "courseName")
+                    .populate("coursePackageId", "coursePackageName")
+                    .populate("programId", "programName")
+                    .lean();
 
+                for (const enrollment of searchEnrollments) {
                     let name = "";
-                    if (edu.type === "Course") name = edu.refId.courseName;
-                    if (edu.type === "Program") name = edu.refId.programName;
-                    if (edu.type === "CoursePackage")
-                        name = edu.refId.coursePackageName;
+                    let type = "";
+                    let courseId = "";
+
+                    if (enrollment.mainCourseId) {
+                        name = enrollment.mainCourseId.courseName;
+                        type = "Course";
+                        courseId = enrollment.mainCourseId._id.toString();
+                    } else if (enrollment.coursePackageId) {
+                        name = enrollment.coursePackageId.coursePackageName;
+                        type = "CoursePackage";
+                        courseId = enrollment.coursePackageId._id.toString();
+                    } else if (enrollment.programId) {
+                        name = enrollment.programId.programName;
+                        type = "Program";
+                        courseId = enrollment.programId._id.toString();
+                    }
 
                     if (name && name.match(new RegExp(q, "i"))) {
-                        const courseId = edu.refId._id.toString();
                         if (!courseMap.has(courseId)) {
                             courseMap.set(courseId, {
                                 id: courseId,
                                 name,
-                                type: edu.type,
-                                extra: `Typ: ${edu.type}`,
+                                type,
+                                extra: `Typ: ${type}`,
                             });
                         }
                     }
@@ -251,7 +267,7 @@ router.get("/details/:type/:id", async (req, res) => {
                 }
 
                 // Fetch enrollments from the new course versioning system
-                const enrollments = await StudentEnrollment.find({
+                const studentEnrollments = await StudentEnrollment.find({
                     studentId: id,
                 })
                     .populate("courseInstanceId")
@@ -260,27 +276,28 @@ router.get("/details/:type/:id", async (req, res) => {
                     .sort({ startDate: -1 });
 
                 // Convert enrollments to education format for display
-                const enrollmentEducation = enrollments.map((enrollment) => ({
-                    _id: enrollment._id,
-                    type: "Course",
-                    refId: enrollment.mainCourseId,
-                    startDate: enrollment.startDate,
-                    endDate: enrollment.endDate,
-                    status: enrollment.status,
-                    grade: enrollment.grade,
-                    enrollmentId: enrollment._id,
-                    courseInstanceId: enrollment.courseInstanceId?._id,
-                    courseInstance: enrollment.courseInstanceId,
-                    addedAt: enrollment.createdAt,
-                    addedBy: enrollment.teacherId?.name || "System",
-                    isEnrollment: true, // Flag to identify this came from enrollment system
-                }));
+                const enrollmentEducation = studentEnrollments.map(
+                    (enrollment) => ({
+                        _id: enrollment._id,
+                        type: "Course",
+                        refId: enrollment.mainCourseId,
+                        name: enrollment.mainCourseId?.courseName,
+                        startDate: enrollment.startDate,
+                        endDate: enrollment.endDate,
+                        status: enrollment.status,
+                        grade: enrollment.grade,
+                        comments: enrollment.notes,
+                        enrollmentId: enrollment._id,
+                        courseInstanceId: enrollment.courseInstanceId?._id,
+                        courseInstance: enrollment.courseInstanceId,
+                        addedAt: enrollment.createdAt,
+                        addedBy: enrollment.teacherId?.name || "System",
+                        isEnrollment: true, // Flag to identify this came from enrollment system
+                    })
+                );
 
-                // Combine both education arrays (old system + new enrollment system)
-                populatedStudent.education = [
-                    ...populatedStudent.education,
-                    ...enrollmentEducation,
-                ];
+                // Use only enrollment data as education entries
+                populatedStudent.education = enrollmentEducation;
 
                 // Add enrollment statistics
                 populatedStudent.enrollmentStats = {
@@ -322,20 +339,24 @@ router.get("/details/:type/:id", async (req, res) => {
                 break;
 
             case "Kurs":
-                const students = await Student.find({
-                    "education.refId": id,
-                }).select("name _id");
+                // Find students who have enrollments for this course
+                const courseEnrollments = await mongoose
+                    .model("StudentEnrollment")
+                    .find({ mainCourseId: id })
+                    .populate("studentId", "name _id")
+                    .lean();
+
+                const students = courseEnrollments.map((e) => e.studentId);
+
                 const sampleStudent = await Student.findOne({
-                    "education.refId": id,
-                })
-                    .populate("education.refId")
-                    .populate({
-                        path: "teacherId", // ✅ rätt fält i Student.js
-                        populate: {
-                            path: "userId", // ✅ referens i Teacher.js
-                            select: "username email",
-                        },
-                    });
+                    _id: { $in: students.map((s) => s._id) },
+                }).populate({
+                    path: "teacherId", // ✅ rätt fält i Student.js
+                    populate: {
+                        path: "userId", // ✅ referens i Teacher.js
+                        select: "username email",
+                    },
+                });
 
                 if (!sampleStudent)
                     return res
