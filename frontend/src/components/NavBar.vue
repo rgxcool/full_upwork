@@ -1,180 +1,143 @@
 <template>
-  <nav class="navbar px-5" @click.self="closeSearch">
-    <div class="top-nav">
-      <div class="logo-version-group">
+  <nav class="navbar" v-show="!isLoginPage">
+    <div class="nav-container">
+      <!-- Logo -->
+      <div class="nav-brand">
         <router-link class="navbar-brand" to="/">
           <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
         </router-link>
-        <span class="build-counter" @click="toggleSecretMenu" ref="versionRef" style="cursor:pointer;">v. {{ buildVersion }}</span>
       </div>
       
-      <!-- Mobile menu button -->
-      <button class="burger-menu" @click="toggleMobileMenu" aria-label="Toggle mobile menu">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-          <path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+      <!-- Actions -->
+      <div class="nav-actions">
+        <!-- Profil dropdown för inloggade -->
+        <div v-if="isLoggedIn" class="profile-dropdown-wrapper">
+          <button class="profile-btn" @click.stop.prevent="toggleProfileMenu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+        </svg>
+            Min profil
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6,9 12,15 18,9"/>
         </svg>
       </button>
-      <div v-if="canSeeSearch" class="search-wrapper">
-        <div class="search-bar-enhanced">
-          <div class="search-type" @click="toggleSearchTypeDropdown">
-            {{ selectedSearchType }}
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M7 10l5 5 5-5z" />
-            </svg>
-          </div>
 
-          <input
-            v-if="selectedSearchType !== 'Datum'"
-            class="search-input"
-            type="text"
-            v-model="searchQuery"
-            @input="handleSearch"
-            @focus="handleInputFocus"
-            :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
-          />
-
-          <DatePicker
-            v-if="selectedSearchType === 'Datum'"
-            v-model="selectedDate"
-            :format="'yyyy-MM-dd'"
-            :placeholder="'Välj datum'"
-          />
-
-          <div v-if="searchQuery || selectedDate" class="clear-icon" @click="clearSearch">✕</div>
-        </div>
-
-        <ul v-if="showSearchTypeDropdown" class="search-type-dropdown">
-          <li :class="{ active: selectedSearchType === 'Alla' }" @click="selectSearchType('Alla')">
-            Alla
-          </li>
-          <li
-            :class="{ active: selectedSearchType === 'Användare' }"
-            @click="selectSearchType('Användare')"
-          >
-            Användare
-          </li>
-          <li :class="{ active: selectedSearchType === 'Kurs' }" @click="selectSearchType('Kurs')">
-            Kurs
-          </li>
-          <li
-            :class="{ active: selectedSearchType === 'Datum' }"
-            @click="selectSearchType('Datum')"
-          >
-            Datum
-          </li>
-        </ul>
-      </div>
-      <div v-if="canSeeSearch" class="icon-container">
-        <div class="icon-group">
-          <div
-            v-if="isLoggedIn && canSeeNotifications"
-            class="icon notification-icon"
-            @click="toggleNotificationPanel"
-            ref="notificationIcon"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-              <path
-                fill="currentColor"
-                d="M12 2C10.3 2 9 3.3 9 5v1.1c-2.8.5-5 3-5 5.9v4l-1 1v1h16v-1l-1-1v-4c0-2.9-2.2-5.4-5-5.9V5c0-1.7-1.3-3-3-3zm0 18c1.1 0 2-.9 2-2H10c0 1.1.9 2 2 2z"
-              />
-            </svg>
-            <span v-if="notifications.length" class="notis-badge">{{ notifications.length }}</span>
-          </div>
-
-          <!-- Notispanel -->
-          <div v-if="showNotisPanel" class="notis-panel" ref="notisPanel">
-            <NotificationBox
-              :notifications="notifications"
-              @notification-dismissed="
-                (id) => (notifications = notifications.filter((n) => n._id !== id))
-              "
-            />
-          </div>
-
-          <div class="icon profile-icon" @click="toggleProfileMenu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-              <path
-                fill="currentColor"
-                d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4"
-              />
-            </svg>
-
-            <!-- Mobilmeny under profilikonen -->
+          <!-- Profile dropdown -->
             <div v-if="showProfileMenu" class="profile-dropdown" ref="profileDropdown">
-              <router-link v-if="isLoggedIn" to="/profile" class="dropdown-link">Profil</router-link>
-              <button v-if="isLoggedIn" @click="logout" class="logout-btn">Logga ut</button>
-              <router-link v-else to="/login" class="dropdown-link">Logga in</router-link>
+            <router-link to="/profile" class="dropdown-item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+            </svg>
+              Min profil
+            </router-link>
+            <button @click="logout" class="dropdown-item logout-item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16,17 21,12 16,7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Logga ut
+            </button>
+          </div>
+        </div>
+
+        <!-- Notification icon -->
+        <div v-if="isLoggedIn && canSeeNotifications" class="notification-icon" @click="toggleNotificationPanel">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span v-if="totalNotifications > 0" class="notis-badge">{{ totalNotifications }}</span>
+        </div>
+
+        <!-- Burger menu button -->
+        <button v-if="isLoggedIn" class="burger-btn" @click.stop.prevent="toggleMobileMenu" aria-label="Öppna meny">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+        </button>
+
+        <!-- Login knapp för icke-inloggade -->
+        <router-link v-if="!isLoggedIn" to="/login" class="login-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+            <polyline points="10,17 15,12 10,7"/>
+            <line x1="15" y1="12" x2="3" y2="12"/>
+          </svg>
+          LOGGA IN
+        </router-link>
+        
+        <!-- Mobile menu overlay -->
+        <div v-if="isMobileMenuOpen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: rgba(0, 0, 0, 0.5); z-index: 9998; backdrop-filter: blur(2px);" @click="closeMobileMenu"></div>
+        
+        <!-- Mobile menu -->
+        <div v-if="isMobileMenuOpen" style="position: fixed; top: 0; right: 0; width: 320px; max-width: 85vw; height: 100vh; background: white; z-index: 9999; box-shadow: -5px 0 20px rgba(0, 0, 0, 0.15); display: flex; flex-direction: column; border-left: 1px solid #e5e7eb; animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 1.5rem; border-bottom: 1px solid #e5e7eb; background: #f8fafc;">
+            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: #374151;">Navigation</h3>
+            <button style="display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; background: none; border: none; border-radius: 0.375rem; color: #6b7280; cursor: pointer; transition: all 0.2s ease;" @click="closeMobileMenu">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          
+          <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; overflow-y: auto;">
+            <ul style="list-style: none; padding: 0; margin: 0;">
+              <li v-for="item in filteredMenuItems" :key="item.link" style="border-bottom: 1px solid #f3f4f6;">
+                <router-link :to="item.link" style="display: block; padding: 1rem 1.5rem; color: #374151; text-decoration: none; font-weight: 500; transition: all 0.2s ease;" @click="closeMobileMenu">
+                  {{ item.name }}
+                </router-link>
+              </li>
+            </ul>
+            
+            <div style="padding: 1.5rem; border-top: 1px solid #e5e7eb; background: #f8fafc;">
+              <button style="display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.75rem; background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease;" @click="logout">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16,17 21,12 16,7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Logga ut
+              </button>
             </div>
           </div>
+        </div>
 
-          <!-- Visible login/register buttons when not logged in -->
-          <div v-if="!isLoggedIn" class="auth-buttons">
-            <router-link to="/login" class="login-btn">Logga in</router-link>
-            <!-- Register button removed -->
+        <!-- Notification panel -->
+        <div v-if="showNotisPanel" class="notification-panel" ref="notisPanel">
+          <div class="notis-header">
+            <h3>Notifikationer</h3>
+            <span class="notis-count">({{ totalNotifications }})</span>
+          </div>
+          
+          <div class="notis-list">
+            <div v-for="notification in notifications" :key="notification.id" class="notis-item">
+              <div class="notis-content">
+                <span class="notis-type">{{ notification.type }}</span>
+                <span class="notis-message">{{ notification.message }}</span>
+              </div>
+              <div class="notis-actions">
+                <button @click="resolveNote(notification.id)" class="resolve-btn">
+                  Markera som löst
+                </button>
+                <button v-if="canResetNotifications" @click="resetNotification(notification.id)" class="reset-btn">
+                  Återställ
+                </button>
+              </div>
+            </div>
+            
+            <div v-if="notifications.length === 0" class="no-notis">
+              Inga notifikationer
+            </div>
           </div>
         </div>
       </div>
-      <!-- Resultat -->
-      <div v-if="showResults" class="search-results me-3">
-        <ul class="result-list">
-          <li
-            v-for="result in filteredResults"
-            :key="result.id"
-            @click="navigateToDetails(result)"
-            class="result-item"
-          >
-            <div class="result-content">
-              <div class="result-title">{{ result.name }}</div>
-              <div class="result-subtitle">{{ result.extra }}</div>
-            </div>
-          </li>
-        </ul>
-      </div>
     </div>
-    
-    <!-- Mobile menu overlay -->
-    <div class="mobile-overlay" :class="{ active: isMobileMenuOpen }" @click="toggleMobileMenu"></div>
-    
-    <!-- Mobile menu -->
-    <div class="mobile-menu" :class="{ open: isMobileMenuOpen }">
-      <div class="mobile-menu-header">
-        <h3>Meny</h3>
-        <button class="mobile-menu-close" @click="toggleMobileMenu">✕</button>
-      </div>
-      <ul class="mobile-nav-links">
-        <li v-for="item in filteredMenuItems" :key="item.link">
-          <router-link 
-            :to="item.link" 
-            class="nav-link"
-            @click="toggleMobileMenu"
-          >
-            {{ item.name }}
-          </router-link>
-        </li>
-        <li v-if="isLoggedIn">
-          <button @click="logout" class="logout-btn">Logga ut</button>
-        </li>
-      </ul>
-    </div>
-    
-    <!-- Always show login/register buttons at far right if not logged in -->
-    <div v-if="!isLoggedIn" class="auth-buttons navbar-auth-buttons">
-      <router-link to="/login" class="login-btn">Logga in</router-link>
-      <!-- Register button removed -->
-    </div>
-    <!-- Secret menu dropdown rendered as sibling to .top-nav and .nav-links -->
-    <div v-if="showSecretMenu" class="secret-menu-dropdown" :style="secretMenuStyle">
-      <ul>
-        <li v-for="item in secretMenuItems" :key="item.link">
-          <router-link v-if="item.link !== '/register'" :to="item.link" class="nav-link">{{ item.name }}</router-link>
-        </li>
-      </ul>
-    </div>
-    <ul class="nav-links nav-links-row">
-      <li v-for="item in filteredMenuItems" :key="item.link">
-        <router-link v-if="item.link !== '/register'" :to="item.link" class="nav-link">{{ item.name }}</router-link>
-      </li>
-    </ul>
   </nav>
 </template>
 
@@ -197,6 +160,11 @@
       const canSeeNotifications = computed(() =>
         ['teacher', 'admin', 'systemadmin'].includes(userRole.value)
       )
+
+      // Dölja navbar på login-sidan
+      const isLoginPage = computed(() => {
+        return router.currentRoute.value.path === '/login'
+      })
 
       const notifications = ref([])
 
@@ -225,8 +193,14 @@
       const selectedSearchType = ref('Alla')
       const showSearchTypeDropdown = ref(false)
 
-      const toggleMobileMenu = () => {
+      const toggleMobileMenu = (event) => {
+        event?.preventDefault()
+        event?.stopPropagation()
         isMobileMenuOpen.value = !isMobileMenuOpen.value
+      }
+
+      const closeMobileMenu = () => {
+        isMobileMenuOpen.value = false
       }
 
       const totalNotifications = computed(() => notifications.value.length)
@@ -434,7 +408,9 @@
           return hasPermission(item.role);
         });
       });
-      const toggleProfileMenu = () => {
+      const toggleProfileMenu = (event) => {
+        event?.preventDefault()
+        event?.stopPropagation()
         showProfileMenu.value = !showProfileMenu.value
       }
 
@@ -537,6 +513,10 @@
         secretMenuStyle,
         canSeeSearch,
         userRole,
+        isLoginPage,
+        isMobileMenuOpen,
+        toggleMobileMenu,
+        closeMobileMenu,
       }
     },
   }
@@ -567,23 +547,63 @@
     margin: 0;
   }
   .navbar {
-    background-color: #f8f8f8;
-    font-family: 'Roboto', sans-serif;
-    padding: 20px;
-    position: relative;
+    background: white;
+    font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid #e5e7eb;
   }
 
-  /* Top navigation container */
-  .top-nav {
+  .nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem 2rem;
+    display: grid;
+    grid-template-columns: minmax(300px, 1fr) auto;
+    align-items: center;
+    min-height: 5rem;
+    gap: 8rem;
+  }
+
+  /* Logo */
+  .nav-brand {
     display: flex;
     align-items: center;
-    justify-content: space-between !important;
-    flex-wrap: wrap; /* gör att burgaren hoppar ner snyggt om det blir trångt */
-    gap: 20px;
-    max-width: 1800px;
-    margin: 0 auto;
-    width: 100%;
-    padding: 15px 20px;
+    justify-self: start;
+  }
+
+  .navbar-brand {
+    display: flex;
+    align-items: center;
+    transition: transform 0.2s ease;
+  }
+
+  .navbar-brand:hover {
+    transform: scale(1.05);
+  }
+
+  .logo {
+    height: 2.5rem;
+    width: auto;
+  }
+
+  .version-badge {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    background: var(--color-bg-secondary);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .version-badge:hover {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
   }
 
   /* Sökruta exakt till vänster */
@@ -687,75 +707,289 @@
     height: 50px;
   }
 
-  .icon-container {
+
+  /* Actions */
+  .nav-actions {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 20px;
+    gap: 2rem;
     position: relative;
+    justify-self: end;
   }
 
-  .icon-group {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    position: relative;
-  }
-
-  .icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #ece6f0;
+  /* Burger button */
+  .burger-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    background: #f8fafc;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    order: 2; /* Ensure it appears after profile button */
     position: relative;
+    z-index: 100;
+    pointer-events: auto;
+  }
+
+  .burger-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+    transform: scale(1.05);
+  }
+
+  .burger-btn:active {
+    transform: scale(0.95);
+  }
+
+  /* Notification icon */
+  .notification-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    background: #f8fafc;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .notification-icon:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+    transform: scale(1.05);
+  }
+
+  .notification-icon:active {
+    transform: scale(0.95);
   }
 
   .notis-badge {
     position: absolute;
-    top: -6px;
-    right: -6px;
-    background: #f44336;
+    top: -8px;
+    right: -8px;
+    background: #dc2626;
     color: white;
-    font-size: 12px;
-    font-weight: bold;
-    padding: 2px 6px;
-    border-radius: 999px;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 2px solid white;
+  }
+
+  /* Notification panel */
+  .notification-panel {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 350px;
+    max-height: 400px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    overflow: hidden;
+  }
+
+  .notis-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .notis-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .notis-count {
+    font-size: 0.875rem;
+    color: #6b7280;
+  }
+
+  .notis-list {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .notis-item {
+    padding: 1rem;
+    border-bottom: 1px solid #f3f4f6;
+  }
+
+  .notis-item:last-child {
+    border-bottom: none;
+  }
+
+  .notis-content {
+    margin-bottom: 0.5rem;
+  }
+
+  .notis-type {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #667eea;
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+  }
+
+  .notis-message {
+    display: block;
+    font-size: 0.875rem;
+    color: #374151;
+    line-height: 1.4;
+  }
+
+  .notis-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .resolve-btn, .reset-btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .resolve-btn {
+    background: #10b981;
+    color: white;
+    border: none;
+  }
+
+  .resolve-btn:hover {
+    background: #059669;
+  }
+
+  .reset-btn {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+  }
+
+  .reset-btn:hover {
+    background: #e5e7eb;
+  }
+
+  .no-notis {
+    padding: 2rem;
+    text-align: center;
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  /* Profile button för inloggade */
+  .profile-dropdown-wrapper {
+    position: relative;
+    order: 1; /* Ensure it appears before burger button */
+  }
+
+  .profile-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #f8fafc;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    padding: 0.875rem 1.5rem;
+    border-radius: 50px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+  }
+
+  .profile-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  }
+
+  .profile-btn:active {
+    transform: translateY(0);
+  }
+
+  .nav-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background: var(--color-bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
+
+  .nav-icon:hover {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    transform: scale(1.05);
+  }
+
+  .notification-badge {
+    position: absolute;
+    top: -0.25rem;
+    right: -0.25rem;
+    background: var(--color-error);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
     line-height: 1;
     z-index: 10;
-  }
-  .icon:hover {
-    background: #dcd4e6;
-  }
-
-  /* Separationslinje */
-  .divider {
-    width: 100%;
-    height: 1px;
-    background: #ddd;
-    margin-top: 10px;
+    min-width: 1.25rem;
+    text-align: center;
   }
 
-  /* Navigationslänkar exakt justerade */
-  .nav-links {
-    display: flex;
-    justify-content: center; /* Centering the links */
-    margin: 0 auto;
-    gap: 40px;
-    list-style: none;
-  }
+  /* Ej använd längre - enkel navbar */
 
   .nav-link {
+    display: block;
     text-decoration: none;
-    font-size: 15px;
-    color: #333;
-    transition: color 0.3s;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
   }
 
-  .nav-link:hover {
-    text-decoration: underline;
+  .nav-link:hover,
+  .nav-link.router-link-active {
+    color: var(--color-primary);
+    background: var(--color-primary-light);
   }
 
   /* Logout Button - Styled to Match Links */
@@ -777,18 +1011,19 @@
     color: white;
   }
 
-  .notis-panel {
+  .notification-panel {
     position: absolute;
-    top: 50px;
+    top: 3.5rem;
     right: 0;
-    background: #fff;
-    border: 1.5px solid #6c63ff;
-    border-radius: 10px;
-    width: 300px;
-    padding: 18px 16px 18px 16px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    width: 20rem;
+    max-width: 90vw;
+    padding: 1rem;
+    box-shadow: var(--shadow-lg);
     z-index: 1200;
-    font-family: 'Inter', sans-serif;
+    font-family: inherit;
   }
 
   .notis-header {
@@ -822,37 +1057,50 @@
     line-height: 1;
   }
 
+  /* Sök */
   .search-wrapper {
     flex: 1;
-    display: flex;
-    justify-content: center;
-    min-width: 200px;
-    max-width: 600px;
-    margin: 0 24px;
+    max-width: 500px;
     position: relative;
   }
 
   .search-bar-enhanced {
     display: flex;
     align-items: center;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 25px;
-    padding: 8px 12px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-    gap: 10px;
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 0.75rem 1rem;
+    box-shadow: var(--shadow-sm);
+    gap: 0.75rem;
+    transition: all 0.2s ease;
+  }
+
+  .search-bar-enhanced:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-light);
   }
 
   .search-type {
-    background: #f2f2f2;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 13px;
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 0.25rem;
     user-select: none;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
+
+  .search-type:hover {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
   }
 
   .search-input {
@@ -957,20 +1205,22 @@
     position: relative; /* viktigt! */
   }
 
-  .burger-menu {
+  .mobile-menu-btn {
     display: none;
     border: none;
     cursor: pointer;
-    background: none;
-    padding: 8px;
-    border-radius: 4px;
-    transition: background 0.2s;
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    padding: 0.5rem;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
     position: relative;
     z-index: 1001;
   }
 
-  .burger-menu:hover {
-    background: #f0f0f0;
+  .mobile-menu-btn:hover {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
   }
 
   @media (min-width: 769px) {
@@ -991,13 +1241,42 @@
     }
   }
 
-  @media (max-width: 300px) {
-    .burger-menu {
-      display: block;
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: #333; /* ← viktigt för att fyllningen syns */
+  /* Responsiv design */
+  @media (max-width: 768px) {
+    .nav-container {
+      padding: 0.75rem 1rem;
+      min-height: 4rem;
+    }
+    
+    .logo {
+      height: 2rem;
+    }
+    
+    .login-btn {
+      padding: 0.75rem 1.5rem;
+      font-size: 0.8rem;
+    }
+    
+    .profile-btn {
+      padding: 0.75rem 1rem;
+      font-size: 0.8rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .nav-container {
+      padding: 0.5rem 1rem;
+    }
+    
+    .login-btn {
+      padding: 0.625rem 1.25rem;
+      font-size: 0.75rem;
+    }
+    
+    .login-btn svg {
+      width: 16px;
+      height: 16px;
+    }
     }
 
     .nav-links {
@@ -1108,18 +1387,145 @@
       text-align: left;
       color: red;
     }
+
+  /* Mobile menu */
+  .mobile-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100vh !important;
+    background: rgba(255, 0, 0, 0.8) !important;
+    z-index: 9998 !important;
   }
 
-  @media (max-width: 300px) {
-    .nav-links {
-      display: none;
+  .mobile-menu {
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    width: 320px !important;
+    max-width: 85vw !important;
+    height: 100vh !important;
+    background: red !important;
+    z-index: 9999 !important;
+    box-shadow: -5px 0 20px rgba(0, 0, 0, 0.5) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border: 5px solid blue !important;
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  /* Hover effects for mobile menu links */
+  .mobile-nav-link:hover {
+    background: #667eea !important;
+    color: white !important;
+  }
+
+  .mobile-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f8fafc;
+  }
+
+  .mobile-menu-header h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .mobile-menu-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    background: none;
+    border: none;
+    border-radius: 0.375rem;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-menu-close:hover {
+    background: #f3f4f6;
+    color: #374151;
+  }
+
+  .mobile-menu-content {
+    flex: 1;
+    display: flex;
       flex-direction: column;
-      width: 100%;
-      text-align: center;
-    }
-    .menu-toggle {
+    justify-content: space-between;
+    overflow-y: auto;
+  }
+
+  .mobile-nav-links {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .mobile-nav-links li {
+    border-bottom: 1px solid #f3f4f6;
+  }
+
+  .mobile-nav-link {
       display: block;
-    }
+    padding: 1rem 1.5rem;
+    color: #374151;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-nav-link:hover {
+    background: #667eea;
+    color: white;
+  }
+
+  .mobile-nav-link.router-link-active {
+    background: #e0e7ff;
+    color: #667eea;
+    border-right: 3px solid #667eea;
+  }
+
+  .mobile-menu-footer {
+    padding: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+    background: #f8fafc;
+  }
+
+  .mobile-logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem;
+    background: #fee2e2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-logout-btn:hover {
+    background: #fecaca;
+    border-color: #f87171;
   }
 
   .profile-icon {
@@ -1139,46 +1545,54 @@
 
   .profile-dropdown {
     position: absolute;
-    top: 45px;
+    top: 3.5rem;
     right: 0;
-    background: #fff;
-    border: 1.5px solid #6c63ff;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    padding: 10px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 0.5rem;
     display: flex;
     flex-direction: column;
     z-index: 1200;
-    width: 150px;
+    min-width: 12rem;
   }
 
-  .profile-dropdown .logout-btn,
-  .profile-dropdown .dropdown-link {
-    color: #222;
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--color-text);
     background: transparent;
     border: none;
     outline: none;
-    padding: 10px;
+    padding: 0.75rem 1rem;
     text-align: left;
-    border-radius: 4px;
-    font-size: 15px;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s;
+    transition: all 0.2s ease;
     width: 100%;
-    display: block;
-  }
-
-  .profile-dropdown .dropdown-link {
     text-decoration: none;
   }
 
-  .profile-dropdown .logout-btn:hover,
-  .profile-dropdown .logout-btn:focus,
-  .profile-dropdown .dropdown-link:hover,
-  .profile-dropdown .dropdown-link:focus {
-    background: #6c63ff;
-    color: #fff;
+  .dropdown-item:hover,
+  .dropdown-item:focus {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+  }
+
+  .logout-item {
+    color: var(--color-error);
+    border-top: 1px solid var(--color-border);
+    margin-top: 0.25rem;
+    padding-top: 0.75rem;
+  }
+
+  .logout-item:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--color-error);
   }
 
   .auth-buttons {
@@ -1188,16 +1602,32 @@
     margin-left: 16px;
   }
   .login-btn {
-    background: #6c63ff;
-    color: #fff;
-    padding: 8px 18px;
-    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #667eea;
+    color: white;
+    padding: 0.875rem 2rem;
+    border-radius: 50px;
     text-decoration: none;
     font-weight: 600;
-    transition: background 0.2s;
+    font-size: 0.875rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    border: 2px solid transparent;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
   }
+  
   .login-btn:hover {
-    background: #5548c8;
+    background: #5a67d8;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .login-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   }
   .register-btn {
     background: #ece6f0;
@@ -1260,14 +1690,5 @@
   .secret-menu-dropdown li:last-child {
     margin-bottom: 0;
   }
-.navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 100;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  height: 166px;
-}
+/* Navbar styling moved to main styles above */
 </style>
