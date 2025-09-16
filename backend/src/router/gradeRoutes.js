@@ -161,26 +161,56 @@ router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
 router.get('/students-to-grade', authenticateUser, async (req, res) => {
   try {
     const now = new Date();
-    const oneWeekFromNow = new Date();
-    oneWeekFromNow.setDate(now.getDate() + 7);
 
-    // Find enrollments ending within the next week and not graded
+    // Find enrollments that have passed end date and are not graded
     const enrollments = await StudentEnrollment.find({
-      endDate: { $gte: now, $lte: oneWeekFromNow },
+      endDate: { $lt: now },
       $or: [{ grade: null }, { grade: "" }],
-      status: { $in: ["enrolled", "active"] }
+      status: { $in: ["enrolled", "active", "completed"] }
     })
       .populate("studentId")
       .populate("courseInstanceId");
 
-    // Format for frontend
-    const studentsToGrade = enrollments.map(enrollment => ({
+    // Format for frontend (from StudentEnrollment)
+    const studentsFromEnrollments = enrollments.map(enrollment => ({
       student: enrollment.studentId,
       courseInstance: enrollment.courseInstanceId,
       endDate: enrollment.endDate,
       grade: enrollment.grade,
       enrollmentId: enrollment._id,
     }));
+
+    // Also include students from Student.education entries (older data path)
+    const studentsWithPastEducation = await Student.find({
+      education: {
+        $elemMatch: {
+          removedAt: null,
+          endDate: { $lt: now },
+          $or: [{ grade: null }, { grade: "" }],
+        },
+      },
+    }).lean();
+
+    const studentsFromEducation = [];
+    for (const s of studentsWithPastEducation) {
+      for (const edu of (s.education || [])) {
+        if (!edu || edu.removedAt) continue;
+        if (!edu.endDate || edu.endDate >= now) continue;
+        if (edu.grade && edu.grade !== "") continue;
+
+        studentsFromEducation.push({
+          student: { _id: s._id, name: s.name, email: s.email },
+          courseInstance: null,
+          endDate: edu.endDate,
+          grade: edu.grade || null,
+          enrollmentId: edu._id, // refers to education entry id
+          source: "student_education",
+        });
+      }
+    }
+
+    const studentsToGrade = [...studentsFromEnrollments, ...studentsFromEducation]
+      .sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
 
     res.json(studentsToGrade);
   } catch (err) {
@@ -305,6 +335,199 @@ router.delete('/enrollments/:id', async (req, res) => {
   } catch (err) {
     console.error('Error deleting enrollment:', err);
     res.status(500).json({ error: 'Failed to delete enrollment' });
+  }
+});
+
+// ===== ADDITIONAL GRADING ROUTES =====
+
+// Debug endpoint to check what students exist
+router.get('/debug/students-past-end-date', authenticateUser, async (req, res) => {
+  try {
+    const now = new Date();
+    
+    // Check StudentEnrollment
+    const enrollments = await StudentEnrollment.find({
+      endDate: { $lt: now },
+      status: { $in: ["active", "completed", "enrolled"] }
+    })
+    .populate("studentId", "name email")
+    .populate("mainCourseId", "courseName")
+    .populate("teacherId", "userId")
+    .populate("teacherId.userId", "username")
+    .lean();
+
+    // Check Student.education
+    const students = await Student.find({
+      education: {
+        $elemMatch: {
+          removedAt: null,
+          endDate: { $lt: now }
+        }
+      }
+    })
+    .populate("teacherId", "userId")
+    .populate("teacherId.userId", "username")
+    .lean();
+
+    res.json({
+      success: true,
+      debug: {
+        now: now.toISOString(),
+        enrollments: {
+          total: enrollments.length,
+          data: enrollments.map(e => ({
+            id: e._id,
+            student: e.studentId?.name,
+            course: e.mainCourseId?.courseName,
+            endDate: e.endDate,
+            status: e.status,
+            grade: e.grade,
+            teacher: e.teacherId?.userId?.username
+          }))
+        },
+        students: {
+          total: students.length,
+          data: students.map(s => ({
+            id: s._id,
+            name: s.name,
+            teacher: s.teacherId?.userId?.username,
+            education: s.education.filter(e => e.endDate && e.endDate < now).map(e => ({
+              id: e._id,
+              name: e.name,
+              endDate: e.endDate,
+              grade: e.grade,
+              locked: e.locked
+            }))
+          }))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error in debug endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get locked grades for admin review
+router.get('/locked-grades', authenticateUser, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!["admin", "systemadmin"].includes(user.role)) {
+      return res.status(403).json({ error: 'Only administrators can view locked grades' });
+    }
+
+    const lockedGrades = await StudentEnrollment.find({
+      isGradeLocked: true,
+    })
+      .populate("studentId", "name email personalNumber")
+      .populate("courseInstanceId", "courseName courseCode")
+      .populate("mainCourseId", "courseName courseCode")
+      .populate("teacherId", "userId subject")
+      .populate("teacherId.userId", "username email")
+      .populate("gradeLockedBy", "username email")
+      .sort({ gradeLockedAt: -1 });
+
+    res.json({
+      success: true,
+      lockedGrades,
+      total: lockedGrades.length,
+    });
+  } catch (error) {
+    console.error('Error fetching locked grades:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get grades for a specific student
+router.get('/student/:studentId/grades', authenticateUser, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    
+    const grades = await StudentEnrollment.find({
+      studentId,
+      grade: { $ne: null },
+    })
+      .populate("courseInstanceId", "courseName courseCode startDate endDate")
+      .populate("mainCourseId", "courseName courseCode")
+      .populate("teacherId", "userId subject")
+      .populate("teacherId.userId", "username email")
+      .populate("gradeBy", "username email")
+      .sort({ gradeDate: -1 });
+
+    res.json({
+      success: true,
+      grades,
+      total: grades.length,
+    });
+  } catch (error) {
+    console.error('Error fetching student grades:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get grades for a specific course instance
+router.get('/course-instance/:courseInstanceId/grades', authenticateUser, async (req, res) => {
+  try {
+    const { courseInstanceId } = req.params;
+    
+    const grades = await StudentEnrollment.find({
+      courseInstanceId,
+      grade: { $ne: null },
+    })
+      .populate("studentId", "name email personalNumber")
+      .populate("courseInstanceId", "courseName courseCode startDate endDate")
+      .populate("mainCourseId", "courseName courseCode")
+      .populate("teacherId", "userId subject")
+      .populate("teacherId.userId", "username email")
+      .populate("gradeBy", "username email")
+      .sort({ gradeDate: -1 });
+
+    res.json({
+      success: true,
+      grades,
+      total: grades.length,
+    });
+  } catch (error) {
+    console.error('Error fetching course instance grades:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update grade (if not locked)
+router.put('/update-grade/:enrollmentId', authenticateUser, async (req, res) => {
+  try {
+    const { enrollmentId } = req.params;
+    const { grade, motivation, comments, nationalTestPoints } = req.body;
+    const userId = req.user?.userId;
+
+    const enrollment = await StudentEnrollment.findById(enrollmentId);
+    if (!enrollment) {
+      return res.status(404).json({ error: 'Enrollment not found' });
+    }
+
+    if (enrollment.isGradeLocked) {
+      return res.status(403).json({ error: 'Grade is locked and cannot be modified' });
+    }
+
+    // Update grade fields
+    if (grade) enrollment.grade = grade;
+    if (motivation) enrollment.motivation = motivation;
+    if (comments !== undefined) enrollment.comments = comments;
+    if (nationalTestPoints) enrollment.nationalTestPoints = nationalTestPoints;
+    
+    enrollment.gradeDate = new Date();
+    enrollment.gradeBy = userId;
+
+    await enrollment.save();
+
+    res.json({
+      success: true,
+      message: 'Grade updated successfully',
+      enrollment,
+    });
+  } catch (error) {
+    console.error('Error updating grade:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
