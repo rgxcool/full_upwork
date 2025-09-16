@@ -6,6 +6,9 @@
         <i class="fas fa-sync-alt"></i>
       </button>
     </div>
+    <div style="margin-bottom: 10px">
+      <v-btn color="primary" small @click="addStudentDialog = true">Lägg till elev till APL</v-btn>
+    </div>
     <table>
       <tbody>
         <tr v-for="status in statusMap" :key="status.key">
@@ -16,7 +19,8 @@
         </tr>
         <tr>
           <td colspan="2" style="padding-top: 6px">
-            Totalt antal studenter: <strong>{{ totalStudents }}</strong>
+            Totalt antal studenter:
+            <strong>{{ totalStudents }}</strong>
           </td>
         </tr>
       </tbody>
@@ -53,9 +57,7 @@
       @dragover.prevent
       @drop="handleDrop($event, status.key)"
     >
-      <h3>
-        {{ status.label }} ({{ studentsByStatus[status.key]?.length || 0 }})
-      </h3>
+      <h3>{{ status.label }} ({{ studentsByStatus[status.key]?.length || 0 }})</h3>
       <div
         v-for="student in studentsByStatus[status.key] || []"
         :key="student._id"
@@ -75,7 +77,10 @@
           {{ commentStatus(student) === 'unseen' ? 'mdi-note-text' : 'mdi-pencil' }}
         </v-icon>
       </div>
-      <div v-if="(studentsByStatus[status.key] || []).length === 0" style="color: #666; font-style: italic; text-align: center; padding: 20px;">
+      <div
+        v-if="(studentsByStatus[status.key] || []).length === 0"
+        style="color: #666; font-style: italic; text-align: center; padding: 20px"
+      >
         Inga studenter i denna kolumn
       </div>
     </div>
@@ -97,8 +102,9 @@
             <span
               :class="{ clickable: true }"
               @click="handleCopy(selectedStudent?.email, 'email', $event)"
-              >{{ selectedStudent?.email }}</span
             >
+              {{ selectedStudent?.email }}
+            </span>
             <br />
             <span
               :class="{ clickable: true }"
@@ -144,10 +150,12 @@
                   small
                   @click="saveEditedComment(index)"
                 >
-                  <v-icon size="x-small" left>mdi-content-save</v-icon> Spara
+                  <v-icon size="x-small" left>mdi-content-save</v-icon>
+                  Spara
                 </v-btn>
                 <v-btn v-if="editingIndex === index" color="grey" small @click="cancelEdit">
-                  <v-icon size="x-small" left>mdi-cancel</v-icon> Avbryt
+                  <v-icon size="x-small" left>mdi-cancel</v-icon>
+                  Avbryt
                 </v-btn>
                 <v-btn
                   v-if="editingIndex !== index"
@@ -180,8 +188,40 @@
 
         <div class="button-row">
           <v-btn class="ml-3 mb-2" small color="green" @click="submitComment">Spara</v-btn>
+          <v-btn class="ml-3 mb-2" small color="red" @click="removeFromApl(selectedStudent)">
+            Ta bort från APL
+          </v-btn>
           <v-btn class="mr-3 mb-2" small color="primary" @click="closeDialog">Stäng</v-btn>
         </div>
+      </v-card>
+    </v-dialog>
+
+    <!-- Add student to APL dialog -->
+    <v-dialog v-model="addStudentDialog" max-width="600px">
+      <v-card>
+        <v-card-title>Lägg till elev till APL</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="searchQuery"
+            label="Sök elev (minst 3 tecken)"
+            clearable
+            @input="onSearchInput"
+          />
+          <div v-if="isSearching" style="font-size: 0.9rem; color: #666">Söker...</div>
+          <v-list v-if="showSuggestions && suggestions.length">
+            <v-list-item v-for="s in suggestions" :key="s.id" @click="selectSuggestion(s)">
+              <v-list-item-title>{{ s.name }}</v-list-item-title>
+              <v-list-item-subtitle>{{ s.extra }}</v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+          <div v-else-if="showSuggestions && !isSearching" style="font-size: 0.9rem; color: #666">
+            Inga träffar
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="closeAddDialog">Stäng</v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
   </div>
@@ -189,10 +229,10 @@
 
 <script setup>
   import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import axios from 'axios'
-import { useStore } from 'vuex'
-import { useRoute } from 'vue-router'
-import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
+  import axios from 'axios'
+  import { useStore } from 'vuex'
+  import { useRoute } from 'vue-router'
+  import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
 
   const store = useStore()
   const route = useRoute()
@@ -202,7 +242,7 @@ import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
   console.log('Role:', currentUser.value?.role)
   const currentUserId = computed(() => store.state.user?.userId?.toString() || '')
   console.log('Current user ID:', currentUserId.value)
-  const totalStudents = computed(() => students.value.length)
+  const totalStudents = computed(() => filteredStudents.value.length)
 
   const commentAscOrder = ref(true)
   const copied = ref(false)
@@ -217,33 +257,53 @@ import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
   const draggedStudent = ref(null)
   const commentContainerRef = ref(null)
 
-  // Only include students with a started course package
-  const filteredStudents = computed(() => {
-    const now = new Date()
-    
-    // First, let's see all students with CoursePackage entries regardless of date
-    const allStudentsWithPackages = students.value.filter(student => {
-      if (!Array.isArray(student.education)) {
-        return false
+  // Manual APL inclusions persisted locally
+  const addStudentDialog = ref(false)
+  const searchQuery = ref('')
+  const suggestions = ref([])
+  const isSearching = ref(false)
+  const showSuggestions = ref(false)
+  const manualAplIds = ref(new Set())
+  const excludedAplIds = ref(new Set())
+
+  const loadManualAplIds = () => {
+    try {
+      const raw = localStorage.getItem('manualAplIds')
+      if (raw) {
+        const arr = JSON.parse(raw)
+        manualAplIds.value = new Set(Array.isArray(arr) ? arr : [])
       }
-      
-      const hasCoursePackage = student.education.some(edu => {
-        if (edu.type !== 'CoursePackage') return false
-        return true // Include all CoursePackage entries, regardless of startDate
-      })
-      
-      return hasCoursePackage
-    })
-    
-    // For now, return all students with CoursePackage entries (temporarily removing date restriction)
-    // TODO: Add a toggle to switch between "all CoursePackage students" and "only past startDate students"
-    
-    // If no students with course packages found, show all students for debugging
-    if (allStudentsWithPackages.length === 0) {
-      return students.value
+    } catch {}
+  }
+  const saveManualAplIds = () => {
+    try {
+      localStorage.setItem('manualAplIds', JSON.stringify(Array.from(manualAplIds.value)))
+    } catch {}
+  }
+  const loadExcludedAplIds = () => {
+    try {
+      const raw = localStorage.getItem('excludedAplIds')
+      if (raw) {
+        const arr = JSON.parse(raw)
+        excludedAplIds.value = new Set(Array.isArray(arr) ? arr : [])
+      }
+    } catch {}
+  }
+  const saveExcludedAplIds = () => {
+    try {
+      localStorage.setItem('excludedAplIds', JSON.stringify(Array.from(excludedAplIds.value)))
+    } catch {}
+  }
+
+  // Only include students with a CoursePackage or manually added
+  const filteredStudents = computed(() => {
+    const hasCoursePackageOrManual = (student) => {
+      if (excludedAplIds.value.has(student._id)) return false
+      if (manualAplIds.value.has(student._id)) return true
+      if (!Array.isArray(student.education)) return false
+      return student.education.some((edu) => edu.type === 'CoursePackage')
     }
-    
-    return allStudentsWithPackages
+    return (students.value || []).filter(hasCoursePackageOrManual)
   })
 
   // Update studentsByStatus and statusCounts to use filteredStudents
@@ -251,7 +311,7 @@ import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
     if (!Array.isArray(filteredStudents.value)) {
       return {}
     }
-    
+
     return statusMap.reduce((acc, status) => {
       acc[status.key] = filteredStudents.value.filter((s) => s.aplStatus === status.key)
       return acc
@@ -316,7 +376,7 @@ import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
         withCredentials: true,
       })
-      
+
       students.value = res.data.map((student) => ({
         ...student,
         commentHistory: (student.commentHistory || []).map((comment) => ({
@@ -330,16 +390,24 @@ import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
   }
 
   onMounted(() => {
+    loadManualAplIds()
+    loadExcludedAplIds()
     fetchStudents()
   })
 
+  watch(manualAplIds, saveManualAplIds, { deep: false })
+  watch(excludedAplIds, saveExcludedAplIds, { deep: false })
+
   // Watch for route changes to refresh data
-  watch(() => route.path, () => {
-    if (route.path === '/apl') {
-      console.log('🔄 APL route detected, refreshing student data...')
-      fetchStudents()
+  watch(
+    () => route.path,
+    () => {
+      if (route.path === '/apl') {
+        console.log('🔄 APL route detected, refreshing student data...')
+        fetchStudents()
+      }
     }
-  })
+  )
 
   const handleDragStart = (e, student) => {
     draggedStudent.value = student
@@ -388,6 +456,65 @@ import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
     } catch (err) {
       console.error('⚠️ Failed to mark comments as seen:', err)
     }
+  }
+
+  // Autocomplete search and selection
+  const onSearchInput = async () => {
+    showSuggestions.value = false
+    suggestions.value = []
+    const q = searchQuery.value.trim()
+    if (q.length < 3) return
+    isSearching.value = true
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/search`, {
+        params: { q, type: 'Användare' },
+        withCredentials: true,
+      })
+      // Only keep students (Elev)
+      suggestions.value = (data || []).filter((r) => r.type === 'Elev')
+      showSuggestions.value = true
+    } catch (e) {
+      console.error('❌ Sökning misslyckades:', e)
+    } finally {
+      isSearching.value = false
+    }
+  }
+
+  const selectSuggestion = (s) => {
+    if (!s?.id) return
+    manualAplIds.value.add(s.id)
+    saveManualAplIds()
+    // If the student is not in the local list (unlikely), we keep inclusion for when they appear
+    searchQuery.value = ''
+    suggestions.value = []
+    showSuggestions.value = false
+    addStudentDialog.value = false
+  }
+
+  const closeAddDialog = () => {
+    addStudentDialog.value = false
+    searchQuery.value = ''
+    suggestions.value = []
+    showSuggestions.value = false
+  }
+
+  const removeFromApl = (student) => {
+    if (!student?._id) return
+    if (!confirm(`Ta bort ${student.name} från APL?`)) return
+    // If they were manually added, remove from manual set
+    if (manualAplIds.value.has(student._id)) {
+      manualAplIds.value.delete(student._id)
+      saveManualAplIds()
+    }
+    // Add to excluded set
+    excludedAplIds.value.add(student._id)
+    saveExcludedAplIds()
+    // Optimistic local update
+    const idx = students.value.findIndex((s) => s._id === student._id)
+    if (idx !== -1) {
+      // No mutation to education to keep server state intact; local filter will hide them
+    }
+    dialog.value = false
   }
 
   const getSortedComments = computed(() => {
@@ -540,7 +667,7 @@ import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
     min-height: 400px;
     background-color: #f1f1f1;
     border: 1px solid #ddd;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   .column.gray {

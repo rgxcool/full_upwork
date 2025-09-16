@@ -14,9 +14,9 @@ import { distance } from "fastest-levenshtein";
  * Handles endpoints for uploading students, matching courses, managing enrollments, and course instances.
  * Relies on CourseMatchingService and related models/utilities.
  */
-import CoursePackage from '../models/CoursePackage.js';
+import CoursePackage from "../models/CoursePackage.js";
 
-console.log('[DEBUG] courseMatchingController.js loaded');
+console.log("[DEBUG] courseMatchingController.js loaded");
 
 /**
  * Uploads an Excel file of students for course matching, parses the file, creates teachers if needed, and returns results.
@@ -26,7 +26,7 @@ console.log('[DEBUG] courseMatchingController.js loaded');
  * @returns {Promise<void>}
  */
 export const uploadStudentsForMatching = async (req, res) => {
-    console.log('[DEBUG] uploadStudentsForMatching called');
+    console.log("[DEBUG] uploadStudentsForMatching called");
     try {
         console.log("🔍 req.user:", req.user);
         console.log("🔍 req.userId:", req.userId);
@@ -44,10 +44,38 @@ export const uploadStudentsForMatching = async (req, res) => {
         const parsedStudents = await parseStudentExcel(fileBuffer, teacherName);
 
         console.log(`[DEBUG] 📊 Excel parsing results:`);
-        console.log(`[DEBUG] Total students parsed from Excel: ${parsedStudents.length}`);
-        console.log(`[DEBUG] Student names:`, parsedStudents.map(s => s.name || s.email || 'unknown'));
+        console.log(
+            `[DEBUG] Total students parsed from Excel: ${parsedStudents.length}`
+        );
+        console.log(
+            `[DEBUG] Student names:`,
+            parsedStudents.map((s) => s.name || s.email || "unknown")
+        );
 
-        if (parsedStudents.length === 0) {
+        // ✅ Group by email and merge multiple entries (same logic as studentController.js)
+        const grouped = new Map();
+        for (const s of parsedStudents) {
+            if (!s.email) continue;
+            if (grouped.has(s.email)) {
+                grouped.get(s.email).education.push(...(s.education || []));
+            } else {
+                grouped.set(s.email, {
+                    ...s,
+                    education: [...(s.education || [])],
+                });
+            }
+        }
+
+        const mergedStudents = [...grouped.values()];
+        console.log(
+            `[DEBUG] 📊 After deduplication: ${mergedStudents.length} unique students`
+        );
+        console.log(
+            `[DEBUG] Merged student names:`,
+            mergedStudents.map((s) => s.name || s.email || "unknown")
+        );
+
+        if (mergedStudents.length === 0) {
             return res
                 .status(400)
                 .json({ error: "No valid data found in file." });
@@ -71,31 +99,39 @@ export const uploadStudentsForMatching = async (req, res) => {
             const reasons = [];
 
             function coerceToString(value) {
-                if (value === undefined || value === null) return '';
-                if (typeof value === 'string') return value;
-                if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-                if (typeof value === 'object') {
+                if (value === undefined || value === null) return "";
+                if (typeof value === "string") return value;
+                if (typeof value === "number" || typeof value === "boolean")
+                    return String(value);
+                if (typeof value === "object") {
                     // xlsx richText object: { richText: [ { text: '...' }, ... ] }
                     if (Array.isArray(value.richText)) {
-                        return value.richText.map(part => (typeof part?.text === 'string' ? part.text : '')).join('');
+                        return value.richText
+                            .map((part) =>
+                                typeof part?.text === "string" ? part.text : ""
+                            )
+                            .join("");
                     }
-                    if (typeof value.text === 'string') {
+                    if (typeof value.text === "string") {
                         return value.text;
                     }
                 }
                 return null; // not safely convertible
             }
 
-            for (const student of parsedStudents) {
-                const studentIdLabel = student.email || student.name || 'unknown';
+            for (const student of mergedStudents) {
+                const studentIdLabel =
+                    student.email || student.name || "unknown";
 
                 // additionalInfo
-                const coercedAdditional = coerceToString(student.additionalInfo);
+                const coercedAdditional = coerceToString(
+                    student.additionalInfo
+                );
                 if (coercedAdditional === null) {
                     reasons.push({
-                        type: 'invalid_field',
+                        type: "invalid_field",
                         student: studentIdLabel,
-                        field: 'additionalInfo',
+                        field: "additionalInfo",
                         message: `Unable to convert 'additionalInfo' to text for student ${studentIdLabel}.`,
                     });
                 } else {
@@ -106,11 +142,11 @@ export const uploadStudentsForMatching = async (req, res) => {
                 if (Array.isArray(student.education)) {
                     for (const entry of student.education) {
                         const coercedName = coerceToString(entry?.name);
-                        if (coercedName === null || coercedName.trim() === '') {
+                        if (coercedName === null || coercedName.trim() === "") {
                             reasons.push({
-                                type: 'invalid_field',
+                                type: "invalid_field",
                                 student: studentIdLabel,
-                                field: 'education.name',
+                                field: "education.name",
                                 message: `Invalid course/package name in education for student ${studentIdLabel}.`,
                             });
                         } else {
@@ -121,7 +157,9 @@ export const uploadStudentsForMatching = async (req, res) => {
             }
 
             if (reasons.length > 0) {
-                const error = new Error('Data validation failed; upload aborted.');
+                const error = new Error(
+                    "Data validation failed; upload aborted."
+                );
                 error.statusCode = 422;
                 error.reasons = reasons;
                 throw error;
@@ -137,8 +175,13 @@ export const uploadStudentsForMatching = async (req, res) => {
             );
 
             if (teacherResult.wasCreated) {
-                const safeUsername = teacherResult.user?.username || teacherName;
-                const safeEmail = teacherResult.user?.email || `${teacherName.toLowerCase().replace(/\s+/g, ".")}@mindful.se`;
+                const safeUsername =
+                    teacherResult.user?.username || teacherName;
+                const safeEmail =
+                    teacherResult.user?.email ||
+                    `${teacherName
+                        .toLowerCase()
+                        .replace(/\s+/g, ".")}@mindful.se`;
                 results.createdTeachers.push({
                     name: safeUsername,
                     email: safeEmail,
@@ -146,9 +189,7 @@ export const uploadStudentsForMatching = async (req, res) => {
                     subject: teacherResult.teacher?.subject || "Övrigt",
                 });
 
-                console.log(
-                    `👨‍🏫 Auto-created teacher: ${safeUsername}`
-                );
+                console.log(`👨‍🏫 Auto-created teacher: ${safeUsername}`);
 
                 // Create notification for the user who uploaded the file
                 try {
@@ -165,7 +206,15 @@ export const uploadStudentsForMatching = async (req, res) => {
             }
 
             teacherInfo = teacherResult.teacher;
-            console.log(`[DEBUG] Teacher info:`, teacherInfo ? { _id: teacherInfo._id, name: teacherInfo.userId?.username } : 'null');
+            console.log(
+                `[DEBUG] Teacher info:`,
+                teacherInfo
+                    ? {
+                          _id: teacherInfo._id,
+                          name: teacherInfo.userId?.username,
+                      }
+                    : "null"
+            );
         } catch (error) {
             console.error("❌ Error handling teacher creation:", error);
             results.errors.push({
@@ -178,7 +227,13 @@ export const uploadStudentsForMatching = async (req, res) => {
         const allPackages = await CoursePackage.find({}).lean();
         const normalizedPackageMap = {};
         for (const pkg of allPackages) {
-            const norm = (pkg.coursePackageName || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
+            const norm = (pkg.coursePackageName || "")
+                .toString()
+                .trim()
+                .toUpperCase()
+                .replace(/\(.*?\)/g, "")
+                .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
+                .replace(/\s+/g, " ");
             normalizedPackageMap[norm] = pkg;
         }
 
@@ -186,7 +241,13 @@ export const uploadStudentsForMatching = async (req, res) => {
         const allCourses = await Course.find({}).lean();
         const normalizedCourseMap = {};
         for (const c of allCourses) {
-            const norm = (c.courseName || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
+            const norm = (c.courseName || "")
+                .toString()
+                .trim()
+                .toUpperCase()
+                .replace(/\(.*?\)/g, "")
+                .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
+                .replace(/\s+/g, " ");
             normalizedCourseMap[norm] = c;
         }
 
@@ -196,6 +257,12 @@ export const uploadStudentsForMatching = async (req, res) => {
 
             function strictMatch(target, candidates) {
                 if (candidates.includes(target)) return target;
+                // containment fallback (handles minor suffix/prefix differences)
+                const contain = candidates.find(
+                    (c) => c.includes(target) || target.includes(c)
+                );
+                if (contain) return contain;
+                // fuzzy fallback
                 let best = null;
                 let minDistance = Infinity;
                 for (const candidate of candidates) {
@@ -205,54 +272,56 @@ export const uploadStudentsForMatching = async (req, res) => {
                         best = candidate;
                     }
                 }
-                if (target.length > 12 && minDistance === 1) return best;
+                if (minDistance === 1) return best;
+                if (target.length >= 8 && minDistance <= 2) return best;
                 return null;
             }
 
-            for (const student of parsedStudents) {
-                const studentIdLabel = student.email || student.name || 'unknown';
-                const entries = Array.isArray(student.education) ? student.education : [];
+            for (const student of mergedStudents) {
+                const studentIdLabel =
+                    student.email || student.name || "unknown";
+                const entries = Array.isArray(student.education)
+                    ? student.education
+                    : [];
                 for (const entry of entries) {
-                    let normalized = (entry.name || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
-                    normalized = normalized.replace(/[-\s]*\d+\s*v$/i, '');
-                    normalized = normalized.replace(/[-\s]*\d+v$/i, '');
-                    normalized = normalized.replace(/\d+v$/i, '');
+                    let normalized = (entry.name || "")
+                        .toString()
+                        .trim()
+                        .toUpperCase()
+                        .replace(/\(.*?\)/g, "")
+                        .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
+                        .replace(/\s+/g, " ");
+                    normalized = normalized.replace(/[-\s]*\d+\s*v$/i, "");
+                    normalized = normalized.replace(/[-\s]*\d+v$/i, "");
+                    normalized = normalized.replace(/\d+v$/i, "");
                     const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
 
-                    let type = null;
-                    if (normalizedPackageMap[normalized]) {
-                        type = 'CoursePackage';
-                    } else {
-                        type = isCourse ? 'Course' : 'CoursePackage';
-                    }
+                    // Check if the normalized name exists in either Course or CoursePackage collections
+                    const matchPkg = strictMatch(
+                        normalized,
+                        Object.keys(normalizedPackageMap)
+                    );
+                    const matchCourse = strictMatch(
+                        normalized,
+                        Object.keys(normalizedCourseMap)
+                    );
 
-                    const matchPkg = strictMatch(normalized, Object.keys(normalizedPackageMap));
-                    const matchCourse = strictMatch(normalized, Object.keys(normalizedCourseMap));
-
-                    if (type === 'Course') {
-                        if (!matchCourse && !matchPkg) {
-                            reasons.push({
-                                type: 'no_match',
-                                student: studentIdLabel,
-                                courseName: entry.name,
-                                message: `No matching course found for "${entry.name}" for student ${studentIdLabel}`,
-                            });
-                        }
-                    } else if (type === 'CoursePackage') {
-                        if (!matchPkg) {
-                            reasons.push({
-                                type: 'no_package_match',
-                                student: studentIdLabel,
-                                courseName: entry.name,
-                                message: `No matching course package found for "${entry.name}" for student ${studentIdLabel}`,
-                            });
-                        }
+                    // If no match found in either collection, add to reasons
+                    if (!matchCourse && !matchPkg) {
+                        reasons.push({
+                            type: "no_match",
+                            student: studentIdLabel,
+                            courseName: entry.name,
+                            message: `No matching course or course package found for "${entry.name}" for student ${studentIdLabel}`,
+                        });
                     }
                 }
             }
 
             if (reasons.length > 0) {
-                const error = new Error('Unmatched courses found; upload aborted.');
+                const error = new Error(
+                    "Unmatched courses found; upload aborted."
+                );
                 error.statusCode = 422;
                 error.reasons = reasons;
                 throw error;
@@ -260,62 +329,133 @@ export const uploadStudentsForMatching = async (req, res) => {
         })();
 
         // Process each student with the new course versioning system
-        for (const studentData of parsedStudents) {
-            console.log(`[DEBUG] Processing student: ${studentData.name || studentData.email || 'unknown'} | Raw education:`, studentData.education);
-            
+        let zeroEnrollmentErrors = [];
+        const createdStudentIds = [];
+        for (const studentData of mergedStudents) {
+            console.log(
+                `[DEBUG] Processing student: ${
+                    studentData.name || studentData.email || "unknown"
+                } | Raw education:`,
+                studentData.education
+            );
+
             // First, create or find the student
             let dbStudent = null;
+            let wasStudentCreated = false;
             try {
                 // Normalize municipality before any DB operation
-                if (studentData.municipality && typeof studentData.municipality.type === 'string') {
-                    studentData.municipality.type = normalizeMunicipalityName(studentData.municipality.type);
+                if (
+                    studentData.municipality &&
+                    typeof studentData.municipality.type === "string"
+                ) {
+                    studentData.municipality.type = normalizeMunicipalityName(
+                        studentData.municipality.type
+                    );
                 }
-                
+
                 // Check if student already exists
                 if (studentData.personalNumber) {
-                    dbStudent = await Student.findOne({ personalNumber: studentData.personalNumber });
+                    dbStudent = await Student.findOne({
+                        personalNumber: studentData.personalNumber,
+                    });
                 }
                 if (!dbStudent && studentData.email) {
-                    dbStudent = await Student.findOne({ email: studentData.email });
+                    dbStudent = await Student.findOne({
+                        email: studentData.email,
+                    });
                 }
 
                 if (!dbStudent) {
                     // Create new student
-                    console.log('[DEBUG] Creating student with data:', studentData);
-                    console.log('[DEBUG] Municipality value before creation:', studentData.municipality);
-                    
+                    console.log(
+                        "[DEBUG] Creating student with data:",
+                        studentData
+                    );
+                    console.log(
+                        "[DEBUG] Municipality value before creation:",
+                        studentData.municipality
+                    );
+
                     // Allowed municipality types from schema
                     const allowedMunicipalities = [
-                        "Botkyrka", "Danderyd", "Huddinge", "Järfälla", "KCNO", "Lidingö", "Norrtälje", "Nykvarn", "Privat kunder", "Salem", "Sigtuna", "Sollentuna", "Solna", "Sundbyberg", "Södertälje", "Täby", "Upplands Bro", "Upplands Väsby", "Vallentuna", "Vaxholm", "Växjö", "Österåker"
+                        "Botkyrka",
+                        "Danderyd",
+                        "Huddinge",
+                        "Järfälla",
+                        "KCNO",
+                        "Lidingö",
+                        "Norrtälje",
+                        "Nykvarn",
+                        "Privat kunder",
+                        "Salem",
+                        "Sigtuna",
+                        "Sollentuna",
+                        "Solna",
+                        "Sundbyberg",
+                        "Södertälje",
+                        "Täby",
+                        "Upplands Bro",
+                        "Upplands Väsby",
+                        "Vallentuna",
+                        "Vaxholm",
+                        "Växjö",
+                        "Österåker",
                     ];
-                    
+
                     // Mapping for common Excel variants
                     const municipalityMap = {
                         "uppl väsby": "Upplands Väsby",
                         "upplands väsby": "Upplands Väsby",
-                        "privat": "Privat kunder",
+                        privat: "Privat kunder",
                         "privat kunder": "Privat kunder",
-                        "jarfalla": "Järfälla",
-                        "sundbyberg": "Sundbyberg",
-                        "sodertalje": "Södertälje",
+                        jarfalla: "Järfälla",
+                        sundbyberg: "Sundbyberg",
+                        sodertalje: "Södertälje",
                         // Add more mappings as needed
                     };
-                    
-                    let rawMunicipality = studentData.municipality && (studentData.municipality.type || studentData.municipality);
-                    let normalizedMunicipality = (rawMunicipality || "").toString().trim().toLowerCase();
-                    normalizedMunicipality = municipalityMap[normalizedMunicipality] || allowedMunicipalities.find(m => m.toLowerCase() === normalizedMunicipality) || rawMunicipality;
-                    
+
+                    let rawMunicipality =
+                        studentData.municipality &&
+                        (studentData.municipality.type ||
+                            studentData.municipality);
+                    let normalizedMunicipality = (rawMunicipality || "")
+                        .toString()
+                        .trim()
+                        .toLowerCase();
+                    normalizedMunicipality =
+                        municipalityMap[normalizedMunicipality] ||
+                        allowedMunicipalities.find(
+                            (m) => m.toLowerCase() === normalizedMunicipality
+                        ) ||
+                        rawMunicipality;
+
                     // Fuzzy fallback if not found in allowed list
-                    if (!allowedMunicipalities.includes(normalizedMunicipality)) {
+                    if (
+                        !allowedMunicipalities.includes(normalizedMunicipality)
+                    ) {
                         // Use getClosestMunicipality from studentController.js
-                        const { getClosestMunicipality } = await import("./studentController.js");
-                        const fuzzyMatch = getClosestMunicipality(rawMunicipality);
+                        const { getClosestMunicipality } = await import(
+                            "./studentController.js"
+                        );
+                        const fuzzyMatch =
+                            getClosestMunicipality(rawMunicipality);
                         if (fuzzyMatch) {
-                            console.log(`[DEBUG] Fuzzy matched municipality: '${rawMunicipality}' → '${fuzzyMatch}'`);
+                            console.log(
+                                `[DEBUG] Fuzzy matched municipality: '${rawMunicipality}' → '${fuzzyMatch}'`
+                            );
                             normalizedMunicipality = fuzzyMatch;
                         } else {
-                            console.error(`[ERROR] Invalid municipality for student ${studentData.name || studentData.email || 'unknown'}:`, rawMunicipality);
-                            throw new Error(`Invalid municipality: "${rawMunicipality}"`);
+                            console.error(
+                                `[ERROR] Invalid municipality for student ${
+                                    studentData.name ||
+                                    studentData.email ||
+                                    "unknown"
+                                }:`,
+                                rawMunicipality
+                            );
+                            throw new Error(
+                                `Invalid municipality: "${rawMunicipality}"`
+                            );
                         }
                     }
 
@@ -341,7 +481,13 @@ export const uploadStudentsForMatching = async (req, res) => {
                     });
 
                     await dbStudent.save();
-                    console.log(`✅ Created new student: ${dbStudent.name} (${dbStudent.email}) with teacherId: ${dbStudent.teacherId || 'null'}`);
+                    wasStudentCreated = true;
+                    createdStudentIds.push(dbStudent._id.toString());
+                    console.log(
+                        `✅ Created new student: ${dbStudent.name} (${
+                            dbStudent.email
+                        }) with teacherId: ${dbStudent.teacherId || "null"}`
+                    );
                     results.students.push(dbStudent);
                 } else {
                     // Update existing student with teacher if not already assigned
@@ -352,7 +498,12 @@ export const uploadStudentsForMatching = async (req, res) => {
                     results.students.push(dbStudent);
                 }
             } catch (error) {
-                console.error(`❌ Error creating/finding student ${studentData.name || studentData.email}:`, error);
+                console.error(
+                    `❌ Error creating/finding student ${
+                        studentData.name || studentData.email
+                    }:`,
+                    error
+                );
                 results.errors.push({
                     studentName: studentData.name,
                     type: "student_creation",
@@ -362,115 +513,281 @@ export const uploadStudentsForMatching = async (req, res) => {
             }
 
             // Now process education entries for this student
-            if (!studentData.education || !Array.isArray(studentData.education) || studentData.education.length === 0) {
-                console.log(`[DEBUG] No education entries for student: ${studentData.name || studentData.email || 'unknown'}`);
+            if (
+                !studentData.education ||
+                !Array.isArray(studentData.education) ||
+                studentData.education.length === 0
+            ) {
+                console.log(
+                    `[DEBUG] No education entries for student: ${
+                        studentData.name || studentData.email || "unknown"
+                    }`
+                );
                 continue;
             }
-            
+
+            // Track enrollments at DB-level and in-memory results
+            const dbEnrollmentsBefore = await StudentEnrollment.countDocuments({
+                studentId: dbStudent._id,
+            });
+            const enrollmentsBefore = results.enrollments.length;
             for (const entry of studentData.education) {
                 console.log(`[DEBUG] Education entry (raw):`, entry);
-                let normalized = (entry.name || '').toString().trim().toUpperCase().replace(/[^A-Z0-9ÅÄÖ\s-]/gi, '');
+                let normalized = (entry.name || "")
+                    .toString()
+                    .trim()
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "");
                 // Remove trailing week extent patterns for package matching
-                normalized = normalized.replace(/[-\s]*\d+\s*v$/i, '');
-                normalized = normalized.replace(/[-\s]*\d+v$/i, '');
-                normalized = normalized.replace(/\d+v$/i, '');
-                const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
-                
+                normalized = normalized.replace(/[-\s]*\d+\s*v$/i, "");
+                normalized = normalized.replace(/[-\s]*\d+v$/i, "");
+                normalized = normalized.replace(/\d+v$/i, "");
+                // Check if it's a course (ends with NIVÅ + number, or contains common course keywords)
+                const isCourse =
+                    /NIVÅ\s*\d+$/i.test(normalized) ||
+                    /SPRÅK|PEDAGOGIK|SPECIALPEDAGOGIK|KOST|FÖRSKOLAN|GRUNDLÄGGANDE/i.test(
+                        normalized
+                    );
+
                 // --- PATCH: Always prefer CoursePackage if name matches a package ---
                 let type = null;
                 if (normalizedPackageMap[normalized]) {
-                    type = 'CoursePackage';
-                    console.log(`[DEBUG] Name '${normalized}' matches a CoursePackage. Forcing type to CoursePackage.`);
+                    type = "CoursePackage";
+                    console.log(
+                        `[DEBUG] Name '${normalized}' matches a CoursePackage. Forcing type to CoursePackage.`
+                    );
                 } else {
-                    type = isCourse ? 'Course' : 'CoursePackage';
+                    type = isCourse ? "Course" : "CoursePackage";
                 }
-                console.log(`[DEBUG] Education entry (normalized): '${normalized}' | Type: ${type}`);
-                
-                if (type === 'CoursePackage') {
-                    const pkg = normalizedPackageMap[normalized];
+                console.log(
+                    `[DEBUG] Education entry (normalized): '${normalized}' | Type: ${type}`
+                );
+
+                if (type === "CoursePackage") {
+                    let pkg = normalizedPackageMap[normalized];
+                    if (!pkg) {
+                        // Fallback: try containment or small-distance fuzzy match against available package keys
+                        const keys = Object.keys(normalizedPackageMap);
+                        // containment first
+                        let key = keys.find(
+                            (k) =>
+                                k.includes(normalized) || normalized.includes(k)
+                        );
+                        if (!key) {
+                            let best = null;
+                            let minDist = Infinity;
+                            for (const k of keys) {
+                                const d = distance(normalized, k);
+                                if (d < minDist) {
+                                    minDist = d;
+                                    best = k;
+                                }
+                            }
+                            if (minDist <= 2) key = best;
+                        }
+                        if (key) {
+                            pkg = normalizedPackageMap[key];
+                            console.log(
+                                `[DEBUG] Fallback matched package: '${normalized}' → '${key}'`
+                            );
+                        }
+                    }
                     if (pkg) {
-                        console.log(`[DEBUG] Matched package: '${normalized}' → '${pkg.coursePackageName}'`);
-                        
+                        console.log(
+                            `[DEBUG] Matched package: '${normalized}' → '${pkg.coursePackageName}'`
+                        );
+
                         // Call courseMatchingService to process the package enrollment
                         try {
-                            const result = await CourseMatchingService.processStudentEducation(
-                                dbStudent._id,
-                                [{
-                                    type: 'CoursePackage',
-                                    refId: pkg._id,
-                                    name: pkg.coursePackageName,
-                                    startDate: entry.startDate,
-                                    endDate: entry.endDate,
-                                    slutprovDate: entry.slutprovDate // <-- PATCH: preserve explicit exam date
-                                }]
+                            const result =
+                                await CourseMatchingService.processStudentEducation(
+                                    dbStudent._id,
+                                    [
+                                        {
+                                            type: "CoursePackage",
+                                            refId: pkg._id,
+                                            name: pkg.coursePackageName,
+                                            startDate: entry.startDate,
+                                            endDate: entry.endDate,
+                                            slutprovDate: entry.slutprovDate, // <-- PATCH: preserve explicit exam date
+                                        },
+                                    ]
+                                );
+                            console.log(
+                                `[DEBUG] Enrollment result for student ${
+                                    dbStudent.name || dbStudent.email
+                                }:`,
+                                result
                             );
-                            console.log(`[DEBUG] Enrollment result for student ${dbStudent.name || dbStudent.email}:`, result);
-                            
+
                             // Aggregate the enrollments from the service result
-                            if (result && result.enrollments && Array.isArray(result.enrollments)) {
+                            if (
+                                result &&
+                                result.enrollments &&
+                                Array.isArray(result.enrollments)
+                            ) {
                                 results.enrollments.push(...result.enrollments);
-                                console.log(`[DEBUG] Added ${result.enrollments.length} enrollments to results for student ${dbStudent.name || dbStudent.email}`);
+                                console.log(
+                                    `[DEBUG] Added ${
+                                        result.enrollments.length
+                                    } enrollments to results for student ${
+                                        dbStudent.name || dbStudent.email
+                                    }`
+                                );
                             }
-                            
+
                             // Also aggregate any warnings or errors
-                            if (result && result.warnings && Array.isArray(result.warnings)) {
+                            if (
+                                result &&
+                                result.warnings &&
+                                Array.isArray(result.warnings)
+                            ) {
                                 results.warnings.push(...result.warnings);
                             }
-                            if (result && result.errors && Array.isArray(result.errors)) {
+                            if (
+                                result &&
+                                result.errors &&
+                                Array.isArray(result.errors)
+                            ) {
                                 results.errors.push(...result.errors);
                             }
                         } catch (err) {
-                            console.error(`[ERROR] Failed to enroll student ${dbStudent.name || dbStudent.email} in package ${pkg.coursePackageName}:`, err);
+                            console.error(
+                                `[ERROR] Failed to enroll student ${
+                                    dbStudent.name || dbStudent.email
+                                } in package ${pkg.coursePackageName}:`,
+                                err
+                            );
                             results.errors.push({
                                 studentName: dbStudent.name || dbStudent.email,
                                 type: "enrollment_error",
                                 error: err.message,
-                                packageName: pkg.coursePackageName
+                                packageName: pkg.coursePackageName,
                             });
                         }
                     } else {
                         // Do NOT push a warning for unmatched course packages
                         // Only log for debugging
-                        console.warn(`[WARN] No course package match for: '${normalized}'. Available keys:`, Object.keys(normalizedPackageMap));
+                        console.warn(
+                            `[WARN] No course package match for: '${normalized}'. Available keys:`,
+                            Object.keys(normalizedPackageMap)
+                        );
                     }
-                } else if (type === 'Course') {
-                    console.log(`[DEBUG] Processing individual course: '${normalized}'`);
-                    
+                } else if (type === "Course") {
+                    console.log(
+                        `[DEBUG] Processing individual course: '${normalized}'`
+                    );
+
                     // Call courseMatchingService to process the individual course enrollment
                     try {
-                        const result = await CourseMatchingService.processStudentEducation(
-                            dbStudent._id,
-                            [{
-                                type: 'Course',
-                                name: entry.name,
-                                startDate: entry.startDate,
-                                endDate: entry.endDate,
-                                slutprovDate: entry.slutprovDate // <-- PATCH: preserve explicit exam date
-                            }]
+                        const result =
+                            await CourseMatchingService.processStudentEducation(
+                                dbStudent._id,
+                                [
+                                    {
+                                        type: "Course",
+                                        name: entry.name,
+                                        startDate: entry.startDate,
+                                        endDate: entry.endDate,
+                                        slutprovDate: entry.slutprovDate, // <-- PATCH: preserve explicit exam date
+                                    },
+                                ]
+                            );
+                        console.log(
+                            `[DEBUG] Course enrollment result for student ${
+                                dbStudent.name || dbStudent.email
+                            }:`,
+                            result
                         );
-                        console.log(`[DEBUG] Course enrollment result for student ${dbStudent.name || dbStudent.email}:`, result);
-                        
+
                         // Aggregate the enrollments from the service result
-                        if (result && result.enrollments && Array.isArray(result.enrollments)) {
+                        if (
+                            result &&
+                            result.enrollments &&
+                            Array.isArray(result.enrollments)
+                        ) {
                             results.enrollments.push(...result.enrollments);
-                            console.log(`[DEBUG] Added ${result.enrollments.length} course enrollments to results for student ${dbStudent.name || dbStudent.email}`);
+                            console.log(
+                                `[DEBUG] Added ${
+                                    result.enrollments.length
+                                } course enrollments to results for student ${
+                                    dbStudent.name || dbStudent.email
+                                }`
+                            );
                         }
-                        
+
                         // Also aggregate any warnings or errors
-                        if (result && result.warnings && Array.isArray(result.warnings)) {
+                        if (
+                            result &&
+                            result.warnings &&
+                            Array.isArray(result.warnings)
+                        ) {
                             results.warnings.push(...result.warnings);
                         }
-                        if (result && result.errors && Array.isArray(result.errors)) {
+                        if (
+                            result &&
+                            result.errors &&
+                            Array.isArray(result.errors)
+                        ) {
                             results.errors.push(...result.errors);
                         }
                     } catch (err) {
-                        console.error(`[ERROR] Failed to enroll student ${dbStudent.name || dbStudent.email} in course ${entry.name}:`, err);
+                        console.error(
+                            `[ERROR] Failed to enroll student ${
+                                dbStudent.name || dbStudent.email
+                            } in course ${entry.name}:`,
+                            err
+                        );
                         results.errors.push({
                             studentName: dbStudent.name || dbStudent.email,
                             type: "enrollment_error",
                             error: err.message,
-                            courseName: entry.name
+                            courseName: entry.name,
                         });
+                    }
+                }
+            }
+
+            const enrollmentsAfter = results.enrollments.length;
+            const dbEnrollmentsAfter = await StudentEnrollment.countDocuments({
+                studentId: dbStudent._id,
+            });
+
+            // Consider it a success if either enrollments increased or the student has a CoursePackage in education
+            const refreshedStudent = await Student.findById(
+                dbStudent._id
+            ).lean();
+            const hasAnyCoursePackage = Array.isArray(
+                refreshedStudent?.education
+            )
+                ? refreshedStudent.education.some(
+                      (e) => e?.type === "CoursePackage"
+                  )
+                : false;
+
+            // Treat as success if the student has any enrollments at all after processing
+            const noNewEnrollments =
+                enrollmentsAfter === enrollmentsBefore &&
+                dbEnrollmentsAfter === dbEnrollmentsBefore &&
+                dbEnrollmentsAfter === 0;
+
+            if (noNewEnrollments && !hasAnyCoursePackage) {
+                // No enrollments created for this student → treat as fatal error
+                zeroEnrollmentErrors.push({
+                    type: "no_enrollments_created",
+                    student: dbStudent.name || dbStudent.email || "unknown",
+                    message:
+                        "No courses could be matched or created for this student; upload refused.",
+                });
+                // Cleanup newly created student to avoid dangling records
+                if (wasStudentCreated && dbStudent?._id) {
+                    try {
+                        await Student.findByIdAndDelete(dbStudent._id);
+                    } catch (e) {
+                        console.error(
+                            "[CLEANUP] Failed to delete student with zero enrollments:",
+                            e
+                        );
                     }
                 }
             }
@@ -478,18 +795,34 @@ export const uploadStudentsForMatching = async (req, res) => {
 
         console.log(`[DEBUG] 📊 Processing results:`);
         console.log(`[DEBUG] Students processed: ${results.students.length}`);
-        console.log(`[DEBUG] Students created/found:`, results.students.map(s => s.name || s.email || 'unknown'));
+        console.log(
+            `[DEBUG] Students created/found:`,
+            results.students.map((s) => s.name || s.email || "unknown")
+        );
 
         // After processing all students, deduplicate missing package errors globally
         const seenPackages = new Set();
-        results.errors = results.errors.filter(err => {
-            if (err.type !== 'missing_package') return true;
-            const norm = (err.packageName || '').toUpperCase().replace(/[,;|]/g, '').replace(/\s+/g, ' ').trim();
+        results.errors = results.errors.filter((err) => {
+            if (err.type !== "missing_package") return true;
+            const norm = (err.packageName || "")
+                .toUpperCase()
+                .replace(/[,;|]/g, "")
+                .replace(/\s+/g, " ")
+                .trim();
             if (seenPackages.has(norm)) return false;
             seenPackages.add(norm);
             return true;
         });
-        console.log('[DEBUG] Deduplicated missing package errors:', results.errors.filter(e => e.type === 'missing_package'));
+        console.log(
+            "[DEBUG] Deduplicated missing package errors:",
+            results.errors.filter((e) => e.type === "missing_package")
+        );
+
+        // Normalize error shape for frontend (use 'error' property, not 'message')
+        results.errors = (results.errors || []).map((e) => ({
+            ...e,
+            error: e.error || e.message || "",
+        }));
 
         console.log("📊 Final results:", {
             students: results.students.length,
@@ -499,6 +832,16 @@ export const uploadStudentsForMatching = async (req, res) => {
             createdTeachers: results.createdTeachers.length,
         });
 
+        // If any student ended with zero enrollments, abort entire upload
+        if (zeroEnrollmentErrors.length > 0) {
+            const error = new Error(
+                "No enrollments created for one or more students; upload aborted."
+            );
+            error.statusCode = 422;
+            error.reasons = zeroEnrollmentErrors;
+            throw error;
+        }
+
         // Prepare response message
         let message = `Processed ${results.students.length} students`;
         if (results.createdTeachers.length > 0) {
@@ -506,7 +849,9 @@ export const uploadStudentsForMatching = async (req, res) => {
         }
 
         // Filter out 'instance_created' warnings if everything else is fine
-        results.warnings = results.warnings.filter(w => w.type !== 'instance_created');
+        results.warnings = results.warnings.filter(
+            (w) => w.type !== "instance_created"
+        );
 
         res.json({
             success: true,
@@ -624,14 +969,16 @@ export const getCourseInstances = async (req, res) => {
         // For each instance, count enrollments and get slutprov date
         const instancesWithCounts = await Promise.all(
             instances.map(async (instance) => {
-                const enrollmentCount = await StudentEnrollment.countDocuments({ courseInstanceId: instance._id });
-                
-                // Get the slutprov date from the first enrollment (they should all have the same date for a course instance)
-                const firstEnrollment = await StudentEnrollment.findOne({ 
+                const enrollmentCount = await StudentEnrollment.countDocuments({
                     courseInstanceId: instance._id,
-                    slutprovDate: { $ne: null }
-                }).select('slutprovDate');
-                
+                });
+
+                // Get the slutprov date from the first enrollment (they should all have the same date for a course instance)
+                const firstEnrollment = await StudentEnrollment.findOne({
+                    courseInstanceId: instance._id,
+                    slutprovDate: { $ne: null },
+                }).select("slutprovDate");
+
                 return {
                     ...instance.toObject(),
                     enrollmentCount,
@@ -827,7 +1174,7 @@ export const updateCourseInstance = async (req, res) => {
     try {
         const { instanceId } = req.params;
         const updateData = req.body;
-        
+
         // Find the instance first
         const instance = await CourseInstance.findById(instanceId);
         if (!instance) {
@@ -878,8 +1225,13 @@ export const deleteAllCourseInstances = async (req, res) => {
         console.log("[API] DELETE /course-instances/all called");
         const courseResult = await CourseInstance.deleteMany({});
         const enrollmentResult = await StudentEnrollment.deleteMany({});
-        console.log(`[API] Deleted ${courseResult.deletedCount} course instances and ${enrollmentResult.deletedCount} enrollments`);
-        res.json({ success: true, message: `All course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount}) deleted` });
+        console.log(
+            `[API] Deleted ${courseResult.deletedCount} course instances and ${enrollmentResult.deletedCount} enrollments`
+        );
+        res.json({
+            success: true,
+            message: `All course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount}) deleted`,
+        });
     } catch (error) {
         console.error("Error deleting all course instances:", error);
         res.status(500).json({ error: "Internal server error" });

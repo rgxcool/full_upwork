@@ -174,12 +174,18 @@
             </div>
           </div>
           <div class="card-body">
-            <div style="border: 3px solid blue; background: yellow; padding: 20px; margin: 10px;">
+            <div style="border: 3px solid blue; background: yellow; padding: 20px; margin: 10px">
               TEST CONTAINER - IF YOU SEE THIS, THE CHANGES ARE WORKING
             </div>
-            <div 
+            <div
               class="education-scroll-container"
-              style="max-height: 200px; overflow-y: scroll; border: 2px solid red; background-color: #f0f0f0; padding: 10px;"
+              style="
+                max-height: 200px;
+                overflow-y: scroll;
+                border: 2px solid red;
+                background-color: #f0f0f0;
+                padding: 10px;
+              "
             >
               <div v-if="student.education && student.education.length > 0" class="education-list">
                 <div
@@ -226,7 +232,11 @@
         <div class="card">
           <div class="card-header">
             <h3>Kommentarer</h3>
-            <button v-if="canComment" @click="showCommentModal = true" class="btn btn-primary btn-sm">
+            <button
+              v-if="canComment"
+              @click="showCommentModal = true"
+              class="btn btn-primary btn-sm"
+            >
               Lägg till kommentar
             </button>
           </div>
@@ -358,7 +368,7 @@
   export default {
     name: 'StudentDetails',
     setup() {
-      console.log('🔍 StudentDetails component setup - TESTING IF CHANGES WORK');
+      console.log('🔍 StudentDetails component setup - TESTING IF CHANGES WORK')
       const route = useRoute()
       const store = useStore()
 
@@ -580,6 +590,12 @@
       }
 
       const getEducationName = (edu) => {
+        // First try to use the name field (which we populated in the schema)
+        if (edu.name) {
+          return edu.name
+        }
+
+        // Fallback to refId if name is not available
         if (!edu.refId) return 'Okänd'
 
         if (edu.type === 'Course') {
