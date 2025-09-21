@@ -160,7 +160,8 @@ router.get("/search", authenticateUser, async (req, res) => {
 
             for (const student of students) {
                 // Get enrollments for this student
-                const searchEnrollments = await StudentEnrollment
+                const searchEnrollments = await mongoose
+                    .model("StudentEnrollment")
                     .find({ studentId: student._id })
                     .populate("mainCourseId", "courseName")
                     .populate("coursePackageId", "coursePackageName")
@@ -253,6 +254,11 @@ router.get("/details/:type/:id", async (req, res) => {
                 // COMMENTED OUT FOR DEBUGGING - Complex population code
                 /*
                 const populatedStudent = student.toObject();
+                populatedStudent.education = Array.isArray(
+                    populatedStudent.education
+                )
+                    ? populatedStudent.education
+                    : [];
 
                 for (const edu of populatedStudent.education) {
                     if (!edu.refId) continue;
@@ -322,6 +328,7 @@ router.get("/details/:type/:id", async (req, res) => {
                 populatedStudent.education = enrollmentEducation;
 
                 // Add enrollment statistics
+                const enrollments = studentEnrollments;
                 populatedStudent.enrollmentStats = {
                     totalEnrollments: enrollments.length,
                     activeEnrollments: enrollments.filter(

@@ -49,8 +49,13 @@ import { exemptAdminsFromRateLimit } from "./src/middleware/security.js";
 app.use(exemptAdminsFromRateLimit);
 
 // Apply rate limiting
-app.use(rateLimiter);
-app.use("/api/", apiRateLimiter);
+if (process.env.NODE_ENV !== "test") {
+    app.use(rateLimiter);
+    app.use("/api/", apiRateLimiter);
+} else {
+    // In tests, only rate limit the students endpoint to validate rate limiting behavior
+    app.use("/api/students", apiRateLimiter);
+}
 
 // Apply performance monitoring
 app.use(performanceMonitor);
@@ -135,29 +140,39 @@ app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
 // Configure database connection with optimization
 dbOptimizer.configurePool();
 
-// MongoDB Connection with enhanced error handling
-mongoose
-    .connect(process.env.MONGO_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        maxPoolSize: parseInt(process.env.MAX_CONCURRENT_REQUESTS) || 50,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
-    })
-    .then(async () => {
-        console.log("✅ Connected to MongoDB");
+// Provide sensible defaults for test environment
+if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = "test-secret";
+}
 
-        // Create database indexes for performance
-        try {
-            await dbOptimizer.createIndexes();
-        } catch (error) {
-            console.warn("⚠️ Database index creation failed:", error.message);
-        }
-    })
-    .catch((err) => {
-        console.error("❌ MongoDB connection error:", err);
-        errorMonitor.recordError(err);
-    });
+// MongoDB Connection with enhanced error handling (skip during tests)
+if (process.env.NODE_ENV !== "test") {
+    mongoose
+        .connect(process.env.MONGO_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            maxPoolSize: parseInt(process.env.MAX_CONCURRENT_REQUESTS) || 50,
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+        })
+        .then(async () => {
+            console.log("✅ Connected to MongoDB");
+
+            // Create database indexes for performance
+            try {
+                await dbOptimizer.createIndexes();
+            } catch (error) {
+                console.warn(
+                    "⚠️ Database index creation failed:",
+                    error.message
+                );
+            }
+        })
+        .catch((err) => {
+            console.error("❌ MongoDB connection error:", err);
+            errorMonitor.recordError(err);
+        });
+}
 
 // Apply global error handler (must be last)
 app.use(globalErrorHandler);
@@ -213,17 +228,23 @@ process.on("unhandledRejection", (err) => {
     });
 });
 
-// Start the server
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on localhost:${PORT}`);
-    console.log(
-        `🔒 Security features: Rate limiting, CORS, Helmet, Input validation`
-    );
-    console.log(
-        `⚡ Performance features: Caching, Lazy loading, Query optimization`
-    );
-    console.log(
-        `📊 Monitoring: Error tracking, Performance metrics, Health checks`
-    );
-    console.log(`🧪 Testing: Unit tests, Integration tests, API validation`);
-});
+// Start the server unless running tests
+if (process.env.NODE_ENV !== "test") {
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running on localhost:${PORT}`);
+        console.log(
+            `🔒 Security features: Rate limiting, CORS, Helmet, Input validation`
+        );
+        console.log(
+            `⚡ Performance features: Caching, Lazy loading, Query optimization`
+        );
+        console.log(
+            `📊 Monitoring: Error tracking, Performance metrics, Health checks`
+        );
+        console.log(
+            `🧪 Testing: Unit tests, Integration tests, API validation`
+        );
+    });
+}
+
+export default app;

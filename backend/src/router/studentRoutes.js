@@ -303,6 +303,15 @@ router.post("/student", async (req, res) => {
             JSON.stringify(req.body, null, 2)
         );
 
+        if (
+            !req.body ||
+            !req.body.name ||
+            !req.body.email ||
+            !req.body.personalNumber
+        ) {
+            return res.status(400).json({ error: "Missing required fields" });
+        }
+
         const student = new Student(req.body);
         const savedStudent = await student.save();
 
@@ -480,17 +489,8 @@ router.delete("/student/:id/courses/:courseId", async (req, res) => {
 router.get("/student/:id", async (req, res) => {
     try {
         const student = await Student.findById(req.params.id)
-            .populate({
-                path: "education.refId",
-                model: function (doc) {
-                    if (doc.type === "Course") return "Course"; // populate Course model
-                    if (doc.type === "CoursePackage") return "CoursePackage"; // populate CoursePackage model
-                    if (doc.type === "Program") return "Program"; // populate Program model
-                    return null; // In case of an invalid type, we don’t populate anything
-                },
-                select: "courseName courseCode coursePackageName coursePackageCode programName", // Adjust selection based on type
-            })
-            .select("+commentHistory.seenBy");
+            .select("+commentHistory.seenBy")
+            .lean();
 
         if (!student)
             return res.status(404).json({ error: "Student not found" });

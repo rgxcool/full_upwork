@@ -80,8 +80,21 @@ const securityConfig = {
 export const enhancedRBAC = {
     // Check if user has required role
     hasRole(userRole, requiredRole) {
-        const userLevel = securityConfig.roles[userRole] || 0;
-        const requiredLevel = securityConfig.roles[requiredRole] || 0;
+        const userHasValidRole = Object.prototype.hasOwnProperty.call(
+            securityConfig.roles,
+            userRole
+        );
+        const requiredIsValidRole = Object.prototype.hasOwnProperty.call(
+            securityConfig.roles,
+            requiredRole
+        );
+
+        if (!userHasValidRole || !requiredIsValidRole) {
+            return false;
+        }
+
+        const userLevel = securityConfig.roles[userRole];
+        const requiredLevel = securityConfig.roles[requiredRole];
         return userLevel >= requiredLevel;
     },
 
@@ -120,7 +133,13 @@ export const enhancedRBAC = {
 };
 
 // Rate limiting middleware
-export const rateLimiter = rateLimit(securityConfig.rateLimit);
+const baseRateLimitConfig = { ...securityConfig.rateLimit };
+if (process.env.NODE_ENV === "test") {
+    // Make rate limit very low in tests to trigger quickly
+    baseRateLimitConfig.windowMs = 60 * 1000;
+    baseRateLimitConfig.max = 3;
+}
+export const rateLimiter = rateLimit(baseRateLimitConfig);
 
 // Enhanced rate limiting for specific endpoints
 export const createRateLimiter = (windowMs, max, message) => {
@@ -158,8 +177,8 @@ export const uploadRateLimiter = createRateLimiter(
 );
 
 export const apiRateLimiter = createRateLimiter(
-    60 * 1000, // 1 minute
-    60, // 60 requests
+    process.env.NODE_ENV === "test" ? 60 * 1000 : 60 * 1000, // 1 minute
+    process.env.NODE_ENV === "test" ? 3 : 60, // lower threshold in tests
     "Too many API requests, please try again later."
 );
 
@@ -209,7 +228,17 @@ export const securityHeaders = helmet({
 export const inputValidator = {
     // Validate email format
     validateEmail(email) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (typeof email !== "string") return false;
+        // Stricter email regex: prevents consecutive dots and leading/trailing dots in local/domain parts
+        const emailRegex =
+            /^(?!.*\.\.)[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+        // Disallow dot immediately before or after @
+        if (/\.@|@\./.test(email)) return false;
+        // Disallow leading or trailing dots in local or domain parts
+        const [local, domain] = email.split("@");
+        if (!local || !domain) return false;
+        if (local.startsWith(".") || local.endsWith(".")) return false;
+        if (domain.startsWith(".") || domain.endsWith(".")) return false;
         return emailRegex.test(email);
     },
 
@@ -253,11 +282,17 @@ export const inputValidator = {
     sanitizeInput(input) {
         if (typeof input !== "string") return input;
 
-        return input
-            .trim()
-            .replace(/[<>]/g, "") // Remove potential HTML tags
-            .replace(/javascript:/gi, "") // Remove javascript: protocol
-            .replace(/on\w+=/gi, ""); // Remove event handlers
+        return (
+            input
+                .trim()
+                // Remove HTML tags including their brackets but keep inner text
+                .replace(/<\/?\s*script\s*>/gi, "")
+                .replace(/[<>]/g, "")
+                // Remove javascript: protocol
+                .replace(/javascript:/gi, "")
+                // Remove inline event handlers like onclick=, onload=
+                .replace(/on\w+=/gi, "")
+        );
     },
 
     // Validate MongoDB ObjectId

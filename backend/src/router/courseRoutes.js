@@ -69,4 +69,27 @@ router.get(
     }
 );
 
+// 🔹 Create a new course
+router.post("/course", async (req, res) => {
+    try {
+        const { courseName, courseCode, coursePoints, courseExtent } = req.body;
+
+        if (!courseName || !courseCode) {
+            return res.status(400).json({ error: "Missing required fields" });
+        }
+
+        const created = await Course.create({
+            courseName,
+            courseCode,
+            coursePoints,
+            courseExtent,
+        });
+
+        res.status(201).json(created);
+    } catch (error) {
+        console.error("Error creating course:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
 export default router;
