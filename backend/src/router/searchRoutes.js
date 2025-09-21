@@ -376,57 +376,64 @@ router.get("/details/:type/:id", async (req, res) => {
                     const course = await Course.findById(id);
                     console.log("📚 Direct course lookup:", course ? "Found" : "Not found");
                     
-                    if (course) {
-                        // Found course directly, return basic info
-                        result = {
-                            courseId: id,
-                            courseName: course.courseName || "Okänd kurs",
-                            teacher: {
-                                _id: null,
-                                username: "Okänd lärare"
-                            },
-                            students: []
-                        };
-                        console.log("✅ Returning basic course result:", result);
-                        break;
-                    }
+                    let courseName = course ? (course.courseName || "Okänd kurs") : "Okänd kurs";
                     
-                    // If not found directly, try the enrollment approach
+                    // If not found directly, try to find students through their education array
+                    console.log("🔍 Looking for students with this course in their education array");
+                    
+                    const studentsWithCourse = await Student.find({
+                        'education.refId': id
+                    }).select('_id name email').lean();
+                    
+                    console.log("📚 Found students with course in education:", studentsWithCourse.length);
+                    
+                    // Also try StudentEnrollment approach
                     const courseEnrollments = await StudentEnrollment
                         .find({ mainCourseId: id })
                         .populate("studentId", "name _id")
                         .lean();
                     
                     console.log("📚 Found enrollments:", courseEnrollments.length);
+                    
+                    // Combine both approaches
+                    const enrollmentStudents = courseEnrollments.map((e) => e.studentId).filter(s => s !== null);
+                    const allStudents = [...studentsWithCourse, ...enrollmentStudents];
+                    
+                    // Remove duplicates based on _id
+                    const uniqueStudents = allStudents.filter((student, index, self) => 
+                        index === self.findIndex(s => s._id.toString() === student._id.toString())
+                    );
+                    
+                    console.log("👥 Total unique students found:", uniqueStudents.length);
 
-                    if (courseEnrollments.length === 0) {
-                        // No enrollments found, return basic info
-                        result = {
-                            courseId: id,
-                            courseName: "Okänd kurs",
-                            teacher: {
-                                _id: null,
-                                username: "Okänd lärare"
-                            },
-                            students: []
-                        };
-                        console.log("✅ No enrollments, returning basic result:", result);
-                        break;
+                    // If we didn't find course name directly and have students, try to get it from student education
+                    if (courseName === "Okänd kurs" && studentsWithCourse.length > 0) {
+                        const studentWithEdu = await Student.findById(studentsWithCourse[0]._id)
+                            .populate('education.refId');
+                        
+                        const courseEdu = studentWithEdu?.education?.find(edu => 
+                            edu.refId && edu.refId._id.toString() === id
+                        );
+                        
+                        if (courseEdu && courseEdu.refId) {
+                            courseName = courseEdu.refId.courseName || 
+                                       courseEdu.refId.programName || 
+                                       courseEdu.refId.coursePackageName || 
+                                       courseName; // Keep existing name if nothing found
+                        }
                     }
-
-                    const students = courseEnrollments.map((e) => e.studentId).filter(s => s !== null);
                     
                     result = {
                         courseId: id,
-                        courseName: "Kurs från enrollments",
+                        courseName: courseName,
                         teacher: {
                             _id: null,
                             username: "Okänd lärare"
                         },
-                        students: students
+                        students: uniqueStudents
                     };
                     
-                    console.log("✅ Returning enrollment-based result:", result);
+                    console.log("✅ Returning combined result:", result);
                 } catch (courseError) {
                     console.error("❌ Error in Kurs case:", courseError);
                     result = {
