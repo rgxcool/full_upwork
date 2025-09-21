@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Course from "../models/Course.js";
 import CoursePackage from "../models/CoursePackage.js";
@@ -154,53 +155,20 @@ router.get("/search", authenticateUser, async (req, res) => {
         }
 
         if (shouldSearchCourses) {
-            const students = await Student.find(studentQuery).lean();
+            // Simpler: query courses directly by name
+            const matchedCourses = await Course.find({
+                courseName: { $regex: q, $options: "i" },
+            })
+                .select("_id courseName courseCode")
+                .lean();
 
-            const courseMap = new Map();
+            const asResults = matchedCourses.map((c) => ({
+                courseName: c.courseName,
+                courseCode: c.courseCode,
+                _id: c._id,
+            }));
 
-            for (const student of students) {
-                // Get enrollments for this student
-                const searchEnrollments = await mongoose
-                    .model("StudentEnrollment")
-                    .find({ studentId: student._id })
-                    .populate("mainCourseId", "courseName")
-                    .populate("coursePackageId", "coursePackageName")
-                    .populate("programId", "programName")
-                    .lean();
-
-                for (const enrollment of searchEnrollments) {
-                    let name = "";
-                    let type = "";
-                    let courseId = "";
-
-                    if (enrollment.mainCourseId) {
-                        name = enrollment.mainCourseId.courseName;
-                        type = "Course";
-                        courseId = enrollment.mainCourseId._id.toString();
-                    } else if (enrollment.coursePackageId) {
-                        name = enrollment.coursePackageId.coursePackageName;
-                        type = "CoursePackage";
-                        courseId = enrollment.coursePackageId._id.toString();
-                    } else if (enrollment.programId) {
-                        name = enrollment.programId.programName;
-                        type = "Program";
-                        courseId = enrollment.programId._id.toString();
-                    }
-
-                    if (name && name.match(new RegExp(q, "i"))) {
-                        if (!courseMap.has(courseId)) {
-                            courseMap.set(courseId, {
-                                id: courseId,
-                                name,
-                                type,
-                                extra: `Typ: ${type}`,
-                            });
-                        }
-                    }
-                }
-            }
-
-            results.push(...courseMap.values());
+            results.push(...asResults);
         }
 
         res.json(results);
@@ -231,6 +199,11 @@ router.get("/details/:type/:id", async (req, res) => {
 
                 // Manually populate education references
                 const populatedStudent = student.toObject();
+                populatedStudent.education = Array.isArray(
+                    populatedStudent.education
+                )
+                    ? populatedStudent.education
+                    : [];
 
                 for (const edu of populatedStudent.education) {
                     if (!edu.refId) continue;
@@ -300,6 +273,7 @@ router.get("/details/:type/:id", async (req, res) => {
                 populatedStudent.education = enrollmentEducation;
 
                 // Add enrollment statistics
+                const enrollments = studentEnrollments;
                 populatedStudent.enrollmentStats = {
                     totalEnrollments: enrollments.length,
                     activeEnrollments: enrollments.filter(
@@ -339,44 +313,26 @@ router.get("/details/:type/:id", async (req, res) => {
                 break;
 
             case "Kurs":
-                // Find students who have enrollments for this course
+                // Return basic course details regardless of enrollment presence
+                const courseDoc = await Course.findById(id).select(
+                    "courseName courseCode"
+                );
+                if (!courseDoc) {
+                    return res.status(404).json({ message: "Kurs saknas" });
+                }
+
+                // Optionally include enrolled students if any
                 const courseEnrollments = await mongoose
                     .model("StudentEnrollment")
                     .find({ mainCourseId: id })
                     .populate("studentId", "name _id")
                     .lean();
-
                 const students = courseEnrollments.map((e) => e.studentId);
-
-                const sampleStudent = await Student.findOne({
-                    _id: { $in: students.map((s) => s._id) },
-                }).populate({
-                    path: "teacherId", // ✅ rätt fält i Student.js
-                    populate: {
-                        path: "userId", // ✅ referens i Teacher.js
-                        select: "username email",
-                    },
-                });
-
-                if (!sampleStudent)
-                    return res
-                        .status(404)
-                        .json({ message: "Kursen har inga elever" });
-
-                const matchingEdu = sampleStudent.education.find(
-                    (e) => e?.refId?._id?.toString() === id
-                );
-
-                let courseName =
-                    matchingEdu?.refId?.courseName ||
-                    matchingEdu?.refId?.programName ||
-                    matchingEdu?.refId?.coursePackageName ||
-                    "Okänd kurs";
 
                 result = {
                     courseId: id,
-                    courseName,
-                    teacher: sampleStudent.teacherId?.userId || null, // ✅ detta är korrekt!
+                    courseName: courseDoc.courseName,
+                    courseCode: courseDoc.courseCode,
                     students,
                 };
                 break;
