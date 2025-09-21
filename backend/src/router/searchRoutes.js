@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Course from "../models/Course.js";
 import CoursePackage from "../models/CoursePackage.js";
@@ -39,8 +40,7 @@ router.get("/courses", authenticateUser, async (req, res) => {
 
         for (const student of students) {
             // Get enrollments for this student
-            const studentEnrollments = await mongoose
-                .model("StudentEnrollment")
+            const studentEnrollments = await StudentEnrollment
                 .find({ studentId: student._id })
                 .populate("mainCourseId", "courseName")
                 .lean();
@@ -160,8 +160,7 @@ router.get("/search", authenticateUser, async (req, res) => {
 
             for (const student of students) {
                 // Get enrollments for this student
-                const searchEnrollments = await mongoose
-                    .model("StudentEnrollment")
+                const searchEnrollments = await StudentEnrollment
                     .find({ studentId: student._id })
                     .populate("mainCourseId", "courseName")
                     .populate("coursePackageId", "coursePackageName")
@@ -212,24 +211,47 @@ router.get("/search", authenticateUser, async (req, res) => {
 
 router.get("/details/:type/:id", async (req, res) => {
     const { type, id } = req.params;
+    console.log(`🔍 Details request: ${type}/${id}`);
 
     try {
         let result;
 
         switch (type) {
             case "Elev":
-                // Use the enhanced student details system
-                const student = await Student.findById(id)
-                    .populate("teacherId", "name email")
-                    .select("+commentHistory.seenBy");
-
+                console.log("🔍 Looking for student with ID:", id);
+                
+                // First try simple findById
+                const student = await Student.findById(id);
+                console.log("📚 Student found:", student ? "Yes" : "No");
+                
                 if (!student) {
+                    console.log("❌ Student not found in database");
                     return res
                         .status(404)
                         .json({ message: "Student not found" });
                 }
+                
+                console.log("✅ Student data:", {
+                    name: student.name,
+                    email: student.email,
+                    education: student.education?.length || 0
+                });
 
-                // Manually populate education references
+                // For now, just return basic student data to debug the issue
+                console.log("📤 Returning basic student data");
+                result = {
+                    _id: student._id,
+                    name: student.name,
+                    email: student.email,
+                    education: student.education || [],
+                    startDate: student.startDate,
+                    endDate: student.endDate,
+                    teacherId: student.teacherId
+                };
+                break;
+
+                // COMMENTED OUT FOR DEBUGGING - Complex population code
+                /*
                 const populatedStudent = student.toObject();
 
                 for (const edu of populatedStudent.education) {
@@ -314,6 +336,7 @@ router.get("/details/:type/:id", async (req, res) => {
                 };
 
                 result = populatedStudent;
+                */
                 break;
 
             case "Lärare":
@@ -339,46 +362,76 @@ router.get("/details/:type/:id", async (req, res) => {
                 break;
 
             case "Kurs":
-                // Find students who have enrollments for this course
-                const courseEnrollments = await mongoose
-                    .model("StudentEnrollment")
-                    .find({ mainCourseId: id })
-                    .populate("studentId", "name _id")
-                    .lean();
+                console.log("🔍 Looking for course with ID:", id);
+                
+                try {
+                    // First try to find the course directly in Course model
+                    const course = await Course.findById(id);
+                    console.log("📚 Direct course lookup:", course ? "Found" : "Not found");
+                    
+                    if (course) {
+                        // Found course directly, return basic info
+                        result = {
+                            courseId: id,
+                            courseName: course.courseName || "Okänd kurs",
+                            teacher: {
+                                _id: null,
+                                username: "Okänd lärare"
+                            },
+                            students: []
+                        };
+                        console.log("✅ Returning basic course result:", result);
+                        break;
+                    }
+                    
+                    // If not found directly, try the enrollment approach
+                    const courseEnrollments = await StudentEnrollment
+                        .find({ mainCourseId: id })
+                        .populate("studentId", "name _id")
+                        .lean();
+                    
+                    console.log("📚 Found enrollments:", courseEnrollments.length);
 
-                const students = courseEnrollments.map((e) => e.studentId);
+                    if (courseEnrollments.length === 0) {
+                        // No enrollments found, return basic info
+                        result = {
+                            courseId: id,
+                            courseName: "Okänd kurs",
+                            teacher: {
+                                _id: null,
+                                username: "Okänd lärare"
+                            },
+                            students: []
+                        };
+                        console.log("✅ No enrollments, returning basic result:", result);
+                        break;
+                    }
 
-                const sampleStudent = await Student.findOne({
-                    _id: { $in: students.map((s) => s._id) },
-                }).populate({
-                    path: "teacherId", // ✅ rätt fält i Student.js
-                    populate: {
-                        path: "userId", // ✅ referens i Teacher.js
-                        select: "username email",
-                    },
-                });
-
-                if (!sampleStudent)
-                    return res
-                        .status(404)
-                        .json({ message: "Kursen har inga elever" });
-
-                const matchingEdu = sampleStudent.education.find(
-                    (e) => e?.refId?._id?.toString() === id
-                );
-
-                let courseName =
-                    matchingEdu?.refId?.courseName ||
-                    matchingEdu?.refId?.programName ||
-                    matchingEdu?.refId?.coursePackageName ||
-                    "Okänd kurs";
-
-                result = {
-                    courseId: id,
-                    courseName,
-                    teacher: sampleStudent.teacherId?.userId || null, // ✅ detta är korrekt!
-                    students,
-                };
+                    const students = courseEnrollments.map((e) => e.studentId).filter(s => s !== null);
+                    
+                    result = {
+                        courseId: id,
+                        courseName: "Kurs från enrollments",
+                        teacher: {
+                            _id: null,
+                            username: "Okänd lärare"
+                        },
+                        students: students
+                    };
+                    
+                    console.log("✅ Returning enrollment-based result:", result);
+                } catch (courseError) {
+                    console.error("❌ Error in Kurs case:", courseError);
+                    result = {
+                        courseId: id,
+                        courseName: "Fel vid hämtning av kurs",
+                        teacher: {
+                            _id: null,
+                            username: "Okänd lärare"
+                        },
+                        students: []
+                    };
+                }
                 break;
 
             default:
@@ -394,6 +447,13 @@ router.get("/details/:type/:id", async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error("❌ Fetch details error:", error);
+        console.error("❌ Error stack:", error.stack);
+        console.error("❌ Error details:", {
+            type,
+            id,
+            message: error.message,
+            name: error.name
+        });
         res.status(500).json({ message: "Serverfel vid hämtning av detaljer" });
     }
 });
