@@ -31,23 +31,29 @@
       <!-- Basic Information Section -->
       <div class="form-section">
         <h3>Grundläggande information</h3>
-        
+
         <!-- Name -->
         <div class="mb-3">
-          <label for="name" class="form-label">Namn: <span class="text-danger">*</span></label>
-          <input 
-            type="text" 
-            id="name" 
-            v-model="studentForm.name" 
-            class="form-control" 
-            required 
+          <label for="name" class="form-label">
+            Namn:
+            <span class="text-danger">*</span>
+          </label>
+          <input
+            type="text"
+            id="name"
+            v-model="studentForm.name"
+            class="form-control"
+            required
             placeholder="Förnamn Efternamn"
           />
         </div>
 
         <!-- Personal Number (SSN) -->
         <div class="mb-3">
-          <label for="personalNumber" class="form-label">Personnummer: <span class="text-danger">*</span></label>
+          <label for="personalNumber" class="form-label">
+            Personnummer:
+            <span class="text-danger">*</span>
+          </label>
           <input
             type="text"
             id="personalNumber"
@@ -62,13 +68,16 @@
 
         <!-- Email -->
         <div class="mb-3">
-          <label for="email" class="form-label">E-post: <span class="text-danger">*</span></label>
-          <input 
-            type="email" 
-            id="email" 
-            v-model="studentForm.email" 
-            class="form-control" 
-            required 
+          <label for="email" class="form-label">
+            E-post:
+            <span class="text-danger">*</span>
+          </label>
+          <input
+            type="email"
+            id="email"
+            v-model="studentForm.email"
+            class="form-control"
+            required
             placeholder="exempel@email.com"
           />
         </div>
@@ -76,7 +85,11 @@
         <!-- Phone Numbers -->
         <div class="mb-3">
           <label class="form-label">Telefonnummer:</label>
-          <div v-for="(phone, index) in studentForm.phoneNumbers" :key="index" class="phone-input-group">
+          <div
+            v-for="(phone, index) in studentForm.phoneNumbers"
+            :key="index"
+            class="phone-input-group"
+          >
             <div class="input-group">
               <input
                 type="tel"
@@ -94,12 +107,9 @@
               </button>
             </div>
           </div>
-          <button
-            type="button"
-            class="btn btn-outline-primary btn-sm mt-2"
-            @click="addPhoneNumber"
-          >
-            <i class="fas fa-plus"></i> Lägg till telefonnummer
+          <button type="button" class="btn btn-outline-primary btn-sm mt-2" @click="addPhoneNumber">
+            <i class="fas fa-plus"></i>
+            Lägg till telefonnummer
           </button>
         </div>
       </div>
@@ -109,13 +119,17 @@
         <h3>Utbildning</h3>
         <div class="alert alert-info mb-3">
           <i class="fas fa-info-circle me-2"></i>
-          <strong>Betygssättning:</strong> Elever som läggs till här kommer automatiskt att visas i betygsmodulen 1 vecka innan kursen slutar för betygsättning.
+          <strong>Betygssättning:</strong>
+          Elever som läggs till här kommer automatiskt att visas i betygsmodulen 1 vecka innan
+          kursen slutar för betygsättning.
         </div>
         <div class="alert alert-success mb-3">
           <i class="fas fa-check-circle me-2"></i>
-          <strong>APL Integration:</strong> Elever med kurspaket kommer automatiskt att visas på APL-listan med status "Ej börjat" (GRAY).
+          <strong>APL Integration:</strong>
+          Elever med kurspaket kommer automatiskt att visas på APL-listan med status "Ej börjat"
+          (GRAY). Enskilda kurser läggs till utan APL-status.
         </div>
-        
+
         <!-- Program Selection -->
         <div class="mb-3">
           <label for="program" class="form-label">Program:</label>
@@ -147,8 +161,12 @@
         </div>
 
         <!-- Individual Course Selection -->
-        <div class="mb-3" v-if="selectedProgram">
+        <div class="mb-3">
           <label for="individualCourse" class="form-label">Enskild kurs:</label>
+          <div class="alert alert-light mb-2">
+            <i class="fas fa-info-circle me-2"></i>
+            <small>Du kan välja enskilda kurser utan att välja program eller kurspaket.</small>
+          </div>
           <div class="course-selection-container">
             <v-select
               v-model="selectedIndividualCourse"
@@ -177,8 +195,12 @@
             <div v-for="course in addedCourses" :key="course._id" class="course-item">
               <span class="course-name">
                 {{ course.displayText }}
-                <span v-if="course.type === 'CoursePackage'" class="badge bg-primary ms-1">Paket</span>
-                <span v-else-if="course.parentPackageId" class="badge bg-secondary ms-1">Från paket</span>
+                <span v-if="course.type === 'CoursePackage'" class="badge bg-primary ms-1">
+                  Paket
+                </span>
+                <span v-else-if="course.parentPackageId" class="badge bg-secondary ms-1">
+                  Från paket
+                </span>
               </span>
               <button
                 type="button"
@@ -195,10 +217,13 @@
       <!-- Dates Section -->
       <div class="form-section">
         <h3>Datum</h3>
-        
+
         <!-- Start Date -->
         <div class="mb-3 position-relative">
-          <label for="startDate" class="form-label">Startdatum: <span class="text-danger">*</span></label>
+          <label for="startDate" class="form-label">
+            Startdatum:
+            <span class="text-danger">*</span>
+          </label>
           <div class="datepicker-container">
             <Datepicker
               v-model="studentForm.startDate"
@@ -219,7 +244,10 @@
 
         <!-- Study Pace -->
         <div class="mb-3">
-          <label class="form-label">Studietakt: <span class="text-danger">*</span></label>
+          <label class="form-label">
+            Studietakt:
+            <span class="text-danger">*</span>
+          </label>
           <div class="radio-group">
             <label class="radio-option">
               <input
@@ -261,7 +289,11 @@
         <div class="mb-3">
           <label class="form-label">Beräknat slutdatum:</label>
           <div class="calculated-date">
-            {{ studentForm.endDate ? formatDate(studentForm.endDate) : 'Välj startdatum och studietakt' }}
+            {{
+              studentForm.endDate
+                ? formatDate(studentForm.endDate)
+                : 'Välj startdatum och studietakt'
+            }}
           </div>
         </div>
 
@@ -289,7 +321,7 @@
       <!-- Location and Additional Info Section -->
       <div class="form-section">
         <h3>Plats och övrig information</h3>
-        
+
         <!-- Municipality -->
         <div class="mb-3">
           <label for="municipality" class="form-label">Kommun:</label>
@@ -306,7 +338,7 @@
           <label for="teacher" class="form-label">Lärare:</label>
           <v-select
             v-model="selectedTeacher"
-            :items="teachers"
+            :items="teachersWithDisplayText"
             item-title="displayText"
             item-value="_id"
             placeholder="Välj lärare"
@@ -318,11 +350,11 @@
         <!-- Exam Type -->
         <div class="mb-3">
           <label for="examType" class="form-label">Provtyp:</label>
-          <input 
-            type="text" 
-            id="examType" 
-            v-model="studentForm.examType" 
-            class="form-control" 
+          <input
+            type="text"
+            id="examType"
+            v-model="studentForm.examType"
+            class="form-control"
             placeholder="T.ex. Nationellt prov, Skriftlig examination"
           />
         </div>
@@ -330,10 +362,10 @@
         <!-- Additional Information -->
         <div class="mb-3">
           <label for="additionalInfo" class="form-label">Övrig information:</label>
-          <textarea 
-            id="additionalInfo" 
-            v-model="studentForm.additionalInfo" 
-            class="form-control" 
+          <textarea
+            id="additionalInfo"
+            v-model="studentForm.additionalInfo"
+            class="form-control"
             rows="3"
             placeholder="Ytterligare information om eleven..."
           ></textarea>
@@ -344,27 +376,15 @@
           <label class="form-label">Status:</label>
           <div class="checkbox-group">
             <label class="checkbox-option">
-              <input
-                type="checkbox"
-                v-model="studentForm.dropout"
-                class="form-check-input"
-              />
+              <input type="checkbox" v-model="studentForm.dropout" class="form-check-input" />
               Har hoppat av
             </label>
             <label class="checkbox-option">
-              <input
-                type="checkbox"
-                v-model="studentForm.attendedExam"
-                class="form-check-input"
-              />
+              <input type="checkbox" v-model="studentForm.attendedExam" class="form-check-input" />
               Har deltagit i prov
             </label>
             <label class="checkbox-option">
-              <input
-                type="checkbox"
-                v-model="studentForm.paidExamFee"
-                class="form-check-input"
-              />
+              <input type="checkbox" v-model="studentForm.paidExamFee" class="form-check-input" />
               Har betalat provavgift
             </label>
           </div>
@@ -373,11 +393,7 @@
 
       <!-- Submit Button -->
       <div class="form-section">
-        <button 
-          type="submit" 
-          class="btn btn-success btn-lg w-100"
-          :disabled="isSubmitting"
-        >
+        <button type="submit" class="btn btn-success btn-lg w-100" :disabled="isSubmitting">
           <i v-if="isSubmitting" class="fas fa-spinner fa-spin me-2"></i>
           {{ isSubmitting ? 'Lägger till elev...' : 'Lägg till elev' }}
         </button>
@@ -387,332 +403,40 @@
 </template>
 
 <script setup>
-import axios from 'axios'
-import Datepicker from '@vuepic/vue-datepicker'
-import '@vuepic/vue-datepicker/dist/main.css'
-import { ref, reactive, watch, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+  import axios from 'axios'
+  import Datepicker from '@vuepic/vue-datepicker'
+  import '@vuepic/vue-datepicker/dist/main.css'
+  import { ref, reactive, watch, onMounted, computed } from 'vue'
+  import { useRouter } from 'vue-router'
 
-// Router
-const router = useRouter()
+  // Router
+  const router = useRouter()
 
-// Reactive data
-const programs = ref([])
-const availableCourses = ref([])
-const availableCoursePackages = ref([])
-const teachers = ref([])
-const selectedProgram = ref(null)
-const selectedCoursePackage = ref(null)
-const selectedIndividualCourse = ref(null)
-const selectedTeacher = ref(null)
-const addedCourses = ref([])
-const isLoadingPrograms = ref(false)
-const isLoadingCourses = ref(false)
-const isLoadingCoursePackages = ref(false)
-const isLoadingTeachers = ref(false)
-const isSubmitting = ref(false)
-const successMessage = ref('')
-const errorMessage = ref('')
-const fetchState = ref(false)
+  // Reactive data
+  const programs = ref([])
+  const availableCourses = ref([])
+  const availableCoursePackages = ref([])
+  const teachers = ref([])
+  const selectedProgram = ref(null)
+  const selectedCoursePackage = ref(null)
+  const selectedIndividualCourse = ref(null)
+  const selectedTeacher = ref(null)
+  const addedCourses = ref([])
+  const isLoadingPrograms = ref(false)
+  const isLoadingCourses = ref(false)
+  const isLoadingCoursePackages = ref(false)
+  const isLoadingTeachers = ref(false)
+  const isSubmitting = ref(false)
+  const successMessage = ref('')
+  const errorMessage = ref('')
+  const fetchState = ref(false)
 
-// Datepicker refs
-const startDatepickerRef = ref(null)
-const finalExamDatepickerRef = ref(null)
+  // Datepicker refs
+  const startDatepickerRef = ref(null)
+  const finalExamDatepickerRef = ref(null)
 
-// Form data
-const studentForm = reactive({
-  name: '',
-  personalNumber: '',
-  email: '',
-  phoneNumbers: [{ number: '' }],
-  startDate: '',
-  studyPace: null,
-  endDate: '',
-  finalExamDate: '',
-  municipality: '',
-  examType: '',
-  additionalInfo: '',
-  dropout: false,
-  attendedExam: false,
-  paidExamFee: false,
-})
-
-// Options
-const textInputOptions = { enterSubmit: true, tabSubmit: true, openMenu: true }
-
-const municipalities = [
-  'Botkyrka',
-  'Danderyd',
-  'Huddinge',
-  'Järfälla',
-  'KCNO',
-  'Lidingö',
-  'Norrtälje',
-  'Nykvarn',
-  'Privat kunder',
-  'Salem',
-  'Sigtuna',
-  'Sollentuna',
-  'Solna',
-  'Sundbyberg',
-  'Södertälje',
-  'Täby',
-  'Upplands Bro',
-  'Upplands Väsby',
-  'Vallentuna',
-  'Vaxholm',
-  'Växjö',
-  'Österåker',
-]
-
-// Computed properties
-const teachersWithDisplayText = computed(() => {
-  return teachers.value.map(teacher => ({
-    ...teacher,
-    displayText: `${teacher.userId?.username || 'Okänd'} (${teacher.subject || 'Övrigt'})`
-  }))
-})
-
-// Methods
-const fetchInitialData = async () => {
-  if (fetchState.value) return
-  fetchState.value = true
-  
-  try {
-    await Promise.all([
-      fetchPrograms(),
-      fetchTeachers()
-    ])
-  } catch (error) {
-    console.error('Error fetching initial data:', error)
-    errorMessage.value = 'Kunde inte ladda grunddata. Försök igen.'
-  } finally {
-    isLoadingPrograms.value = false
-    isLoadingTeachers.value = false
-  }
-}
-
-const fetchPrograms = async () => {
-  try {
-    isLoadingPrograms.value = true
-    const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`, {
-      withCredentials: true,
-    })
-    programs.value = res.data
-  } catch (error) {
-    console.error('Error fetching programs:', error)
-    errorMessage.value = 'Kunde inte ladda program.'
-  }
-}
-
-const fetchTeachers = async () => {
-  try {
-    isLoadingTeachers.value = true
-    const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`, {
-      withCredentials: true,
-    })
-    teachers.value = res.data.filter(t => t.userId && t.userId.username)
-  } catch (error) {
-    console.error('Error fetching teachers:', error)
-    errorMessage.value = 'Kunde inte ladda lärare.'
-  }
-}
-
-const fetchCoursesForProgram = async (programId) => {
-  if (!programId) return
-  
-  try {
-    isLoadingCourses.value = true
-    const res = await axios.get(
-      `${import.meta.env.VITE_API_URL}/api/program/${programId}/courses`,
-      { withCredentials: true }
-    )
-    availableCourses.value = res.data.map((c) => ({
-      ...c,
-      displayText: `${c.courseName} (${c.courseCode || 'Ingen kod'})`,
-    }))
-  } catch (error) {
-    console.error('Error fetching courses:', error)
-    errorMessage.value = 'Kunde inte ladda kurser för programmet.'
-  } finally {
-    isLoadingCourses.value = false
-  }
-}
-
-const fetchCoursePackagesForProgram = async (programId) => {
-  if (!programId) return
-  
-  try {
-    isLoadingCoursePackages.value = true
-    const program = programs.value.find(p => p._id === programId)
-    if (program && program.programCoursePackages) {
-      availableCoursePackages.value = program.programCoursePackages.map(pkg => ({
-        ...pkg,
-        displayText: `${pkg.coursePackageName} (${pkg.coursePackageCode || 'Ingen kod'})`
-      }))
-    }
-  } catch (error) {
-    console.error('Error fetching course packages:', error)
-    errorMessage.value = 'Kunde inte ladda kurspaket för programmet.'
-  } finally {
-    isLoadingCoursePackages.value = false
-  }
-}
-
-const onProgramChange = (programId) => {
-  selectedCoursePackage.value = null
-  selectedIndividualCourse.value = null
-  addedCourses.value = []
-  
-  if (programId) {
-    fetchCoursesForProgram(programId)
-    fetchCoursePackagesForProgram(programId)
-  } else {
-    availableCourses.value = []
-    availableCoursePackages.value = []
-  }
-}
-
-const onCoursePackageChange = (packageId) => {
-  if (packageId) {
-    // Clear individual courses when package is selected
-    selectedIndividualCourse.value = null
-    addedCourses.value = []
-    
-    const selectedPackage = availableCoursePackages.value.find(pkg => pkg._id === packageId)
-    if (selectedPackage) {
-      // Add the course package itself with its courses stored for removal logic
-      addedCourses.value.push({
-        _id: selectedPackage._id,
-        courseName: selectedPackage.coursePackageName,
-        courseCode: selectedPackage.coursePackageCode,
-        displayText: `${selectedPackage.coursePackageName} (${selectedPackage.coursePackageCode || 'Ingen kod'})`,
-        type: 'CoursePackage',
-        coursePackageCourses: selectedPackage.coursePackageCourses // Store for removal logic
-      })
-      
-      // Add all individual courses from the package
-      const individualCourses = selectedPackage.coursePackageCourses.map(course => ({
-        ...course,
-        displayText: `${course.courseName} (${course.courseCode || 'Ingen kod'})`,
-        type: 'Course',
-        parentPackageId: selectedPackage._id // Track which package this course belongs to
-      }))
-      
-      addedCourses.value.push(...individualCourses)
-      
-      successMessage.value = `✅ Kurspaket "${selectedPackage.coursePackageName}" har lagts till med ${selectedPackage.coursePackageCourses.length} individuella kurser.`
-      setTimeout(() => {
-        successMessage.value = ''
-      }, 5000)
-    }
-  }
-}
-
-const addIndividualCourse = () => {
-  if (!selectedIndividualCourse.value) {
-    errorMessage.value = 'Välj en kurs först.'
-    return
-  }
-  
-  const course = availableCourses.value.find((c) => c._id === selectedIndividualCourse.value)
-  if (!course) {
-    errorMessage.value = 'Kursinformation hittades inte.'
-    return
-  }
-  
-  // Check if course is already added
-  if (addedCourses.value.some(c => c._id === course._id)) {
-    errorMessage.value = 'Kursen är redan tillagd.'
-    return
-  }
-  
-  addedCourses.value.push({
-    ...course,
-    type: 'Course'
-  })
-  
-  successMessage.value = `✅ Kursen "${course.displayText}" har lagts till.`
-  setTimeout(() => {
-    successMessage.value = ''
-  }, 3000)
-  
-  selectedIndividualCourse.value = null
-}
-
-const removeCourse = (courseId) => {
-  const courseToRemove = addedCourses.value.find(course => course._id === courseId)
-  
-  if (courseToRemove && courseToRemove.type === 'CoursePackage') {
-    // If removing a course package, remove both the package and all its individual courses
-    const packageCourses = courseToRemove.coursePackageCourses || []
-    const packageCourseIds = packageCourses.map(course => course._id)
-    
-    addedCourses.value = addedCourses.value.filter(course => 
-      course._id !== courseId && !packageCourseIds.includes(course._id)
-    )
-  } else if (courseToRemove && courseToRemove.parentPackageId) {
-    // If removing an individual course that belongs to a package, remove the entire package
-    const packageId = courseToRemove.parentPackageId
-    const packageEntry = addedCourses.value.find(course => course._id === packageId && course.type === 'CoursePackage')
-    const packageCourseIds = packageEntry?.coursePackageCourses?.map(course => course._id) || []
-    
-    addedCourses.value = addedCourses.value.filter(course => 
-      course._id !== packageId && !packageCourseIds.includes(course._id)
-    )
-  } else {
-    // If removing an individual course that doesn't belong to a package, just remove that course
-    addedCourses.value = addedCourses.value.filter(course => course._id !== courseId)
-  }
-}
-
-const addPhoneNumber = () => {
-  studentForm.phoneNumbers.push({ number: '' })
-}
-
-const removePhoneNumber = (index) => {
-  if (studentForm.phoneNumbers.length > 1) {
-    studentForm.phoneNumbers.splice(index, 1)
-  }
-}
-
-const calculateEndDate = () => {
-  if (!studentForm.startDate || !studentForm.studyPace) {
-    studentForm.endDate = ''
-    return
-  }
-  
-  const startDate = new Date(studentForm.startDate)
-  const durationDays = parseInt(studentForm.studyPace) * 7
-  const endDate = new Date(startDate)
-  endDate.setDate(startDate.getDate() + durationDays - 3)
-  studentForm.endDate = endDate.toISOString()
-}
-
-const formatDate = (dateString) => {
-  if (!dateString) return ''
-  return new Date(dateString).toLocaleDateString('sv-SE')
-}
-
-const openDatepicker = (refName) => {
-  if (refName === 'startDatepickerRef' && startDatepickerRef.value) {
-    startDatepickerRef.value.openMenu()
-  } else if (refName === 'finalExamDatepickerRef' && finalExamDatepickerRef.value) {
-    finalExamDatepickerRef.value.openMenu()
-  }
-}
-
-const handleEnterKey = (e) => {
-  if (!e.target.closest('.dp__input')) e.preventDefault()
-}
-
-const handleDatepickerEnter = (e) => {
-  e.stopPropagation()
-  e.preventDefault()
-}
-
-const resetForm = () => {
-  Object.assign(studentForm, {
+  // Form data
+  const studentForm = reactive({
     name: '',
     personalNumber: '',
     email: '',
@@ -728,285 +452,610 @@ const resetForm = () => {
     attendedExam: false,
     paidExamFee: false,
   })
-  
-  selectedProgram.value = null
-  selectedCoursePackage.value = null
-  selectedIndividualCourse.value = null
-  selectedTeacher.value = null
-  addedCourses.value = []
-  availableCourses.value = []
-  availableCoursePackages.value = []
-}
 
-const submitStudentForm = async () => {
-  // Validation
-  if (!studentForm.name || !studentForm.personalNumber || !studentForm.email || !studentForm.startDate || !studentForm.studyPace) {
-    errorMessage.value = 'Vänligen fyll i alla obligatoriska fält!'
-    return
-  }
-  
-  if (addedCourses.value.length === 0) {
-    errorMessage.value = 'Välj minst en kurs eller kurspaket!'
-    return
-  }
-  
-  isSubmitting.value = true
-  errorMessage.value = ''
-  
-  try {
-    // Prepare phone numbers (filter out empty ones)
-    const phoneNumbers = studentForm.phoneNumbers
-      .map(phone => phone.number.trim())
-      .filter(number => number.length > 0)
-    
-    // Prepare education entries with dates for enrollment creation
-    const education = addedCourses.value.map(course => ({
-      type: course.type || 'Course',
-      refId: course._id,
-      name: course.courseName,
-      startDate: studentForm.startDate,
-      endDate: studentForm.endDate,
-      slutprovDate: studentForm.finalExamDate,
+  // Options
+  const textInputOptions = { enterSubmit: true, tabSubmit: true, openMenu: true }
+
+  const municipalities = [
+    'Botkyrka',
+    'Danderyd',
+    'Huddinge',
+    'Järfälla',
+    'KCNO',
+    'Lidingö',
+    'Norrtälje',
+    'Nykvarn',
+    'Privat kunder',
+    'Salem',
+    'Sigtuna',
+    'Sollentuna',
+    'Solna',
+    'Sundbyberg',
+    'Södertälje',
+    'Täby',
+    'Upplands Bro',
+    'Upplands Väsby',
+    'Vallentuna',
+    'Vaxholm',
+    'Växjö',
+    'Österåker',
+  ]
+
+  // Computed properties
+  const teachersWithDisplayText = computed(() => {
+    return teachers.value.map((teacher) => ({
+      ...teacher,
+      displayText: `${teacher.userId?.username || 'Okänd'} (${teacher.subject || 'Övrigt'})`,
     }))
-    
-    const payload = {
-      name: studentForm.name.trim(),
-      personalNumber: studentForm.personalNumber.trim(),
-      email: studentForm.email.trim(),
-      phone: phoneNumbers.length > 0 ? phoneNumbers[0] : '', // Primary phone
-      phoneNumbers: phoneNumbers, // All phone numbers
-      startDate: studentForm.startDate,
-      endDate: studentForm.endDate,
-      finalExamDate: studentForm.finalExamDate,
-      municipality: studentForm.municipality ? { type: studentForm.municipality } : undefined,
-      exam: studentForm.examType.trim(),
-      additionalInfo: studentForm.additionalInfo.trim(),
-      teacher: selectedTeacher.value ? teachers.value.find(t => t._id === selectedTeacher.value)?.userId?.username : '',
-      teacherId: selectedTeacher.value || undefined,
-      dropout: studentForm.dropout,
-      attendedExam: studentForm.attendedExam,
-      paidExamFee: studentForm.paidExamFee,
-      program: selectedProgram.value,
-      education: education,
+  })
+
+  // Methods
+  const fetchInitialData = async () => {
+    if (fetchState.value) return
+    fetchState.value = true
+
+    try {
+      await Promise.all([
+        fetchPrograms(),
+        fetchTeachers(),
+        fetchAllCourses(), // Load all courses initially for individual selection
+      ])
+    } catch (error) {
+      console.error('Error fetching initial data:', error)
+      errorMessage.value = 'Kunde inte ladda grunddata. Försök igen.'
+    } finally {
+      isLoadingPrograms.value = false
+      isLoadingTeachers.value = false
+      isLoadingCourses.value = false
     }
-    
-    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, payload, {
-      withCredentials: true,
+  }
+
+  const fetchPrograms = async () => {
+    try {
+      isLoadingPrograms.value = true
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/programs`, {
+        withCredentials: true,
+      })
+      programs.value = res.data
+    } catch (error) {
+      console.error('Error fetching programs:', error)
+      errorMessage.value = 'Kunde inte ladda program.'
+    }
+  }
+
+  const fetchTeachers = async () => {
+    try {
+      isLoadingTeachers.value = true
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`, {
+        withCredentials: true,
+      })
+      teachers.value = res.data.filter((t) => t.userId && t.userId.username)
+    } catch (error) {
+      console.error('Error fetching teachers:', error)
+      errorMessage.value = 'Kunde inte ladda lärare.'
+    }
+  }
+
+  const fetchCoursesForProgram = async (programId) => {
+    if (!programId) return
+
+    try {
+      isLoadingCourses.value = true
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/program/${programId}/courses`,
+        { withCredentials: true }
+      )
+      availableCourses.value = res.data.map((c) => ({
+        ...c,
+        displayText: `${c.courseName} (${c.courseCode || 'Ingen kod'})`,
+      }))
+    } catch (error) {
+      console.error('Error fetching courses:', error)
+      errorMessage.value = 'Kunde inte ladda kurser för programmet.'
+    } finally {
+      isLoadingCourses.value = false
+    }
+  }
+
+  const fetchAllCourses = async () => {
+    try {
+      isLoadingCourses.value = true
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/courses`, {
+        withCredentials: true,
+      })
+      availableCourses.value = res.data.map((c) => ({
+        ...c,
+        displayText: `${c.courseName} (${c.courseCode || 'Ingen kod'})`,
+      }))
+    } catch (error) {
+      console.error('Error fetching all courses:', error)
+      errorMessage.value = 'Kunde inte ladda kurser.'
+    } finally {
+      isLoadingCourses.value = false
+    }
+  }
+
+  const fetchCoursePackagesForProgram = async (programId) => {
+    if (!programId) return
+
+    try {
+      isLoadingCoursePackages.value = true
+      const program = programs.value.find((p) => p._id === programId)
+      if (program && program.programCoursePackages) {
+        availableCoursePackages.value = program.programCoursePackages.map((pkg) => ({
+          ...pkg,
+          displayText: `${pkg.coursePackageName} (${pkg.coursePackageCode || 'Ingen kod'})`,
+        }))
+      }
+    } catch (error) {
+      console.error('Error fetching course packages:', error)
+      errorMessage.value = 'Kunde inte ladda kurspaket för programmet.'
+    } finally {
+      isLoadingCoursePackages.value = false
+    }
+  }
+
+  const onProgramChange = (programId) => {
+    selectedCoursePackage.value = null
+    selectedIndividualCourse.value = null
+    addedCourses.value = []
+
+    if (programId) {
+      fetchCoursesForProgram(programId)
+      fetchCoursePackagesForProgram(programId)
+    } else {
+      // When no program is selected, fetch all available courses for individual selection
+      fetchAllCourses()
+      availableCoursePackages.value = []
+    }
+  }
+
+  const onCoursePackageChange = (packageId) => {
+    if (packageId) {
+      // Clear individual courses when package is selected
+      selectedIndividualCourse.value = null
+      addedCourses.value = []
+
+      const selectedPackage = availableCoursePackages.value.find((pkg) => pkg._id === packageId)
+      if (selectedPackage) {
+        // Add the course package itself with its courses stored for removal logic
+        addedCourses.value.push({
+          _id: selectedPackage._id,
+          courseName: selectedPackage.coursePackageName,
+          courseCode: selectedPackage.coursePackageCode,
+          displayText: `${selectedPackage.coursePackageName} (${
+            selectedPackage.coursePackageCode || 'Ingen kod'
+          })`,
+          type: 'CoursePackage',
+          coursePackageCourses: selectedPackage.coursePackageCourses, // Store for removal logic
+        })
+
+        // Add all individual courses from the package
+        const individualCourses = selectedPackage.coursePackageCourses.map((course) => ({
+          ...course,
+          displayText: `${course.courseName} (${course.courseCode || 'Ingen kod'})`,
+          type: 'Course',
+          parentPackageId: selectedPackage._id, // Track which package this course belongs to
+        }))
+
+        addedCourses.value.push(...individualCourses)
+
+        successMessage.value = `✅ Kurspaket "${selectedPackage.coursePackageName}" har lagts till med ${selectedPackage.coursePackageCourses.length} individuella kurser.`
+        setTimeout(() => {
+          successMessage.value = ''
+        }, 5000)
+      }
+    }
+  }
+
+  const addIndividualCourse = () => {
+    if (!selectedIndividualCourse.value) {
+      errorMessage.value = 'Välj en kurs först.'
+      return
+    }
+
+    const course = availableCourses.value.find((c) => c._id === selectedIndividualCourse.value)
+    if (!course) {
+      errorMessage.value = 'Kursinformation hittades inte.'
+      return
+    }
+
+    // Check if course is already added
+    if (addedCourses.value.some((c) => c._id === course._id)) {
+      errorMessage.value = 'Kursen är redan tillagd.'
+      return
+    }
+
+    addedCourses.value.push({
+      ...course,
+      type: 'Course',
     })
-    
-    console.log('✅ Student created successfully:', response.data)
-    console.log('📋 Education entries:', response.data.education)
-    
-    successMessage.value = '✅ Eleven har lagts till framgångsrikt!'
-    
-    // Reset form immediately
-    resetForm()
-    
-    // Show success message and then navigate to APL list
+
+    successMessage.value = `✅ Kursen "${course.displayText}" har lagts till.`
     setTimeout(() => {
       successMessage.value = ''
-      // Navigate to APL list to see the newly added student
-      router.push('/apl')
-    }, 2000)
-    
-  } catch (error) {
-    console.error('❌ Backend error:', error.response?.data || error)
-    errorMessage.value = error.response?.data?.error || 'Kunde inte lägga till elev. Något gick fel. Försök igen.'
-  } finally {
-    isSubmitting.value = false
-  }
-}
+    }, 3000)
 
-// Lifecycle
-onMounted(fetchInitialData)
+    selectedIndividualCourse.value = null
+  }
+
+  const removeCourse = (courseId) => {
+    const courseToRemove = addedCourses.value.find((course) => course._id === courseId)
+
+    if (courseToRemove && courseToRemove.type === 'CoursePackage') {
+      // If removing a course package, remove both the package and all its individual courses
+      const packageCourses = courseToRemove.coursePackageCourses || []
+      const packageCourseIds = packageCourses.map((course) => course._id)
+
+      addedCourses.value = addedCourses.value.filter(
+        (course) => course._id !== courseId && !packageCourseIds.includes(course._id)
+      )
+    } else if (courseToRemove && courseToRemove.parentPackageId) {
+      // If removing an individual course that belongs to a package, remove the entire package
+      const packageId = courseToRemove.parentPackageId
+      const packageEntry = addedCourses.value.find(
+        (course) => course._id === packageId && course.type === 'CoursePackage'
+      )
+      const packageCourseIds = packageEntry?.coursePackageCourses?.map((course) => course._id) || []
+
+      addedCourses.value = addedCourses.value.filter(
+        (course) => course._id !== packageId && !packageCourseIds.includes(course._id)
+      )
+    } else {
+      // If removing an individual course that doesn't belong to a package, just remove that course
+      addedCourses.value = addedCourses.value.filter((course) => course._id !== courseId)
+    }
+  }
+
+  const addPhoneNumber = () => {
+    studentForm.phoneNumbers.push({ number: '' })
+  }
+
+  const removePhoneNumber = (index) => {
+    if (studentForm.phoneNumbers.length > 1) {
+      studentForm.phoneNumbers.splice(index, 1)
+    }
+  }
+
+  const calculateEndDate = () => {
+    if (!studentForm.startDate || !studentForm.studyPace) {
+      studentForm.endDate = ''
+      return
+    }
+
+    const startDate = new Date(studentForm.startDate)
+    const durationDays = parseInt(studentForm.studyPace) * 7
+    const endDate = new Date(startDate)
+    endDate.setDate(startDate.getDate() + durationDays - 3)
+    studentForm.endDate = endDate.toISOString()
+  }
+
+  const formatDate = (dateString) => {
+    if (!dateString) return ''
+    return new Date(dateString).toLocaleDateString('sv-SE')
+  }
+
+  const openDatepicker = (refName) => {
+    if (refName === 'startDatepickerRef' && startDatepickerRef.value) {
+      startDatepickerRef.value.openMenu()
+    } else if (refName === 'finalExamDatepickerRef' && finalExamDatepickerRef.value) {
+      finalExamDatepickerRef.value.openMenu()
+    }
+  }
+
+  const handleEnterKey = (e) => {
+    if (!e.target.closest('.dp__input')) e.preventDefault()
+  }
+
+  const handleDatepickerEnter = (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+  }
+
+  const resetForm = () => {
+    Object.assign(studentForm, {
+      name: '',
+      personalNumber: '',
+      email: '',
+      phoneNumbers: [{ number: '' }],
+      startDate: '',
+      studyPace: null,
+      endDate: '',
+      finalExamDate: '',
+      municipality: '',
+      examType: '',
+      additionalInfo: '',
+      dropout: false,
+      attendedExam: false,
+      paidExamFee: false,
+    })
+
+    selectedProgram.value = null
+    selectedCoursePackage.value = null
+    selectedIndividualCourse.value = null
+    selectedTeacher.value = null
+    addedCourses.value = []
+    availableCourses.value = []
+    availableCoursePackages.value = []
+  }
+
+  const submitStudentForm = async () => {
+    // Validation
+    if (
+      !studentForm.name ||
+      !studentForm.personalNumber ||
+      !studentForm.email ||
+      !studentForm.startDate ||
+      !studentForm.studyPace
+    ) {
+      errorMessage.value = 'Vänligen fyll i alla obligatoriska fält!'
+      return
+    }
+
+    if (addedCourses.value.length === 0) {
+      errorMessage.value = 'Välj minst en kurs eller kurspaket!'
+      return
+    }
+
+    isSubmitting.value = true
+    errorMessage.value = ''
+
+    try {
+      // Prepare phone numbers (filter out empty ones)
+      const phoneNumbers = studentForm.phoneNumbers
+        .map((phone) => phone.number.trim())
+        .filter((number) => number.length > 0)
+
+      // Prepare education entries with dates for enrollment creation
+      const education = addedCourses.value.map((course) => ({
+        type: course.type || 'Course',
+        refId: course._id,
+        name: course.courseName,
+        startDate: studentForm.startDate,
+        endDate: studentForm.endDate,
+        slutprovDate: studentForm.finalExamDate,
+      }))
+
+      const payload = {
+        name: studentForm.name.trim(),
+        personalNumber: studentForm.personalNumber.trim(),
+        email: studentForm.email.trim(),
+        phone: phoneNumbers.length > 0 ? phoneNumbers[0] : '', // Primary phone
+        phoneNumbers: phoneNumbers, // All phone numbers
+        startDate: studentForm.startDate,
+        endDate: studentForm.endDate,
+        finalExamDate: studentForm.finalExamDate,
+        municipality: studentForm.municipality ? { type: studentForm.municipality } : undefined,
+        exam: studentForm.examType.trim(),
+        additionalInfo: studentForm.additionalInfo.trim(),
+        teacher: selectedTeacher.value
+          ? teachers.value.find((t) => t._id === selectedTeacher.value)?.userId?.username
+          : '',
+        teacherId: selectedTeacher.value || undefined,
+        dropout: studentForm.dropout,
+        attendedExam: studentForm.attendedExam,
+        paidExamFee: studentForm.paidExamFee,
+        program: selectedProgram.value,
+        education: education,
+      }
+
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, payload, {
+        withCredentials: true,
+      })
+
+      console.log('✅ Student created successfully:', response.data)
+      console.log('📋 Education entries:', response.data.education)
+
+      successMessage.value = '✅ Eleven har lagts till framgångsrikt!'
+
+      // Reset form immediately
+      resetForm()
+
+      // Show success message and then navigate to APL list
+      setTimeout(() => {
+        successMessage.value = ''
+        // Navigate to APL list to see the newly added student
+        router.push('/apl')
+      }, 2000)
+    } catch (error) {
+      console.error('❌ Backend error:', error.response?.data || error)
+      errorMessage.value =
+        error.response?.data?.error || 'Kunde inte lägga till elev. Något gick fel. Försök igen.'
+    } finally {
+      isSubmitting.value = false
+    }
+  }
+
+  // Lifecycle
+  onMounted(fetchInitialData)
 </script>
 
 <style scoped>
-.scrollable-view {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.form-section {
-  background: #f8f9fa;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-  border-left: 4px solid #007dc3;
-}
-
-.form-section h3 {
-  color: #007dc3;
-  margin-bottom: 20px;
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-.form-control,
-.form-control-datepicker {
-  max-width: 100%;
-  width: 100%;
-}
-
-.datepicker-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.calendar-icon {
-  position: absolute;
-  right: 10px;
-  cursor: pointer;
-  font-size: 1.2rem;
-  z-index: 10;
-}
-
-.radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.radio-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.checkbox-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.checkbox-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.calculated-date {
-  padding: 8px 12px;
-  background: #e9ecef;
-  border-radius: 4px;
-  font-weight: 500;
-  color: #495057;
-}
-
-.phone-input-group {
-  margin-bottom: 8px;
-}
-
-.course-selection-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.added-courses-list {
-  background: #fff;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  padding: 12px;
-}
-
-.course-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid #f1f3f4;
-}
-
-.course-item:last-child {
-  border-bottom: none;
-}
-
-.course-name {
-  font-weight: 500;
-  color: #495057;
-}
-
-.badge {
-  font-size: 0.75em;
-  padding: 0.25em 0.5em;
-  border-radius: 0.375rem;
-}
-
-.bg-primary {
-  background-color: #007dc3 !important;
-  color: white;
-}
-
-.bg-secondary {
-  background-color: #6c757d !important;
-  color: white;
-}
-
-.styled-select {
-  width: 100%;
-}
-
-.text-danger {
-  color: #dc3545 !important;
-}
-
-.btn-success {
-  background-color: #28a745;
-  border-color: #28a745;
-}
-
-.btn-success:hover {
-  background-color: #218838;
-  border-color: #1e7e34;
-}
-
-.alert {
-  max-width: 500px;
-  margin: 0 auto;
-}
-
-.alert-info {
-  background-color: #d1ecf1;
-  border-color: #bee5eb;
-  color: #0c5460;
-}
-
-.alert-info .fas {
-  color: #0c5460;
-}
-
-.alert-success {
-  background-color: #d4edda;
-  border-color: #c3e6cb;
-  color: #155724;
-}
-
-.alert-success .fas {
-  color: #155724;
-}
-
-@media (max-width: 768px) {
   .scrollable-view {
-    padding: 10px;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
   }
-  
+
   .form-section {
-    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-left: 4px solid #007dc3;
   }
-  
-  .course-selection-container {
+
+  .form-section h3 {
+    color: #007dc3;
+    margin-bottom: 20px;
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+
+  .form-control,
+  .form-control-datepicker {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .datepicker-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+
+  .calendar-icon {
+    position: absolute;
+    right: 10px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    z-index: 10;
+  }
+
+  .radio-group {
+    display: flex;
     flex-direction: column;
-    align-items: stretch;
+    gap: 8px;
   }
-  
-  .course-selection-container .btn {
-    margin-top: 8px;
+
+  .radio-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
   }
-}
+
+  .checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .calculated-date {
+    padding: 8px 12px;
+    background: #e9ecef;
+    border-radius: 4px;
+    font-weight: 500;
+    color: #495057;
+  }
+
+  .phone-input-group {
+    margin-bottom: 8px;
+  }
+
+  .course-selection-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .added-courses-list {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 12px;
+  }
+
+  .course-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f3f4;
+  }
+
+  .course-item:last-child {
+    border-bottom: none;
+  }
+
+  .course-name {
+    font-weight: 500;
+    color: #495057;
+  }
+
+  .badge {
+    font-size: 0.75em;
+    padding: 0.25em 0.5em;
+    border-radius: 0.375rem;
+  }
+
+  .bg-primary {
+    background-color: #007dc3 !important;
+    color: white;
+  }
+
+  .bg-secondary {
+    background-color: #6c757d !important;
+    color: white;
+  }
+
+  .styled-select {
+    width: 100%;
+  }
+
+  .text-danger {
+    color: #dc3545 !important;
+  }
+
+  .btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+  }
+
+  .btn-success:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+  }
+
+  .alert {
+    max-width: 500px;
+    margin: 0 auto;
+  }
+
+  .alert-info {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    color: #0c5460;
+  }
+
+  .alert-info .fas {
+    color: #0c5460;
+  }
+
+  .alert-success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+  }
+
+  .alert-success .fas {
+    color: #155724;
+  }
+
+  @media (max-width: 768px) {
+    .scrollable-view {
+      padding: 10px;
+    }
+
+    .form-section {
+      padding: 15px;
+    }
+
+    .course-selection-container {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .course-selection-container .btn {
+      margin-top: 8px;
+    }
+  }
 </style>
