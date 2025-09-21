@@ -90,7 +90,7 @@ const StudentSchema = new mongoose.Schema(
         aplStatus: {
             type: String,
             enum: ["GRAY", "RED", "BLUE", "YELLOW", "GREEN"],
-            default: "",
+            default: "GRAY",
         },
 
         aplStatusHistory: [

@@ -14,17 +14,23 @@ vi.mock("dotenv", () => ({
     config: vi.fn(),
 }));
 
-// Mock bcrypt
-vi.mock("bcryptjs", () => ({
-    hash: vi.fn(),
-    compare: vi.fn(),
-}));
+// Mock bcrypt (provide default export to satisfy default import)
+vi.mock("bcryptjs", () => {
+    const mod = {
+        hash: vi.fn(),
+        compare: vi.fn(),
+    };
+    return { default: mod, ...mod };
+});
 
-// Mock jsonwebtoken
-vi.mock("jsonwebtoken", () => ({
-    sign: vi.fn(),
-    verify: vi.fn(),
-}));
+// Mock jsonwebtoken (provide default export to satisfy default import)
+vi.mock("jsonwebtoken", () => {
+    const mod = {
+        sign: vi.fn(),
+        verify: vi.fn(),
+    };
+    return { default: mod, ...mod };
+});
 
 describe("Authentication Tests", () => {
     beforeEach(() => {
