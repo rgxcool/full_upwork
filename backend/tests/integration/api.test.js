@@ -11,6 +11,7 @@ import request from "supertest";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import app from "../../index.js";
+import bcrypt from "bcrypt";
 import User from "../../src/models/User.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
@@ -43,11 +44,12 @@ describe("API Integration Tests", () => {
         await Student.deleteMany({});
         await Course.deleteMany({});
 
-        // Create test user
+        // Create test user with a valid bcrypt hash
+        const hashed = await bcrypt.hash("testPassword123!", 10);
         testUser = new User({
             name: "Test Admin",
             email: "testadmin@example.com",
-            password: "$2a$10$test.hash.for.testing",
+            password: hashed,
             role: "admin",
         });
         await testUser.save();
