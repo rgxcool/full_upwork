@@ -12,9 +12,9 @@
           <div class="card-header">
             <h5>Batch-bearbetning av studenter</h5>
           </div>
-          
+
           <div class="card-body">
-          <!--   Debug section
+            <!--   Debug section
             <div
               class="debug-info"
               style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px"
@@ -47,7 +47,7 @@
                 @change="handleFileChange"
                 accept=".xlsx,.xls"
                 class="form-control"
-                style="display: none;"
+                style="display: none"
               />
               <button type="button" class="btn btn-logo" @click="triggerFileSelect">
                 Välj fil
@@ -60,11 +60,7 @@
             <div v-if="uploadedStudents.length > 0" class="upload-summary">
               <h6>Uppladdade studenter ({{ uploadedStudents.length }}):</h6>
               <div class="student-list scrollable-student-list">
-                <div
-                  v-for="(student, index) in uploadedStudents"
-                  :key="index"
-                  class="student-item"
-                >
+                <div v-for="(student, index) in uploadedStudents" :key="index" class="student-item">
                   {{ student.name }} - {{ getEnrollmentCount(student.email) }} kurser
                 </div>
               </div>
@@ -102,11 +98,26 @@
               <div v-if="processingResults.enrollments.length > 0" class="enrollments-scroll-list">
                 <h6>Skapade inskrivningar:</h6>
                 <ul>
-                  <li v-for="(enrollment, idx) in processingResults.enrollments" :key="enrollment._id || idx">
+                  <li
+                    v-for="(enrollment, idx) in processingResults.enrollments"
+                    :key="enrollment._id || idx"
+                  >
                     {{ enrollment.studentEmail }} –
-                    <span v-if="enrollment.courseInstanceName">{{ enrollment.courseInstanceName }}</span>
+                    <span v-if="enrollment.courseInstanceName">
+                      {{ enrollment.courseInstanceName }}
+                    </span>
                     <span v-else>kursinstans</span>
-                    – {{ enrollment.startDate ? (new Date(enrollment.startDate)).toLocaleDateString() : '' }} till {{ enrollment.endDate ? (new Date(enrollment.endDate)).toLocaleDateString() : '' }} – {{ enrollment.status }}
+                    –
+                    {{
+                      enrollment.startDate
+                        ? new Date(enrollment.startDate).toLocaleDateString()
+                        : ''
+                    }}
+                    till
+                    {{
+                      enrollment.endDate ? new Date(enrollment.endDate).toLocaleDateString() : ''
+                    }}
+                    – {{ enrollment.status }}
                   </li>
                 </ul>
               </div>
@@ -192,11 +203,27 @@
           console.error('Error processing students:', error)
           if (error.response?.status === 422 && Array.isArray(error.response?.data?.reasons)) {
             const reasons = error.response.data.reasons
-              .map(r => `- ${r.student || ''} ${r.field ? '(' + r.field + ')' : ''}: ${r.message}`.trim())
+              .map((r) =>
+                `- ${r.student || ''} ${r.field ? '(' + r.field + ')' : ''}: ${r.message}`.trim()
+              )
               .join('\n')
             alert(`Uppladdning avbröts p.g.a. valideringsfel:\n${reasons}`)
           } else {
-            alert('Ett fel uppstod vid bearbetning av studenter.')
+            alert(
+              'Ett fel uppstod vid bearbetning av studenter.\n' +
+                'message: ' +
+                error.response?.data?.message +
+                '\n' +
+                'error: ' +
+                error.response?.data?.error +
+                '\n' +
+                'details: ' +
+                error.response?.data?.details +
+                '\n' +
+                'reasons: ' +
+                error.response?.data?.reasons +
+                '\nförmodligen felaktig struktur på dokumentet'
+            )
           }
         } finally {
           isProcessing.value = false
@@ -225,9 +252,9 @@
 
       // Helper to count enrollments per student
       const getEnrollmentCount = (email) => {
-        if (!processingResults.value || !processingResults.value.enrollments) return 0;
-        return processingResults.value.enrollments.filter(e => e.studentEmail === email).length;
-      };
+        if (!processingResults.value || !processingResults.value.enrollments) return 0
+        return processingResults.value.enrollments.filter((e) => e.studentEmail === email).length
+      }
 
       return {
         isLoggedIn,
