@@ -8,8 +8,78 @@
         </router-link>
       </div>
       
-      <!-- Actions -->
-      <div class="nav-actions">
+        <!-- Search wrapper -->
+      <div v-if="canSeeSearch" class="search-wrapper">
+        <div class="search-bar-enhanced">
+          <div class="search-type" @click="toggleSearchTypeDropdown">
+            {{ selectedSearchType }}
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M7 10l5 5 5-5z" />
+            </svg>
+          </div>
+
+          <input
+            v-if="selectedSearchType !== 'Datum'"
+            class="search-input"
+            type="text"
+            v-model="searchQuery"
+            @input="handleSearch"
+            @focus="handleInputFocus"
+            :placeholder="`Sök efter ${selectedSearchType.toLowerCase()}...`"
+          />
+
+          <DatePicker
+            v-if="selectedSearchType === 'Datum'"
+            v-model="selectedDate"
+            :format="'yyyy-MM-dd'"
+            :placeholder="'Välj datum'"
+              @change="handleSearch"
+          />
+
+          <div v-if="searchQuery || selectedDate" class="clear-icon" @click="clearSearch">✕</div>
+        </div>
+
+        <ul v-if="showSearchTypeDropdown" class="search-type-dropdown">
+          <li :class="{ active: selectedSearchType === 'Alla' }" @click="selectSearchType('Alla')">
+            Alla
+          </li>
+          <li
+            :class="{ active: selectedSearchType === 'Användare' }"
+            @click="selectSearchType('Användare')"
+          >
+            Användare
+          </li>
+          <li :class="{ active: selectedSearchType === 'Kurs' }" @click="selectSearchType('Kurs')">
+            Kurs
+          </li>
+          <li
+            :class="{ active: selectedSearchType === 'Datum' }"
+            @click="selectSearchType('Datum')"
+          >
+            Datum
+          </li>
+        </ul>
+
+          <!-- Search results -->
+          <div v-if="showResults" class="search-results">
+        <ul class="result-list">
+          <li
+            v-for="result in filteredResults"
+            :key="result.id"
+            @click="navigateToDetails(result)"
+            class="result-item"
+          >
+            <div class="result-content">
+              <div class="result-title">{{ result.name }}</div>
+              <div class="result-subtitle">{{ result.extra }}</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+        
+        <!-- Actions -->
+        <div class="nav-actions">
         <!-- Profil dropdown för inloggade -->
         <div v-if="isLoggedIn" class="profile-dropdown-wrapper">
           <button class="profile-btn" @click.stop.prevent="toggleProfileMenu">
@@ -70,11 +140,11 @@
           </svg>
           LOGGA IN
         </router-link>
-        
-        <!-- Mobile menu overlay -->
+    
+    <!-- Mobile menu overlay -->
         <div v-if="isMobileMenuOpen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: rgba(0, 0, 0, 0.5); z-index: 9998; backdrop-filter: blur(2px);" @click="closeMobileMenu"></div>
-        
-        <!-- Mobile menu -->
+    
+    <!-- Mobile menu -->
         <div v-if="isMobileMenuOpen" style="position: fixed; top: 0; right: 0; width: 320px; max-width: 85vw; height: 100vh; background: white; z-index: 9999; box-shadow: -5px 0 20px rgba(0, 0, 0, 0.15); display: flex; flex-direction: column; border-left: 1px solid #e5e7eb; animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
           <div style="display: flex; align-items: center; justify-content: space-between; padding: 1.5rem; border-bottom: 1px solid #e5e7eb; background: #f8fafc;">
             <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: #374151;">Navigation</h3>
@@ -84,16 +154,16 @@
                 <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
-          </div>
+      </div>
           
           <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; overflow-y: auto;">
             <ul style="list-style: none; padding: 0; margin: 0;">
               <li v-for="item in filteredMenuItems" :key="item.link" style="border-bottom: 1px solid #f3f4f6;">
                 <router-link :to="item.link" style="display: block; padding: 1rem 1.5rem; color: #374151; text-decoration: none; font-weight: 500; transition: all 0.2s ease;" @click="closeMobileMenu">
-                  {{ item.name }}
-                </router-link>
-              </li>
-            </ul>
+            {{ item.name }}
+          </router-link>
+        </li>
+      </ul>
             
             <div style="padding: 1.5rem; border-top: 1px solid #e5e7eb; background: #f8fafc;">
               <button style="display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.75rem; background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease;" @click="logout">
@@ -106,21 +176,21 @@
               </button>
             </div>
           </div>
-        </div>
-
+    </div>
+    
         <!-- Notification panel -->
         <div v-if="showNotisPanel" class="notification-panel" ref="notisPanel">
           <div class="notis-header">
             <h3>Notifikationer</h3>
             <span class="notis-count">({{ totalNotifications }})</span>
-          </div>
+    </div>
           
           <div class="notis-list">
             <div v-for="notification in notifications" :key="notification.id" class="notis-item">
               <div class="notis-content">
                 <span class="notis-type">{{ notification.type }}</span>
                 <span class="notis-message">{{ notification.message }}</span>
-              </div>
+    </div>
               <div class="notis-actions">
                 <button @click="resolveNote(notification.id)" class="resolve-btn">
                   Markera som löst
@@ -274,8 +344,9 @@
       }
 
       const handleSearch = async () => {
-        console.log('📦 searchResults:', searchResults.value)
-        console.log('📂 filteredResults:', filteredResults.value)
+        console.log('🔍 Starting search with type:', selectedSearchType.value)
+        console.log('📝 Search query:', searchQuery.value)
+        console.log('📅 Selected date:', selectedDate.value)
         try {
           const params = new URLSearchParams()
           const isDateSearch = selectedSearchType.value === 'Datum'
@@ -304,16 +375,26 @@
             params.append('q', searchQuery.value)
           }
 
+          console.log('🌐 Search URL:', `${import.meta.env.VITE_API_URL}/api/search?${params.toString()}`)
+
           const res = await axios.get(
             `${import.meta.env.VITE_API_URL}/api/search?${params.toString()}`,
             { withCredentials: true }
           )
+          console.log('✅ Search response:', res.data)
           searchResults.value = res.data
-          showResults.value = filteredResults.value.length > 0
+          showResults.value = res.data.length > 0
+          console.log('📊 Show results:', showResults.value, 'Results count:', res.data.length)
         } catch (err) {
           console.error('Sökfel:', err)
           searchResults.value = []
           showResults.value = false
+        }
+      }
+
+      const handleInputFocus = () => {
+        if (searchQuery.value && searchQuery.value.length >= 3) {
+          showResults.value = true
         }
       }
 
@@ -477,6 +558,7 @@
         filter,
         filteredResults,
         handleSearch,
+        handleInputFocus,
         searchQuery,
         showResults,
         showFilters,
@@ -563,10 +645,10 @@
     margin: 0 auto;
     padding: 1rem 2rem;
     display: grid;
-    grid-template-columns: minmax(300px, 1fr) auto;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
     min-height: 5rem;
-    gap: 8rem;
+    gap: 2rem;
   }
 
   /* Logo */
@@ -1060,8 +1142,9 @@
   /* Sök */
   .search-wrapper {
     flex: 1;
-    max-width: 500px;
+    max-width: 600px;
     position: relative;
+    justify-self: center;
   }
 
   .search-bar-enhanced {

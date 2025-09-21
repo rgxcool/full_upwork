@@ -57,13 +57,19 @@ export default {
     const fetchData = async () => {
       const { type, id } = route.params;
       console.log("🔍 Requesting details for:", type, id);
+      console.log("🌐 API URL:", import.meta.env.VITE_API_URL);
+      console.log("📍 Full URL:", `${import.meta.env.VITE_API_URL}/api/details/${type}/${id}`);
 
       try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/details/${type}/${id}`);
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/details/${type}/${id}`, {
+          withCredentials: true
+        });
         data.value = response.data;
         console.log("✅ Data received:", response.data);
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error("❌ Error fetching data:", error);
+        console.error("❌ Error response:", error.response?.data);
+        console.error("❌ Error status:", error.response?.status);
       }
     };
 
