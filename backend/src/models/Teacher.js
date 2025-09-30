@@ -16,6 +16,15 @@ const teacherSchema = new mongoose.Schema(
             required: true, // if you always want it defined
             trim: true,
         },
+        phoneNumbers: {
+            type: [
+                {
+                    type: String,
+                    trim: true,
+                },
+            ],
+            default: [],
+        },
         // You can add more teacher-specific fields later here
     },
     { timestamps: true }

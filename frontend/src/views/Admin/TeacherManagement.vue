@@ -311,6 +311,37 @@
                     </div>
                   </div>
                 </div>
+
+                <div class="row">
+                  <div class="col-12">
+                    <div class="form-group">
+                      <label class="form-label">Telefonnummer</label>
+                      <div
+                        class="phone-input-group"
+                        v-for="(phone, index) in editingTeacher.phoneNumbers"
+                        :key="index"
+                      >
+                        <input
+                          type="text"
+                          v-model="phone.number"
+                          class="form-control"
+                          :placeholder="`Telefon ${index + 1}`"
+                        />
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary"
+                          @click="removeEditingPhone(index)"
+                          :disabled="editingTeacher.phoneNumbers.length === 1"
+                        >
+                          Ta bort
+                        </button>
+                      </div>
+                      <button type="button" class="btn btn-outline-primary btn-sm mt-2" @click="addEditingPhone">
+                        Lägg till telefonnummer
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </form>
             </div>
             <div class="modal-footer">
@@ -577,6 +608,9 @@
           email: teacher.userId?.email || '',
           subject: teacher.subject || 'Övrigt',
           colorCode: teacher.colorCode || '#FF0000',
+          phoneNumbers: Array.isArray(teacher.phoneNumbers)
+            ? teacher.phoneNumbers.map((p) => ({ number: p }))
+            : [{ number: '' }],
         }
 
         const modal = new bootstrap.Modal(this.$refs.editTeacherModal)
@@ -593,6 +627,9 @@
             email: this.editingTeacher.email,
             subject: this.editingTeacher.subject,
             colorCode: this.editingTeacher.colorCode,
+            phoneNumbers: this.editingTeacher.phoneNumbers
+              .map((p) => (p.number || '').trim())
+              .filter((p) => p !== ''),
           })
 
           // Update local data
@@ -607,6 +644,9 @@
               },
               subject: this.editingTeacher.subject,
               colorCode: this.editingTeacher.colorCode,
+              phoneNumbers: this.editingTeacher.phoneNumbers
+                .map((p) => (p.number || '').trim())
+                .filter((p) => p !== ''),
             }
           }
 
@@ -619,6 +659,20 @@
           alert('Kunde inte uppdatera lärare')
         } finally {
           this.isSaving = false
+        }
+      },
+
+      addEditingPhone() {
+        if (!Array.isArray(this.editingTeacher.phoneNumbers)) {
+          this.editingTeacher.phoneNumbers = [{ number: '' }]
+        } else {
+          this.editingTeacher.phoneNumbers.push({ number: '' })
+        }
+      },
+
+      removeEditingPhone(index) {
+        if (Array.isArray(this.editingTeacher.phoneNumbers) && this.editingTeacher.phoneNumbers.length > 1) {
+          this.editingTeacher.phoneNumbers.splice(index, 1)
         }
       },
 
