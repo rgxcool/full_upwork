@@ -100,7 +100,7 @@ router.post(
         console.log("📨 Incoming teacher POST:", req.body);
 
         try {
-            const { username, email, subject, colorCode, generatePassword } =
+            const { username, email, subject, colorCode, generatePassword, phoneNumbers } =
                 req.body;
 
             if (!username || !email || !subject) {
@@ -147,6 +147,9 @@ router.post(
                 userId: savedUser._id,
                 colorCode: colorCode || generateRandomColor(),
                 subject: (subject || "").trim(),
+                phoneNumbers: Array.isArray(phoneNumbers)
+                    ? phoneNumbers.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => p.trim())
+                    : [],
             });
 
             const savedTeacher = await teacher.save();
@@ -187,7 +190,7 @@ router.post("/teacher", async (req, res) => {
     console.log("📨 Incoming teacher POST:", req.body);
 
     try {
-        const { username, email, colorCode, subject } = req.body;
+            const { username, email, colorCode, subject, phoneNumbers } = req.body;
 
         if (!username || !email) {
             return res
@@ -216,6 +219,9 @@ router.post("/teacher", async (req, res) => {
             userId: savedUser._id,
             colorCode: colorCode || generateRandomColor(),
             subject: subject || "Övrigt", // Default subject if not provided
+            phoneNumbers: Array.isArray(phoneNumbers)
+                ? phoneNumbers.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => p.trim())
+                : [],
         });
         const savedTeacher = await teacher.save();
 
@@ -240,7 +246,7 @@ router.put(
     async (req, res) => {
         try {
             const { id } = req.params;
-            const { username, email, subject, colorCode } = req.body;
+            const { username, email, subject, colorCode, phoneNumbers } = req.body;
 
             // Find teacher
             const teacher = await Teacher.findById(id).populate("userId");
@@ -261,6 +267,11 @@ router.put(
             const teacherUpdateData = {};
             if (subject) teacherUpdateData.subject = subject;
             if (colorCode) teacherUpdateData.colorCode = colorCode;
+            if (Array.isArray(phoneNumbers)) {
+                teacherUpdateData.phoneNumbers = phoneNumbers
+                    .filter((p) => typeof p === "string" && p.trim() !== "")
+                    .map((p) => p.trim());
+            }
 
             const updatedTeacher = await Teacher.findByIdAndUpdate(
                 id,

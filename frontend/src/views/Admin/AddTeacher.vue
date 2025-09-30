@@ -54,30 +54,22 @@
               </div>
 
               <div class="form-group">
-                <label for="subject" class="form-label">
-                  Huvudämne
+                <label for="permissions" class="form-label">
+                  Behörigheter
                   <span class="required">*</span>
                 </label>
-                <select id="subject" class="form-control" v-model="teacherForm.subject" required>
-                  <option value="">Välj ämne</option>
-                  <option value="Svenska">Svenska</option>
-                  <option value="Engelska">Engelska</option>
-                  <option value="Matematik">Matematik</option>
-                  <option value="Historia">Historia</option>
-                  <option value="Samhällskunskap">Samhällskunskap</option>
-                  <option value="Naturkunskap">Naturkunskap</option>
-                  <option value="Fysik">Fysik</option>
-                  <option value="Kemi">Kemi</option>
-                  <option value="Biologi">Biologi</option>
-                  <option value="Idrott och hälsa">Idrott och hälsa</option>
-                  <option value="Slöjd">Slöjd</option>
-                  <option value="Bild">Bild</option>
-                  <option value="Musik">Musik</option>
-                  <option value="Specialpedagogik">Specialpedagogik</option>
-                  <option value="Studievägledning">Studievägledning</option>
-                  <option value="Övrigt">Övrigt</option>
-                </select>
-                <small class="form-help">Lärarens huvudsakliga undervisningsämne</small>
+                <div id="permissions" class="permissions-list" role="listbox" aria-multiselectable="true">
+                  <div
+                    v-for="opt in permissionsOptions"
+                    :key="opt"
+                    class="permission-item"
+                    :class="{ selected: teacherForm.permissions.includes(opt) }"
+                    @dblclick="togglePermission(opt)"
+                  >
+                    {{ opt }}
+                  </div>
+                </div>
+                <small class="form-help">Dubbelklicka för att välja/avmarkera.</small>
               </div>
             </div>
 
@@ -177,6 +169,39 @@
                 </div>
               </div>
             </div>
+
+            <!-- Contact Information -->
+            <div class="form-section">
+              <h5 class="section-title">Kontaktuppgifter</h5>
+
+              <div class="form-group">
+                <label class="form-label">Telefonnummer</label>
+                <div
+                  class="phone-input-group"
+                  v-for="(phone, index) in teacherForm.phoneNumbers"
+                  :key="index"
+                >
+                  <input
+                    type="text"
+                    class="form-control"
+                    v-model="phone.number"
+                    :placeholder="`Telefon ${index + 1}`"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary"
+                    @click="removePhoneNumber(index)"
+                    :disabled="teacherForm.phoneNumbers.length === 1"
+                  >
+                    Ta bort
+                  </button>
+                </div>
+                <button type="button" class="btn btn-outline-primary btn-sm mt-2" @click="addPhoneNumber">
+                  Lägg till telefonnummer
+                </button>
+                <small class="form-help">Lägg till ett eller flera telefonnummer.</small>
+              </div>
+            </div>
           </div>
 
           <!-- Submit Button -->
@@ -235,7 +260,7 @@
                       {{ createdTeacher.email }}
                     </div>
                     <div>
-                      <strong>Ämne:</strong>
+                      <strong>Behörigheter:</strong>
                       {{ createdTeacher.subject }}
                     </div>
                     <div>
@@ -337,9 +362,30 @@
         teacherForm: {
           username: '',
           email: '',
-          subject: '',
+          permissions: [],
           colorCode: '#FF0000',
+          phoneNumbers: [{ number: '' }],
         },
+        permissionsOptions: [
+          'Samtliga behörigheter som rektor',
+          'Alvis',
+          'Freja',
+          'Its learning',
+          'Växeltelefon',
+          'Studie- och yrkesvägledarexamen',
+          'Specialpedagogisk examen',
+          'Information och Kommunikation 1',
+          'Information och Kommunikation 2',
+          'Svenska',
+          'Svenska som andraspråk',
+          'Retorik',
+          'Barn- och Fritidsprogrammet',
+          'Engelska',
+          'Försäljning- och Serviceprogammet',
+          'Matematik',
+          'Vård- och omsorgsprogrammet',
+          'Sammhällskunskap 1a1',
+        ],
         createdTeacher: {},
         generatedPassword: '',
       }
@@ -373,8 +419,9 @@
         this.teacherForm = {
           username: '',
           email: '',
-          subject: '',
+          permissions: [],
           colorCode: '#FF0000',
+          phoneNumbers: [{ number: '' }],
         }
         this.generateRandomColor()
       },
@@ -398,8 +445,11 @@
           const response = await api.post('/admin/teacher', {
             username: this.teacherForm.username,
             email: this.teacherForm.email,
-            subject: this.teacherForm.subject,
+            subject: this.teacherForm.permissions.join(', '),
             colorCode: this.teacherForm.colorCode,
+            phoneNumbers: this.teacherForm.phoneNumbers
+              .map((p) => (p.number || '').trim())
+              .filter((p) => p !== ''),
             generatePassword: true,
           })
 
@@ -407,7 +457,7 @@
             this.createdTeacher = {
               username: this.teacherForm.username,
               email: this.teacherForm.email,
-              subject: this.teacherForm.subject,
+              subject: this.teacherForm.permissions.join(', '),
             }
             this.generatedPassword = response.data.password
 
@@ -434,7 +484,7 @@
       },
 
       validateForm() {
-        const { username, email, subject } = this.teacherForm
+        const { username, email, permissions } = this.teacherForm
 
         if (!username || !username.trim()) {
           alert('Namn är obligatoriskt.')
@@ -446,8 +496,8 @@
           return false
         }
 
-        if (!subject || !subject.trim()) {
-          alert('Ämne är obligatoriskt.')
+        if (!permissions || permissions.length === 0) {
+          alert('Minst en behörighet är obligatorisk.')
           return false
         }
 
@@ -458,6 +508,25 @@
         }
 
         return true
+      },
+
+      addPhoneNumber() {
+        this.teacherForm.phoneNumbers.push({ number: '' })
+      },
+
+      removePhoneNumber(index) {
+        if (this.teacherForm.phoneNumbers.length > 1) {
+          this.teacherForm.phoneNumbers.splice(index, 1)
+        }
+      },
+
+      togglePermission(opt) {
+        const idx = this.teacherForm.permissions.indexOf(opt)
+        if (idx === -1) {
+          this.teacherForm.permissions.push(opt)
+        } else {
+          this.teacherForm.permissions.splice(idx, 1)
+        }
       },
 
       async copyPassword() {
@@ -823,5 +892,35 @@
   .spinner-border-sm {
     width: 1rem;
     height: 1rem;
+  }
+
+  .permissions-list {
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    max-height: 220px;
+    overflow: auto;
+    background: white;
+  }
+
+  .permission-item {
+    padding: 0.5rem 0.75rem;
+    cursor: default;
+    user-select: none;
+  }
+
+  .permission-item:hover {
+    background: #f1f3f5;
+  }
+
+  .permission-item.selected {
+    background: #e9f7ef;
+    border-left: 4px solid #2c9316;
+  }
+
+  .phone-input-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
   }
 </style>
