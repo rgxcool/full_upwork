@@ -9,7 +9,7 @@
       v-if="successMessage"
       class="alert alert-success alert-dismissible fade show"
       role="alert"
-      style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050"
+      style="position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 2000"
     >
       {{ successMessage }}
       <button type="button" class="btn-close" @click="successMessage = ''"></button>
@@ -20,7 +20,7 @@
       v-if="errorMessage"
       class="alert alert-danger alert-dismissible fade show"
       role="alert"
-      style="position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 1050"
+      style="position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 2000"
     >
       {{ errorMessage }}
       <button type="button" class="btn-close" @click="errorMessage = ''"></button>
@@ -407,10 +407,8 @@
   import Datepicker from '@vuepic/vue-datepicker'
   import '@vuepic/vue-datepicker/dist/main.css'
   import { ref, reactive, watch, onMounted, computed } from 'vue'
-  import { useRouter } from 'vue-router'
 
-  // Router
-  const router = useRouter()
+  // Router (not needed; we stay on this page after submit)
 
   // Reactive data
   const programs = ref([])
@@ -430,6 +428,7 @@
   const successMessage = ref('')
   const errorMessage = ref('')
   const fetchState = ref(false)
+  const courseSchedules = ref({})
 
   // Datepicker refs
   const startDatepickerRef = ref(null)
@@ -644,6 +643,9 @@
         setTimeout(() => {
           successMessage.value = ''
         }, 5000)
+
+        // Recalculate end date based on added courses
+        calculateEndDate()
       }
     }
   }
@@ -677,6 +679,9 @@
     }, 3000)
 
     selectedIndividualCourse.value = null
+
+    // Recalculate as list changed
+    calculateEndDate()
   }
 
   const removeCourse = (courseId) => {
@@ -705,6 +710,8 @@
       // If removing an individual course that doesn't belong to a package, just remove that course
       addedCourses.value = addedCourses.value.filter((course) => course._id !== courseId)
     }
+    // Recalculate as list changed
+    calculateEndDate()
   }
 
   const addPhoneNumber = () => {
@@ -718,16 +725,43 @@
   }
 
   const calculateEndDate = () => {
+    courseSchedules.value = {}
     if (!studentForm.startDate || !studentForm.studyPace) {
       studentForm.endDate = ''
       return
     }
 
-    const startDate = new Date(studentForm.startDate)
     const durationDays = parseInt(studentForm.studyPace) * 7
-    const endDate = new Date(startDate)
-    endDate.setDate(startDate.getDate() + durationDays - 3)
-    studentForm.endDate = endDate.toISOString()
+    const courseEntries = addedCourses.value.filter((c) => c.type === 'Course')
+
+    // If no specific courses selected yet, fall back to single span
+    if (courseEntries.length === 0) {
+      const baseStart = new Date(studentForm.startDate)
+      const baseEnd = new Date(baseStart)
+      baseEnd.setDate(baseStart.getDate() + durationDays - 3)
+      studentForm.endDate = baseEnd.toISOString()
+      return
+    }
+
+    let pointer = new Date(studentForm.startDate)
+    let lastEnd = null
+    for (const course of courseEntries) {
+      const start = new Date(pointer)
+      const end = new Date(start)
+      end.setDate(start.getDate() + durationDays - 3)
+
+      courseSchedules.value[course._id] = {
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+      }
+
+      // Advance pointer to the next day after this course ends
+      pointer = new Date(end)
+      pointer.setDate(pointer.getDate() + 1)
+      lastEnd = end
+    }
+
+    studentForm.endDate = lastEnd ? lastEnd.toISOString() : ''
   }
 
   const formatDate = (dateString) => {
@@ -806,15 +840,45 @@
         .map((phone) => phone.number.trim())
         .filter((number) => number.length > 0)
 
-      // Prepare education entries with dates for enrollment creation
-      const education = addedCourses.value.map((course) => ({
-        type: course.type || 'Course',
-        refId: course._id,
-        name: course.courseName,
-        startDate: studentForm.startDate,
-        endDate: studentForm.endDate,
-        slutprovDate: studentForm.finalExamDate,
-      }))
+      // Prepare education entries with per-course dates
+      const courseEntries = addedCourses.value.filter((c) => c.type === 'Course')
+      const packageEntries = addedCourses.value.filter((c) => c.type === 'CoursePackage')
+
+      // Ensure schedules are up-to-date
+      calculateEndDate()
+
+      const education = []
+      // Add individual course entries with their scheduled dates
+      for (const c of courseEntries) {
+        const sched = courseSchedules.value[c._id]
+        education.push({
+          type: 'Course',
+          refId: c._id,
+          name: c.courseName,
+          startDate: sched?.startDate || studentForm.startDate,
+          endDate: sched?.endDate || studentForm.endDate,
+          slutprovDate: studentForm.finalExamDate,
+        })
+      }
+      // For course packages, use envelope spanning first-to-last course range
+      if (packageEntries.length > 0 && courseEntries.length > 0) {
+        const times = Object.values(courseSchedules.value)
+          .map((s) => [new Date(s.startDate).getTime(), new Date(s.endDate).getTime()])
+          .flat()
+          .filter((n) => !isNaN(n))
+        const minStart = Math.min(...times)
+        const maxEnd = Math.max(...times)
+        for (const pkg of packageEntries) {
+          education.push({
+            type: 'CoursePackage',
+            refId: pkg._id,
+            name: pkg.courseName,
+            startDate: isFinite(minStart) ? new Date(minStart).toISOString() : studentForm.startDate,
+            endDate: isFinite(maxEnd) ? new Date(maxEnd).toISOString() : studentForm.endDate,
+            slutprovDate: studentForm.finalExamDate,
+          })
+        }
+      }
 
       const payload = {
         name: studentForm.name.trim(),
@@ -851,23 +915,36 @@
       // Reset form immediately
       resetForm()
 
-      // Show success message and then navigate to APL list
+      // Re-enable button immediately after successful completion
+      isSubmitting.value = false
+
+      // Keep user on the page; auto-hide message after a short delay
       setTimeout(() => {
         successMessage.value = ''
-        // Navigate to APL list to see the newly added student
-        router.push('/apl')
-      }, 2000)
+      }, 2500)
     } catch (error) {
       console.error('❌ Backend error:', error.response?.data || error)
       errorMessage.value =
         error.response?.data?.error || 'Kunde inte lägga till elev. Något gick fel. Försök igen.'
     } finally {
+      // Ensure not stuck loading on any exit path
       isSubmitting.value = false
     }
   }
 
   // Lifecycle
   onMounted(fetchInitialData)
+
+  // Keep end-date in sync when base inputs change
+  watch(
+    () => [studentForm.startDate, studentForm.studyPace],
+    () => calculateEndDate(),
+    { deep: false }
+  )
+  watch(
+    () => addedCourses.value.length,
+    () => calculateEndDate()
+  )
 </script>
 
 <style scoped>
