@@ -115,6 +115,21 @@
           </div>
         </v-card-subtitle>
 
+        <v-card-text v-if="selectedStudent" class="mb-0">
+          <div class="education-summary">
+            <div class="education-row">
+              <strong>Kurspaket:</strong>
+              <span>{{ packageNamesDisplay || '–' }}</span>
+            </div>
+            <div class="education-row">
+              <strong>Utbildning:</strong>
+              <span>Start: {{ earliestStartDisplay || '–' }}</span>
+              <span class="dot-sep">•</span>
+              <span>Slut: {{ latestEndDisplay || '–' }}</span>
+            </div>
+          </div>
+        </v-card-text>
+
         <FileUploaderDownloader
           v-if="selectedStudent"
           :studentId="selectedStudent._id"
@@ -544,6 +559,41 @@
     )
   }
 
+  const formatDateOnly = (date) => {
+    if (!date) return ''
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleDateString('sv-SE')
+  }
+
+  const packageNamesDisplay = computed(() => {
+    const edu = selectedStudent.value?.education || []
+    const names = edu
+      .filter((e) => e && e.type === 'CoursePackage')
+      .map((e) => e.name || e.refId?.coursePackageName)
+      .filter(Boolean)
+    const unique = Array.from(new Set(names))
+    return unique.join(', ')
+  })
+
+  const earliestStartDisplay = computed(() => {
+    const edu = selectedStudent.value?.education || []
+    const starts = edu
+      .map((e) => (e && e.startDate ? new Date(e.startDate).getTime() : NaN))
+      .filter((n) => !isNaN(n))
+    if (!starts.length) return ''
+    return formatDateOnly(new Date(Math.min(...starts)))
+  })
+
+  const latestEndDisplay = computed(() => {
+    const edu = selectedStudent.value?.education || []
+    const ends = edu
+      .map((e) => (e && e.endDate ? new Date(e.endDate).getTime() : NaN))
+      .filter((n) => !isNaN(n))
+    if (!ends.length) return ''
+    return formatDateOnly(new Date(Math.max(...ends)))
+  })
+
   const scrollToLatest = () => {
     const el = commentContainerRef.value
     if (el) el.scrollTop = el.scrollHeight
@@ -904,6 +954,30 @@
 
   .dialog-close-btn:hover {
     color: #000;
+  }
+
+  .education-summary {
+    margin: 8px 0 4px;
+    padding: 10px 12px;
+    background: #f7f9fb;
+    border: 1px solid #e1e7ef;
+    border-radius: 6px;
+  }
+  .education-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .education-row:last-child {
+    margin-bottom: 0;
+  }
+  .education-row strong {
+    min-width: 90px;
+  }
+  .dot-sep {
+    opacity: 0.5;
   }
 
   .comment-history-scroll {
