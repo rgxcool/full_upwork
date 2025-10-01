@@ -32,6 +32,21 @@
           <div class="card-body">
             <div class="info-grid">
               <div class="info-item">
+                <label>APL-status:</label>
+                <select
+                  v-if="editMode && isAdmin"
+                  v-model="editData.aplStatus"
+                  class="form-control"
+                >
+                  <option value="GRAY">Grå</option>
+                  <option value="RED">Röd</option>
+                  <option value="BLUE">Blå</option>
+                  <option value="YELLOW">Gul</option>
+                  <option value="GREEN">Grön</option>
+                </select>
+                <span v-else>{{ student.aplStatus || 'Ej angivet' }}</span>
+              </div>
+              <div class="info-item">
                 <label>Namn:</label>
                 <input
                   v-if="editMode && isAdmin"
@@ -154,6 +169,18 @@
                 ></textarea>
                 <span v-else>{{ student.additionalInfo || 'Ej angivet' }}</span>
               </div>
+
+              <div class="info-item">
+                <label>Specialbehov:</label>
+                <textarea
+                  v-if="editMode && isAdmin"
+                  v-model="editData.specialNeeds"
+                  class="form-control"
+                  rows="3"
+                  placeholder="Beskriv eventuella särskilda behov eller anpassningar"
+                ></textarea>
+                <span v-else>{{ student.specialNeeds || 'Ej angivet' }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -174,9 +201,6 @@
             </div>
           </div>
           <div class="card-body">
-            <div style="border: 3px solid blue; background: yellow; padding: 20px; margin: 10px">
-              TEST CONTAINER - IF YOU SEE THIS, THE CHANGES ARE WORKING
-            </div>
             <div
               class="education-scroll-container"
               style="
@@ -440,6 +464,7 @@
             phone: student.value.phone || '',
             email: student.value.email || '',
             municipality: { type: student.value.municipality?.type || '' },
+            aplStatus: student.value.aplStatus || 'GRAY',
             startDate: student.value.startDate
               ? new Date(student.value.startDate).toISOString().split('T')[0]
               : '',
@@ -448,6 +473,7 @@
               : '',
             exam: student.value.exam || '',
             additionalInfo: student.value.additionalInfo || '',
+            specialNeeds: student.value.specialNeeds || '',
           }
 
           // Load change history if admin
@@ -507,6 +533,7 @@
           phone: student.value.phone || '',
           email: student.value.email || '',
           municipality: { type: student.value.municipality?.type || '' },
+          aplStatus: student.value.aplStatus || 'GRAY',
           startDate: student.value.startDate
             ? new Date(student.value.startDate).toISOString().split('T')[0]
             : '',
@@ -515,6 +542,7 @@
             : '',
           exam: student.value.exam || '',
           additionalInfo: student.value.additionalInfo || '',
+          specialNeeds: student.value.specialNeeds || '',
         }
       }
 

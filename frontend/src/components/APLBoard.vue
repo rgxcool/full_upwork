@@ -66,7 +66,7 @@
         @dragstart="handleDragStart($event, student)"
         @click="openComments(student)"
       >
-        {{ student.name }}
+        <router-link :to="`/student/${student._id}`" @click.stop>{{ student.name }}</router-link>
         <v-icon
           v-if="commentStatus(student)"
           :class="['comment-icon', { pulse: commentStatus(student) === 'unseen' }]"

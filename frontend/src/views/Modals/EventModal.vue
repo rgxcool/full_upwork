@@ -53,7 +53,9 @@
             </thead>
             <tbody>
               <tr v-for="(student, index) in studentsData" :key="student._id || index">
-                <td>{{ student.name }}</td>
+                <td>
+                  <router-link :to="`/student/${student._id}`">{{ student.name }}</router-link>
+                </td>
                 <td>{{ student.personalNumber }}</td>
                 <td>{{ student.courseName || '-' }}</td>
                 <td>{{ student.additionalInfo || '-' }}</td>

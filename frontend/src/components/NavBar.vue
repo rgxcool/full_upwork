@@ -7,8 +7,8 @@
           <img src="../assets/mindful_transparent.png" alt="Mindful logo" class="logo" />
         </router-link>
       </div>
-      
-        <!-- Search wrapper -->
+
+      <!-- Search wrapper -->
       <div v-if="canSeeSearch" class="search-wrapper">
         <div class="search-bar-enhanced">
           <div class="search-type" @click="toggleSearchTypeDropdown">
@@ -33,7 +33,7 @@
             v-model="selectedDate"
             :format="'yyyy-MM-dd'"
             :placeholder="'Välj datum'"
-              @change="handleSearch"
+            @change="handleSearch"
           />
 
           <div v-if="searchQuery || selectedDate" class="clear-icon" @click="clearSearch">✕</div>
@@ -60,53 +60,85 @@
           </li>
         </ul>
 
-          <!-- Search results -->
-          <div v-if="showResults" class="search-results">
-        <ul class="result-list">
-          <li
-            v-for="result in filteredResults"
-            :key="result.id"
-            @click="navigateToDetails(result)"
-            class="result-item"
-          >
-            <div class="result-content">
-              <div class="result-title">{{ result.name }}</div>
-              <div class="result-subtitle">{{ result.extra }}</div>
-            </div>
-          </li>
-        </ul>
+        <!-- Search results -->
+        <div v-if="showResults" class="search-results">
+          <ul class="result-list">
+            <li
+              v-for="result in filteredResults"
+              :key="result.id"
+              @click="navigateToDetails(result)"
+              class="result-item"
+            >
+              <div class="result-content">
+                <div class="result-title">{{ result.name }}</div>
+                <div class="result-subtitle">{{ result.extra }}</div>
+              </div>
+            </li>
+          </ul>
+        </div>
       </div>
-    </div>
-        
-        <!-- Actions -->
-        <div class="nav-actions">
+
+      <!-- Actions -->
+      <div class="nav-actions">
         <!-- Profil dropdown för inloggade -->
         <div v-if="isLoggedIn" class="profile-dropdown-wrapper">
           <button class="profile-btn" @click.stop.prevent="toggleProfileMenu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-        </svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
             Min profil
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6,9 12,15 18,9"/>
-        </svg>
-      </button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="6,9 12,15 18,9" />
+            </svg>
+          </button>
 
           <!-- Profile dropdown -->
-            <div v-if="showProfileMenu" class="profile-dropdown" ref="profileDropdown">
+          <div v-if="showProfileMenu" class="profile-dropdown" ref="profileDropdown">
             <router-link to="/profile" class="dropdown-item">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-            </svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
               Min profil
             </router-link>
             <button @click="logout" class="dropdown-item logout-item">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16,17 21,12 16,7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16,17 21,12 16,7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
               </svg>
               Logga ut
             </button>
@@ -114,96 +146,242 @@
         </div>
 
         <!-- Notification icon -->
-        <div v-if="isLoggedIn && canSeeNotifications" class="notification-icon" @click="toggleNotificationPanel">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        <div
+          v-if="isLoggedIn && canSeeNotifications"
+          class="notification-icon"
+          @click="toggleNotificationPanel"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
           <span v-if="totalNotifications > 0" class="notis-badge">{{ totalNotifications }}</span>
         </div>
 
         <!-- Burger menu button -->
-        <button v-if="isLoggedIn" class="burger-btn" @click.stop.prevent="toggleMobileMenu" aria-label="Öppna meny">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
+        <button
+          v-if="isLoggedIn"
+          class="burger-btn"
+          @click.stop.prevent="toggleMobileMenu"
+          aria-label="Öppna meny"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
         </button>
 
         <!-- Login knapp för icke-inloggade -->
         <router-link v-if="!isLoggedIn" to="/login" class="login-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-            <polyline points="10,17 15,12 10,7"/>
-            <line x1="15" y1="12" x2="3" y2="12"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+            <polyline points="10,17 15,12 10,7" />
+            <line x1="15" y1="12" x2="3" y2="12" />
           </svg>
           LOGGA IN
         </router-link>
-    
-    <!-- Mobile menu overlay -->
-        <div v-if="isMobileMenuOpen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: rgba(0, 0, 0, 0.5); z-index: 9998; backdrop-filter: blur(2px);" @click="closeMobileMenu"></div>
-    
-    <!-- Mobile menu -->
-        <div v-if="isMobileMenuOpen" style="position: fixed; top: 0; right: 0; width: 320px; max-width: 85vw; height: 100vh; background: white; z-index: 9999; box-shadow: -5px 0 20px rgba(0, 0, 0, 0.15); display: flex; flex-direction: column; border-left: 1px solid #e5e7eb; animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: 1.5rem; border-bottom: 1px solid #e5e7eb; background: #f8fafc;">
-            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: #374151;">Navigation</h3>
-            <button style="display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; background: none; border: none; border-radius: 0.375rem; color: #6b7280; cursor: pointer; transition: all 0.2s ease;" @click="closeMobileMenu">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
+
+        <!-- Mobile menu overlay -->
+        <div
+          v-if="isMobileMenuOpen"
+          style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9998;
+            backdrop-filter: blur(2px);
+          "
+          @click="closeMobileMenu"
+        ></div>
+
+        <!-- Mobile menu -->
+        <div
+          v-if="isMobileMenuOpen"
+          style="
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 320px;
+            max-width: 85vw;
+            height: 100vh;
+            background: white;
+            z-index: 9999;
+            box-shadow: -5px 0 20px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #e5e7eb;
+            animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          "
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: 1.5rem;
+              border-bottom: 1px solid #e5e7eb;
+              background: #f8fafc;
+            "
+          >
+            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: #374151">
+              Navigation
+            </h3>
+            <button
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 2rem;
+                height: 2rem;
+                background: none;
+                border: none;
+                border-radius: 0.375rem;
+                color: #6b7280;
+                cursor: pointer;
+                transition: all 0.2s ease;
+              "
+              @click="closeMobileMenu"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-      </div>
-          
-          <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; overflow-y: auto;">
-            <ul style="list-style: none; padding: 0; margin: 0;">
-              <li v-for="item in filteredMenuItems" :key="item.link" style="border-bottom: 1px solid #f3f4f6;">
-                <router-link :to="item.link" style="display: block; padding: 1rem 1.5rem; color: #374151; text-decoration: none; font-weight: 500; transition: all 0.2s ease;" @click="closeMobileMenu">
-            {{ item.name }}
-          </router-link>
-        </li>
-      </ul>
-            
-            <div style="padding: 1.5rem; border-top: 1px solid #e5e7eb; background: #f8fafc;">
-              <button style="display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.75rem; background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease;" @click="logout">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                  <polyline points="16,17 21,12 16,7"/>
-                  <line x1="21" y1="12" x2="9" y2="12"/>
+          </div>
+
+          <div
+            style="
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              overflow-y: auto;
+            "
+          >
+            <ul style="list-style: none; padding: 0; margin: 0">
+              <li
+                v-for="item in filteredMenuItems"
+                :key="item.link"
+                style="border-bottom: 1px solid #f3f4f6"
+              >
+                <router-link
+                  :to="item.link"
+                  style="
+                    display: block;
+                    padding: 1rem 1.5rem;
+                    color: #374151;
+                    text-decoration: none;
+                    font-weight: 500;
+                    transition: all 0.2s ease;
+                  "
+                  @click="closeMobileMenu"
+                >
+                  {{ item.name }}
+                </router-link>
+              </li>
+            </ul>
+
+            <div style="padding: 1.5rem; border-top: 1px solid #e5e7eb; background: #f8fafc">
+              <button
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 0.5rem;
+                  width: 100%;
+                  padding: 0.75rem;
+                  background: #fee2e2;
+                  color: #dc2626;
+                  border: 1px solid #fecaca;
+                  border-radius: 0.5rem;
+                  font-weight: 500;
+                  cursor: pointer;
+                  transition: all 0.2s ease;
+                "
+                @click="logout"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16,17 21,12 16,7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
                 </svg>
                 Logga ut
               </button>
             </div>
           </div>
-    </div>
-    
+        </div>
+
         <!-- Notification panel -->
         <div v-if="showNotisPanel" class="notification-panel" ref="notisPanel">
           <div class="notis-header">
             <h3>Notifikationer</h3>
             <span class="notis-count">({{ totalNotifications }})</span>
-    </div>
-          
+          </div>
+
           <div class="notis-list">
             <div v-for="notification in notifications" :key="notification.id" class="notis-item">
               <div class="notis-content">
                 <span class="notis-type">{{ notification.type }}</span>
                 <span class="notis-message">{{ notification.message }}</span>
-    </div>
+              </div>
               <div class="notis-actions">
                 <button @click="resolveNote(notification.id)" class="resolve-btn">
                   Markera som löst
                 </button>
-                <button v-if="canResetNotifications" @click="resetNotification(notification.id)" class="reset-btn">
+                <button
+                  v-if="canResetNotifications"
+                  @click="resetNotification(notification.id)"
+                  class="reset-btn"
+                >
                   Återställ
                 </button>
               </div>
             </div>
-            
-            <div v-if="notifications.length === 0" class="no-notis">
-              Inga notifikationer
-            </div>
+
+            <div v-if="notifications.length === 0" class="no-notis">Inga notifikationer</div>
           </div>
         </div>
       </div>
@@ -313,6 +491,8 @@
 
         if (courseTypes.includes(result.type)) {
           router.push(`/education/${result.id}`) // NY ruta för kurser
+        } else if (['Elev', 'Student'].includes(result.type)) {
+          router.push(`/student/${result.id}`)
         } else {
           router.push(`/detaljer/${result.type}/${result.id}`) // Vanlig vy
         }
@@ -361,7 +541,11 @@
             const formattedDate = date.toISOString().split('T')[0]
             params.append('type', 'Datum')
             params.append('date', formattedDate)
-          } else if (selectedSearchType.value === 'Alla' && searchQuery.value && /^\d{4}-\d{2}-\d{2}$/.test(searchQuery.value)) {
+          } else if (
+            selectedSearchType.value === 'Alla' &&
+            searchQuery.value &&
+            /^\d{4}-\d{2}-\d{2}$/.test(searchQuery.value)
+          ) {
             // If 'Alla' and input matches yyyy-mm-dd, treat as date search
             params.append('type', 'Datum')
             params.append('date', searchQuery.value)
@@ -375,7 +559,10 @@
             params.append('q', searchQuery.value)
           }
 
-          console.log('🌐 Search URL:', `${import.meta.env.VITE_API_URL}/api/search?${params.toString()}`)
+          console.log(
+            '🌐 Search URL:',
+            `${import.meta.env.VITE_API_URL}/api/search?${params.toString()}`
+          )
 
           const res = await axios.get(
             `${import.meta.env.VITE_API_URL}/api/search?${params.toString()}`,
@@ -460,10 +647,14 @@
         'Prövningar',
         'Earnings',
         'Stats',
-      ];
+      ]
       const menuItems = [
         { name: 'APL', link: '/apl', role: ['admin', 'teacher'] },
-        { name: 'Kalender', link: '/kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
+        {
+          name: 'Kalender',
+          link: '/kalender',
+          role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'],
+        },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },
@@ -474,21 +665,21 @@
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
-      ];
+      ]
       const filteredMenuItems = computed(() => {
         return menuItems.filter((item) => {
-          if (secretMenuNames.includes(item.name)) return false;
-          if (!item.role) return true;
-          return hasPermission(item.role);
-        });
-      });
+          if (secretMenuNames.includes(item.name)) return false
+          if (!item.role) return true
+          return hasPermission(item.role)
+        })
+      })
       const secretMenuItems = computed(() => {
         return menuItems.filter((item) => {
-          if (!secretMenuNames.includes(item.name)) return false;
-          if (!item.role) return true;
-          return hasPermission(item.role);
-        });
-      });
+          if (!secretMenuNames.includes(item.name)) return false
+          if (!item.role) return true
+          return hasPermission(item.role)
+        })
+      })
       const toggleProfileMenu = (event) => {
         event?.preventDefault()
         event?.stopPropagation()
@@ -525,23 +716,23 @@
         document.removeEventListener('mousedown', handleClickOutside)
       })
 
-      const showSecretMenu = ref(false);
-      const versionRef = ref(null);
+      const showSecretMenu = ref(false)
+      const versionRef = ref(null)
       const secretMenuStyle = computed(() => {
-        if (!showSecretMenu.value || !versionRef.value) return {};
+        if (!showSecretMenu.value || !versionRef.value) return {}
         // Position dropdown below the version number, relative to nav
-        const navRect = versionRef.value.closest('nav').getBoundingClientRect();
-        const rect = versionRef.value.getBoundingClientRect();
+        const navRect = versionRef.value.closest('nav').getBoundingClientRect()
+        const rect = versionRef.value.getBoundingClientRect()
         return {
           position: 'absolute',
           top: `${rect.bottom - navRect.top + 8}px`,
           left: `${rect.left - navRect.left}px`,
           zIndex: 3000,
-        };
-      });
+        }
+      })
       const toggleSecretMenu = () => {
-        showSecretMenu.value = !showSecretMenu.value;
-      };
+        showSecretMenu.value = !showSecretMenu.value
+      }
 
       return {
         totalNotifications,
@@ -789,7 +980,6 @@
     height: 50px;
   }
 
-
   /* Actions */
   .nav-actions {
     display: flex;
@@ -948,7 +1138,8 @@
     gap: 0.5rem;
   }
 
-  .resolve-btn, .reset-btn {
+  .resolve-btn,
+  .reset-btn {
     padding: 0.375rem 0.75rem;
     font-size: 0.75rem;
     border-radius: 0.375rem;
@@ -1318,7 +1509,7 @@
     .mobile-overlay {
       display: none !important;
     }
-    
+
     .burger-menu {
       display: none !important;
     }
@@ -1330,16 +1521,16 @@
       padding: 0.75rem 1rem;
       min-height: 4rem;
     }
-    
+
     .logo {
       height: 2rem;
     }
-    
+
     .login-btn {
       padding: 0.75rem 1.5rem;
       font-size: 0.8rem;
     }
-    
+
     .profile-btn {
       padding: 0.75rem 1rem;
       font-size: 0.8rem;
@@ -1350,126 +1541,126 @@
     .nav-container {
       padding: 0.5rem 1rem;
     }
-    
+
     .login-btn {
       padding: 0.625rem 1.25rem;
       font-size: 0.75rem;
     }
-    
+
     .login-btn svg {
       width: 16px;
       height: 16px;
     }
-    }
+  }
 
-    .nav-links {
-      display: none !important;
-    }
+  .nav-links {
+    display: none !important;
+  }
 
-    .mobile-menu {
-      position: fixed;
-      top: 0;
-      right: 0;
-      height: 100vh;
-      width: 80%;
-      max-width: 300px;
-      background-color: #fff;
-      box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
-      transform: translateX(100%);
-      transition: all 0.3s ease;
-      padding: 20px;
-      z-index: 2000;
-      display: flex;
-      flex-direction: column;
-      visibility: hidden;
-      opacity: 0;
-      overflow-y: auto;
-    }
+  .mobile-menu {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: 80%;
+    max-width: 300px;
+    background-color: #fff;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    padding: 20px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    visibility: hidden;
+    opacity: 0;
+    overflow-y: auto;
+  }
 
-    .mobile-menu.open {
-      transform: translateX(0); /* Detta visar menyn */
-      visibility: visible;
-      opacity: 1;
-    }
+  .mobile-menu.open {
+    transform: translateX(0); /* Detta visar menyn */
+    visibility: visible;
+    opacity: 1;
+  }
 
-    .mobile-menu-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 1px solid #eee;
-    }
+  .mobile-menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+  }
 
-    .mobile-menu-header h3 {
-      margin: 0;
-      color: #333;
-      font-size: 18px;
-    }
+  .mobile-menu-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 18px;
+  }
 
-    .mobile-menu-close {
-      background: none;
-      border: none;
-      font-size: 20px;
-      cursor: pointer;
-      color: #666;
-      padding: 5px;
-      border-radius: 4px;
-      transition: background 0.2s;
-    }
+  .mobile-menu-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #666;
+    padding: 5px;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
 
-    .mobile-menu-close:hover {
-      background: #f0f0f0;
-    }
+  .mobile-menu-close:hover {
+    background: #f0f0f0;
+  }
 
-    .mobile-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.4);
-      z-index: 1500;
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s ease;
-    }
+  .mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1500;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+  }
 
-    .mobile-overlay.active {
-      opacity: 1;
-      visibility: visible;
-    }
+  .mobile-overlay.active {
+    opacity: 1;
+    visibility: visible;
+  }
 
-    .mobile-nav-links {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
+  .mobile-nav-links {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
 
-    .mobile-nav-links .nav-link {
-      font-size: 16px;
-      text-align: left;
-      padding: 10px;
-      display: block;
-      color: #333;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background 0.2s;
-    }
+  .mobile-nav-links .nav-link {
+    font-size: 16px;
+    text-align: left;
+    padding: 10px;
+    display: block;
+    color: #333;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
 
-    .mobile-nav-links .nav-link:hover {
-      background: #f5f5f5;
-    }
+  .mobile-nav-links .nav-link:hover {
+    background: #f5f5f5;
+  }
 
-    .logout-btn {
-      margin-bottom: 20px;
-      width: 100%;
-      text-align: left;
-      color: red;
-    }
+  .logout-btn {
+    margin-bottom: 20px;
+    width: 100%;
+    text-align: left;
+    color: red;
+  }
 
   /* Mobile menu */
   .mobile-overlay {
@@ -1550,7 +1741,7 @@
   .mobile-menu-content {
     flex: 1;
     display: flex;
-      flex-direction: column;
+    flex-direction: column;
     justify-content: space-between;
     overflow-y: auto;
   }
@@ -1566,7 +1757,7 @@
   }
 
   .mobile-nav-link {
-      display: block;
+    display: block;
     padding: 1rem 1.5rem;
     color: #374151;
     text-decoration: none;
@@ -1701,7 +1892,7 @@
     letter-spacing: 0.3px;
     white-space: nowrap;
   }
-  
+
   .login-btn:hover {
     background: #5a67d8;
     box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
@@ -1773,5 +1964,5 @@
   .secret-menu-dropdown li:last-child {
     margin-bottom: 0;
   }
-/* Navbar styling moved to main styles above */
+  /* Navbar styling moved to main styles above */
 </style>

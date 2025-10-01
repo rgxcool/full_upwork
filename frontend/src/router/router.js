@@ -26,7 +26,7 @@ const CourseInstances = () => import('@/views/Admin/CourseInstances.vue')
 const CourseMatching = () => import('@/views/Admin/CourseMatching.vue')
 const StudentEnrollments = () => import('@/views/Admin/StudentEnrollments.vue')
 const TeacherManagement = () => import('@/views/Admin/TeacherManagement.vue')
-const TEST = () => import('@/views/Admin/TEST.vue');
+const TEST = () => import('@/views/Admin/TEST.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
@@ -170,10 +170,11 @@ const routes = [
   },
 
   // Teacher Routes (Requires "teacher" or higher)
-  { 
-    path: '/kalender', 
-    component: FullCalendar, 
-    meta: { title: 'Kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin']  } },
+  {
+    path: '/kalender',
+    component: FullCalendar,
+    meta: { title: 'Kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
+  },
 
   { path: '/betyg', component: BetygSattning, meta: { title: 'Grade Setting', role: 'teacher' } },
   {
@@ -189,7 +190,10 @@ const routes = [
     name: 'StudentDetails',
     component: StudentDetails,
     props: true,
-    meta: { title: 'Student Details', role: 'student' },
+    meta: {
+      title: 'Student Details',
+      role: ['student', 'teacher', 'syv', 'specped', 'admin', 'systemadmin'],
+    },
   },
 
   {

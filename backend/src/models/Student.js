@@ -78,6 +78,8 @@ const StudentSchema = new mongoose.Schema(
         email: { type: String, required: true, unique: true },
         exam: String,
         additionalInfo: String,
+        // Free-text field describing any special needs or accommodations
+        specialNeeds: String,
         teacher: String,
         teacherId: {
             type: mongoose.Schema.Types.ObjectId,
