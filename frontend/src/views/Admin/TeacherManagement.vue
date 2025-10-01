@@ -52,8 +52,8 @@
         </div>
 
         <div class="filter-options">
-          <select v-model="subjectFilter" class="form-control">
-            <option value="">Alla ämnen</option>
+          <select v-model="permissionsFilter" class="form-control">
+            <option value="">Alla behörigheter</option>
             <option value="Svenska">Svenska</option>
             <option value="Engelska">Engelska</option>
             <option value="Matematik">Matematik</option>
@@ -264,25 +264,19 @@
                 <div class="row">
                   <div class="col-md-6">
                     <div class="form-group">
-                      <label class="form-label">Ämne</label>
-                      <select v-model="editingTeacher.subject" class="form-control" required>
-                        <option value="Svenska">Svenska</option>
-                        <option value="Engelska">Engelska</option>
-                        <option value="Matematik">Matematik</option>
-                        <option value="Historia">Historia</option>
-                        <option value="Samhällskunskap">Samhällskunskap</option>
-                        <option value="Naturkunskap">Naturkunskap</option>
-                        <option value="Fysik">Fysik</option>
-                        <option value="Kemi">Kemi</option>
-                        <option value="Biologi">Biologi</option>
-                        <option value="Idrott och hälsa">Idrott och hälsa</option>
-                        <option value="Slöjd">Slöjd</option>
-                        <option value="Bild">Bild</option>
-                        <option value="Musik">Musik</option>
-                        <option value="Specialpedagogik">Specialpedagogik</option>
-                        <option value="Studievägledning">Studievägledning</option>
-                        <option value="Övrigt">Övrigt</option>
-                      </select>
+                      <label class="form-label">Behörigheter</label>
+                      <div class="permissions-list" role="listbox" aria-multiselectable="true">
+                        <div
+                          v-for="opt in permissionsOptions"
+                          :key="opt"
+                          class="permission-item"
+                          :class="{ selected: editingPermissions.includes(opt) }"
+                          @dblclick="toggleEditingPermission(opt)"
+                        >
+                          {{ opt }}
+                        </div>
+                      </div>
+                      <small class="form-help">Dubbelklicka för att välja/avmarkera.</small>
                     </div>
                   </div>
                   <div class="col-md-6">
@@ -522,11 +516,32 @@
         teachers: [],
         isLoading: true,
         searchQuery: '',
-        subjectFilter: '',
+        permissionsFilter: '',
         showAddTeacherModal: false,
 
         // Edit teacher
         editingTeacher: {},
+        editingPermissions: [],
+        permissionsOptions: [
+          'Samtliga behörigheter som rektor',
+          'Alvis',
+          'Freja',
+          'Its learning',
+          'Växeltelefon',
+          'Studie- och yrkesvägledarexamen',
+          'Specialpedagogisk examen',
+          'Information och Kommunikation 1',
+          'Information och Kommunikation 2',
+          'Svenska',
+          'Svenska som andraspråk',
+          'Retorik',
+          'Barn- och Fritidsprogrammet',
+          'Engelska',
+          'Försäljning- och Serviceprogammet',
+          'Matematik',
+          'Vård- och omsorgsprogrammet',
+          'Sammhällskunskap 1a1',
+        ],
         isSaving: false,
 
         // Change password
@@ -559,8 +574,8 @@
           )
         }
 
-        if (this.subjectFilter) {
-          filtered = filtered.filter((teacher) => teacher.subject === this.subjectFilter)
+        if (this.permissionsFilter) {
+          filtered = filtered.filter((teacher) => teacher.subject === this.permissionsFilter)
         }
 
         return filtered
@@ -606,12 +621,14 @@
           _id: teacher._id,
           username: teacher.userId?.username || '',
           email: teacher.userId?.email || '',
-          subject: teacher.subject || 'Övrigt',
           colorCode: teacher.colorCode || '#FF0000',
           phoneNumbers: Array.isArray(teacher.phoneNumbers)
             ? teacher.phoneNumbers.map((p) => ({ number: p }))
             : [{ number: '' }],
         }
+        this.editingPermissions = typeof teacher.subject === 'string' && teacher.subject.length
+          ? teacher.subject.split(',').map((s) => s.trim()).filter(Boolean)
+          : []
 
         const modal = new bootstrap.Modal(this.$refs.editTeacherModal)
         modal.show()
@@ -625,7 +642,7 @@
           await api.put(`/teachers/${this.editingTeacher._id}`, {
             username: this.editingTeacher.username,
             email: this.editingTeacher.email,
-            subject: this.editingTeacher.subject,
+            subject: this.editingPermissions.join(', '),
             colorCode: this.editingTeacher.colorCode,
             phoneNumbers: this.editingTeacher.phoneNumbers
               .map((p) => (p.number || '').trim())
@@ -642,7 +659,7 @@
                 username: this.editingTeacher.username,
                 email: this.editingTeacher.email,
               },
-              subject: this.editingTeacher.subject,
+              subject: this.editingPermissions.join(', '),
               colorCode: this.editingTeacher.colorCode,
               phoneNumbers: this.editingTeacher.phoneNumbers
                 .map((p) => (p.number || '').trim())
@@ -673,6 +690,15 @@
       removeEditingPhone(index) {
         if (Array.isArray(this.editingTeacher.phoneNumbers) && this.editingTeacher.phoneNumbers.length > 1) {
           this.editingTeacher.phoneNumbers.splice(index, 1)
+        }
+      },
+
+      toggleEditingPermission(opt) {
+        const idx = this.editingPermissions.indexOf(opt)
+        if (idx === -1) {
+          this.editingPermissions.push(opt)
+        } else {
+          this.editingPermissions.splice(idx, 1)
         }
       },
 
@@ -1156,6 +1182,27 @@
   .btn-sm {
     padding: 0.25rem 0.5rem;
     font-size: 0.875rem;
+  }
+
+  .permissions-list {
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    max-height: 220px;
+    overflow: auto;
+  }
+
+  .permission-item {
+    padding: 0.5rem 0.75rem;
+    cursor: default;
+  }
+
+  .permission-item:hover {
+    background: #f1f3f5;
+  }
+
+  .permission-item.selected {
+    background: #e9f7ef;
+    border-left: 4px solid #2c9316;
   }
 
   .form-control {
