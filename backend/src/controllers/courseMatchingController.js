@@ -543,8 +543,10 @@ export const uploadStudentsForMatching = async (req, res) => {
                 normalized = normalized.replace(/[-\s]*\d+v$/i, "");
                 normalized = normalized.replace(/\d+v$/i, "");
                 // Check if it's a course (ends with NIVÅ + number, or contains common course keywords)
+                // Treat as Course if it ends with common NIVÅ patterns: 1, 1A, 1B, 2A, 1A1, etc.
+                // Examples matched: "MATEMATIK NIVÅ 1B", "MATEMATIK NIVÅ 2A", "ANATOMI OCH FYSIOLOGI NIVÅ 1A1"
                 const isCourse =
-                    /NIVÅ\s*\d+$/i.test(normalized) ||
+                    /NIVÅ\s*\d+(?:[A-Z](?:\d)?)?$/i.test(normalized) ||
                     /SPRÅK|PEDAGOGIK|SPECIALPEDAGOGIK|KOST|FÖRSKOLAN|GRUNDLÄGGANDE/i.test(
                         normalized
                     );
