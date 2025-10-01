@@ -91,7 +91,9 @@
               :key="student._id"
               :class="{ 'dropout-row': student.dropout }"
             >
-              <td>{{ student.name }}</td>
+              <td>
+                <router-link :to="`/student/${student._id}`">{{ student.name }}</router-link>
+              </td>
               <td>{{ student.personalNumber }}</td>
               <td class="course-cell">
                 <div class="course-list">

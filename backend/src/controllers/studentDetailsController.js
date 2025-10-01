@@ -31,11 +31,14 @@ export const getStudentDetails = async (req, res) => {
             return res.status(404).json({ error: "Student not found" });
         }
 
-        // Manually populate education references
+        // Manually populate education references (if present as array)
         const populatedStudent = student.toObject();
+        const existingEducation = Array.isArray(populatedStudent.education)
+            ? populatedStudent.education
+            : [];
 
-        for (const edu of populatedStudent.education) {
-            if (!edu.refId) continue;
+        for (const edu of existingEducation) {
+            if (!edu?.refId) continue;
 
             try {
                 let populatedRef = null;
@@ -142,6 +145,7 @@ export const updateStudentInfo = async (req, res) => {
             "email",
             "exam",
             "additionalInfo",
+            "specialNeeds",
             "startDate",
             "endDate",
             "finalExamDate",
@@ -157,6 +161,20 @@ export const updateStudentInfo = async (req, res) => {
             if (updates[field] !== undefined) {
                 student[field] = updates[field];
             }
+        }
+
+        // Track APL status changes with history
+        if (
+            typeof updates.aplStatus === "string" &&
+            updates.aplStatus !== student.aplStatus
+        ) {
+            student.aplStatusHistory = student.aplStatusHistory || [];
+            student.aplStatusHistory.push({
+                status: updates.aplStatus,
+                changedAt: new Date(),
+                changedBy: req.user?.name || req.user?.userId || "system",
+            });
+            student.aplStatus = updates.aplStatus;
         }
 
         // Log the changes
