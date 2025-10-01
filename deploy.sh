@@ -1,28 +1,33 @@
 #!/bin/bash
 
-set -e  # Exit immediately on error
+#!/bin/bash
+set -euo pipefail
+
+# Always run from the repo root (where this script lives)
+cd "$(dirname "$0")"
 
 echo "📥 Pulling latest code..."
-git pull origin main
+git fetch origin main
+git merge --ff-only origin/main
 
 echo "📦 Installing backend dependencies..."
-cd backend
-npm install
+pushd backend >/dev/null
+npm ci
 
-echo "🚀 Starting or restarting backend with PM2..."
-pm2 start ecosystem.config.cjs --env production
+echo "🚀 Starting or reloading backend with PM2..."
+# Note: your repo has ecosystem.config.js (not .cjs)
+pm2 startOrReload ecosystem.config.cjs --env production
+popd >/dev/null
 
 echo "📦 Installing frontend dependencies..."
-cd ../frontend
-npm install
+pushd frontend >/dev/null
+npm ci
 
-# Ensure higher heap size just for this command (4–6 GB is typical; pick what your box can spare)
-export NODE_OPTIONS="--max-old-space-size=6144"
-NODE_OPTIONS="--max-old-space-size=4096" npm --prefix frontend run build
-unset NODE_OPTIONS
-
-echo "🏗️ Building frontend for production..."
+# If you rely on a runtime API URL at build time, prefer .env.production.
+# If you must inject via env, export it BEFORE the build:
 export VITE_API_URL=""
-npm run build
+echo "🏗️ Building frontend for production (with larger Node heap)..."
+NODE_OPTIONS="--max-old-space-size=4096" npm run build
+popd >/dev/null
 
-echo "✅ Deployment complete. App is live at https://mindfullearning.se"
+echo "✅ Deployment complete. App should be live."
