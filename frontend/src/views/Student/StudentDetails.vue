@@ -201,51 +201,58 @@
             </div>
           </div>
           <div class="card-body">
-            <div
-              class="education-scroll-container"
-              style="
-                max-height: 200px;
-                overflow-y: scroll;
-                border: 2px solid red;
-                background-color: #f0f0f0;
-                padding: 10px;
-              "
-            >
-              <div v-if="student.education && student.education.length > 0" class="education-list">
-                <div
-                  v-for="(edu, index) in student.education"
-                  :key="edu._id || index"
-                  class="education-item"
-                  :class="{ 'enrollment-item': edu.isEnrollment }"
+            <div class="education-scroll-container">
+              <div v-if="sortedEducation && sortedEducation.length > 0">
+                <draggable
+                  v-model="sortedEducation"
+                  :animation="200"
+                  handle=".drag-handle"
+                  @end="handleEducationReorder"
+                  item-key="_id"
+                  class="education-list"
                 >
-                  <div class="education-header">
-                    <span class="education-type">{{ edu.type }}</span>
-                    <span v-if="edu.isEnrollment" class="enrollment-badge">Inskriven</span>
-                    <span class="education-name">
-                      {{ getEducationName(edu) }}
-                    </span>
-                  </div>
+                  <template #item="{ element }">
+                    <div
+                      :key="element._id || element.refId?._id"
+                      class="education-item"
+                      :class="{ 'enrollment-item': element.isEnrollment }"
+                    >
+                      <div class="education-header">
+                        <span class="drag-handle" title="Dra för att ändra ordning">☰</span>
+                        <span class="education-type">{{ element.type }}</span>
+                        <span v-if="element.isEnrollment" class="enrollment-badge">Inskriven</span>
+                        <span class="education-name">
+                          {{ getEducationName(element) }}
+                        </span>
+                      </div>
 
-                  <div class="education-details">
-                    <div v-if="edu.startDate && edu.endDate" class="education-dates">
-                      {{ formatDate(edu.startDate) }} - {{ formatDate(edu.endDate) }}
+                      <div class="education-details">
+                        <div v-if="element.startDate && element.endDate" class="education-dates">
+                          {{ formatDate(element.startDate) }} - {{ formatDate(element.endDate) }}
+                        </div>
+
+                        <div v-if="element.status" class="education-status">
+                          Status:
+                          <span :class="'status-' + element.status">{{ element.status }}</span>
+                        </div>
+
+                        <div v-if="element.grade" class="education-grade">
+                          Betyg: {{ element.grade }}
+                        </div>
+
+                        <div
+                          v-if="element.isEnrollment && element.courseInstance"
+                          class="course-instance-info"
+                        >
+                          Kursinstans: {{ element.courseInstance.courseName }} ({{
+                            formatDate(element.courseInstance.startDate)
+                          }}
+                          - {{ formatDate(element.courseInstance.endDate) }})
+                        </div>
+                      </div>
                     </div>
-
-                    <div v-if="edu.status" class="education-status">
-                      Status:
-                      <span :class="'status-' + edu.status">{{ edu.status }}</span>
-                    </div>
-
-                    <div v-if="edu.grade" class="education-grade">Betyg: {{ edu.grade }}</div>
-
-                    <div v-if="edu.isEnrollment && edu.courseInstance" class="course-instance-info">
-                      Kursinstans: {{ edu.courseInstance.courseName }} ({{
-                        formatDate(edu.courseInstance.startDate)
-                      }}
-                      - {{ formatDate(edu.courseInstance.endDate) }})
-                    </div>
-                  </div>
-                </div>
+                  </template>
+                </draggable>
               </div>
               <div v-else class="no-education">Ingen utbildning registrerad</div>
             </div>
@@ -384,15 +391,18 @@
 </template>
 
 <script>
-  import { ref, computed, onMounted } from 'vue'
+  import { ref, computed, onMounted, watch } from 'vue'
   import { useRoute } from 'vue-router'
   import { useStore } from 'vuex'
   import { api } from '@/store/store.js'
+  import draggable from 'vuedraggable'
 
   export default {
     name: 'StudentDetails',
+    components: {
+      draggable,
+    },
     setup() {
-      console.log('🔍 StudentDetails component setup - TESTING IF CHANGES WORK')
       const route = useRoute()
       const store = useStore()
 
@@ -642,6 +652,103 @@
         return new Date(date).toLocaleDateString('sv-SE')
       }
 
+      // Ref for education list that can be reordered
+      const sortedEducation = ref([])
+
+      // Watch for changes in student education and update sortedEducation
+      watch(
+        () => student.value?.education,
+        (newEducation) => {
+          if (!newEducation) {
+            sortedEducation.value = []
+            return
+          }
+          // Sort by startDate in ascending order only on initial load
+          sortedEducation.value = [...newEducation].sort((a, b) => {
+            if (!a.startDate && !b.startDate) return 0
+            if (!a.startDate) return 1
+            if (!b.startDate) return -1
+            return new Date(a.startDate) - new Date(b.startDate)
+          })
+        },
+        { immediate: true }
+      )
+
+      // Handler for when education items are reordered
+      const handleEducationReorder = async () => {
+        if (!student.value?.education || sortedEducation.value.length === 0) return
+
+        try {
+          // Recalculate dates based on the new order
+          const updatedEducation = recalculateEducationDates(sortedEducation.value)
+
+          // Update both the sortedEducation ref and student.education
+          sortedEducation.value = updatedEducation
+          student.value.education = updatedEducation
+
+          // Update dates in the backend for each enrollment sequentially to avoid rate limits
+          for (const edu of updatedEducation.filter((edu) => edu.enrollmentId)) {
+            await api.put(`/enrollments/${edu.enrollmentId}`, {
+              startDate: edu.startDate,
+              endDate: edu.endDate,
+            })
+            // Small delay between requests to avoid rate limiting
+            await new Promise((resolve) => setTimeout(resolve, 100))
+          }
+
+          console.log('Education dates updated successfully')
+        } catch (err) {
+          console.error('Error updating education dates:', err)
+          alert('Kunde inte uppdatera utbildningsdatum')
+          // Reload to reset on error
+          loadStudent()
+        }
+      }
+
+      // Recalculate dates for education items based on their durations
+      const recalculateEducationDates = (educationArray) => {
+        if (educationArray.length === 0) return []
+
+        const updated = educationArray.map((item) => ({
+          ...item,
+          // Preserve original dates for duration calculation
+          _originalStartDate: item.startDate,
+          _originalEndDate: item.endDate,
+        }))
+
+        // Store the original durations for each item
+        const durations = updated.map((item) => {
+          if (!item._originalStartDate || !item._originalEndDate) return 30 // Default 30 days
+          return Math.max(
+            1,
+            Math.ceil(
+              (new Date(item._originalEndDate) - new Date(item._originalStartDate)) /
+                (1000 * 60 * 60 * 24)
+            )
+          )
+        })
+
+        // Get the starting date from the first item
+        let currentDate = new Date(updated[0]._originalStartDate || Date.now())
+
+        // Update dates based on stored durations
+        updated.forEach((item, index) => {
+          // Set start date
+          item.startDate = new Date(currentDate)
+
+          // Calculate end date based on stored duration
+          const duration = durations[index]
+          item.endDate = new Date(currentDate)
+          item.endDate.setDate(item.endDate.getDate() + duration - 1)
+
+          // Move to next start date (one day after current end date)
+          currentDate = new Date(item.endDate)
+          currentDate.setDate(currentDate.getDate() + 1)
+        })
+
+        return updated
+      }
+
       onMounted(() => {
         loadStudent()
       })
@@ -664,6 +771,7 @@
         userId,
         canComment,
         activeComments,
+        sortedEducation,
         toggleEditMode,
         saveChanges,
         cancelEdit,
@@ -675,6 +783,7 @@
         canDeleteComment,
         getEducationName,
         formatDate,
+        handleEducationReorder,
       }
     },
   }
@@ -1123,30 +1232,34 @@
   }
 
   .education-scroll-container {
-    max-height: 200px !important;
-    overflow-y: scroll !important;
-    padding-right: 10px;
-    border: 2px solid red !important;
-    border-radius: 4px;
-    height: 200px !important;
-    background-color: #f0f0f0 !important;
+    padding: 10px;
   }
 
-  .education-scroll-container::-webkit-scrollbar {
-    width: 8px;
+  .drag-handle {
+    cursor: move;
+    font-size: 20px;
+    color: #6c757d;
+    margin-right: 8px;
+    user-select: none;
   }
 
-  .education-scroll-container::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
+  .drag-handle:hover {
+    color: #007bff;
   }
 
-  .education-scroll-container::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
+  .education-item {
+    cursor: grab;
   }
 
-  .education-scroll-container::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
+  .education-item:active {
+    cursor: grabbing;
+  }
+
+  .sortable-ghost {
+    opacity: 0.4;
+  }
+
+  .sortable-chosen {
+    cursor: grabbing !important;
   }
 </style>

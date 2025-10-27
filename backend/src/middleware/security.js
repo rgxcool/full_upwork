@@ -1,5 +1,6 @@
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
+import jwt from "jsonwebtoken";
 import { logger } from "../utils/errorHandler.js";
 import { AppError, AuthorizationError } from "../utils/errorHandler.js";
 
@@ -132,13 +133,58 @@ export const enhancedRBAC = {
     },
 };
 
-// Rate limiting middleware
+// Helper function to check if user is admin/systemadmin from JWT token
+const isAdminUser = (req) => {
+    try {
+        // Check if user is already attached to request
+        if (req.user && ["admin", "systemadmin"].includes(req.user.role)) {
+            logger.info(`✅ Rate limit SKIPPED: User is ${req.user.role}`);
+            return true;
+        }
+
+        // Check JWT token from cookie if user is not yet attached
+        const token = req.cookies?.token;
+        if (token) {
+            try {
+                if (!process.env.JWT_SECRET) {
+                    logger.error("❌ JWT_SECRET is not defined!");
+                    return false;
+                }
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                const isAdmin = ["admin", "systemadmin"].includes(decoded.role);
+                if (isAdmin) {
+                    logger.info(
+                        `✅ Rate limit SKIPPED: Token shows user is ${decoded.role}`
+                    );
+                }
+                return isAdmin;
+            } catch (err) {
+                logger.debug(
+                    `Rate limit applied: JWT verification failed: ${err.message}`
+                );
+                return false;
+            }
+        }
+    } catch (err) {
+        logger.debug(
+            `Rate limit applied: Error checking admin status: ${err.message}`
+        );
+        return false;
+    }
+    return false;
+};
+
+// Rate limiting middleware with skip for admins
 const baseRateLimitConfig = { ...securityConfig.rateLimit };
 if (process.env.NODE_ENV === "test") {
     // Make rate limit very low in tests to trigger quickly
     baseRateLimitConfig.windowMs = 60 * 1000;
     baseRateLimitConfig.max = 3;
 }
+
+// Add skip function for admins
+baseRateLimitConfig.skip = (req) => isAdminUser(req);
+
 export const rateLimiter = rateLimit(baseRateLimitConfig);
 
 // Enhanced rate limiting for specific endpoints
@@ -149,6 +195,7 @@ export const createRateLimiter = (windowMs, max, message) => {
         message: { error: message },
         standardHeaders: true,
         legacyHeaders: false,
+        skip: (req) => isAdminUser(req),
         handler: (req, res) => {
             logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
             res.status(429).json({
@@ -190,11 +237,11 @@ export const courseDetailRateLimiter = createRateLimiter(
 );
 
 // Middleware to exempt admin/systemadmin users from rate limiting
+// NOTE: This is now handled automatically in the rate limiters via the skip option
 export function exemptAdminsFromRateLimit(req, res, next) {
-    if (req.user && ["admin", "systemadmin"].includes(req.user.role)) {
-        return next(); // Skip rate limiting for admins
-    }
-    next(); // Always call next() for everyone else!
+    // This middleware is kept for backwards compatibility but is no longer needed
+    // since the rate limiters now skip admins automatically
+    next();
 }
 
 // Security headers middleware
