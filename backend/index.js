@@ -44,11 +44,7 @@ app.use(securityHeaders);
 import cors from "cors";
 app.use(cors(corsConfig));
 
-// Exempt admins from rate limiting globally
-import { exemptAdminsFromRateLimit } from "./src/middleware/security.js";
-app.use(exemptAdminsFromRateLimit);
-
-// Apply rate limiting
+// Apply rate limiting (admins are automatically exempted via skip function)
 if (process.env.NODE_ENV !== "test") {
     app.use(rateLimiter);
     app.use("/api/", apiRateLimiter);

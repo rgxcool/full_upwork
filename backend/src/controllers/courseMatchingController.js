@@ -1087,6 +1087,39 @@ export const updateEnrollmentStatus = async (req, res) => {
     }
 };
 
+/**
+ * Update enrollment dates
+ */
+export const updateEnrollmentDates = async (req, res) => {
+    try {
+        const { enrollmentId } = req.params;
+        const { startDate, endDate } = req.body;
+
+        const enrollment = await StudentEnrollment.findById(enrollmentId);
+        if (!enrollment) {
+            return res.status(404).json({ error: "Enrollment not found" });
+        }
+
+        if (startDate !== undefined) {
+            enrollment.startDate = new Date(startDate);
+        }
+        if (endDate !== undefined) {
+            enrollment.endDate = new Date(endDate);
+        }
+
+        await enrollment.save();
+
+        res.json({
+            success: true,
+            message: "Enrollment dates updated successfully",
+            enrollment,
+        });
+    } catch (error) {
+        console.error("Error updating enrollment dates:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
 export const getCourseStatistics = async (req, res) => {
     try {
         const { startDate, endDate, courseId } = req.query;

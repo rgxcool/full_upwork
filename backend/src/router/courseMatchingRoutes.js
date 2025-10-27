@@ -10,6 +10,7 @@ import {
     getStudentEnrollments,
     getCourseInstanceEnrollments,
     updateEnrollmentStatus,
+    updateEnrollmentDates,
     getCourseStatistics,
     createCourseInstance,
     updateCourseInstance,
@@ -23,7 +24,12 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Course matching routes
-router.get("/course-match", isAuthenticated, exemptAdminsFromRateLimit, findCourseMatch);
+router.get(
+    "/course-match",
+    isAuthenticated,
+    exemptAdminsFromRateLimit,
+    findCourseMatch
+);
 router.post(
     "/upload-students",
     upload.single("file"),
@@ -86,6 +92,12 @@ router.put(
     isAuthenticated,
     hasRole(["admin", "systemadmin", "teacher"]),
     updateEnrollmentStatus
+);
+router.put(
+    "/enrollments/:enrollmentId",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin", "teacher"]),
+    updateEnrollmentDates
 );
 
 // Statistics routes
