@@ -1,4 +1,5 @@
 import { distance } from "fastest-levenshtein";
+import { normalizeCodeForMatching } from "./parseStudentExcel.js";
 
 class CourseMatchingService {
     /**
@@ -47,11 +48,12 @@ class CourseMatchingService {
     }
 
     /**
-     * Find the best matching course using fuzzy matching
+     * Find the best matching course using code matching (prioritized) or fuzzy name matching
      */
-    static async findBestCourseMatch(courseName, threshold = 0.7) {
+    static async findBestCourseMatch(courseCodeOrName, threshold = 0.7) {
         const { default: Course } = await import("../models/Course.js");
-        const cleanedName = this.cleanCourseName(courseName);
+        // Normalize input: treat as code using the same function as database codes
+        const normalizedInput = normalizeCodeForMatching(courseCodeOrName || "");
 
         // Get all courses (include inactive too to avoid false negatives)
         let allCourses = await Course.find({ isActive: true });
@@ -59,29 +61,55 @@ class CourseMatchingService {
             allCourses = await Course.find({});
         }
 
+        // First, try exact code match
+        for (const course of allCourses) {
+            const normalizedCode = normalizeCodeForMatching(course.courseCode || "");
+            if (normalizedCode === normalizedInput) {
+                console.log(
+                    `[DEBUG] Exact code match found: '${normalizedInput}' → '${course.courseCode}' (${course.courseName})`
+                );
+                return { course, score: 1.0 };
+            }
+        }
+
+        // If no exact match, try fuzzy matching on codes first, then names
         let bestMatch = null;
         let bestScore = 0;
 
         for (const course of allCourses) {
+            const normalizedCode = normalizeCodeForMatching(course.courseCode || "");
+            const courseCodeDistance = distance(normalizedInput, normalizedCode);
+
+            // Convert distance to similarity score (0-1, where 1 is exact match)
+            const maxCodeLength = Math.max(
+                normalizedInput.length,
+                normalizedCode.length
+            );
+            const courseCodeScore =
+                maxCodeLength > 0
+                    ? 1 - courseCodeDistance / maxCodeLength
+                    : 0;
+
+            // Also try name matching as fallback
+            const cleanedName = this.cleanCourseName(courseCodeOrName);
             const courseNameDistance = distance(
                 cleanedName,
                 this.cleanCourseName(course.courseName)
             );
-            const courseCodeDistance = distance(
-                cleanedName,
-                this.cleanCourseName(course.courseCode)
-            );
-
-            // Convert distance to similarity score (0-1, where 1 is exact match)
-            const maxLength = Math.max(
+            const maxNameLength = Math.max(
                 cleanedName.length,
-                course.courseName.length,
-                course.courseCode.length
+                course.courseName.length
             );
-            const courseNameScore = 1 - courseNameDistance / maxLength;
-            const courseCodeScore = 1 - courseCodeDistance / maxLength;
+            const courseNameScore =
+                maxNameLength > 0
+                    ? 1 - courseNameDistance / maxNameLength
+                    : 0;
 
-            const score = Math.max(courseNameScore, courseCodeScore);
+            // Prioritize code matching: use code score if it's reasonable, otherwise use name score
+            const score =
+                courseCodeScore >= 0.5
+                    ? courseCodeScore
+                    : Math.max(courseCodeScore, courseNameScore);
 
             if (score > bestScore) {
                 bestScore = score;
@@ -187,45 +215,41 @@ class CourseMatchingService {
         const missingPackages = new Set();
         for (const entry of educationEntries) {
             try {
-                // --- PATCH: Improved normalization and fuzzy matching for course packages ---
+                // --- PATCH: Match course packages by code (prioritized) ---
                 const { default: CoursePackage } = await import(
                     "../models/CoursePackage.js"
                 );
                 const allPackages = await CoursePackage.find({}).lean();
-                function normalizeName(name) {
-                    return (name || "")
-                        .toUpperCase()
-                        .replace(/[,;|]/g, "") // Remove commas, semicolons, pipes
-                        .replace(/\s+/g, " ") // Collapse spaces
-                        .trim();
-                }
-                const normalizedEntryName = normalizeName(entry.name)
-                    .replace(/[-\s]*\d+\s*v$/i, "")
-                    .replace(/[-\s]*\d+v$/i, "")
-                    .replace(/\d+v$/i, "");
+                
+                // Normalize entry as code: uppercase, remove spaces
+                // Normalize entry code using the same function as database codes
+                // (entry.name already has cleanCourseName applied during parsing)
+                let normalizedEntryCode = normalizeCodeForMatching(entry.name || "");
 
-                // Try exact match first
-                let packageMatch = allPackages.find(
-                    (pkg) =>
-                        normalizeName(pkg.coursePackageName) ===
-                        normalizedEntryName
-                );
-                // Fallback: fuzzy match for long names (distance <= 1)
+                // Try exact code match first
+                let packageMatch = allPackages.find((pkg) => {
+                    const normalizedCode = normalizeCodeForMatching(pkg.coursePackageCode || "");
+                    return normalizedCode === normalizedEntryCode;
+                });
+                
+                // Fallback: fuzzy match on codes (distance <= 1 for short codes, <= 2 for longer)
                 if (!packageMatch) {
                     let best = null,
                         minDist = Infinity;
                     for (const pkg of allPackages) {
-                        const normPkg = normalizeName(pkg.coursePackageName);
-                        const d = distance(normalizedEntryName, normPkg);
+                        const normalizedCode = normalizeCodeForMatching(pkg.coursePackageCode || "");
+                        const d = distance(normalizedEntryCode, normalizedCode);
                         if (d < minDist) {
                             minDist = d;
                             best = pkg;
                         }
                     }
-                    if (normalizedEntryName.length > 12 && minDist <= 1) {
+                    // Allow fuzzy match if distance is small relative to code length
+                    const maxDist = normalizedEntryCode.length >= 8 ? 2 : 1;
+                    if (minDist <= maxDist) {
                         packageMatch = best;
                         console.log(
-                            `[DEBUG] Fuzzy matched package: '${entry.name}' → '${best.coursePackageName}' (distance ${minDist})`
+                            `[DEBUG] Fuzzy matched package by code: '${entry.name}' → '${best.coursePackageCode}' (${best.coursePackageName}, distance ${minDist})`
                         );
                     }
                 }

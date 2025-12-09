@@ -62,8 +62,9 @@ export async function parseCoursePackages(filePath) {
                 continue; // Skip program-only rows
             }
 
-            // Check and process the course package (bold cell in column B)
-            if (isBold && nameB) {
+            // Check and process the course package (bold cell in column B or name ends with - XX V)
+            const isPackage = isBold || /-\s*\d+\s*v$/i.test(nameB);
+            if (isPackage && nameB) {
                 if (!currentProgram) {
                     console.error(
                         `🚨 Row ${row.number}: Course package '${nameB}' has no assigned program.`
@@ -71,13 +72,13 @@ export async function parseCoursePackages(filePath) {
                     continue;
                 }
 
-                if (!coursePackageMap.has(nameB)) {
+                if (!coursePackageMap.has(code)) {
                     console.log(
                         `📦 Found new course package for ${currentProgram.programName}: ${nameB}`
                     );
 
                     currentCoursePackage = await CoursePackage.findOneAndUpdate(
-                        { coursePackageName: nameB },
+                        { coursePackageCode: code },
                         {
                             coursePackageName: nameB,
                             coursePackageCode: code,
@@ -88,10 +89,10 @@ export async function parseCoursePackages(filePath) {
                         { new: true, upsert: true }
                     );
 
-                    coursePackageMap.set(nameB, currentCoursePackage._id);
+                    coursePackageMap.set(code, currentCoursePackage._id);
                 } else {
                     currentCoursePackage = await CoursePackage.findById(
-                        coursePackageMap.get(nameB)
+                        coursePackageMap.get(code)
                     );
                 }
 
@@ -126,9 +127,10 @@ export async function parseCoursePackages(filePath) {
             if (!nameB) continue; // Skip rows without a course package name
 
             // Skip rows that don't contain valid course packages
-            if (isBold) {
+            const isPackage = isBold || /-\s*\d+\s*v$/i.test(nameB);
+            if (isPackage) {
                 currentCoursePackage = await CoursePackage.findById(
-                    coursePackageMap.get(nameB)
+                    coursePackageMap.get(code)
                 );
                 continue;
             }
@@ -142,7 +144,6 @@ export async function parseCoursePackages(filePath) {
 
             const existingCourse = await Course.findOneAndUpdate(
                 {
-                    courseName: nameB,
                     courseCode: code,
                 },
                 {

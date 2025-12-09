@@ -21,13 +21,36 @@ function extractMail(value) {
 }
 
 // ✅ Clean course-like strings BEFORE fuzzy matching
-function cleanCourseName(name) {
+export function cleanCourseName(name) {
+    if (!name) return "";
     return name
+        .toString()
         .replace(/\(.*?\)/g, "") // Remove parentheses, e.g. (REVIDERAD)
         .replace(/\bmot\b/gi, "") // Remove "mot"
         .replace(/[,;|]/g, "") // Remove separators
         .replace(/\s+/g, " ") // Collapse spaces
         .trim();
+}
+
+/**
+ * Normalizes a course/package code for matching by applying cleanCourseName
+ * and then standardizing (uppercase, remove all spaces, remove week patterns)
+ * @param {string} code - The code to normalize
+ * @returns {string} The normalized code
+ */
+export function normalizeCodeForMatching(code) {
+    if (!code) return "";
+    // Convert to string and trim
+    let normalized = code.toString().trim();
+    // First apply cleanCourseName to remove parentheses, "mot", separators
+    normalized = cleanCourseName(normalized);
+    // Then uppercase and remove all spaces
+    normalized = normalized.toUpperCase().replace(/\s+/g, "");
+    // Remove trailing week extent patterns for package matching
+    normalized = normalized.replace(/[-\s]*\d+\s*v$/i, '');
+    normalized = normalized.replace(/[-\s]*\d+v$/i, '');
+    normalized = normalized.replace(/\d+v$/i, '');
+    return normalized;
 }
 
 export async function parseStudentExcel(fileBuffer, teacherName) {
@@ -67,7 +90,9 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             }
         });
 
-        rowObject["teacher"] = teacherName;
+        // Read teacher from "Lärare" column if available, otherwise fall back to filename
+        const teacherFromDoc = rowObject["Lärare"]?.toString().trim();
+        rowObject["teacher"] = teacherFromDoc || teacherName;
         rowObject["dropout"] = hasRedBackground;
 
         if (requiredFields.every((field) => !rowObject[field])) {
@@ -114,9 +139,11 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             console.log(`[DEBUG] 📋 Raw SLUT: ${rowObject["SLUT"]} -> Parsed: ${parsedEndDate}`);
             console.log(`[DEBUG] 📋 Raw PREL. DATUM SLUTPROV: ${rowObject["PREL. DATUM SLUTPROV"]} -> Parsed: ${parsedSlutprovDate}`);
             
+            const cleanedName = cleanCourseName(name);
+            console.log(`[DEBUG] 📋 Parsing course: raw="${name}" → cleaned="${cleanedName}"`);
             education.push({
                 type: "Course",
-                name: cleanCourseName(name),
+                name: cleanedName,
                 startDate: parsedStartDate,
                 endDate: parsedEndDate,
                 slutprovDate: parsedSlutprovDate,
@@ -140,7 +167,7 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             email: extractMail(rowObject["MAIL"]),
             exam: rowObject["PROV"] || "",
             additionalInfo: rowObject["ÖVRIGT"] || "",
-            teacher: teacherName,
+            teacher: rowObject["teacher"],
             dropout: hasRedBackground,
             aplStatus: "GRAY",
             education,

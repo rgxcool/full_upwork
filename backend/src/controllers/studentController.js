@@ -9,10 +9,13 @@ import Course from "../models/Course.js";
 import User from "../models/User.js";
 import Teacher from "../models/Teacher.js";
 import CoursePackage from "../models/CoursePackage.js";
-import { parseStudentExcel } from "../utils/parseStudentExcel.js";
+import {
+    parseStudentExcel,
+    normalizeCodeForMatching,
+} from "../utils/parseStudentExcel.js";
 import { distance } from "fastest-levenshtein";
 
-console.log('[DEBUG] studentController.js loaded');
+console.log("[DEBUG] studentController.js loaded");
 
 /**
  * Normalizes a string by removing special characters, accents, and converting to lowercase.
@@ -142,7 +145,7 @@ export function normalizeMunicipalityName(name) {
 
 // ✅ Main upload function
 async function uploadXlsx(req, res) {
-    console.log('[DEBUG] uploadXlsx called');
+    console.log("[DEBUG] uploadXlsx called");
     console.log("🟢 Received XLSX file upload request");
 
     if (!req.file) {
@@ -152,8 +155,19 @@ async function uploadXlsx(req, res) {
     try {
         const fileBuffer = req.file.buffer;
         const fileName = req.file.originalname;
-        const teacherName = fileName.split(" ").pop().split(".")[0];
-        const parsedStudents = await parseStudentExcel(fileBuffer, teacherName);
+        // Teacher will be read from the document, so we pass empty string as fallback
+        const teacherNameFallback = "";
+        const parsedStudents = await parseStudentExcel(
+            fileBuffer,
+            teacherNameFallback
+        );
+
+        // Teacher will be read from each student's "Lärare" column in the document
+        // Use the first student's teacher as fallback for metadata fields if needed
+        let teacherNameFallbackForMetadata = teacherNameFallback;
+        if (parsedStudents.length > 0 && parsedStudents[0].teacher) {
+            teacherNameFallbackForMetadata = parsedStudents[0].teacher.trim();
+        }
         if (parsedStudents.length === 0) {
             return res.status(400).json({ error: "No valid data to save." });
         }
@@ -186,20 +200,45 @@ async function uploadXlsx(req, res) {
         const programMap = Object.fromEntries(
             programs.map((p) => [p.programName, p._id])
         );
+        // Use coursePackageCode for matching
         const packageMap = Object.fromEntries(
-            packages.map((p) => [p.coursePackageName, p._id])
+            packages.map((p) => [p.coursePackageCode, p._id])
         );
+        // Use courseCode for matching
         const courseMap = Object.fromEntries(
-            courses.map((c) => [c.courseName, c._id])
+            courses.map((c) => [c.courseCode, c._id])
         );
 
         const normalizedProgramMap = buildNormalizedMap(
             Object.keys(programMap)
         );
-        const normalizedPackageMap = buildNormalizedMap(
-            Object.keys(packageMap)
+        // Build normalized maps using codes (apply same normalization as Excel parser)
+        const normalizedPackageMap = {};
+        for (const pkg of packages) {
+            const norm = normalizeCodeForMatching(pkg.coursePackageCode || "");
+            normalizedPackageMap[norm] = pkg.coursePackageCode;
+            console.log(
+                `[DEBUG] Package code mapping: "${pkg.coursePackageCode}" → "${norm}"`
+            );
+        }
+        const normalizedCourseMap = {};
+        for (const c of courses) {
+            const norm = normalizeCodeForMatching(c.courseCode || "");
+            normalizedCourseMap[norm] = c.courseCode;
+            console.log(
+                `[DEBUG] Course code mapping: "${c.courseCode}" → "${norm}"`
+            );
+        }
+        console.log(
+            `[DEBUG] Total packages in map: ${
+                Object.keys(normalizedPackageMap).length
+            }`
         );
-        const normalizedCourseMap = buildNormalizedMap(Object.keys(courseMap));
+        console.log(
+            `[DEBUG] Total courses in map: ${
+                Object.keys(normalizedCourseMap).length
+            }`
+        );
 
         const now = new Date();
 
@@ -210,7 +249,10 @@ async function uploadXlsx(req, res) {
             const reasons = [];
 
             function strictMatch(target, candidates) {
+                // First try exact match
                 if (candidates.includes(target)) return target;
+
+                // Then try fuzzy match
                 let best = null;
                 let minDistance = Infinity;
                 for (const candidate of candidates) {
@@ -220,18 +262,51 @@ async function uploadXlsx(req, res) {
                         best = candidate;
                     }
                 }
-                if (target.length > 12 && minDistance === 1) return best;
+
+                // Allow fuzzy match based on code length and distance
+                // For short codes (<=8 chars): only exact match or distance 1
+                // For medium codes (9-12 chars): distance <= 1
+                // For long codes (>12 chars): distance <= 2
+                if (target.length <= 8 && minDistance <= 1) return best;
+                if (
+                    target.length > 8 &&
+                    target.length <= 12 &&
+                    minDistance <= 1
+                )
+                    return best;
+                if (target.length > 12 && minDistance <= 2) return best;
+
                 return null;
             }
 
             for (const student of mergedStudents) {
-                const studentIdLabel = student.email || student.name || "unknown";
-                const entries = Array.isArray(student.education) ? student.education : [];
+                const studentIdLabel =
+                    student.email || student.name || "unknown";
+                const entries = Array.isArray(student.education)
+                    ? student.education
+                    : [];
                 for (const entry of entries) {
-                    let normalizedName = normalize(entry.name);
-                    normalizedName = normalizedName.replace(/[-\s]*\d+\s*v$/i, '');
-                    normalizedName = normalizedName.replace(/[-\s]*\d+v$/i, '');
-                    normalizedName = normalizedName.replace(/\d+v$/i, '');
+                    // Skip empty entries
+                    if (!entry.name || !entry.name.trim()) {
+                        continue;
+                    }
+
+                    // Normalize as code using the same function as database codes
+                    // (entry.name already has cleanCourseName applied during parsing)
+                    const originalName = entry.name || "";
+                    let normalizedName = normalizeCodeForMatching(originalName);
+
+                    // Skip if normalization resulted in empty string
+                    if (!normalizedName) {
+                        console.warn(
+                            `[DEBUG] Skipping entry with empty normalized name: "${originalName}"`
+                        );
+                        continue;
+                    }
+
+                    console.log(
+                        `[DEBUG] Matching entry: "${originalName}" → normalized: "${normalizedName}"`
+                    );
 
                     const isCourse = /NIVÅ\s*\d+$/i.test(normalizedName);
                     let type = isCourse ? "Course" : "CoursePackage";
@@ -245,23 +320,85 @@ async function uploadXlsx(req, res) {
                         Object.keys(normalizedCourseMap)
                     );
 
+                    console.log(
+                        `[DEBUG] Match results for "${normalizedName}": package=${
+                            matchPackage || "none"
+                        }, course=${matchCourse || "none"}`
+                    );
+                    console.log(
+                        `[DEBUG] Available package keys (first 10): ${Object.keys(
+                            normalizedPackageMap
+                        )
+                            .slice(0, 10)
+                            .join(", ")}`
+                    );
+                    console.log(
+                        `[DEBUG] Available course keys (first 10): ${Object.keys(
+                            normalizedCourseMap
+                        )
+                            .slice(0, 10)
+                            .join(", ")}`
+                    );
+
                     // Treat as failure when an entry is a course and neither a course nor package match exists
-                    if (type === 'Course' && !matchCourse && !matchPackage) {
+                    if (type === "Course" && !matchCourse && !matchPackage) {
+                        // Find closest matches for better error message
+                        let closestPkg = null,
+                            closestPkgDist = Infinity;
+                        let closestCourse = null,
+                            closestCourseDist = Infinity;
+                        for (const key of Object.keys(normalizedPackageMap)) {
+                            const d = distance(normalizedName, key);
+                            if (d < closestPkgDist) {
+                                closestPkgDist = d;
+                                closestPkg = normalizedPackageMap[key];
+                            }
+                        }
+                        for (const key of Object.keys(normalizedCourseMap)) {
+                            const d = distance(normalizedName, key);
+                            if (d < closestCourseDist) {
+                                closestCourseDist = d;
+                                closestCourse = normalizedCourseMap[key];
+                            }
+                        }
+
+                        const suggestions = [];
+                        if (closestPkg && closestPkgDist <= 3) {
+                            suggestions.push(
+                                `closest package: "${closestPkg}" (distance: ${closestPkgDist})`
+                            );
+                        }
+                        if (closestCourse && closestCourseDist <= 3) {
+                            suggestions.push(
+                                `closest course: "${closestCourse}" (distance: ${closestCourseDist})`
+                            );
+                        }
+
                         reasons.push({
-                            type: 'no_match',
+                            type: "no_match",
                             student: studentIdLabel,
                             courseName: entry.name,
-                            message: `No matching course found for "${entry.name}" for student ${studentIdLabel}`,
+                            normalizedName: normalizedName,
+                            message: `No matching course found for "${
+                                entry.name
+                            }" (normalized: "${normalizedName}") for student ${studentIdLabel}. ${
+                                suggestions.length > 0
+                                    ? "Suggestions: " + suggestions.join(", ")
+                                    : ""
+                            }`,
                         });
                     }
                 }
             }
 
             if (reasons.length > 0) {
-                throw Object.assign(new Error('Unmatched courses found; upload aborted.'), {
-                    statusCode: 422,
-                    reasons,
-                });
+                throw Object.assign(
+                    new Error("Unmatched courses found; upload aborted."),
+                    {
+                        statusCode: 422,
+                        reasons,
+                    }
+                );
             }
         })();
 
@@ -287,24 +424,28 @@ async function uploadXlsx(req, res) {
                 // Convert education entries → { refId, type, ... }
                 const studentWarnings = [];
                 const newEducation = student.education.map((entry) => {
-                    let normalized = normalize(entry.name);
-
-                    // Remove trailing week extent patterns for package matching
-                    normalized = normalized.replace(/[-\s]*\d+\s*v$/i, '');
-                    normalized = normalized.replace(/[-\s]*\d+v$/i, '');
-                    normalized = normalized.replace(/\d+v$/i, '');
+                    // Normalize as code using the same function as database codes
+                    // (entry.name already has cleanCourseName applied during parsing)
+                    let normalized = normalizeCodeForMatching(entry.name || "");
 
                     // Distinguish course vs package by name ending
                     const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
                     let type = isCourse ? "Course" : "CoursePackage";
 
                     // Always log normalized input and all normalized package keys
-                    console.log("[DEBUG] Normalized input:", normalized, "Normalized package keys:", Object.keys(normalizedPackageMap));
+                    console.log(
+                        "[DEBUG] Normalized input:",
+                        normalized,
+                        "Normalized package keys:",
+                        Object.keys(normalizedPackageMap)
+                    );
 
-                    // Require exact match for packages/courses, allow fuzzy only for long names
+                    // Require exact match for packages/courses, allow fuzzy for close matches
                     function strictMatch(target, candidates) {
+                        // First try exact match
                         if (candidates.includes(target)) return target;
-                        // Only allow fuzzy match for long names (length > 12) and distance = 1
+
+                        // Then try fuzzy match
                         let best = null;
                         let minDistance = Infinity;
                         for (const candidate of candidates) {
@@ -314,7 +455,20 @@ async function uploadXlsx(req, res) {
                                 best = candidate;
                             }
                         }
-                        if (target.length > 12 && minDistance === 1) return best;
+
+                        // Allow fuzzy match based on code length and distance
+                        // For short codes (<=8 chars): only exact match or distance 1
+                        // For medium codes (9-12 chars): distance <= 1
+                        // For long codes (>12 chars): distance <= 2
+                        if (target.length <= 8 && minDistance <= 1) return best;
+                        if (
+                            target.length > 8 &&
+                            target.length <= 12 &&
+                            minDistance <= 1
+                        )
+                            return best;
+                        if (target.length > 12 && minDistance <= 2) return best;
+
                         return null;
                     }
 
@@ -345,31 +499,43 @@ async function uploadXlsx(req, res) {
                     } else {
                         if (!type || type === "Auto") type = "Course";
                         // Log for debugging
-                        let bestPkg = null, bestPkgDist = Infinity;
-                        for (const candidate of Object.keys(normalizedPackageMap)) {
+                        let bestPkg = null,
+                            bestPkgDist = Infinity;
+                        for (const candidate of Object.keys(
+                            normalizedPackageMap
+                        )) {
                             const d = distance(normalized, candidate);
-                            if (d < bestPkgDist) { bestPkgDist = d; bestPkg = candidate; }
+                            if (d < bestPkgDist) {
+                                bestPkgDist = d;
+                                bestPkg = candidate;
+                            }
                         }
-                        let bestCourse = null, bestCourseDist = Infinity;
-                        for (const candidate of Object.keys(normalizedCourseMap)) {
+                        let bestCourse = null,
+                            bestCourseDist = Infinity;
+                        for (const candidate of Object.keys(
+                            normalizedCourseMap
+                        )) {
                             const d = distance(normalized, candidate);
-                            if (d < bestCourseDist) { bestCourseDist = d; bestCourse = candidate; }
+                            if (d < bestCourseDist) {
+                                bestCourseDist = d;
+                                bestCourse = candidate;
+                            }
                         }
                         console.warn(
                             `🟡 No match for: "${entry.name}" → "${normalized}". Best package: ${bestPkg} (d=${bestPkgDist}), best course: ${bestCourse} (d=${bestCourseDist}). Normalized package keys:`,
                             Object.keys(normalizedPackageMap)
                         );
                         // Only push warning for unmatched courses, unless the name matches a known package
-                        if (type === 'Course' && !matchPackage) {
-                            console.warn('[DEBUG] Pushing no_match warning:', {
+                        if (type === "Course" && !matchPackage) {
+                            console.warn("[DEBUG] Pushing no_match warning:", {
                                 entryName: entry.name,
                                 type,
                                 matchPackage,
                                 normalized,
-                                packageKeys: Object.keys(normalizedPackageMap)
+                                packageKeys: Object.keys(normalizedPackageMap),
                             });
                             studentWarnings.push({
-                                type: 'no_match',
+                                type: "no_match",
                                 courseName: entry.name,
                                 message: `No matching course found for \"${entry.name}\"`,
                             });
@@ -382,7 +548,9 @@ async function uploadXlsx(req, res) {
                         name: entry.name,
                         grade: null,
                         addedAt: now,
-                        addedBy: teacherName,
+                        addedBy:
+                            student.teacher?.trim() ||
+                            teacherNameFallbackForMetadata,
                         removedAt: null,
                     };
                 });
@@ -396,8 +564,10 @@ async function uploadXlsx(req, res) {
                         (old) =>
                             old.refId?.toString() === e.refId?.toString() &&
                             old.type === e.type &&
-                            new Date(old.startDate).getTime() === new Date(e.startDate).getTime() &&
-                            new Date(old.endDate).getTime() === new Date(e.endDate).getTime()
+                            new Date(old.startDate).getTime() ===
+                                new Date(e.startDate).getTime() &&
+                            new Date(old.endDate).getTime() ===
+                                new Date(e.endDate).getTime()
                     );
                     if (!exists) mergedEducation.push(e);
                 }
@@ -435,7 +605,9 @@ async function uploadXlsx(req, res) {
                     aplStatus: existing?.aplStatus || "GRAY",
                     createdAt: existing?.createdAt || now,
                     updatedAt: now,
-                    uploadedBy: teacherName,
+                    uploadedBy:
+                        student.teacher?.trim() ||
+                        teacherNameFallbackForMetadata,
                 };
 
                 return {
@@ -463,9 +635,13 @@ async function uploadXlsx(req, res) {
     } catch (err) {
         console.error("❌ Upload failed:", err);
         const status = err.statusCode || 500;
-        const payload = err.statusCode === 422
-            ? { error: "Unmatched courses found; upload aborted.", reasons: err.reasons }
-            : { error: "Failed to process file", details: err.message };
+        const payload =
+            err.statusCode === 422
+                ? {
+                      error: "Unmatched courses found; upload aborted.",
+                      reasons: err.reasons,
+                  }
+                : { error: "Failed to process file", details: err.message };
         res.status(status).json(payload);
     }
 }
