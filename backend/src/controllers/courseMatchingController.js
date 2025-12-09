@@ -2,7 +2,7 @@ import CourseMatchingService from "../utils/courseMatchingService.js";
 import Student from "../models/Student.js";
 import CourseInstance from "../models/CourseInstance.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
-import { parseStudentExcel } from "../utils/parseStudentExcel.js";
+import { parseStudentExcel, normalizeCodeForMatching } from "../utils/parseStudentExcel.js";
 import { createOrFindTeacher } from "../utils/teacherService.js";
 import { createGlobalNotification } from "../controllers/notificationController.js";
 import { normalizeMunicipalityName } from "./studentController.js";
@@ -38,10 +38,11 @@ export const uploadStudentsForMatching = async (req, res) => {
 
         const fileBuffer = req.file.buffer;
         const fileName = req.file.originalname;
-        const teacherName = fileName.split(" ").pop().split(".")[0];
+        // Teacher will be read from the document, so we pass empty string as fallback
+        const teacherNameFallback = "";
 
         // Parse students using the existing parser
-        const parsedStudents = await parseStudentExcel(fileBuffer, teacherName);
+        const parsedStudents = await parseStudentExcel(fileBuffer, teacherNameFallback);
 
         console.log(`[DEBUG] 📊 Excel parsing results:`);
         console.log(
@@ -131,8 +132,12 @@ export const uploadStudentsForMatching = async (req, res) => {
                     reasons.push({
                         type: "invalid_field",
                         student: studentIdLabel,
-                        field: "additionalInfo",
-                        message: `Unable to convert 'additionalInfo' to text for student ${studentIdLabel}.`,
+                        studentEmail: student.email || "",
+                        studentName: student.name || "",
+                        field: "ÖVRIGT (additionalInfo)",
+                        fieldValue: JSON.stringify(student.additionalInfo),
+                        message: `Kunde inte konvertera fältet 'ÖVRIGT' till text för student ${studentIdLabel}. Fältet innehåller data som inte kan läsas korrekt. Kontrollera att cellen innehåller vanlig text och inte formaterade objekt.`,
+                        suggestion: "Kontrollera kolumnen 'ÖVRIGT' i Excel-filen och se till att den innehåller vanlig text.",
                     });
                 } else {
                     student.additionalInfo = coercedAdditional;
@@ -146,8 +151,12 @@ export const uploadStudentsForMatching = async (req, res) => {
                             reasons.push({
                                 type: "invalid_field",
                                 student: studentIdLabel,
-                                field: "education.name",
-                                message: `Invalid course/package name in education for student ${studentIdLabel}.`,
+                                studentEmail: student.email || "",
+                                studentName: student.name || "",
+                                field: "KURS/PAKET",
+                                fieldValue: JSON.stringify(entry?.name),
+                                message: `Ogiltigt eller tomt kurs-/paketnamn för student ${studentIdLabel}. Kolumnen 'KURS/PAKET' måste innehålla en kurskod eller paketkod.`,
+                                suggestion: "Kontrollera att kolumnen 'KURS/PAKET' innehåller en giltig kurskod (t.ex. MATE2A00X) eller paketkod (t.ex. KVARVO).",
                             });
                         } else {
                             entry.name = coercedName;
@@ -157,112 +166,114 @@ export const uploadStudentsForMatching = async (req, res) => {
             }
 
             if (reasons.length > 0) {
-                const error = new Error(
-                    "Data validation failed; upload aborted."
-                );
+                const errorSummary = `Validering misslyckades: ${reasons.length} fel hittades i dokumentet.`;
+                const error = new Error(errorSummary);
                 error.statusCode = 422;
                 error.reasons = reasons;
+                error.detailedMessage = `Dokumentet innehåller ${reasons.length} fel som måste åtgärdas innan uppladdning kan fortsätta. Se detaljerna nedan för mer information.`;
                 throw error;
             }
         })();
 
-        // Handle teacher creation if needed
-        let teacherInfo = null;
-        try {
-            const teacherResult = await createOrFindTeacher(
-                teacherName,
-                req.user?.userId
-            );
-
-            if (teacherResult.wasCreated) {
-                const safeUsername =
-                    teacherResult.user?.username || teacherName;
-                const safeEmail =
-                    teacherResult.user?.email ||
-                    `${teacherName
-                        .toLowerCase()
-                        .replace(/\s+/g, ".")}@mindful.se`;
-                results.createdTeachers.push({
-                    name: safeUsername,
-                    email: safeEmail,
-                    password: teacherResult.password,
-                    subject: teacherResult.teacher?.subject || "Övrigt",
-                });
-
-                console.log(`👨‍🏫 Auto-created teacher: ${safeUsername}`);
-
-                // Create notification for the user who uploaded the file
-                try {
-                    await createGlobalNotification(
-                        "teacher_auto_created",
-                        `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Lösenord: ${teacherResult.password}`
-                    );
-                } catch (notificationError) {
-                    console.error(
-                        "❌ Error creating notification:",
-                        notificationError
-                    );
-                }
+        // Collect all unique teachers from the document and create/find them
+        const uniqueTeachers = new Set();
+        for (const student of mergedStudents) {
+            if (student.teacher && student.teacher.trim()) {
+                uniqueTeachers.add(student.teacher.trim());
             }
-
-            teacherInfo = teacherResult.teacher;
-            console.log(
-                `[DEBUG] Teacher info:`,
-                teacherInfo
-                    ? {
-                          _id: teacherInfo._id,
-                          name: teacherInfo.userId?.username,
-                      }
-                    : "null"
-            );
-        } catch (error) {
-            console.error("❌ Error handling teacher creation:", error);
-            results.errors.push({
-                type: "teacher_creation",
-                error: error.message,
-            });
         }
 
-        // Build normalized package map
+        // Create a map of teacher names to teacher documents
+        const teacherMap = new Map();
+        for (const teacherName of uniqueTeachers) {
+            try {
+                const teacherResult = await createOrFindTeacher(
+                    teacherName,
+                    req.user?.userId
+                );
+
+                if (teacherResult.wasCreated) {
+                    const safeUsername =
+                        teacherResult.user?.username || teacherName;
+                    const safeEmail =
+                        teacherResult.user?.email ||
+                        `${teacherName
+                            .toLowerCase()
+                            .replace(/\s+/g, ".")}@mindful.se`;
+                    results.createdTeachers.push({
+                        name: safeUsername,
+                        email: safeEmail,
+                        password: teacherResult.password,
+                        subject: teacherResult.teacher?.subject || "Övrigt",
+                    });
+
+                    console.log(`👨‍🏫 Auto-created teacher: ${safeUsername}`);
+
+                    // Create notification for the user who uploaded the file
+                    try {
+                        await createGlobalNotification(
+                            "teacher_auto_created",
+                            `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Lösenord: ${teacherResult.password}`
+                        );
+                    } catch (notificationError) {
+                        console.error(
+                            "❌ Error creating notification:",
+                            notificationError
+                        );
+                    }
+                }
+
+                teacherMap.set(teacherName, teacherResult.teacher);
+                console.log(
+                    `[DEBUG] Teacher mapped: '${teacherName}' → ${teacherResult.teacher?._id || 'null'}`
+                );
+            } catch (error) {
+                console.error(
+                    `❌ Error handling teacher creation for '${teacherName}':`,
+                    error
+                );
+                results.errors.push({
+                    type: "teacher_creation",
+                    teacher: teacherName,
+                    field: "Lärare",
+                    error: error.message,
+                    message: `Kunde inte skapa eller hitta lärare "${teacherName}": ${error.message}`,
+                    suggestion: `Kontrollera att lärarens namn i kolumnen 'Lärare' är korrekt angivet. Om läraren inte finns i systemet kommer en ny lärare att skapas automatiskt, men detta kan misslyckas om namnet är ogiltigt.`,
+                });
+            }
+        }
+
+        // Build normalized package map using coursePackageCode
         const allPackages = await CoursePackage.find({}).lean();
         const normalizedPackageMap = {};
         for (const pkg of allPackages) {
-            const norm = (pkg.coursePackageName || "")
-                .toString()
-                .trim()
-                .toUpperCase()
-                .replace(/\(.*?\)/g, "")
-                .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
-                .replace(/\s+/g, " ");
+            // Normalize code using the same function as Excel parser
+            const norm = normalizeCodeForMatching(pkg.coursePackageCode || "");
             normalizedPackageMap[norm] = pkg;
+            console.log(`[DEBUG] Package code mapping: "${pkg.coursePackageCode}" → "${norm}"`);
         }
+        console.log(`[DEBUG] Total packages in map: ${Object.keys(normalizedPackageMap).length}`);
 
-        // Build normalized course map
+        // Build normalized course map using courseCode
         const allCourses = await Course.find({}).lean();
         const normalizedCourseMap = {};
         for (const c of allCourses) {
-            const norm = (c.courseName || "")
-                .toString()
-                .trim()
-                .toUpperCase()
-                .replace(/\(.*?\)/g, "")
-                .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
-                .replace(/\s+/g, " ");
+            // Normalize code using the same function as Excel parser
+            const norm = normalizeCodeForMatching(c.courseCode || "");
             normalizedCourseMap[norm] = c;
+            console.log(`[DEBUG] Course code mapping: "${c.courseCode}" → "${norm}"`);
         }
+        console.log(`[DEBUG] Total courses in map: ${Object.keys(normalizedCourseMap).length}`);
 
         // Pre-validation: if any course or package entry cannot be matched, abort upload
         (function prevalidateUnmatchedCourses() {
             const reasons = [];
 
             function strictMatch(target, candidates) {
+                // First try exact match
                 if (candidates.includes(target)) return target;
-                // containment fallback (handles minor suffix/prefix differences)
-                const contain = candidates.find(
-                    (c) => c.includes(target) || target.includes(c)
-                );
-                if (contain) return contain;
-                // fuzzy fallback
+                
+                // Then try fuzzy match
                 let best = null;
                 let minDistance = Infinity;
                 for (const candidate of candidates) {
@@ -272,8 +283,15 @@ export const uploadStudentsForMatching = async (req, res) => {
                         best = candidate;
                     }
                 }
-                if (minDistance === 1) return best;
-                if (target.length >= 8 && minDistance <= 2) return best;
+                
+                // Allow fuzzy match based on code length and distance
+                // For short codes (<=8 chars): only exact match or distance 1
+                // For medium codes (9-12 chars): distance <= 1
+                // For long codes (>12 chars): distance <= 2
+                if (target.length <= 8 && minDistance <= 1) return best;
+                if (target.length > 8 && target.length <= 12 && minDistance <= 1) return best;
+                if (target.length > 12 && minDistance <= 2) return best;
+                
                 return null;
             }
 
@@ -284,16 +302,23 @@ export const uploadStudentsForMatching = async (req, res) => {
                     ? student.education
                     : [];
                 for (const entry of entries) {
-                    let normalized = (entry.name || "")
-                        .toString()
-                        .trim()
-                        .toUpperCase()
-                        .replace(/\(.*?\)/g, "")
-                        .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "")
-                        .replace(/\s+/g, " ");
-                    normalized = normalized.replace(/[-\s]*\d+\s*v$/i, "");
-                    normalized = normalized.replace(/[-\s]*\d+v$/i, "");
-                    normalized = normalized.replace(/\d+v$/i, "");
+                    // Skip empty entries
+                    if (!entry.name || !entry.name.trim()) {
+                        continue;
+                    }
+                    
+                    // Normalize the code/name using the same function as database codes
+                    // (entry.name already has cleanCourseName applied during parsing)
+                    const originalName = entry.name || "";
+                    let normalized = normalizeCodeForMatching(originalName);
+                    
+                    // Skip if normalization resulted in empty string
+                    if (!normalized) {
+                        console.warn(`[DEBUG] Skipping entry with empty normalized name: "${originalName}"`);
+                        continue;
+                    }
+                    
+                    console.log(`[DEBUG] Matching entry: "${originalName}" → normalized: "${normalized}"`);
                     const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
 
                     // Check if the normalized name exists in either Course or CoursePackage collections
@@ -305,25 +330,73 @@ export const uploadStudentsForMatching = async (req, res) => {
                         normalized,
                         Object.keys(normalizedCourseMap)
                     );
+                    
+                    console.log(`[DEBUG] Match results for "${normalized}": package=${matchPkg || 'none'}, course=${matchCourse || 'none'}`);
+                    console.log(`[DEBUG] Available package keys (first 10): ${Object.keys(normalizedPackageMap).slice(0, 10).join(', ')}`);
+                    console.log(`[DEBUG] Available course keys (first 10): ${Object.keys(normalizedCourseMap).slice(0, 10).join(', ')}`);
 
                     // If no match found in either collection, add to reasons
                     if (!matchCourse && !matchPkg) {
+                        // Find closest matches for suggestions
+                        const allCodes = [
+                            ...Object.keys(normalizedCourseMap),
+                            ...Object.keys(normalizedPackageMap),
+                        ];
+                        const suggestions = [];
+                        let bestMatch = null;
+                        let bestDistance = Infinity;
+                        
+                        for (const code of allCodes) {
+                            const dist = distance(normalized, code);
+                            if (dist < bestDistance) {
+                                bestDistance = dist;
+                                bestMatch = code;
+                            }
+                            if (dist <= 2 && suggestions.length < 3) {
+                                const matchItem = normalizedCourseMap[code] || normalizedPackageMap[code];
+                                if (matchItem) {
+                                    suggestions.push({
+                                        code: matchItem.courseCode || matchItem.coursePackageCode,
+                                        name: matchItem.courseName || matchItem.coursePackageName,
+                                        distance: dist,
+                                    });
+                                }
+                            }
+                        }
+                        
+                        // Sort suggestions by distance
+                        suggestions.sort((a, b) => a.distance - b.distance);
+                        
+                        const suggestionText = suggestions.length > 0
+                            ? ` Föreslagna matchningar: ${suggestions.map(s => `${s.code} (${s.name})`).join(", ")}.`
+                            : bestMatch && bestDistance <= 5
+                            ? ` Närmaste matchning: ${bestMatch} (avstånd: ${bestDistance}).`
+                            : "";
+                        
                         reasons.push({
                             type: "no_match",
                             student: studentIdLabel,
-                            courseName: entry.name,
-                            message: `No matching course or course package found for "${entry.name}" for student ${studentIdLabel}`,
+                            studentEmail: student.email || "",
+                            studentName: student.name || "",
+                            courseCode: entry.name,
+                            normalizedCode: normalized,
+                            message: `Ingen matchande kurs eller kurspaket hittades för koden "${entry.name}" för student ${studentIdLabel}.${suggestionText}`,
+                            suggestion: suggestions.length > 0
+                                ? `Kontrollera om du menade någon av de föreslagna koderna: ${suggestions.map(s => s.code).join(", ")}.`
+                                : "Kontrollera att kurskoden/paketkoden är korrekt stavad. Koder ska matcha exakt (t.ex. MATE2A00X, KVARVO).",
+                            suggestions: suggestions,
                         });
                     }
                 }
             }
 
             if (reasons.length > 0) {
-                const error = new Error(
-                    "Unmatched courses found; upload aborted."
-                );
+                const uniqueCodes = new Set(reasons.map(r => r.courseCode));
+                const errorSummary = `Hittade ${reasons.length} omatchade kurser/paket (${uniqueCodes.size} unika koder) i dokumentet.`;
+                const error = new Error(errorSummary);
                 error.statusCode = 422;
                 error.reasons = reasons;
+                error.detailedMessage = `Dokumentet innehåller ${reasons.length} kurser/paket som inte kunde matchas mot systemet. Detta kan bero på felstavade kurskoder eller att kurserna/paketen inte finns i systemet. Se detaljerna nedan för varje omatchad kod.`;
                 throw error;
             }
         })();
@@ -445,6 +518,7 @@ export const uploadStudentsForMatching = async (req, res) => {
                             );
                             normalizedMunicipality = fuzzyMatch;
                         } else {
+                            const allowedList = allowedMunicipalities.join(", ");
                             console.error(
                                 `[ERROR] Invalid municipality for student ${
                                     studentData.name ||
@@ -453,11 +527,30 @@ export const uploadStudentsForMatching = async (req, res) => {
                                 }:`,
                                 rawMunicipality
                             );
-                            throw new Error(
-                                `Invalid municipality: "${rawMunicipality}"`
+                            const error = new Error(
+                                `Ogiltig kommun för student ${studentData.name || studentData.email || "unknown"}: "${rawMunicipality}"`
                             );
+                            error.statusCode = 422;
+                            error.reasons = [{
+                                type: "invalid_municipality",
+                                student: studentData.name || studentData.email || "unknown",
+                                studentEmail: studentData.email || "",
+                                studentName: studentData.name || "",
+                                field: "KOMMUN/PRIVAT",
+                                fieldValue: rawMunicipality,
+                                message: `Ogiltig kommun "${rawMunicipality}" för student ${studentData.name || studentData.email || "unknown"}.`,
+                                suggestion: `Kommunen måste vara en av följande: ${allowedList}. Kontrollera stavningen i kolumnen 'KOMMUN/PRIVAT'.`,
+                                allowedMunicipalities: allowedMunicipalities,
+                            }];
+                            throw error;
                         }
                     }
+
+                    // Get the teacher for this specific student from the teacherMap
+                    const studentTeacherName = studentData.teacher?.trim() || "";
+                    const studentTeacherInfo = studentTeacherName
+                        ? teacherMap.get(studentTeacherName)
+                        : null;
 
                     dbStudent = new Student({
                         name: studentData.name,
@@ -473,8 +566,8 @@ export const uploadStudentsForMatching = async (req, res) => {
                         examTime: studentData.examTime || "",
                         exam: studentData.exam || "",
                         additionalInfo: studentData.additionalInfo || "",
-                        teacher: studentData.teacher || teacherName,
-                        teacherId: teacherInfo?._id || null,
+                        teacher: studentTeacherName,
+                        teacherId: studentTeacherInfo?._id || null,
                         dropout: studentData.dropout || false,
                         aplStatus: studentData.aplStatus || "GRAY",
                         education: [],
@@ -490,9 +583,14 @@ export const uploadStudentsForMatching = async (req, res) => {
                     );
                     results.students.push(dbStudent);
                 } else {
-                    // Update existing student with teacher if not already assigned
-                    if (teacherInfo && !dbStudent.teacherId) {
-                        dbStudent.teacherId = teacherInfo._id;
+                    // Update existing student with teacher from document if not already assigned
+                    const studentTeacherName = studentData.teacher?.trim() || "";
+                    const studentTeacherInfo = studentTeacherName
+                        ? teacherMap.get(studentTeacherName)
+                        : null;
+                    if (studentTeacherInfo && !dbStudent.teacherId) {
+                        dbStudent.teacherId = studentTeacherInfo._id;
+                        dbStudent.teacher = studentTeacherName;
                         await dbStudent.save();
                     }
                     results.students.push(dbStudent);
@@ -504,11 +602,24 @@ export const uploadStudentsForMatching = async (req, res) => {
                     }:`,
                     error
                 );
-                results.errors.push({
-                    studentName: studentData.name,
+                const errorDetails = {
+                    studentName: studentData.name || "Okänt namn",
+                    studentEmail: studentData.email || "Ingen e-post",
+                    studentPersonalNumber: studentData.personalNumber || "Inget personnummer",
                     type: "student_creation",
                     error: error.message,
-                });
+                    message: `Kunde inte skapa eller hitta student ${studentData.name || studentData.email || "okänd"}: ${error.message}`,
+                };
+                
+                // If it's a municipality error, include the reasons
+                if (error.reasons && Array.isArray(error.reasons)) {
+                    errorDetails.reasons = error.reasons;
+                    errorDetails.suggestion = "Kontrollera att kommunen är korrekt angiven i kolumnen 'KOMMUN/PRIVAT'.";
+                } else {
+                    errorDetails.suggestion = "Kontrollera att alla obligatoriska fält är korrekt ifyllda (NAMN, PERSONNUMMER, EMAIL, KOMMUN/PRIVAT).";
+                }
+                
+                results.errors.push(errorDetails);
                 continue; // Skip to next student
             }
 
@@ -533,15 +644,19 @@ export const uploadStudentsForMatching = async (req, res) => {
             const enrollmentsBefore = results.enrollments.length;
             for (const entry of studentData.education) {
                 console.log(`[DEBUG] Education entry (raw):`, entry);
-                let normalized = (entry.name || "")
-                    .toString()
-                    .trim()
-                    .toUpperCase()
-                    .replace(/[^A-Z0-9ÅÄÖ\s-]/gi, "");
-                // Remove trailing week extent patterns for package matching
-                normalized = normalized.replace(/[-\s]*\d+\s*v$/i, "");
-                normalized = normalized.replace(/[-\s]*\d+v$/i, "");
-                normalized = normalized.replace(/\d+v$/i, "");
+                // Normalize the code using the same function as database codes
+                // (entry.name already has cleanCourseName applied during parsing)
+                const originalName = entry.name || "";
+                let normalized = normalizeCodeForMatching(originalName);
+                
+                // Skip if normalization resulted in empty string
+                if (!normalized) {
+                    console.warn(`[DEBUG] Skipping entry with empty normalized name: "${originalName}"`);
+                    continue;
+                }
+                
+                console.log(`[DEBUG] Matching entry: "${originalName}" → normalized: "${normalized}"`);
+                
                 // Check if it's a course (ends with NIVÅ + number, or contains common course keywords)
                 // Treat as Course if it ends with common NIVÅ patterns: 1, 1A, 1B, 2A, 1A1, etc.
                 // Examples matched: "MATEMATIK NIVÅ 1B", "MATEMATIK NIVÅ 2A", "ANATOMI OCH FYSIOLOGI NIVÅ 1A1"
@@ -551,15 +666,27 @@ export const uploadStudentsForMatching = async (req, res) => {
                         normalized
                     );
 
-                // --- PATCH: Always prefer CoursePackage if name matches a package ---
+                // --- Determine type: Try to match against both CoursePackage and Course codes ---
                 let type = null;
-                if (normalizedPackageMap[normalized]) {
+                const matchesPackage = normalizedPackageMap[normalized];
+                const matchesCourse = normalizedCourseMap[normalized];
+                
+                if (matchesPackage) {
                     type = "CoursePackage";
                     console.log(
                         `[DEBUG] Name '${normalized}' matches a CoursePackage. Forcing type to CoursePackage.`
                     );
+                } else if (matchesCourse) {
+                    type = "Course";
+                    console.log(
+                        `[DEBUG] Name '${normalized}' matches a Course. Forcing type to Course.`
+                    );
                 } else {
+                    // No exact match found, use pattern-based detection
                     type = isCourse ? "Course" : "CoursePackage";
+                    console.log(
+                        `[DEBUG] No exact match for '${normalized}', using pattern-based type: ${type}`
+                    );
                 }
                 console.log(
                     `[DEBUG] Education entry (normalized): '${normalized}' | Type: ${type}`
@@ -662,9 +789,13 @@ export const uploadStudentsForMatching = async (req, res) => {
                             );
                             results.errors.push({
                                 studentName: dbStudent.name || dbStudent.email,
+                                studentEmail: dbStudent.email || "",
                                 type: "enrollment_error",
                                 error: err.message,
                                 packageName: pkg.coursePackageName,
+                                packageCode: pkg.coursePackageCode,
+                                message: `Kunde inte registrera student ${dbStudent.name || dbStudent.email || "okänd"} på kurspaketet ${pkg.coursePackageName} (${pkg.coursePackageCode}): ${err.message}`,
+                                suggestion: "Kontrollera att kurspaketet finns i systemet och att studentens start- och slutdatum är korrekt angivna.",
                             });
                         }
                     } else {
@@ -742,9 +873,12 @@ export const uploadStudentsForMatching = async (req, res) => {
                         );
                         results.errors.push({
                             studentName: dbStudent.name || dbStudent.email,
+                            studentEmail: dbStudent.email || "",
                             type: "enrollment_error",
                             error: err.message,
-                            courseName: entry.name,
+                            courseCode: entry.name,
+                            message: `Kunde inte registrera student ${dbStudent.name || dbStudent.email || "okänd"} på kursen ${entry.name}: ${err.message}`,
+                            suggestion: "Kontrollera att kurskoden är korrekt och att studentens start- och slutdatum är korrekt angivna.",
                         });
                     }
                 }
@@ -775,11 +909,19 @@ export const uploadStudentsForMatching = async (req, res) => {
 
             if (noNewEnrollments && !hasAnyCoursePackage) {
                 // No enrollments created for this student → treat as fatal error
+                const studentEducationCodes = studentData.education
+                    ?.map(e => e.name)
+                    .filter(Boolean)
+                    .join(", ") || "Inga kurser/paket angivna";
+                
                 zeroEnrollmentErrors.push({
                     type: "no_enrollments_created",
                     student: dbStudent.name || dbStudent.email || "unknown",
-                    message:
-                        "No courses could be matched or created for this student; upload refused.",
+                    studentEmail: dbStudent.email || "",
+                    studentName: dbStudent.name || "",
+                    educationCodes: studentEducationCodes,
+                    message: `Inga kurser kunde matchas eller skapas för student ${dbStudent.name || dbStudent.email || "okänd"}.`,
+                    suggestion: `Kontrollera att kurskoderna/paketkoderna (${studentEducationCodes}) är korrekta och finns i systemet. Se tidigare felmeddelanden för detaljer om omatchade kurser.`,
                 });
                 // Cleanup newly created student to avoid dangling records
                 if (wasStudentCreated && dbStudent?._id) {
@@ -836,11 +978,11 @@ export const uploadStudentsForMatching = async (req, res) => {
 
         // If any student ended with zero enrollments, abort entire upload
         if (zeroEnrollmentErrors.length > 0) {
-            const error = new Error(
-                "No enrollments created for one or more students; upload aborted."
-            );
+            const errorSummary = `${zeroEnrollmentErrors.length} student(er) kunde inte registreras på några kurser.`;
+            const error = new Error(errorSummary);
             error.statusCode = 422;
             error.reasons = zeroEnrollmentErrors;
+            error.detailedMessage = `Uppladdningen avbröts eftersom ${zeroEnrollmentErrors.length} student(er) inte kunde registreras på några kurser. Detta beror vanligtvis på att kurskoderna/paketkoderna inte kunde matchas. Se detaljerna nedan för varje student.`;
             throw error;
         }
 
@@ -864,12 +1006,51 @@ export const uploadStudentsForMatching = async (req, res) => {
         console.error("Error uploading students for matching:", error);
         const status = error.statusCode || 500;
         if (status === 422) {
-            return res.status(422).json({
-                error: "Unmatched courses found; upload aborted.",
+            // Build a comprehensive error response
+            const errorResponse = {
+                success: false,
+                error: error.message || "Valideringsfel: uppladdning avbruten.",
+                detailedMessage: error.detailedMessage || "Dokumentet innehåller fel som måste åtgärdas innan uppladdning kan fortsätta.",
                 reasons: error.reasons || [],
-            });
+                errorCount: error.reasons?.length || 0,
+                errorTypes: {},
+            };
+            
+            // Count error types for summary
+            if (error.reasons && Array.isArray(error.reasons)) {
+                error.reasons.forEach(reason => {
+                    const type = reason.type || "unknown";
+                    errorResponse.errorTypes[type] = (errorResponse.errorTypes[type] || 0) + 1;
+                });
+            }
+            
+            // Add helpful summary
+            const typeSummary = Object.entries(errorResponse.errorTypes)
+                .map(([type, count]) => {
+                    const typeNames = {
+                        "invalid_field": "Ogiltiga fält",
+                        "no_match": "Omatchade kurser/paket",
+                        "invalid_municipality": "Ogiltiga kommuner",
+                        "student_creation": "Student-skapande fel",
+                        "enrollment_error": "Registreringsfel",
+                        "no_enrollments_created": "Inga registreringar skapade",
+                    };
+                    return `${typeNames[type] || type}: ${count}`;
+                })
+                .join(", ");
+            
+            if (typeSummary) {
+                errorResponse.summary = `Feltyper: ${typeSummary}`;
+            }
+            
+            return res.status(422).json(errorResponse);
         }
-        res.status(500).json({ error: "Internal server error" });
+        res.status(500).json({ 
+            success: false,
+            error: "Ett internt serverfel uppstod vid bearbetning av filen.",
+            message: error.message || "Okänt fel",
+            suggestion: "Kontrollera att filen är i korrekt format (Excel .xlsx) och försök igen. Om problemet kvarstår, kontakta systemadministratören.",
+        });
     }
 };
 

@@ -53,7 +53,7 @@ export async function parseCourses(filePath) {
         if (!currentProgram || !courseName) continue;
 
         const course = await Course.findOneAndUpdate(
-            { courseName, courseCode },
+            { courseCode },
             { courseName, courseCode, coursePoints, courseExtent },
             { new: true, upsert: true }
         );

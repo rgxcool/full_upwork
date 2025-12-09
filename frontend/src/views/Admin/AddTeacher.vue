@@ -58,7 +58,12 @@
                   Behörigheter
                   <span class="required">*</span>
                 </label>
-                <div id="permissions" class="permissions-list" role="listbox" aria-multiselectable="true">
+                <div
+                  id="permissions"
+                  class="permissions-list"
+                  role="listbox"
+                  aria-multiselectable="true"
+                >
                   <div
                     v-for="opt in permissionsOptions"
                     :key="opt"
@@ -137,8 +142,8 @@
                   <div>
                     <strong>Automatisk lösenordsgenerering</strong>
                     <p>
-                      Ett säkert lösenord kommer att genereras automatiskt och visas efter att kontot
-                      skapats.
+                      Ett säkert lösenord kommer att genereras automatiskt och visas efter att
+                      kontot skapats.
                     </p>
                   </div>
                 </div>
@@ -162,8 +167,8 @@
                   <div>
                     <strong>Viktigt att komma ihåg</strong>
                     <p>
-                      Se till att dela lösenordet säkert med läraren och uppmana dem att ändra det vid
-                      första inloggning.
+                      Se till att dela lösenordet säkert med läraren och uppmana dem att ändra det
+                      vid första inloggning.
                     </p>
                   </div>
                 </div>
@@ -196,7 +201,11 @@
                     Ta bort
                   </button>
                 </div>
-                <button type="button" class="btn btn-outline-primary btn-sm mt-2" @click="addPhoneNumber">
+                <button
+                  type="button"
+                  class="btn btn-outline-primary btn-sm mt-2"
+                  @click="addPhoneNumber"
+                >
                   Lägg till telefonnummer
                 </button>
                 <small class="form-help">Lägg till ett eller flera telefonnummer.</small>
