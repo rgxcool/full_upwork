@@ -20,7 +20,7 @@ function extractMail(value) {
     return typeof value === "string" ? value.trim() : "";
 }
 
-// ✅ Clean course-like strings BEFORE fuzzy matching
+// ✅ Clean course-like strings for normalization (exact matching only)
 export function cleanCourseName(name) {
     if (!name) return "";
     return name

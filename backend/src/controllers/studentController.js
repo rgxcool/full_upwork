@@ -249,33 +249,8 @@ async function uploadXlsx(req, res) {
             const reasons = [];
 
             function strictMatch(target, candidates) {
-                // First try exact match
+                // Only exact match - no fuzzy matching
                 if (candidates.includes(target)) return target;
-
-                // Then try fuzzy match
-                let best = null;
-                let minDistance = Infinity;
-                for (const candidate of candidates) {
-                    const d = distance(target, candidate);
-                    if (d < minDistance) {
-                        minDistance = d;
-                        best = candidate;
-                    }
-                }
-
-                // Allow fuzzy match based on code length and distance
-                // For short codes (<=8 chars): only exact match or distance 1
-                // For medium codes (9-12 chars): distance <= 1
-                // For long codes (>12 chars): distance <= 2
-                if (target.length <= 8 && minDistance <= 1) return best;
-                if (
-                    target.length > 8 &&
-                    target.length <= 12 &&
-                    minDistance <= 1
-                )
-                    return best;
-                if (target.length > 12 && minDistance <= 2) return best;
-
                 return null;
             }
 
@@ -440,35 +415,9 @@ async function uploadXlsx(req, res) {
                         Object.keys(normalizedPackageMap)
                     );
 
-                    // Require exact match for packages/courses, allow fuzzy for close matches
+                    // Only exact match - no fuzzy matching
                     function strictMatch(target, candidates) {
-                        // First try exact match
                         if (candidates.includes(target)) return target;
-
-                        // Then try fuzzy match
-                        let best = null;
-                        let minDistance = Infinity;
-                        for (const candidate of candidates) {
-                            const d = distance(target, candidate);
-                            if (d < minDistance) {
-                                minDistance = d;
-                                best = candidate;
-                            }
-                        }
-
-                        // Allow fuzzy match based on code length and distance
-                        // For short codes (<=8 chars): only exact match or distance 1
-                        // For medium codes (9-12 chars): distance <= 1
-                        // For long codes (>12 chars): distance <= 2
-                        if (target.length <= 8 && minDistance <= 1) return best;
-                        if (
-                            target.length > 8 &&
-                            target.length <= 12 &&
-                            minDistance <= 1
-                        )
-                            return best;
-                        if (target.length > 12 && minDistance <= 2) return best;
-
                         return null;
                     }
 
