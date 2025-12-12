@@ -270,28 +270,8 @@ export const uploadStudentsForMatching = async (req, res) => {
             const reasons = [];
 
             function strictMatch(target, candidates) {
-                // First try exact match
+                // Only exact match - no fuzzy matching
                 if (candidates.includes(target)) return target;
-                
-                // Then try fuzzy match
-                let best = null;
-                let minDistance = Infinity;
-                for (const candidate of candidates) {
-                    const d = distance(target, candidate);
-                    if (d < minDistance) {
-                        minDistance = d;
-                        best = candidate;
-                    }
-                }
-                
-                // Allow fuzzy match based on code length and distance
-                // For short codes (<=8 chars): only exact match or distance 1
-                // For medium codes (9-12 chars): distance <= 1
-                // For long codes (>12 chars): distance <= 2
-                if (target.length <= 8 && minDistance <= 1) return best;
-                if (target.length > 8 && target.length <= 12 && minDistance <= 1) return best;
-                if (target.length > 12 && minDistance <= 2) return best;
-                
                 return null;
             }
 
@@ -693,33 +673,12 @@ export const uploadStudentsForMatching = async (req, res) => {
                 );
 
                 if (type === "CoursePackage") {
+                    // Only exact match - no fuzzy matching or fallback
                     let pkg = normalizedPackageMap[normalized];
                     if (!pkg) {
-                        // Fallback: try containment or small-distance fuzzy match against available package keys
-                        const keys = Object.keys(normalizedPackageMap);
-                        // containment first
-                        let key = keys.find(
-                            (k) =>
-                                k.includes(normalized) || normalized.includes(k)
+                        console.log(
+                            `[DEBUG] No exact package match found for: '${normalized}'`
                         );
-                        if (!key) {
-                            let best = null;
-                            let minDist = Infinity;
-                            for (const k of keys) {
-                                const d = distance(normalized, k);
-                                if (d < minDist) {
-                                    minDist = d;
-                                    best = k;
-                                }
-                            }
-                            if (minDist <= 2) key = best;
-                        }
-                        if (key) {
-                            pkg = normalizedPackageMap[key];
-                            console.log(
-                                `[DEBUG] Fallback matched package: '${normalized}' → '${key}'`
-                            );
-                        }
                     }
                     if (pkg) {
                         console.log(
