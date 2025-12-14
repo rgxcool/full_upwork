@@ -81,6 +81,10 @@ export async function calculateSlutprovDate(teacher, courseEndDate) {
 
     // Normalize teacher name for comparison (case-insensitive, trim)
     const normalizedName = teacherUsername.trim().toLowerCase();
+    
+    // Debug logging
+    console.log(`📅 Calculating slutprovDate for teacher: "${teacherUsername}" (normalized: "${normalizedName}")`);
+    console.log(`📅 Course end date: ${courseEndDate.toISOString().split('T')[0]}`);
 
     // Helper function to get a specific day of the week before a date
     const getDayOfWeekBefore = (date, targetDay) => {
@@ -127,43 +131,57 @@ export async function calculateSlutprovDate(teacher, courseEndDate) {
     };
 
     // Check teacher name and apply appropriate rule
+    // Get the first word of the name (in case it's "Allan Smith" or "Maja Andersson")
+    const firstName = normalizedName.split(/\s+/)[0];
+    
     if (
         ["allan", "iman", "maja", "mette"].some((name) =>
-            normalizedName.includes(name)
+            firstName === name || normalizedName.includes(name)
         )
     ) {
         // Saturday the week before course end
-        return getDayOfWeekInPreviousWeek(courseEndDate, 6); // 6 = Saturday
+        const result = getDayOfWeekInPreviousWeek(courseEndDate, 6); // 6 = Saturday
+        console.log(`📅 ✅ Matched Allan/Iman/Maja/Mette rule - Calculated Saturday: ${result.toISOString().split('T')[0]}`);
+        return result;
     }
 
-    if (normalizedName.includes("eva")) {
+    if (firstName === "eva" || normalizedName.includes("eva")) {
         // Thursday the day before course end
         // Find the Thursday that is immediately before the course end date
         // If course ends on Friday, test is Thursday (day before)
         // If course ends on another day, find the previous Thursday
-        return getDayOfWeekBefore(courseEndDate, 4); // 4 = Thursday
+        const result = getDayOfWeekBefore(courseEndDate, 4); // 4 = Thursday
+        console.log(`📅 ✅ Matched Eva rule - Calculated Thursday: ${result.toISOString().split('T')[0]}`);
+        return result;
     }
 
-    if (normalizedName.includes("mirsada")) {
+    if (firstName === "mirsada" || normalizedName.includes("mirsada")) {
         // Wednesday the week before course end
-        return getDayOfWeekInPreviousWeek(courseEndDate, 3); // 3 = Wednesday
+        const result = getDayOfWeekInPreviousWeek(courseEndDate, 3); // 3 = Wednesday
+        console.log(`📅 ✅ Matched Mirsada rule - Calculated Wednesday: ${result.toISOString().split('T')[0]}`);
+        return result;
     }
 
     if (
         ["elham", "linnea", "linnéa", "ulrika", "jonathan"].some((name) =>
-            normalizedName.includes(name)
+            firstName === name || normalizedName.includes(name)
         )
     ) {
         // Sunday the week before course end
-        return getDayOfWeekInPreviousWeek(courseEndDate, 0); // 0 = Sunday
+        const result = getDayOfWeekInPreviousWeek(courseEndDate, 0); // 0 = Sunday
+        console.log(`📅 ✅ Matched Elham/Linnéa/Ulrika/Jonathan rule - Calculated Sunday: ${result.toISOString().split('T')[0]}`);
+        return result;
     }
 
-    if (normalizedName.includes("angelina")) {
+    if (firstName === "angelina" || normalizedName.includes("angelina")) {
         // Default: Wednesday the week before course end
-        return getDayOfWeekInPreviousWeek(courseEndDate, 3); // 3 = Wednesday
+        const result = getDayOfWeekInPreviousWeek(courseEndDate, 3); // 3 = Wednesday
+        console.log(`📅 ✅ Matched Angelina rule - Calculated Wednesday: ${result.toISOString().split('T')[0]}`);
+        return result;
     }
 
     // No matching rule
+    console.log(`📅 ⚠️ No matching rule found for teacher: "${teacherUsername}"`);
     return null;
 }
 
