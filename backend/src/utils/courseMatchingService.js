@@ -107,19 +107,29 @@ class CourseMatchingService {
         if (existingInstance) {
             let needsSave = false;
 
-            // Always set slutprovDate to the explicit value if provided
-            if (slutprovDate) {
+            // Update responsibleTeacher if provided
+            if (responsibleTeacherId && existingInstance.responsibleTeacher?.toString() !== responsibleTeacherId.toString()) {
+                existingInstance.responsibleTeacher = responsibleTeacherId;
+                needsSave = true;
+            }
+
+            // Only set slutprovDate if explicitly provided AND there's no teacher
+            // If there's a teacher, let the pre-save hook calculate it based on teacher rules
+            if (slutprovDate && !responsibleTeacherId) {
                 existingInstance.slutprovDate = slutprovDate;
                 needsSave = true;
                 console.log(
                     `[FORCE PATCH] Set slutprovDate for course instance: ${existingInstance.courseName} to ${slutprovDate}`
                 );
-            }
-
-            // Update responsibleTeacher if provided
-            if (responsibleTeacherId && existingInstance.responsibleTeacher?.toString() !== responsibleTeacherId.toString()) {
-                existingInstance.responsibleTeacher = responsibleTeacherId;
-                needsSave = true;
+            } else if (responsibleTeacherId && !slutprovDate) {
+                // Teacher is set but no explicit date - clear existing date to let pre-save hook recalculate
+                if (existingInstance.slutprovDate) {
+                    existingInstance.slutprovDate = undefined;
+                    needsSave = true;
+                    console.log(
+                        `[FORCE PATCH] Cleared slutprovDate for course instance: ${existingInstance.courseName} to let pre-save hook recalculate based on teacher rules`
+                    );
+                }
             }
 
             // Save if any changes were made (this will trigger pre-save hook for auto-calculation)
@@ -141,6 +151,10 @@ class CourseMatchingService {
             throw new Error(`Main course not found: ${mainCourseId}`);
         }
 
+        // Only set slutprovDate if explicitly provided AND there's no teacher
+        // If there's a teacher, let the pre-save hook calculate it based on teacher rules
+        const shouldSetSlutprovDate = slutprovDate && !responsibleTeacherId;
+
         const newInstance = new CourseInstance({
             mainCourseId,
             startDate,
@@ -152,7 +166,8 @@ class CourseMatchingService {
             createdBy: userId,
             responsibleTeacher: responsibleTeacherId || undefined,
             notes: `Auto-created for student enrollment (${startDate.toDateString()} - ${endDate.toDateString()})`,
-            slutprovDate: slutprovDate || undefined,
+            // Only set slutprovDate if explicitly provided and no teacher (let pre-save hook calculate for teachers)
+            slutprovDate: shouldSetSlutprovDate ? slutprovDate : undefined,
         });
 
         await newInstance.save();
@@ -248,21 +263,29 @@ class CourseMatchingService {
                         `[DEBUG] entry.slutprovDate for course ${entry.name}:`,
                         entry.slutprovDate
                     );
-                    let slutprovDate;
+                    let slutprovDate = null;
                     if (entry.slutprovDate) {
+                        // Use explicit slutprovDate if provided
                         slutprovDate = new Date(entry.slutprovDate);
                         console.log(
                             `[DEBUG] Using explicit slutprovDate for course ${entry.name}:`,
                             slutprovDate
                         );
-                    } else {
+                    } else if (!entry.teacherId) {
+                        // Only use fallback Wednesday if there's no teacher
+                        // If there's a teacher, let the pre-save hook calculate based on teacher rules
                         slutprovDate = this.getWednesdayOfWeek(
                             new Date(entry.startDate),
                             4
                         );
                         console.log(
-                            `[DEBUG] Using fallback slutprovDate for course ${entry.name}:`,
+                            `[DEBUG] Using fallback slutprovDate (no teacher) for course ${entry.name}:`,
                             slutprovDate
+                        );
+                    } else {
+                        // Teacher is set but no explicit date - let pre-save hook calculate
+                        console.log(
+                            `[DEBUG] No slutprovDate provided, teacher ${entry.teacherId} set - will auto-calculate based on teacher rules`
                         );
                     }
 

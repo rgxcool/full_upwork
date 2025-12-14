@@ -134,18 +134,24 @@ export async function calculateSlutprovDate(teacher, courseEndDate) {
     // Get the first word of the name (in case it's "Allan Smith" or "Maja Andersson")
     const firstName = normalizedName.split(/\s+/)[0];
     
-    if (
-        ["allan", "iman", "maja", "mette"].some((name) =>
-            firstName === name || normalizedName.includes(name)
-        )
-    ) {
-        // Saturday the week before course end
+    // Helper function to check if name matches (exact first name match or whole name contains the name as a word)
+    const nameMatches = (targetName) => {
+        // Exact first name match
+        if (firstName === targetName) return true;
+        // Check if the normalized name contains the target name as a whole word (not substring)
+        const nameRegex = new RegExp(`\\b${targetName}\\b`, 'i');
+        return nameRegex.test(normalizedName);
+    };
+    
+    // Allan/Iman/Maja/Mette - Saturday the week before course end
+    if (["allan", "iman", "maja", "mette"].some(name => nameMatches(name))) {
         const result = getDayOfWeekInPreviousWeek(courseEndDate, 6); // 6 = Saturday
         console.log(`📅 ✅ Matched Allan/Iman/Maja/Mette rule - Calculated Saturday: ${result.toISOString().split('T')[0]}`);
         return result;
     }
 
-    if (firstName === "eva" || normalizedName.includes("eva")) {
+    // Eva - Thursday the day before course end
+    if (nameMatches("eva")) {
         // Thursday the day before course end
         // Find the Thursday that is immediately before the course end date
         // If course ends on Friday, test is Thursday (day before)
@@ -155,26 +161,22 @@ export async function calculateSlutprovDate(teacher, courseEndDate) {
         return result;
     }
 
-    if (firstName === "mirsada" || normalizedName.includes("mirsada")) {
-        // Wednesday the week before course end
+    // Mirsada - Wednesday the week before course end
+    if (nameMatches("mirsada")) {
         const result = getDayOfWeekInPreviousWeek(courseEndDate, 3); // 3 = Wednesday
         console.log(`📅 ✅ Matched Mirsada rule - Calculated Wednesday: ${result.toISOString().split('T')[0]}`);
         return result;
     }
 
-    if (
-        ["elham", "linnea", "linnéa", "ulrika", "jonathan"].some((name) =>
-            firstName === name || normalizedName.includes(name)
-        )
-    ) {
-        // Sunday the week before course end
+    // Elham/Linnéa/Ulrika/Jonathan - Sunday the week before course end
+    if (["elham", "linnea", "linnéa", "ulrika", "jonathan"].some(name => nameMatches(name))) {
         const result = getDayOfWeekInPreviousWeek(courseEndDate, 0); // 0 = Sunday
         console.log(`📅 ✅ Matched Elham/Linnéa/Ulrika/Jonathan rule - Calculated Sunday: ${result.toISOString().split('T')[0]}`);
         return result;
     }
 
-    if (firstName === "angelina" || normalizedName.includes("angelina")) {
-        // Default: Wednesday the week before course end
+    // Angelina - Plans her own (default: Wednesday the week before course end)
+    if (nameMatches("angelina")) {
         const result = getDayOfWeekInPreviousWeek(courseEndDate, 3); // 3 = Wednesday
         console.log(`📅 ✅ Matched Angelina rule - Calculated Wednesday: ${result.toISOString().split('T')[0]}`);
         return result;
