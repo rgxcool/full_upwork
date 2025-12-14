@@ -233,6 +233,132 @@ router.get("/calendar-events", authenticateUser, async (req, res) => {
     }
 });
 
+// IMPORTANT: This route must come BEFORE /calendar-events/:id to avoid route conflicts
+router.put(
+    "/calendar-events/move-group",
+    authenticateUser,
+    async (req, res) => {
+        try {
+            const { teacherId, fromDate, toDate, courseInstanceIds } = req.body;
+            if (!teacherId || !fromDate || !toDate) {
+                return res
+                    .status(400)
+                    .json({ error: "Missing teacherId, fromDate or toDate" });
+            }
+
+            // Permission check: Only admins or the responsible teacher can move events
+            const isAdmin = ["admin", "systemadmin"].includes(req.user.role);
+            let isResponsibleTeacher = false;
+
+            if (req.user.role === "teacher") {
+                const teacher = await Teacher.findOne({
+                    userId: req.user.userId,
+                });
+                if (
+                    teacher &&
+                    teacher._id.toString() === teacherId.toString()
+                ) {
+                    isResponsibleTeacher = true;
+                }
+            }
+
+            if (!isAdmin && !isResponsibleTeacher) {
+                return res.status(403).json({
+                    error: "Only admins or the responsible teacher can move exam dates",
+                });
+            }
+
+            const fromKey = new Date(fromDate);
+            const toKey = new Date(toDate);
+            const fromLocal = new Date(
+                fromKey.getFullYear(),
+                fromKey.getMonth(),
+                fromKey.getDate()
+            );
+            const toLocal = new Date(
+                toKey.getFullYear(),
+                toKey.getMonth(),
+                toKey.getDate()
+            );
+
+            // Update enrollments for this teacher on fromDate
+            const enrollmentsUpdated = await StudentEnrollment.updateMany(
+                {
+                    teacherId,
+                    slutprovDate: {
+                        $gte: new Date(
+                            fromLocal.toISOString().split("T")[0] +
+                                "T00:00:00.000Z"
+                        ),
+                        $lte: new Date(
+                            fromLocal.toISOString().split("T")[0] +
+                                "T23:59:59.999Z"
+                        ),
+                    },
+                },
+                { $set: { slutprovDate: toLocal } }
+            );
+
+            // Update CourseInstance.slutprovDate if courseInstanceIds are provided
+            let courseInstancesUpdated = 0;
+            if (
+                courseInstanceIds &&
+                Array.isArray(courseInstanceIds) &&
+                courseInstanceIds.length > 0
+            ) {
+                const { default: CourseInstance } = await import(
+                    "../models/CourseInstance.js"
+                );
+                const result = await CourseInstance.updateMany(
+                    {
+                        _id: { $in: courseInstanceIds },
+                        responsibleTeacher: teacherId,
+                        slutprovDate: {
+                            $gte: new Date(
+                                fromLocal.toISOString().split("T")[0] +
+                                    "T00:00:00.000Z"
+                            ),
+                            $lte: new Date(
+                                fromLocal.toISOString().split("T")[0] +
+                                    "T23:59:59.999Z"
+                            ),
+                        },
+                    },
+                    { $set: { slutprovDate: toLocal } }
+                );
+                courseInstancesUpdated = result.modifiedCount;
+            }
+
+            // Update students with manual finalExamDate for this teacher on fromDate
+            const students = await Student.find({
+                teacherId,
+                finalExamDate: {
+                    $gte: new Date(
+                        fromLocal.toISOString().split("T")[0] + "T00:00:00.000Z"
+                    ),
+                    $lte: new Date(
+                        fromLocal.toISOString().split("T")[0] + "T23:59:59.999Z"
+                    ),
+                },
+            });
+            for (const s of students) {
+                s.finalExamDate = toLocal;
+                await s.save();
+            }
+
+            res.json({
+                message: "Group moved",
+                enrollmentsModified: enrollmentsUpdated.modifiedCount,
+                courseInstancesModified: courseInstancesUpdated,
+                studentsModified: students.length,
+            });
+        } catch (error) {
+            console.error("❌ Failed to move group:", error);
+            res.status(500).json({ error: "Failed to move group" });
+        }
+    }
+);
+
 router.put("/calendar-events/:id", async (req, res) => {
     try {
         const { id } = req.params;
@@ -320,6 +446,7 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         )
             .populate("studentId")
             .populate("mainCourseId")
+            .populate("courseInstanceId")
             .populate({
                 path: "teacherId",
                 populate: { path: "userId", select: "username" },
@@ -776,6 +903,7 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                             examLocation: eventExamLocation,
                             examTime: eventExamTime,
                             courseName: course.courseName,
+                            courseInstanceIds: [],
                             students: [],
                         },
                     };
@@ -787,6 +915,22 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                 ].extendedProps.students.findIndex(
                     (s) => s._id.toString() === student._id.toString()
                 );
+
+                // Add courseInstanceId to the array if not already present
+                if (enrollment.courseInstanceId) {
+                    const instanceId =
+                        enrollment.courseInstanceId._id?.toString() ||
+                        enrollment.courseInstanceId.toString();
+                    if (
+                        !grouped[key].extendedProps.courseInstanceIds.includes(
+                            instanceId
+                        )
+                    ) {
+                        grouped[key].extendedProps.courseInstanceIds.push(
+                            instanceId
+                        );
+                    }
+                }
 
                 if (existingStudentIndex === -1) {
                     // Student not in event yet, add them
@@ -802,6 +946,10 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                         examLocation,
                         courseName: course.courseName,
                         finalExamDate: enrollment.slutprovDate, // Use the enrollment's exam date
+                        courseInstanceId:
+                            enrollment.courseInstanceId?._id?.toString() ||
+                            enrollment.courseInstanceId?.toString() ||
+                            null,
                     });
                 } else {
                     // Student already exists, update their course info (they might have multiple courses)
@@ -1380,76 +1528,3 @@ router.get("/exams/student/:studentId", async (req, res) => {
         res.status(500).json({ error: "Failed to list student exams" });
     }
 });
-
-// --- Move grouped exams (teacher + date -> newDate) ---
-router.put(
-    "/calendar-events/move-group",
-    authenticateUser,
-    async (req, res) => {
-        try {
-            const { teacherId, fromDate, toDate } = req.body;
-            if (!teacherId || !fromDate || !toDate) {
-                return res
-                    .status(400)
-                    .json({ error: "Missing teacherId, fromDate or toDate" });
-            }
-
-            const fromKey = new Date(fromDate);
-            const toKey = new Date(toDate);
-            const fromLocal = new Date(
-                fromKey.getFullYear(),
-                fromKey.getMonth(),
-                fromKey.getDate()
-            );
-            const toLocal = new Date(
-                toKey.getFullYear(),
-                toKey.getMonth(),
-                toKey.getDate()
-            );
-
-            // Update enrollments for this teacher on fromDate
-            const enrollmentsUpdated = await StudentEnrollment.updateMany(
-                {
-                    teacherId,
-                    slutprovDate: {
-                        $gte: new Date(
-                            fromLocal.toISOString().split("T")[0] +
-                                "T00:00:00.000Z"
-                        ),
-                        $lte: new Date(
-                            fromLocal.toISOString().split("T")[0] +
-                                "T23:59:59.999Z"
-                        ),
-                    },
-                },
-                { $set: { slutprovDate: toLocal } }
-            );
-
-            // Update students with manual finalExamDate for this teacher on fromDate
-            const students = await Student.find({
-                teacherId,
-                finalExamDate: {
-                    $gte: new Date(
-                        fromLocal.toISOString().split("T")[0] + "T00:00:00.000Z"
-                    ),
-                    $lte: new Date(
-                        fromLocal.toISOString().split("T")[0] + "T23:59:59.999Z"
-                    ),
-                },
-            });
-            for (const s of students) {
-                s.finalExamDate = toLocal;
-                await s.save();
-            }
-
-            res.json({
-                message: "Group moved",
-                enrollmentsModified: enrollmentsUpdated.modifiedCount,
-                studentsModified: students.length,
-            });
-        } catch (error) {
-            console.error("❌ Failed to move group:", error);
-            res.status(500).json({ error: "Failed to move group" });
-        }
-    }
-);

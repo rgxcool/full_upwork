@@ -82,6 +82,30 @@ courseInstanceSchema.pre("validate", function (next) {
     next();
 });
 
+// Auto-calculate slutprovDate based on teacher and course end date
+courseInstanceSchema.pre("save", async function (next) {
+    // Only auto-calculate if:
+    // 1. responsibleTeacher is set
+    // 2. endDate is set
+    // 3. slutprovDate is not already manually set (allow manual override)
+    if (this.responsibleTeacher && this.endDate && !this.slutprovDate) {
+        try {
+            const { calculateSlutprovDate } = await import("../utils/slutprovDateCalculator.js");
+            const calculatedDate = await calculateSlutprovDate(this.responsibleTeacher, this.endDate);
+            if (calculatedDate) {
+                this.slutprovDate = calculatedDate;
+                console.log(
+                    `📅 Auto-calculated slutprovDate for course "${this.courseName}": ${calculatedDate.toDateString()}`
+                );
+            }
+        } catch (error) {
+            console.error("Error calculating slutprovDate:", error);
+            // Don't fail the save if calculation fails
+        }
+    }
+    next();
+});
+
 // Method to check if instance overlaps with date range
 courseInstanceSchema.methods.overlapsWith = function (startDate, endDate) {
     return this.startDate < endDate && this.endDate > startDate;
