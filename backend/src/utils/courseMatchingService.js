@@ -105,14 +105,28 @@ class CourseMatchingService {
         });
 
         if (existingInstance) {
+            let needsSave = false;
+
             // Always set slutprovDate to the explicit value if provided
             if (slutprovDate) {
                 existingInstance.slutprovDate = slutprovDate;
-                await existingInstance.save();
+                needsSave = true;
                 console.log(
                     `[FORCE PATCH] Set slutprovDate for course instance: ${existingInstance.courseName} to ${slutprovDate}`
                 );
             }
+
+            // Update responsibleTeacher if provided
+            if (responsibleTeacherId && existingInstance.responsibleTeacher?.toString() !== responsibleTeacherId.toString()) {
+                existingInstance.responsibleTeacher = responsibleTeacherId;
+                needsSave = true;
+            }
+
+            // Save if any changes were made (this will trigger pre-save hook for auto-calculation)
+            if (needsSave) {
+                await existingInstance.save();
+            }
+
             console.log(
                 `✅ Found existing course instance: ${
                     existingInstance.courseName

@@ -1356,7 +1356,32 @@ export const updateCourseInstance = async (req, res) => {
             return res.status(404).json({ error: "Course instance not found" });
         }
 
+        // Check if we need to recalculate slutprovDate
+        const teacherChanged = updateData.responsibleTeacher !== undefined;
+        const endDateChanged = updateData.endDate !== undefined;
+        const slutprovDateExplicitlySet = updateData.slutprovDate !== undefined;
+
+        // If teacher or endDate is changing, and slutprovDate is not explicitly set in this update,
+        // we should recalculate it based on the new teacher/endDate
+        if ((teacherChanged || endDateChanged) && !slutprovDateExplicitlySet) {
+            const newTeacher = updateData.responsibleTeacher || instance.responsibleTeacher;
+            const newEndDate = updateData.endDate ? new Date(updateData.endDate) : instance.endDate;
+
+            // Auto-calculate if teacher is set
+            if (newTeacher && newEndDate) {
+                const { calculateSlutprovDate } = await import("../utils/slutprovDateCalculator.js");
+                const calculatedDate = await calculateSlutprovDate(newTeacher, newEndDate);
+                if (calculatedDate) {
+                    updateData.slutprovDate = calculatedDate;
+                    console.log(
+                        `📅 Auto-calculated slutprovDate on update for course "${instance.courseName}": ${calculatedDate.toDateString()}`
+                    );
+                }
+            }
+        }
+
         // Update the instance with the provided data
+        // Use findOneAndUpdate and then save() to trigger pre-save hooks, or manually set
         const updatedInstance = await CourseInstance.findByIdAndUpdate(
             instanceId,
             updateData,

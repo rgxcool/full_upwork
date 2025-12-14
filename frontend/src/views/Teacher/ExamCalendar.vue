@@ -78,6 +78,7 @@ export default {
       showAddEventModal: false,
       eventType: null,
       teachers: [],
+      currentTeacherId: null,
       calendarOptions: {
         plugins: [dayGridPlugin, interactionPlugin],
         initialView: 'dayGridWeek',
@@ -156,6 +157,16 @@ export default {
             color: t.colorCode,
             subject: t.subject
           }));
+
+        // If user is a teacher, find their teacher ID
+        if (this.userRole === "teacher") {
+          const currentUserId = this.$store.state.user?.userId;
+          const teacher = res.data.find(t => t.userId?._id?.toString() === currentUserId?.toString() || 
+                                            t.userId?.toString() === currentUserId?.toString());
+          if (teacher) {
+            this.currentTeacherId = teacher._id.toString();
+          }
+        }
       } catch (err) {
         console.error("❌ Kunde inte hämta lärare:", err);
       }
@@ -217,15 +228,31 @@ export default {
             color: event.color || "#999999",
             extendedProps: { ...(event.extendedProps || {}), saved: true }
           })),
-          ...syncedEvents.data.map(event => ({
-            id: event.id, // comes from /calendar-events/syncable
-            title: event.title,
-            start: event.start,
-            allDay: true,
-            color: event.color || "#999999",
-            editable: false, // prevent drag on synced (derived) events
-            extendedProps: { ...(event.extendedProps || {}), synced: true }
-          })),
+          ...syncedEvents.data.map(event => {
+            // Make synced events editable for admins and the responsible teacher
+            const isAdmin = ["admin", "systemadmin"].includes(this.userRole);
+            const eventTeacherId = event.extendedProps?.teacherId?._id?.toString() || 
+                                   event.extendedProps?.teacherId?.toString();
+            const isResponsibleTeacher = eventTeacherId && 
+              this.userRole === "teacher" &&
+              this.currentTeacherId === eventTeacherId;
+            const isEditable = isAdmin || isResponsibleTeacher;
+
+            return {
+              id: event.id, // comes from /calendar-events/syncable
+              title: event.title,
+              start: event.start,
+              allDay: true,
+              color: event.color || "#999999",
+              editable: isEditable, // allow drag for admins and responsible teachers
+              extendedProps: { 
+                ...(event.extendedProps || {}), 
+                synced: true,
+                courseInstanceIds: event.extendedProps?.courseInstanceIds || [],
+                teacherId: eventTeacherId
+              }
+            };
+          }),
           ...meetings.data.map(meeting => ({
             id: meeting._id,
             title: meeting.title,
@@ -292,7 +319,44 @@ export default {
       const isSavedCalendarEvent = info.event.extendedProps?.saved === true;
       const isSynced = info.event.extendedProps?.synced === true;
 
-      // Guard: do not allow dragging of synced (derived) events without a real DB id
+      // Handle synced events (from course instances/enrollments)
+      if (isSynced && !isMeeting && !isSavedCalendarEvent) {
+        const teacherId = info.event.extendedProps?.teacherId;
+        // Get the original date from oldEvent or calculate from delta
+        const oldStart = info.oldEvent?.start || info.event.start;
+        const newStart = info.event.start;
+        const fromDate = oldStart ? new Date(oldStart).toISOString().split('T')[0] : null;
+        const toDate = newStart ? new Date(newStart).toISOString().split('T')[0] : null;
+        const courseInstanceIds = info.event.extendedProps?.courseInstanceIds || [];
+
+        if (!teacherId || !fromDate || !toDate) {
+          console.warn('🟠 Synced event missing required data:', { teacherId, fromDate, toDate });
+          info.revert();
+          return;
+        }
+
+        import('@/store/store.js').then(({ api }) => {
+          api
+            .put('/calendar-events/move-group', {
+              teacherId,
+              fromDate,
+              toDate,
+              courseInstanceIds
+            }, { withCredentials: true })
+            .then(() => {
+              console.log("✅ Synced event moved successfully!");
+              // Refresh events to show updated dates
+              this.fetchEvents();
+            })
+            .catch((err) => {
+              console.error("❌ Kunde inte flytta synced event:", err.response?.data || err.message);
+              info.revert();
+            });
+        });
+        return;
+      }
+
+      // Guard: do not allow dragging of other synced events without a real DB id
       if (!isMeeting && !isSavedCalendarEvent) {
         console.warn('🟠 Dragging is only allowed for sparade kalender-händelser och möten.');
         info.revert();
@@ -324,6 +388,7 @@ export default {
     }, 
   },
   async mounted() {
+    await this.fetchTeachers();
     await this.fetchEvents();
   }
 };
