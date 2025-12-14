@@ -6,11 +6,39 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
 
-//Generate Random Color for the colorCode in TeacherProfile
-function generateRandomColor() {
-    return `#${Math.floor(Math.random() * 16777215)
-        .toString(16)
-        .padStart(6, "0")}`;
+// Predefined color list for teacher profiles
+const TEACHER_COLORS = [
+    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', 
+    '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', 
+    '#ffffff', '#000000'
+];
+
+/**
+ * Get the next available color from the predefined list
+ * Ensures each teacher gets a unique color
+ */
+async function getNextAvailableColor() {
+    try {
+        // Get all existing teachers and their colors
+        const existingTeachers = await Teacher.find({}, 'colorCode');
+        const usedColors = new Set(existingTeachers.map(t => t.colorCode).filter(Boolean));
+        
+        // Find the first color in the list that's not used
+        for (const color of TEACHER_COLORS) {
+            if (!usedColors.has(color)) {
+                return color;
+            }
+        }
+        
+        // If all colors are used, cycle through the list
+        // This shouldn't happen with 22 colors, but handle it gracefully
+        const index = existingTeachers.length % TEACHER_COLORS.length;
+        return TEACHER_COLORS[index];
+    } catch (error) {
+        console.error('Error getting next available color:', error);
+        // Fallback to first color if there's an error
+        return TEACHER_COLORS[0];
+    }
 }
 
 // Function to generate a strong random password
@@ -143,9 +171,10 @@ router.post(
             const savedUser = await user.save();
 
             // Create new Teacher linked to the User
+            const teacherColor = colorCode || await getNextAvailableColor();
             const teacher = new Teacher({
                 userId: savedUser._id,
-                colorCode: colorCode || generateRandomColor(),
+                colorCode: teacherColor,
                 subject: (subject || "").trim(),
                 phoneNumbers: Array.isArray(phoneNumbers)
                     ? phoneNumbers.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => p.trim())
@@ -215,9 +244,10 @@ router.post("/teacher", async (req, res) => {
         const savedUser = await user.save();
 
         // Create new Teacher linked to the User
+        const teacherColor = colorCode || await getNextAvailableColor();
         const teacher = new Teacher({
             userId: savedUser._id,
-            colorCode: colorCode || generateRandomColor(),
+            colorCode: teacherColor,
             subject: subject || "Övrigt", // Default subject if not provided
             phoneNumbers: Array.isArray(phoneNumbers)
                 ? phoneNumbers.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => p.trim())

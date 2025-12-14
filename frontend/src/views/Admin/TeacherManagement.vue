@@ -803,46 +803,40 @@
         }
       },
 
-      generateRandomColor() {
-        const hue = Math.floor(Math.random() * 360)
-        const saturation = 65 + Math.floor(Math.random() * 30)
-        const lightness = 45 + Math.floor(Math.random() * 20)
-
-        const hslToHex = (h, s, l) => {
-          l /= 100
-          const a = (s * Math.min(l, 1 - l)) / 100
-          const f = (n) => {
-            const k = (n + h / 30) % 12
-            const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
-            return Math.round(255 * color)
-              .toString(16)
-              .padStart(2, '0')
+      // Predefined color list for teacher profiles
+      getNextAvailableColor(excludeColor = null) {
+        const TEACHER_COLORS = [
+          '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', 
+          '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', 
+          '#ffffff', '#000000'
+        ]
+        
+        // Get all used colors from existing teachers
+        const usedColors = new Set(
+          this.teachers
+            .map(t => t.colorCode)
+            .filter(Boolean)
+            .filter(color => color !== excludeColor) // Exclude the current teacher's color when editing
+        )
+        
+        // Find the first color in the list that's not used
+        for (const color of TEACHER_COLORS) {
+          if (!usedColors.has(color)) {
+            return color
           }
-          return `#${f(0)}${f(8)}${f(4)}`
         }
+        
+        // If all colors are used, cycle through the list
+        const index = this.teachers.length % TEACHER_COLORS.length
+        return TEACHER_COLORS[index]
+      },
 
-        this.editingTeacher.colorCode = hslToHex(hue, saturation, lightness)
+      generateRandomColor() {
+        this.editingTeacher.colorCode = this.getNextAvailableColor(this.editingTeacher.colorCode)
       },
 
       generateRandomColorForNew() {
-        const hue = Math.floor(Math.random() * 360)
-        const saturation = 65 + Math.floor(Math.random() * 30)
-        const lightness = 45 + Math.floor(Math.random() * 20)
-
-        const hslToHex = (h, s, l) => {
-          l /= 100
-          const a = (s * Math.min(l, 1 - l)) / 100
-          const f = (n) => {
-            const k = (n + h / 30) % 12
-            const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
-            return Math.round(255 * color)
-              .toString(16)
-              .padStart(2, '0')
-          }
-          return `#${f(0)}${f(8)}${f(4)}`
-        }
-
-        this.newTeacher.colorCode = hslToHex(hue, saturation, lightness)
+        this.newTeacher.colorCode = this.getNextAvailableColor()
       },
 
       async createNewTeacher() {

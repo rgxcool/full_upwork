@@ -705,48 +705,34 @@
         }
       }
 
-      // Recalculate dates for education items based on their durations
+      // Recalculate dates so that date "slots" stay with their positions.
+      // When the user reorders courses we want the dates that belonged to a
+      // position to move to the course now in that position (swap dates).
       const recalculateEducationDates = (educationArray) => {
         if (educationArray.length === 0) return []
 
-        const updated = educationArray.map((item) => ({
-          ...item,
-          // Preserve original dates for duration calculation
-          _originalStartDate: item.startDate,
-          _originalEndDate: item.endDate,
-        }))
+        // Capture existing date slots sorted by startDate so we keep the overall timeline.
+        const dateSlots = [...educationArray]
+          .map((item) => ({
+            startDate: item.startDate ? new Date(item.startDate) : null,
+            endDate: item.endDate ? new Date(item.endDate) : null,
+          }))
+          .sort((a, b) => {
+            if (!a.startDate && !b.startDate) return 0
+            if (!a.startDate) return 1
+            if (!b.startDate) return -1
+            return a.startDate - b.startDate
+          })
 
-        // Store the original durations for each item
-        const durations = updated.map((item) => {
-          if (!item._originalStartDate || !item._originalEndDate) return 30 // Default 30 days
-          return Math.max(
-            1,
-            Math.ceil(
-              (new Date(item._originalEndDate) - new Date(item._originalStartDate)) /
-                (1000 * 60 * 60 * 24)
-            )
-          )
+        // Assign the earliest slot to the first item, next to second, etc.
+        return educationArray.map((item, index) => {
+          const slot = dateSlots[index]
+          return {
+            ...item,
+            startDate: slot?.startDate ? slot.startDate.toISOString() : item.startDate,
+            endDate: slot?.endDate ? slot.endDate.toISOString() : item.endDate,
+          }
         })
-
-        // Get the starting date from the first item
-        let currentDate = new Date(updated[0]._originalStartDate || Date.now())
-
-        // Update dates based on stored durations
-        updated.forEach((item, index) => {
-          // Set start date
-          item.startDate = new Date(currentDate)
-
-          // Calculate end date based on stored duration
-          const duration = durations[index]
-          item.endDate = new Date(currentDate)
-          item.endDate.setDate(item.endDate.getDate() + duration - 1)
-
-          // Move to next start date (one day after current end date)
-          currentDate = new Date(item.endDate)
-          currentDate.setDate(currentDate.getDate() + 1)
-        })
-
-        return updated
       }
 
       onMounted(() => {
