@@ -309,24 +309,20 @@ router.put(
                 const { default: CourseInstance } = await import(
                     "../models/CourseInstance.js"
                 );
+                // Update all CourseInstances in the provided list that belong to this teacher
+                // The frontend provides the specific instances to update, so we trust that list
+                // and update them regardless of their current slutprovDate
                 const result = await CourseInstance.updateMany(
                     {
                         _id: { $in: courseInstanceIds },
                         responsibleTeacher: teacherId,
-                        slutprovDate: {
-                            $gte: new Date(
-                                fromLocal.toISOString().split("T")[0] +
-                                    "T00:00:00.000Z"
-                            ),
-                            $lte: new Date(
-                                fromLocal.toISOString().split("T")[0] +
-                                    "T23:59:59.999Z"
-                            ),
-                        },
                     },
-                    { $set: { slutprovDate: toLocal } }
+                    { 
+                        $set: { slutprovDate: toLocal }
+                    }
                 );
                 courseInstancesUpdated = result.modifiedCount;
+                console.log(`📅 Updated ${courseInstancesUpdated} CourseInstances from ${fromDate} to ${toDate}`);
             }
 
             // Update students with manual finalExamDate for this teacher on fromDate

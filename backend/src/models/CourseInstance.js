@@ -87,7 +87,9 @@ courseInstanceSchema.pre("save", async function (next) {
     // Only auto-calculate if:
     // 1. responsibleTeacher is set
     // 2. endDate is set
-    // 3. slutprovDate is not already manually set (allow manual override)
+    // 3. slutprovDate is not already set (allow manual override)
+    // IMPORTANT: This preserves manually set dates from drag-and-drop operations
+    // If slutprovDate exists (even if it was set via updateMany), we don't recalculate
     if (this.responsibleTeacher && this.endDate && !this.slutprovDate) {
         try {
             const { calculateSlutprovDate } = await import("../utils/slutprovDateCalculator.js");
@@ -103,6 +105,7 @@ courseInstanceSchema.pre("save", async function (next) {
             // Don't fail the save if calculation fails
         }
     }
+    // If slutprovDate is already set, we preserve it (could be manually set via drag-and-drop)
     next();
 });
 
