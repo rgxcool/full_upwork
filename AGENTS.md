@@ -16,11 +16,4 @@
 
 ## Useful commands
 - Run tests: `make test`
-- Backend dev server: `cd backend && npm run dev`
-- Backend tests: `cd backend && npm test`
-- Frontend dev server: `cd frontend && npm run dev`
-- Frontend build: `cd frontend && npm run build`
-- Compose dev stack: `make dev` (or `docker compose up --build`)
-- Compose up/down: `make compose-up` / `make compose-down`
-- Deploy (PM2 + frontend build): `make deploy`
-- Generate JSDoc site: `npm run docs`
+- Run linter: `make format`
