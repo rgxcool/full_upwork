@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 DOCKER_COMPOSE ?= docker compose
 
-.PHONY: deploy deploy-old estimate start-backend compose-up compose-down dev test
+.PHONY: deploy deploy-old estimate start-backend compose-up compose-down dev test citest
 
 deploy:
 	@echo "📥 Pulling latest code..."
@@ -60,6 +60,9 @@ estimate:
 start-backend:
 	cd backend && pm2 start ecosystem.config.cjs --env production
 
-test:
+citest:
 	@echo "🧪 Running backend tests inside Docker (target: cicd)..."
 	docker build --target cicd --progress=plain .
+
+test:
+	npx vitest run --coverage --coverage.provider=v8
