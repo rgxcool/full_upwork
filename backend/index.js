@@ -129,7 +129,7 @@ app.use("/", router);
 console.log("Router successfully mounted!");
 
 // Ensure preflight (OPTIONS) requests are handled
-app.options("*", cors());
+app.options(/.*/, cors());
 
 app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
 
