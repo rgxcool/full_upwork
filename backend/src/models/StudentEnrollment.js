@@ -144,7 +144,7 @@ const studentEnrollmentSchema = new mongoose.Schema(
 );
 
 // Pre-save middleware to update status history
-studentEnrollmentSchema.pre("save", function (next) {
+studentEnrollmentSchema.pre("save", function () {
     if (this.isModified("status")) {
         this.statusHistory.push({
             status: this.status,
@@ -159,7 +159,6 @@ studentEnrollmentSchema.pre("save", function (next) {
         delete this.statusChangeReason;
         delete this.statusChangeNotes;
     }
-    next();
 });
 
 // Method to change status with reason
