@@ -1,5 +1,6 @@
 {
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.16",
     "clean-jsdoc-theme": "^4.3.0",
     "documentation": "^14.0.3",
     "eslint": "^9.29.0",
