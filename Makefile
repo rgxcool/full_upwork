@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 DOCKER_COMPOSE ?= docker compose
 
-.PHONY: deploy deploy-old estimate start-backend compose-up compose-down dev test citest
+.PHONY: deploy deploy-old estimate start-backend compose-up compose-down format dev test citest
 
 deploy:
 	@echo "📥 Pulling latest code..."
@@ -56,6 +56,9 @@ estimate:
 	printf "Estimated total dev time: %.1f hours\n" $$total_hours && \
 	echo "Total commits: $$total_commits" && \
 	rm $$tmp
+
+format:
+	 npx eslint --no-config-lookup --fix
 
 start-backend:
 	cd backend && pm2 start ecosystem.config.cjs --env production
