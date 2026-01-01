@@ -62,6 +62,7 @@ const createStudent = async (overrides = {}) => {
         commentHistory: overrides.commentHistory ?? [],
         changeHistory: overrides.changeHistory,
         aplStatus: overrides.aplStatus,
+        aplStatusHistory: overrides.aplStatusHistory,
         dropout: overrides.dropout,
         startDate: overrides.startDate,
         endDate: overrides.endDate,
@@ -238,6 +239,58 @@ describe("studentDetailsController", () => {
             expect(programSpy).toHaveBeenCalledWith(programId);
         });
 
+        it("falls back to empty education and system addedBy", async () => {
+            const studentDoc = {
+                toObject: () => ({
+                    _id: new mongoose.Types.ObjectId(),
+                    education: "not-an-array",
+                }),
+            };
+
+            const select = vi.fn().mockResolvedValue(studentDoc);
+            const populate = vi.fn().mockReturnValue({ select });
+            vi.spyOn(Student, "findById").mockReturnValue({ populate });
+
+            const enrollments = [
+                {
+                    _id: new mongoose.Types.ObjectId(),
+                    status: "enrolled",
+                    mainCourseId: null,
+                    courseInstanceId: null,
+                    startDate: new Date("2024-01-01"),
+                    endDate: new Date("2024-06-01"),
+                    createdAt: new Date("2023-12-01"),
+                },
+            ];
+
+            const sort = vi.fn().mockResolvedValue(enrollments);
+            const populateTeacher = vi.fn().mockReturnValue({ sort });
+            const populateMain = vi.fn().mockReturnValue({
+                populate: populateTeacher,
+            });
+            const populateCourseInstance = vi.fn().mockReturnValue({
+                populate: populateMain,
+            });
+            vi.spyOn(StudentEnrollment, "find").mockReturnValue({
+                populate: populateCourseInstance,
+            });
+
+            const req = buildReq({
+                params: { id: new mongoose.Types.ObjectId().toString() },
+            });
+            const res = buildRes();
+
+            await getStudentDetails(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(res.body.education).toHaveLength(1);
+            expect(res.body.education[0]).toMatchObject({
+                addedBy: "System",
+                courseInstanceId: undefined,
+                name: undefined,
+            });
+        });
+
         it("handles education populate errors gracefully", async () => {
             const courseId = new mongoose.Types.ObjectId();
             const studentDoc = {
@@ -371,6 +424,80 @@ describe("studentDetailsController", () => {
                 expect.arrayContaining(["name", "dropout", "phone"])
             );
             expect(res.body.student.changeHistory).toHaveLength(1);
+        });
+
+        it("skips apl history when status is unchanged", async () => {
+            const student = await createStudent({
+                aplStatus: "GREEN",
+                aplStatusHistory: [{ status: "GREEN", changedAt: new Date() }],
+                changeHistory: [],
+            });
+
+            const req = buildReq({
+                params: { id: student._id.toString() },
+                body: { name: "Same", aplStatus: "GREEN" },
+                user: {
+                    role: "admin",
+                    userId: new mongoose.Types.ObjectId().toString(),
+                },
+            });
+            const res = buildRes();
+
+            await updateStudentInfo(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(res.body.student.aplStatusHistory).toHaveLength(1);
+            expect(res.body.student.changeHistory).toHaveLength(1);
+        });
+
+        it("uses userId when name is not provided", async () => {
+            const student = await createStudent({
+                aplStatus: "GRAY",
+                aplStatusHistory: [],
+                changeHistory: [],
+            });
+            const userId = new mongoose.Types.ObjectId().toString();
+
+            const req = buildReq({
+                params: { id: student._id.toString() },
+                body: { aplStatus: "RED" },
+                user: { role: "admin", userId },
+            });
+            const res = buildRes();
+
+            await updateStudentInfo(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(res.body.student.aplStatusHistory).toHaveLength(1);
+            expect(res.body.student.aplStatusHistory[0].changedBy).toBe(userId);
+        });
+
+        it("initializes apl history and uses system fallback when user identity is missing", async () => {
+            const student = {
+                _id: new mongoose.Types.ObjectId(),
+                aplStatus: "GRAY",
+                aplStatusHistory: null,
+                changeHistory: [],
+                save: vi.fn().mockResolvedValue(),
+            };
+            vi.spyOn(Student, "findById").mockResolvedValueOnce(student);
+
+            const req = buildReq({
+                params: { id: student._id.toString() },
+                body: { aplStatus: "RED" },
+                user: { role: "admin" },
+            });
+            const res = buildRes();
+
+            await updateStudentInfo(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(student.aplStatus).toBe("RED");
+            expect(student.aplStatusHistory).toHaveLength(1);
+            expect(student.aplStatusHistory[0]).toMatchObject({
+                status: "RED",
+                changedBy: "system",
+            });
         });
 
         it("returns 500 when update fails", async () => {
@@ -907,6 +1034,10 @@ describe("studentDetailsController", () => {
 
         it("returns empty history when not set", async () => {
             const student = await createStudent();
+            await Student.updateOne(
+                { _id: student._id },
+                { $unset: { changeHistory: "" } }
+            );
 
             const req = buildReq({
                 params: { id: student._id.toString() },
@@ -918,6 +1049,48 @@ describe("studentDetailsController", () => {
 
             expect(res.statusCode).toBe(200);
             expect(res.body).toEqual({ success: true, changeHistory: [] });
+        });
+
+        it("uses empty history when changeHistory is null", async () => {
+            const select = vi.fn().mockResolvedValue({ changeHistory: null });
+            vi.spyOn(Student, "findById").mockReturnValue({ select });
+
+            const req = buildReq({
+                params: { id: new mongoose.Types.ObjectId().toString() },
+                user: { role: "admin" },
+            });
+            const res = buildRes();
+
+            await getChangeHistory(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(res.body).toEqual({ success: true, changeHistory: [] });
+        });
+
+        it("returns stored change history", async () => {
+            const student = await createStudent({
+                changeHistory: [
+                    {
+                        timestamp: new Date(),
+                        changedBy: new mongoose.Types.ObjectId(),
+                        changedByRole: "admin",
+                        changes: ["name"],
+                        previousValues: {},
+                        newValues: {},
+                    },
+                ],
+            });
+
+            const req = buildReq({
+                params: { id: student._id.toString() },
+                user: { role: "admin" },
+            });
+            const res = buildRes();
+
+            await getChangeHistory(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(res.body.changeHistory).toHaveLength(1);
         });
 
         it("returns 500 when history fetch fails", async () => {
