@@ -1,49 +1,18 @@
-FROM node:20-alpine AS deps
-WORKDIR /usr/src/app
+# ----------------------------
+# cicd
+# ----------------------------
+FROM node:25-alpine AS cicd
+ENV APP_HOME=/app NODE_ENV=test
+WORKDIR $APP_HOME
 
-# Install production dependencies
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --omit=dev
+RUN apk add --no-cache make
 
-FROM ubuntu:22.04 AS cicd
-WORKDIR /usr/src/app
+COPY package*.json ./
+COPY backend/package*.json backend/
+COPY Makefile vitest.config.js ./
 
-ENV DEBIAN_FRONTEND=noninteractive
+RUN --mount=type=cache,id=root-npm,target=$APP_HOME/.npm \
+    --mount=type=cache,id=backend-npm,target=$APP_HOME/backend/.npm \
+    npm ci && npm --prefix backend ci
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates gnupg && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs build-essential python3 && \
-    npm install -g npm@10 && \
-    rm -rf /var/lib/apt/lists/*
-
-ENV NODE_ENV=test
-ENV CI=true
-ENV MONGOMS_VERSION=7.0.12
-ENV MONGOMS_OS=ubuntu2204
-
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci
-
-COPY backend/. .
-RUN npm test -- --run
-
-
-## RUNNER
-FROM node:20-alpine AS runner
-WORKDIR /usr/src/app
-
-ENV NODE_ENV=production
-
-# Copy installed dependencies from the deps stage
-COPY --from=deps /usr/src/app/node_modules ./node_modules
-
-# Copy backend source code
-COPY backend/. .
-
-# Ensure runtime directories exist
-RUN mkdir -p logs public/uploads
-
-EXPOSE 5001
-
-CMD ["node", "index.js"]
+CMD ["make", "test"]
