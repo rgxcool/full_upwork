@@ -18,9 +18,10 @@ if (!process.env.MONGOMS_DISTRO) {
 
 export default defineConfig({
     test: {
-        include: ["backend/tests/**/*.test.js"],
+        environment: 'node',
         exclude: ["frontend/**", "node_modules/**", "dist/**"],
-        maxWorkers: 8,
+        include: ["backend/tests/**/*.test.js"],
+        maxWorkers: 12,
         silent: true,
     },
 });
