@@ -21,5 +21,6 @@ export default defineConfig({
         include: ["backend/tests/**/*.test.js"],
         exclude: ["frontend/**", "node_modules/**", "dist/**"],
         maxWorkers: 8,
+        silent: true,
     },
 });
