@@ -252,6 +252,19 @@ describe("global error handler", () => {
             expect(res.body.path).toBe("/api/test");
         });
     }
+
+    it("uses defaults when error lacks status/message", () => {
+        const req = buildReq();
+        const res = buildRes();
+        const fallbackError = new Error("");
+        fallbackError.stack = "stack";
+
+        globalErrorHandler(fallbackError, req, res);
+
+        expect(res.statusCode).toBe(500);
+        expect(res.body.error.message).toBe("Server Error");
+        expect(res.body.error.stack).toBe("stack");
+    });
 });
 
 describe("performance & rate limit middlewares", () => {
@@ -268,6 +281,14 @@ describe("performance & rate limit middlewares", () => {
 
         res.end();
         expect(perfSpy).toHaveBeenCalled();
+    });
+
+    it("retains slow queries when under cap", () => {
+        errorMonitor.resetMetrics();
+
+        errorMonitor.recordPerformance("GET /short", 1500);
+
+        expect(errorMonitor.performanceMetrics.slowQueries).toHaveLength(1);
     });
 
     it("guards rate limit errors", () => {
