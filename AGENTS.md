@@ -20,5 +20,5 @@
 - `generate-docs.js`: OpenAI-based JSDoc annotator (needs `OPENAI_API_KEY`)
 
 ## Useful commands
-- Run tests: `make test`
+- Run tests: `make citest`
 - Run linter: `make format`
