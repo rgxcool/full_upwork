@@ -9,11 +9,14 @@ import {
     vi,
 } from "vitest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import bcrypt from "bcrypt";
 import Teacher from "../../src/models/Teacher.js";
 import User from "../../src/models/User.js";
 import { createOrFindTeacher } from "../../src/utils/teacherService.js";
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
 const TEACHER_COLORS = [
     "#e6194b",
@@ -40,8 +43,6 @@ const TEACHER_COLORS = [
     "#000000",
 ];
 
-let mongoServer;
-
 const buildUser = (overrides = {}) => ({
     username: "Teacher One",
     email: "teacher.one@example.com",
@@ -52,15 +53,11 @@ const buildUser = (overrides = {}) => ({
 
 describe("teacherService", () => {
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {

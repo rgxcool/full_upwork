@@ -8,10 +8,11 @@ import {
     afterEach,
 } from "vitest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
-
-let mongoServer;
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
 const buildEnrollment = (overrides = {}) =>
     new StudentEnrollment({
@@ -24,15 +25,11 @@ const buildEnrollment = (overrides = {}) =>
 
 describe("StudentEnrollment model", () => {
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {

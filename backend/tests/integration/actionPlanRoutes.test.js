@@ -11,13 +11,14 @@ import {
 import express from "express";
 import request from "supertest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import actionPlanRoutes from "../../src/router/actionPlanRoutes.js";
 import ActionPlan from "../../src/models/ActionPlan.js";
 import Notification from "../../src/models/Notification.js";
 import FormQuestions from "../../src/models/ActionPlanQuestions.js";
-
-let mongoServer;
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
 const buildApp = () => {
     const app = express();
@@ -43,15 +44,11 @@ describe("Action Plan Routes", () => {
     let app;
 
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {

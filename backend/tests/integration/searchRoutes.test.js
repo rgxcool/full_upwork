@@ -11,7 +11,6 @@ import {
 import request from "supertest";
 import mongoose from "mongoose";
 import express from "express";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import User from "../../src/models/User.js";
 import Student from "../../src/models/Student.js";
 import Teacher from "../../src/models/Teacher.js";
@@ -20,6 +19,10 @@ import CoursePackage from "../../src/models/CoursePackage.js";
 import Program from "../../src/models/Program.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import searchRoutes from "../../src/router/searchRoutes.js";
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
 const mockAuthenticateUser = vi.hoisted(() => (req, _res, next) => {
     const roleHeader = req.headers["x-test-role"];
@@ -39,23 +42,18 @@ vi.mock("../../src/controllers/authController.js", () => ({
     authenticateUser: mockAuthenticateUser,
 }));
 
-let mongoServer;
 let searchApp;
 
 describe("Search Routes", () => {
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
         searchApp = express();
         searchApp.use(express.json());
         searchApp.use("/api", searchRoutes);
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {
