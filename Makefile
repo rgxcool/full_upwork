@@ -58,7 +58,7 @@ estimate:
 	rm $$tmp
 
 format:
-	 npx eslint --no-config-lookup --fix
+	npx eslint --no-config-lookup --fix
 
 start-backend:
 	cd backend && pm2 start ecosystem.config.cjs --env production
@@ -68,4 +68,5 @@ citest:
 	docker build --target cicd --progress=plain .
 
 test:
-	NODE_ENV=test NODE_OPTIONS="--require ./backend/tests/setup-crypto.cjs" npx vitest run --coverage --coverage.provider=v8 --reporter=dot
+	NODE_ENV=test NODE_OPTIONS="--require ./backend/tests/setup-crypto.cjs" npx vitest run \
+	--coverage --coverage.provider=v8 --reporter=dot
