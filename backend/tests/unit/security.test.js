@@ -7,6 +7,7 @@ import {
     vi,
 } from "vitest";
 
+
 vi.mock("express-rate-limit", () => ({
     __esModule: true,
     default: vi.fn((opts) => ({
@@ -30,6 +31,8 @@ import {
 } from "../../src/middleware/security.js";
 import { logger, AppError, AuthorizationError } from "../../src/utils/errorHandler.js";
 import jwt from "jsonwebtoken";
+
+process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
 
 const buildReq = (overrides = {}) => ({
     method: "POST",
@@ -217,7 +220,7 @@ describe("security middleware helpers", () => {
         expect(error.message).toBe("Not allowed by CORS");
     });
 
-    it("securityAudit detects suspicious payloads", () => {
+it("securityAudit detects suspicious payloads", () => {
         const res = buildRes();
         const next = vi.fn();
         const req = buildReq({
@@ -358,5 +361,101 @@ describe("security middleware helpers", () => {
             expect(strong.isValid).toBe(true);
             expect(strong.errors.numbers).toBeNull();
         });
+    });
+});
+
+describe("rate limiter behavior", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        process.env.JWT_SECRET = "test-secret";
+    });
+
+    it("adjusts base rate limiter for test env and exposes skip hook", () => {
+        expect(rateLimiter.options.windowMs).toBe(60 * 1000);
+        expect(rateLimiter.options.max).toBe(3);
+        expect(typeof rateLimiter.options.skip).toBe("function");
+    });
+
+    it("rate limit skip returns true for admin users", () => {
+        const skipResult = rateLimiter.options.skip(
+            buildReq({ user: { role: "admin" }, cookies: {} })
+        );
+        expect(skipResult).toBe(true);
+    });
+
+    it("rate limit skip verifies token and logs on success", () => {
+        const token = "token";
+        const decoded = { role: "admin" };
+        vi.spyOn(jwt, "verify").mockReturnValueOnce(decoded);
+        const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => {});
+        const skipResult = rateLimiter.options.skip(
+            buildReq({ cookies: { token } })
+        );
+        expect(skipResult).toBe(true);
+        expect(infoSpy).toHaveBeenCalledWith(
+            `✅ Rate limit SKIPPED: Token shows user is ${decoded.role}`
+        );
+    });
+
+    it("rate limit skip logs debug when JWT verification fails", () => {
+        vi.spyOn(jwt, "verify").mockImplementation(() => {
+            throw new Error("unexpected");
+        });
+        const debugSpy = vi.spyOn(logger, "debug").mockImplementation(() => {});
+        const skipResult = rateLimiter.options.skip(
+            buildReq({ cookies: { token: "bad" } })
+        );
+        expect(skipResult).toBe(false);
+        expect(debugSpy).toHaveBeenCalled();
+    });
+
+    it("rate limit skip logs error when JWT_SECRET missing", () => {
+        const originalSecret = process.env.JWT_SECRET;
+        delete process.env.JWT_SECRET;
+        const errorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+        const skipResult = rateLimiter.options.skip(
+            buildReq({ cookies: { token: "token" } })
+        );
+        expect(skipResult).toBe(false);
+        expect(errorSpy).toHaveBeenCalledWith("❌ JWT_SECRET is not defined!");
+        process.env.JWT_SECRET = originalSecret;
+    });
+
+    it("rate limit skip catches unexpected errors while inspecting cookies", () => {
+        const req = {};
+        Object.defineProperty(req, "cookies", {
+            get() {
+                throw new Error("boom");
+            },
+        });
+        const debugSpy = vi.spyOn(logger, "debug").mockImplementation(() => {});
+        const skipResult = rateLimiter.options.skip(req);
+        expect(skipResult).toBe(false);
+        expect(debugSpy).toHaveBeenCalledWith(
+            expect.stringMatching(/Error checking admin status/)
+        );
+    });
+
+    it("createRateLimiter exposes handler and skip options", () => {
+        const limiter = createRateLimiter(1000, 1, "stop");
+        expect(limiter.options.windowMs).toBe(1000);
+        expect(typeof limiter.options.handler).toBe("function");
+        expect(typeof limiter.options.skip).toBe("function");
+        const skipResult = limiter.options.skip(
+            buildReq({ user: { role: "systemadmin" }, cookies: {} })
+        );
+        expect(skipResult).toBe(true);
+    });
+
+    it("createRateLimiter handler responds with 429 payload", () => {
+        const limiter = createRateLimiter(1000, 1, "blocked");
+        const res = buildRes();
+        limiter.options.handler(
+            buildReq({ ip: "1.2.3.4" }),
+            res
+        );
+        expect(res.statusCode).toBe(429);
+        expect(res.body.success).toBe(false);
+        expect(res.body.error.retryAfter).toBe(Math.ceil(1000 / 1000));
     });
 });
