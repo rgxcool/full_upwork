@@ -104,11 +104,11 @@ describe("errorHandler utilities", () => {
         expect(new ConflictError().statusCode).toBe(409);
     });
 
-    it("records errors and honors Sentry configuration", () => {
-        const error = new AppError("boom", 500);
-        const req = buildReq();
-        const loggerSpy = vi.spyOn(logger, "error");
-        const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+it("records errors and honors Sentry configuration", () => {
+    const error = new AppError("boom", 500);
+    const req = buildReq();
+    const loggerSpy = vi.spyOn(logger, "error");
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
         process.env.SENTRY_DSN = "https://dsn";
         errorMonitor.recordError(error, req);
@@ -123,6 +123,20 @@ describe("errorHandler utilities", () => {
         );
 
         consoleSpy.mockRestore();
+    });
+
+    it("records errors without request context", () => {
+        const error = new AppError("bare", 400);
+        const loggerSpy = vi.spyOn(logger, "error");
+
+        errorMonitor.recordError(error);
+
+        expect(loggerSpy).toHaveBeenCalledWith(
+            "Application Error",
+            expect.objectContaining({
+                request: null,
+            })
+        );
     });
 
     it("records performance metrics and enforces slow query caps", () => {
