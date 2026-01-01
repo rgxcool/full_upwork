@@ -7,6 +7,10 @@
 - Backend tests use `backend/.env.test`, `NODE_ENV=test`
 - Default ports: backend 5001, Vite frontend 5173, Mongo 27017
 
+## JS Style Guide
+- Do not introduce polyfills for tests
+- ONLY mock external dependencies NEVER module-internal code
+
 ## Repo layout
 - `backend/`: Node/Express API (ESM, Mongoose); entrypoint `backend/index.js`
 - `backend/src/router/*.js` has web-facing endpoints.
