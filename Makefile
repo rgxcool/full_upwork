@@ -97,7 +97,7 @@ citest:
 			-e MONGO_URI="mongodb://$$service:27017" \
 			$(CITEST_BACKEND_MOUNT) \
 			"$(CITEST_IMAGE)"; \
-	'xs
+	'
 
 dev:
 	$(DC) up --build
