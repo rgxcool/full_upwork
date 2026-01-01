@@ -116,6 +116,99 @@ describe("Program Routes", () => {
             );
         });
 
+        it("returns empty arrays when program course data is missing", async () => {
+            const missingProgramId = new mongoose.Types.ObjectId();
+
+            await Program.collection.insertOne({
+                _id: missingProgramId,
+                programName: "Program Missing Arrays",
+                programCourses: null,
+                programCoursePackages: null,
+            });
+
+            const response = await request(app)
+                .get("/api/programs")
+                .expect(200);
+
+            const missingProgram = response.body.find(
+                (program) => program._id === missingProgramId.toString()
+            );
+
+            expect(missingProgram).toBeDefined();
+            expect(missingProgram.programCourses).toEqual([]);
+            expect(missingProgram.programCoursePackages).toEqual([]);
+        });
+
+        it("returns empty course package lists when package courses are missing", async () => {
+            const missingPackageId = new mongoose.Types.ObjectId();
+            const programWithMissingPackageId = new mongoose.Types.ObjectId();
+
+            await CoursePackage.collection.insertOne({
+                _id: missingPackageId,
+                coursePackageName: "Package Missing Courses",
+                coursePackageCode: "P002",
+                coursePackagePoints: "0",
+                coursePackageExtent: "0",
+                coursePackageCourses: null,
+            });
+
+            await Program.collection.insertOne({
+                _id: programWithMissingPackageId,
+                programName: "Program Missing Package Courses",
+                programCourses: [],
+                programCoursePackages: [missingPackageId],
+            });
+
+            const response = await request(app)
+                .get("/api/programs")
+                .expect(200);
+
+            const programWithMissingPackage = response.body.find(
+                (program) =>
+                    program._id === programWithMissingPackageId.toString()
+            );
+
+            expect(programWithMissingPackage).toBeDefined();
+            expect(programWithMissingPackage.programCoursePackages).toHaveLength(
+                1
+            );
+            expect(
+                programWithMissingPackage.programCoursePackages[0]
+                    .coursePackageCourses
+            ).toEqual([]);
+        });
+
+        it("handles missing course order values when sorting", async () => {
+            const programMissingOrderId = new mongoose.Types.ObjectId();
+            const [firstCourse, secondCourse] = await Course.find({}).lean();
+
+            await Program.collection.insertOne({
+                _id: programMissingOrderId,
+                programName: "Program Missing Orders",
+                programCourses: [
+                    { courseId: firstCourse._id },
+                    { courseId: secondCourse._id },
+                ],
+                programCoursePackages: [],
+            });
+
+            const response = await request(app)
+                .get("/api/programs")
+                .expect(200);
+
+            const programMissingOrder = response.body.find(
+                (program) => program._id === programMissingOrderId.toString()
+            );
+
+            expect(programMissingOrder).toBeDefined();
+            expect(programMissingOrder.programCourses).toHaveLength(2);
+            expect(
+                programMissingOrder.programCourses.every(
+                    (course) => course.order === null
+                )
+            ).toBe(true);
+        });
+
         it("handles database errors", async () => {
             vi.spyOn(Program, "find").mockImplementationOnce(() => {
                 throw new Error("Database failure");
@@ -163,6 +256,22 @@ describe("Program Routes", () => {
                 courseExtent: "10 weeks",
                 order: 2,
             });
+        });
+
+        it("returns an empty list when program courses are missing", async () => {
+            const missingCoursesProgramId = new mongoose.Types.ObjectId();
+
+            await Program.collection.insertOne({
+                _id: missingCoursesProgramId,
+                programName: "Program Without Courses",
+                programCourses: null,
+            });
+
+            const response = await request(app)
+                .get(`/api/program/${missingCoursesProgramId}/courses`)
+                .expect(200);
+
+            expect(response.body).toEqual([]);
         });
 
         it("returns 404 when the program does not exist", async () => {
