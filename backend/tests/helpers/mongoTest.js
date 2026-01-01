@@ -6,13 +6,9 @@ const buildMongoUri = () => {
         process.env.MONGO_TEST_DB ||
         `mindful_test_${process.pid}_${Math.random().toString(16).slice(2)}`;
 
-    try {
-        const url = new URL(baseUri);
-        url.pathname = `/${dbName}`;
-        return url.toString();
-    } catch {
-        return `${baseUri.replace(/\/+$/, "")}/${dbName}`;
-    }
+    const url = new URL(baseUri);
+    url.pathname = `/${dbName}`;
+    return url.toString();
 };
 
 export const getTestMongoUri = () => buildMongoUri();
