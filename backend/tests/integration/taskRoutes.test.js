@@ -10,12 +10,14 @@ import {
 } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import Task from "../../src/models/Task.js";
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
-let mongoServer;
 const userId = "user-123";
 const otherUserId = "user-456";
 
@@ -28,15 +30,11 @@ const buildAuthHeader = (id) => ({
 
 describe("Task Routes", () => {
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {

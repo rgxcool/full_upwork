@@ -10,25 +10,23 @@ import {
 } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import app from "../../index.js";
 import CoursePackage from "../../src/models/CoursePackage.js";
 import Course from "../../src/models/Course.js";
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
-let mongoServer;
 let coursePackageId;
 
 describe("Course Package Routes", () => {
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {

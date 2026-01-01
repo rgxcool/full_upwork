@@ -9,23 +9,24 @@ import {
 } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import express from "express";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Document from "../../src/models/Document.js";
 import documentRoutes from "../../src/router/documentRoutes.js";
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
-let mongoServer;
 let app;
 const uploadsDir = path.join(process.cwd(), "public", "uploads");
 const createdFiles = new Set();
 
 describe("Document Routes", () => {
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
         fs.mkdirSync(uploadsDir, { recursive: true });
         app = express();
         app.use(express.json());
@@ -33,10 +34,7 @@ describe("Document Routes", () => {
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {

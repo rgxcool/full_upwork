@@ -10,26 +10,23 @@ import {
 } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import User from "../../src/models/User.js";
-
-let mongoServer;
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
 describe("User Routes", () => {
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
         process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {

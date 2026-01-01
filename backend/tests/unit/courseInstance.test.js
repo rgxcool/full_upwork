@@ -9,15 +9,16 @@ import {
     vi,
 } from "vitest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import { calculateSlutprovDate } from "../../src/utils/slutprovDateCalculator.js";
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
 vi.mock("../../src/utils/slutprovDateCalculator.js", () => ({
     calculateSlutprovDate: vi.fn(),
 }));
-
-let mongoServer;
 
 const buildInstance = (overrides = {}) =>
     new CourseInstance({
@@ -31,15 +32,11 @@ const buildInstance = (overrides = {}) =>
 
 describe("CourseInstance model", () => {
     beforeAll(async () => {
-        mongoServer = await MongoMemoryServer.create();
-        await mongoose.connect(mongoServer.getUri());
+        await connectTestDatabase();
     }, 60000);
 
     afterAll(async () => {
-        await mongoose.disconnect();
-        if (mongoServer) {
-            await mongoServer.stop();
-        }
+        await disconnectTestDatabase();
     }, 60000);
 
     beforeEach(async () => {
