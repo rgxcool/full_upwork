@@ -68,4 +68,4 @@ citest:
 	docker build --target cicd --progress=plain .
 
 test:
-	NODE_ENV=test npx vitest run --coverage --coverage.provider=v8
+	NODE_ENV=test NODE_OPTIONS="--require ./backend/tests/setup-crypto.cjs" npx vitest run --coverage --coverage.provider=v8

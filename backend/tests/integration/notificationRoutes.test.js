@@ -1,0 +1,291 @@
+import {
+    describe,
+    it,
+    expect,
+    beforeAll,
+    afterAll,
+    beforeEach,
+    afterEach,
+    vi,
+} from "vitest";
+import request from "supertest";
+import mongoose from "mongoose";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import jwt from "jsonwebtoken";
+import app from "../../index.js";
+import Notification from "../../src/models/Notification.js";
+import Teacher from "../../src/models/Teacher.js";
+
+let mongoServer;
+
+const signToken = (overrides = {}) => {
+    const payload = {
+        userId: new mongoose.Types.ObjectId().toString(),
+        role: "admin",
+        name: "Test User",
+        email: "test@example.com",
+        ...overrides,
+    };
+
+    return jwt.sign(payload, process.env.JWT_SECRET || "test-secret");
+};
+
+describe("Notification Routes", () => {
+    beforeAll(async () => {
+        mongoServer = await MongoMemoryServer.create();
+        await mongoose.connect(mongoServer.getUri());
+    }, 60000);
+
+    afterAll(async () => {
+        await mongoose.disconnect();
+        if (mongoServer) {
+            await mongoServer.stop();
+        }
+    }, 60000);
+
+    beforeEach(async () => {
+        await Notification.deleteMany({});
+        await Teacher.deleteMany({});
+    });
+
+    afterEach(async () => {
+        vi.restoreAllMocks();
+        await Notification.deleteMany({});
+        await Teacher.deleteMany({});
+    });
+
+    describe("GET /api/notifications", () => {
+        it("returns unique notifications for admin users", async () => {
+            const studentId = new mongoose.Types.ObjectId();
+
+            await Notification.create([
+                {
+                    type: "action_plan_required",
+                    message: "Action plan required",
+                    resolved: false,
+                },
+                {
+                    type: "action_plan_required",
+                    message: "Action plan required again",
+                    resolved: false,
+                },
+                {
+                    type: "grades_pending",
+                    message: "Grades pending",
+                    resolved: false,
+                },
+                {
+                    type: "grades_pending",
+                    message: "Grades pending again",
+                    resolved: false,
+                },
+                {
+                    type: "dropout",
+                    message: "Dropout alert",
+                    resolved: false,
+                    meta: { studentId },
+                },
+                {
+                    type: "dropout",
+                    message: "Dropout alert duplicate",
+                    resolved: false,
+                    meta: { studentId },
+                },
+                {
+                    type: "custom",
+                    message: "Custom notification",
+                    resolved: false,
+                },
+            ]);
+
+            const token = signToken();
+            const response = await request(app)
+                .get("/api/notifications")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+
+            expect(Array.isArray(response.body)).toBe(true);
+            expect(response.body).toHaveLength(4);
+
+            const types = response.body.map((note) => note.type);
+            expect(types.filter((type) => type === "action_plan_required"))
+                .toHaveLength(1);
+            expect(types.filter((type) => type === "grades_pending")).toHaveLength(
+                1
+            );
+            expect(types.filter((type) => type === "dropout")).toHaveLength(1);
+            expect(types.filter((type) => type === "custom")).toHaveLength(1);
+        });
+
+        it("returns 403 when teacher profile is missing", async () => {
+            const token = signToken({
+                role: "teacher",
+                userId: new mongoose.Types.ObjectId().toString(),
+            });
+
+            const response = await request(app)
+                .get("/api/notifications")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(403);
+
+            expect(response.body).toEqual({
+                error: "Teacher profile not found",
+            });
+        });
+
+        it("returns notifications for a teacher with a profile", async () => {
+            const userId = new mongoose.Types.ObjectId();
+            const teacher = await Teacher.create({
+                userId,
+                subject: "math",
+            });
+            await Notification.collection.insertOne({
+                type: "custom",
+                message: "Teacher-specific note",
+                resolved: false,
+                teacher: teacher._id,
+            });
+
+            const token = signToken({
+                role: "teacher",
+                userId: userId.toString(),
+            });
+
+            const response = await request(app)
+                .get("/api/notifications")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+
+            expect(Array.isArray(response.body)).toBe(true);
+        });
+
+        it("handles server errors", async () => {
+            vi.spyOn(Notification, "find").mockRejectedValueOnce(
+                new Error("DB failure")
+            );
+
+            const token = signToken();
+            const response = await request(app)
+                .get("/api/notifications")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(500);
+
+            expect(response.body).toEqual({ message: "Server error" });
+        });
+    });
+
+    describe("PUT /api/notifications/resolve/:studentId", () => {
+        it("marks notifications resolved for the student", async () => {
+            const studentId = new mongoose.Types.ObjectId().toString();
+            await Notification.collection.insertOne({
+                type: "action_plan_required",
+                message: "Action plan",
+                resolved: false,
+                studentId,
+            });
+
+            const response = await request(app)
+                .put(`/api/notifications/resolve/${studentId}`)
+                .expect(200);
+
+            expect(response.body).toEqual({ message: "Notification resolved" });
+
+            const updated = await Notification.collection.findOne({
+                studentId,
+            });
+            expect(updated.resolved).toBe(true);
+        });
+
+        it("returns 500 when update fails", async () => {
+            vi.spyOn(Notification, "updateMany").mockRejectedValueOnce(
+                new Error("DB failure")
+            );
+
+            const response = await request(app)
+                .put(
+                    `/api/notifications/resolve/${new mongoose.Types.ObjectId()}`
+                )
+                .expect(500);
+
+            expect(response.body).toHaveProperty(
+                "message",
+                "Error resolving notification"
+            );
+        });
+    });
+
+    describe("PUT /api/notifications/:id/resolve", () => {
+        it("resolves a notification", async () => {
+            const note = await Notification.create({
+                type: "custom",
+                message: "Resolve me",
+                resolved: false,
+            });
+
+            const userId = new mongoose.Types.ObjectId().toString();
+            const response = await request(app)
+                .put(`/api/notifications/${note._id}/resolve`)
+                .send({ userId })
+                .expect(200);
+
+            expect(response.body).toHaveProperty(
+                "message",
+                "Notis markerad som hanterad"
+            );
+            expect(response.body.note.resolved).toBe(true);
+            expect(response.body.note.resolvedBy.toString()).toBe(userId);
+        });
+
+        it("returns 404 when notification is missing", async () => {
+            const response = await request(app)
+                .put(
+                    `/api/notifications/${new mongoose.Types.ObjectId()}/resolve`
+                )
+                .expect(404);
+
+            expect(response.text).toBe("Notis hittades inte");
+        });
+
+        it("returns 500 for invalid ids", async () => {
+            const response = await request(app)
+                .put("/api/notifications/not-a-valid-id/resolve")
+                .expect(500);
+
+            expect(response.body).toHaveProperty("message");
+        });
+    });
+
+    describe("PUT /api/notifications/:id/reset", () => {
+        it("resets a notification", async () => {
+            const note = await Notification.create({
+                type: "custom",
+                message: "Reset me",
+                resolved: true,
+                resolvedBy: new mongoose.Types.ObjectId(),
+            });
+
+            const response = await request(app)
+                .put(`/api/notifications/${note._id}/reset`)
+                .expect(200);
+
+            expect(response.body.note.resolved).toBe(false);
+            expect(response.body.note.resolvedBy).toBeNull();
+        });
+
+        it("returns 404 when notification is missing", async () => {
+            const response = await request(app)
+                .put(`/api/notifications/${new mongoose.Types.ObjectId()}/reset`)
+                .expect(404);
+
+            expect(response.text).toBe("Notis hittades inte");
+        });
+
+        it("returns 500 for invalid ids", async () => {
+            const response = await request(app)
+                .put("/api/notifications/not-a-valid-id/reset")
+                .expect(500);
+
+            expect(response.text).toBe("Serverfel");
+        });
+    });
+});

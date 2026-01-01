@@ -1,0 +1,255 @@
+import {
+    describe,
+    it,
+    expect,
+    beforeAll,
+    afterAll,
+    beforeEach,
+    afterEach,
+    vi,
+} from "vitest";
+import request from "supertest";
+import mongoose from "mongoose";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import jwt from "jsonwebtoken";
+import app from "../../index.js";
+import Meeting from "../../src/models/Meeting.js";
+
+let mongoServer;
+
+const signToken = (overrides = {}) => {
+    const payload = {
+        userId: new mongoose.Types.ObjectId().toString(),
+        role: "admin",
+        personalNumber: "200001010101",
+        ...overrides,
+    };
+
+    return jwt.sign(payload, process.env.JWT_SECRET || "test-secret");
+};
+
+describe("Meeting Routes", () => {
+    beforeAll(async () => {
+        mongoServer = await MongoMemoryServer.create();
+        await mongoose.connect(mongoServer.getUri());
+    }, 60000);
+
+    afterAll(async () => {
+        await mongoose.disconnect();
+        if (mongoServer) {
+            await mongoServer.stop();
+        }
+    }, 60000);
+
+    beforeEach(async () => {
+        await Meeting.deleteMany({});
+    });
+
+    afterEach(async () => {
+        vi.restoreAllMocks();
+        await Meeting.deleteMany({});
+    });
+
+    describe("GET /api/meetings", () => {
+        it("returns all meetings for non-student users", async () => {
+            await Meeting.create([
+                {
+                    title: "Meeting A",
+                    start: new Date("2024-01-10T10:00:00.000Z"),
+                    location: "Room A",
+                    student: {
+                        id: new mongoose.Types.ObjectId(),
+                        name: "Student A",
+                        personalNumber: "200001010101",
+                    },
+                    bookedBy: "admin",
+                },
+                {
+                    title: "Meeting B",
+                    start: new Date("2024-01-11T10:00:00.000Z"),
+                    location: "Room B",
+                    student: {
+                        id: new mongoose.Types.ObjectId(),
+                        name: "Student B",
+                        personalNumber: "199901010101",
+                    },
+                    bookedBy: "syv",
+                },
+            ]);
+
+            const token = signToken({ role: "admin" });
+            const response = await request(app)
+                .get("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+
+            expect(response.body).toHaveLength(2);
+        });
+
+        it("filters meetings for student users", async () => {
+            await Meeting.create([
+                {
+                    title: "Meeting A",
+                    start: new Date("2024-01-10T10:00:00.000Z"),
+                    location: "Room A",
+                    student: {
+                        id: new mongoose.Types.ObjectId(),
+                        name: "Student A",
+                        personalNumber: "200001010101",
+                    },
+                    bookedBy: "admin",
+                },
+                {
+                    title: "Meeting B",
+                    start: new Date("2024-01-11T10:00:00.000Z"),
+                    location: "Room B",
+                    student: {
+                        id: new mongoose.Types.ObjectId(),
+                        name: "Student B",
+                        personalNumber: "199901010101",
+                    },
+                    bookedBy: "syv",
+                },
+            ]);
+
+            const token = signToken({
+                role: "elev",
+                personalNumber: "200001010101",
+            });
+            const response = await request(app)
+                .get("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+
+            expect(response.body).toHaveLength(1);
+            expect(response.body[0]).toHaveProperty("title", "Meeting A");
+        });
+
+        it("returns 500 when the query fails", async () => {
+            vi.spyOn(Meeting, "find").mockImplementationOnce(() => {
+                throw new Error("DB failure");
+            });
+
+            const token = signToken();
+            const response = await request(app)
+                .get("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(500);
+
+            expect(response.body).toEqual({
+                error: "Serverfel vid hämtning av möten",
+            });
+        });
+    });
+
+    describe("POST /api/meetings", () => {
+        it("creates a meeting when required fields are present", async () => {
+            const token = signToken();
+            const payload = {
+                title: "New Meeting",
+                start: "2024-02-01T12:00:00.000Z",
+                location: "Room C",
+                studentId: new mongoose.Types.ObjectId().toString(),
+                studentName: "Student C",
+                personalNumber: "200001010101",
+                bookedBy: "admin",
+            };
+
+            const response = await request(app)
+                .post("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .send(payload)
+                .expect(201);
+
+            expect(response.body).toHaveProperty("title", "New Meeting");
+            expect(response.body).toHaveProperty("bookedBy", "admin");
+        });
+
+        it("returns 400 when required fields are missing", async () => {
+            const token = signToken();
+            const response = await request(app)
+                .post("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .send({ title: "Incomplete meeting" })
+                .expect(400);
+
+            expect(response.body).toEqual({
+                error: "Obligatoriska fält saknas",
+            });
+        });
+
+        it("returns 500 when saving fails", async () => {
+            vi.spyOn(Meeting.prototype, "save").mockRejectedValueOnce(
+                new Error("Save failed")
+            );
+
+            const token = signToken();
+            const response = await request(app)
+                .post("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .send({
+                    title: "New Meeting",
+                    start: "2024-02-01T12:00:00.000Z",
+                    location: "Room C",
+                    studentId: new mongoose.Types.ObjectId().toString(),
+                    studentName: "Student C",
+                    personalNumber: "200001010101",
+                    bookedBy: "admin",
+                })
+                .expect(500);
+
+            expect(response.body).toEqual({
+                error: "Serverfel vid sparande av möte",
+            });
+        });
+    });
+
+    describe("PUT /api/meetings/:id", () => {
+        it("updates meeting start time", async () => {
+            const meeting = await Meeting.create({
+                title: "Meeting A",
+                start: new Date("2024-01-10T10:00:00.000Z"),
+                location: "Room A",
+                student: {
+                    id: new mongoose.Types.ObjectId(),
+                    name: "Student A",
+                    personalNumber: "200001010101",
+                },
+                bookedBy: "admin",
+            });
+
+            const token = signToken();
+            const response = await request(app)
+                .put(`/api/meetings/${meeting._id}`)
+                .set("Authorization", `Bearer ${token}`)
+                .send({ start: "2024-01-12T08:00:00.000Z" })
+                .expect(200);
+
+            expect(response.body).toHaveProperty("start");
+        });
+
+        it("returns 404 when meeting does not exist", async () => {
+            const token = signToken();
+            const response = await request(app)
+                .put(`/api/meetings/${new mongoose.Types.ObjectId()}`)
+                .set("Authorization", `Bearer ${token}`)
+                .send({ start: "2024-01-12T08:00:00.000Z" })
+                .expect(404);
+
+            expect(response.body).toEqual({ error: "Möte hittades inte" });
+        });
+
+        it("returns 500 for invalid ids", async () => {
+            const token = signToken();
+            const response = await request(app)
+                .put("/api/meetings/not-a-valid-id")
+                .set("Authorization", `Bearer ${token}`)
+                .send({ start: "2024-01-12T08:00:00.000Z" })
+                .expect(500);
+
+            expect(response.body).toEqual({
+                error: "Serverfel vid uppdatering av möte",
+            });
+        });
+    });
+});
