@@ -1,42 +1,5 @@
-# Mindful Learning – Etapp 1
+# Mindful Learning – Etapp
 
-## Roller och behörigheter
-
-Systemet ska stödja flera olika profiler med olika behörigheter:
-
-- Elev
-- Lärare
-- Administratör
-- Systemadministratör
-- SYV (Studie- och yrkesvägledare)
-- Specialpedagog
-- Praktiksamordnare
-
-Behörigheter ska vara personanpassningsbara och kunna justeras individuellt.
-Exempel:
-- Angelina får ändra i slutprovslistan
-- Mirsada har tillgång till ett gemensamt dokument med Anes för att kunna stötta vid betygsättning
-
----
-
-## Sökruta
-
-En global sökruta där det räcker med tre tecken för att söka på:
-
-### Elev
-- Sökning på för-, mellan- och efternamn
-- Leder till elevens profil
-
-### Datum
-- Visar elever med kursstart eller kursslut på valt datum
-
-### Lärare
-- Leder till lärarens profil
-- Visar aktiva och avslutade kurser samt elever
-
-### Kurs
-- Visar ansvarig lärare
-- Visar elever som läser kursen
 
 ---
 
