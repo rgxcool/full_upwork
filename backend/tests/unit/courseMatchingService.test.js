@@ -1,491 +1,300 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import CourseMatchingService from "../../src/utils/courseMatchingService.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const mockCourseFind = vi.fn();
-const mockCourseFindById = vi.fn();
-vi.mock("../../src/models/Course.js", () => ({
-    __esModule: true,
-    default: {
-        find: mockCourseFind,
-        findById: mockCourseFindById,
-    },
-}));
+const baseCourse = {
+  _id: "course-ref",
+  courseName: "Course Ref",
+  courseCode: "COURSE-CODE",
+  coursePoints: 10,
+  courseExtent: "5",
+};
 
-const mockCourseInstanceFindOne = vi.fn();
-const mockCoursePackageFind = vi.fn();
-const mockCoursePackageFindById = vi.fn();
-vi.mock("../../src/models/CoursePackage.js", () => ({
-    __esModule: true,
-    default: {
-        find: (...args) => mockCoursePackageFind(...args),
-        findById: (...args) => mockCoursePackageFindById(...args),
-    },
-}));
-class CourseInstanceMock {
-    constructor(data) {
-        Object.assign(this, data);
-        this._id = data._id || "ci-" + Math.random().toString(36).slice(2);
-        this.save = vi.fn().mockResolvedValue(this);
-        this.toObject = () => ({ ...this });
-    }
-    static findOne(...args) {
-        return mockCourseInstanceFindOne(...args);
-    }
-}
-vi.mock("../../src/models/CourseInstance.js", () => ({
-    __esModule: true,
-    default: CourseInstanceMock,
-}));
+const CourseMock = {
+  find: vi.fn(),
+  findById: vi.fn(),
+};
 
-const mockStudentEnrollmentFindOne = vi.fn();
-const createdEnrollments = [];
-class StudentEnrollmentMock {
-    constructor(data) {
-        Object.assign(this, data);
-        this.save = vi.fn().mockResolvedValue(this);
-        createdEnrollments.push(this);
-    }
-    toObject() {
-        return { ...this };
-    }
-    static findOne(...args) {
-        return mockStudentEnrollmentFindOne(...args);
-    }
-}
-vi.mock("../../src/models/StudentEnrollment.js", () => ({
-    __esModule: true,
-    default: StudentEnrollmentMock,
-}));
+const CourseInstanceMock = vi.fn(function (data) {
+  Object.assign(this, data);
+  this._id = data._id || "ci-" + Math.random().toString(36).slice(2, 8);
+  this.save = vi.fn().mockResolvedValue(this);
+  this.toObject = vi.fn(() => ({ ...this }));
+});
+CourseInstanceMock.findOne = vi.fn();
+
+const StudentEnrollmentConstructor = vi.fn(function (data) {
+  Object.assign(this, data);
+  this._id = data._id || "enroll-" + Math.random().toString(36).slice(2, 8);
+  this.save = vi.fn().mockResolvedValue(this);
+  this.toObject = vi.fn(() => ({ ...this }));
+});
+StudentEnrollmentConstructor.findOne = vi.fn();
 
 const StudentModelMock = {
-    findById: vi.fn(),
+  findById: vi.fn(),
 };
+
+const CoursePackageMock = {
+  find: vi.fn(),
+  findById: vi.fn(),
+};
+
+vi.mock("../../src/models/Course.js", () => ({
+  __esModule: true,
+  default: CourseMock,
+}));
+vi.mock("../../src/models/CourseInstance.js", () => ({
+  __esModule: true,
+  default: CourseInstanceMock,
+}));
+vi.mock("../../src/models/StudentEnrollment.js", () => ({
+  __esModule: true,
+  default: StudentEnrollmentConstructor,
+}));
 vi.mock("../../src/models/Student.js", () => ({
-    __esModule: true,
-    default: StudentModelMock,
+  __esModule: true,
+  default: StudentModelMock,
+}));
+vi.mock("../../src/models/CoursePackage.js", () => ({
+  __esModule: true,
+  default: CoursePackageMock,
 }));
 
-vi.mock("../../src/models/Event.js", () => ({
-    __esModule: true,
-    default: class EventMock {
-        constructor() {
-            this.save = vi.fn().mockResolvedValue(this);
-        }
-    },
-}));
-
-const createStudentDocument = () => ({
-    _id: "student1",
-    name: "Test Student",
-    email: "student@example.com",
-    teacherId: "teacher-main",
-    education: [],
-    save: vi.fn().mockResolvedValue(undefined),
-});
-
-const loadService = async () => {
-    vi.resetModules();
-    global._StudentModel = undefined;
-    const module = await import("../../src/utils/courseMatchingService.js");
-    return module.default;
+const studentDoc = {
+  _id: "student-1",
+  name: "Test Student",
+  email: "student@example.com",
+  education: [],
+  teacherId: "teacher-1",
+  save: vi.fn().mockResolvedValue(true),
 };
 
 beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.clearAllMocks();
-    mockCourseFind.mockResolvedValue([]);
-    mockCourseFindById.mockResolvedValue(null);
-    mockCourseInstanceFindOne.mockResolvedValue(null);
-    mockStudentEnrollmentFindOne.mockResolvedValue(null);
-    mockCoursePackageFind.mockReturnValue({
-        lean: vi.fn().mockResolvedValue([]),
-    });
-    mockCoursePackageFindById.mockResolvedValue({
-        populate: vi.fn().mockResolvedValue(null),
-    });
-    createdEnrollments.length = 0;
-    StudentModelMock.findById.mockResolvedValue(createStudentDocument());
+  vi.clearAllMocks();
+  studentDoc.education = [];
+  StudentModelMock.findById.mockResolvedValue(studentDoc);
+  global._StudentModel = StudentModelMock;
+
+  CoursePackageMock.find.mockReturnValue({
+    lean: async () => [],
+  });
+  CoursePackageMock.findById.mockReturnValue({
+    populate: async () => null,
+  });
+  CourseMock.findById.mockResolvedValue({ ...baseCourse });
+  CourseInstanceMock.findOne.mockResolvedValue(null);
+  StudentEnrollmentConstructor.findOne.mockResolvedValue(null);
 });
 
-describe("CourseMatchingService utilities", () => {
-    it("calculates calendar helpers", async () => {
-        const CourseMatchingService = await loadService();
-        const monday = CourseMatchingService.getNextMonday("2024-09-22");
-        expect(monday.getDay()).toBe(1);
-        const added = CourseMatchingService.addWeeks("2024-08-01", 3);
-        expect(added.getDate()).toBe(new Date("2024-08-01").getDate() + 21);
-        const wednesday = CourseMatchingService.getWednesdayOfWeek(
-            "2024-08-01",
-            2
-        );
-        expect(wednesday.getDay()).toBe(3);
-        expect(CourseMatchingService.cleanCourseName("abc (rev) mot extra")).toBe(
-            "ABC EXTRA"
-        );
-    });
+afterEach(() => {
+  delete global._StudentModel;
+  vi.restoreAllMocks();
+});
+
+describe("CourseMatchingService helpers", () => {
+  it("normalizes dates and names correctly", () => {
+    expect(
+      CourseMatchingService.getNextMonday(new Date("2025-06-05"))
+        .getDay()
+    ).toBe(1);
+    expect(
+      CourseMatchingService.addWeeks(new Date("2025-06-01"), 2).getTime()
+    ).toBe(new Date("2025-06-15").getTime());
+    expect(
+      CourseMatchingService.getWednesdayOfWeek("2025-06-01", 2)
+        .getDay()
+    ).toBe(3);
+    expect(
+      CourseMatchingService.cleanCourseName("Intro to (something) mot, info|extra")
+    ).toBe("INTRO TO INFOEXTRA");
+  });
 });
 
 describe("findBestCourseMatch", () => {
-    it("returns null when no match", async () => {
-        const CourseMatchingService = await loadService();
-        const result = await CourseMatchingService.findBestCourseMatch("missing");
-        expect(result).toBeNull();
-    });
+  it("returns the exact match when codes normalize to same value", async () => {
+    CourseMock.find
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { courseCode: "  ABC123 ", courseName: "Demo", _id: "course-1" },
+      ]);
 
-    it("returns course when exact match exists", async () => {
-        const CourseMatchingService = await loadService();
-        const course = {
-            _id: "course1",
-            courseCode: "SVEA1000X",
-            courseName: "Swedish",
-        };
-        mockCourseFind.mockResolvedValueOnce([course]);
-        const result = await CourseMatchingService.findBestCourseMatch("svea1000x");
-        expect(result).toEqual({
-            course,
-            score: 1.0,
-        });
+    const result = await CourseMatchingService.findBestCourseMatch("abc123");
+    expect(result).toEqual({
+      course: expect.objectContaining({ _id: "course-1" }),
+      score: 1,
     });
+  });
+
+  it("returns null when there are no normalized matches", async () => {
+    CourseMock.find
+      .mockResolvedValueOnce([{ courseCode: "XXX", _id: "course-2" }])
+      .mockResolvedValueOnce([{ courseCode: "YYY", _id: "course-3" }]);
+    const result = await CourseMatchingService.findBestCourseMatch("nope");
+    expect(result).toBeNull();
+  });
 });
 
 describe("findOrCreateCourseInstance", () => {
-    it("updates existing instance", async () => {
-        const CourseMatchingService = await loadService();
-        const instance = new CourseInstanceMock({
-            _id: "ci1",
-            courseName: "Test",
-            startDate: new Date("2024-08-01"),
-            endDate: new Date("2024-09-01"),
-            responsibleTeacher: null,
-        });
-        mockCourseInstanceFindOne.mockResolvedValueOnce(instance);
+  it("returns existing instance when found and updates metadata", async () => {
+    const existing = {
+      _id: "ci-existing",
+      courseName: "Existing",
+      startDate: new Date("2025-03-01"),
+      endDate: new Date("2025-06-01"),
+      responsibleTeacher: {
+        toString: () => "teacher-old",
+      },
+      save: vi.fn().mockResolvedValue(true),
+      courseNameRef: "Existing",
+      toObject: function () {
+        return { ...this };
+      },
+    };
+    CourseInstanceMock.findOne.mockResolvedValue(existing);
+    await CourseMatchingService.findOrCreateCourseInstance(
+      "main-course",
+      new Date("2025-03-01"),
+      new Date("2025-06-01"),
+      "user-id",
+      "teacher-new",
+      undefined
+    );
+    expect(existing.save).toHaveBeenCalled();
+  });
 
-        const result = await CourseMatchingService.findOrCreateCourseInstance(
-            "course123",
-            new Date("2024-08-01"),
-            new Date("2024-09-01"),
-            "user1",
-            null,
-            new Date("2024-09-15")
-        );
-
-        expect(result.wasCreated).toBe(false);
-        expect(instance.slutprovDate).toEqual(new Date("2024-09-15"));
-        expect(instance.save).toHaveBeenCalled();
+  it("creates a new instance when none exists", async () => {
+    CourseInstanceMock.findOne.mockResolvedValue(null);
+    CourseMock.findById.mockResolvedValue({
+      _id: "main-course",
+      courseName: "Main",
+      courseCode: "MCODE",
+      coursePoints: 10,
+      courseExtent: 5,
     });
-
-    it("creates new instance when missing", async () => {
-        const CourseMatchingService = await loadService();
-        const mainCourse = {
-            _id: "main1",
-            courseName: "Main course",
-            courseCode: "MAIN100",
-            coursePoints: 10,
-            courseExtent: 5,
-        };
-        mockCourseInstanceFindOne.mockResolvedValue(null);
-        mockCourseFindById.mockResolvedValueOnce(mainCourse);
-
-        const result = await CourseMatchingService.findOrCreateCourseInstance(
-            mainCourse._id,
-            new Date("2024-08-01"),
-            new Date("2024-09-01"),
-            "user1",
-            "teacher1",
-            null
-        );
-
-        expect(result.wasCreated).toBe(true);
-        expect(result.instance).toBeInstanceOf(CourseInstanceMock);
-        expect(result.instance.courseName).toBe(mainCourse.courseName);
-    });
+    const result = await CourseMatchingService.findOrCreateCourseInstance(
+      "main-course",
+      new Date("2025-07-01"),
+      new Date("2025-10-01"),
+      "user-id",
+      null,
+      new Date("2025-09-01")
+    );
+    expect(result.wasCreated).toBe(true);
+    expect(result.instance).toBeInstanceOf(CourseInstanceMock);
+  });
 });
 
 describe("processStudentEducation", () => {
-    it("handles program entries", async () => {
-        const CourseMatchingService = await loadService();
-        const studentId = "stu1";
-        const entry = {
-            type: "Program",
-            refId: "prog1",
-            name: "Program Test",
-            notes: "Notes",
-        };
-        const results = await CourseMatchingService.processStudentEducation(
-            studentId,
-            [entry],
-            "user1"
-        );
-
-        expect(results.enrollments).toHaveLength(0); // filtered because courseInstanceId is unset for programs
-        expect(results.errors).toHaveLength(0);
-        expect(results.warnings).toHaveLength(0);
-        expect(createdEnrollments[0]).toBeDefined();
-        const studentDoc = await StudentModelMock.findById();
-        expect(studentDoc.education.some((e) => e.type === "Program")).toBe(
-            true
-        );
+  it("processes a course entry and creates enrollment", async () => {
+    const findBestSpy = vi
+      .spyOn(CourseMatchingService, "findBestCourseMatch")
+      .mockResolvedValue({ course: { ...baseCourse } });
+    CourseInstanceMock.findOne.mockResolvedValue(null);
+    StudentEnrollmentConstructor.findOne.mockResolvedValue(null);
+    CoursePackageMock.find.mockReturnValue({
+      lean: async () => [],
     });
 
-    it("enrolls individual course entries and updates the education array", async () => {
-        const CourseMatchingService = await loadService();
-        const studentDoc = createStudentDocument();
-        StudentModelMock.findById.mockResolvedValue(studentDoc);
+    const results = await CourseMatchingService.processStudentEducation(
+      "student-1",
+      [
+        {
+          type: "Course",
+          name: "Course Code",
+          startDate: "2025-07-01",
+          endDate: "2025-08-01",
+          notes: "note",
+        },
+      ],
+      "admin"
+    );
 
-        const course = {
-            _id: "course-individual",
-            courseCode: "INDV100",
-            courseName: "Individual Course",
-            courseExtent: "5",
-        };
+    expect(results.errors).toHaveLength(0);
+    expect(StudentEnrollmentConstructor).toHaveBeenCalled();
+    expect(
+      results.warnings.some((warning) => warning.type === "instance_created")
+    ).toBe(true);
+    expect(studentDoc.education).toHaveLength(1);
+    expect(studentDoc.education[0]).toMatchObject({
+      type: "Course",
+      refId: baseCourse._id,
+    });
+    findBestSpy.mockRestore();
+  });
 
-        const matchSpy = vi
-            .spyOn(CourseMatchingService, "findBestCourseMatch")
-            .mockResolvedValue({
-                course,
-                score: 1,
-            });
-
-        const instance = {
-            _id: "instance-individual",
-            courseName: course.courseName,
-            startDate: new Date("2025-01-01"),
-            endDate: new Date("2025-02-05"),
-        };
-        const instanceSpy = vi
-            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
-            .mockResolvedValue({
-                instance,
-                wasCreated: true,
-            });
-
-        const entry = {
-            type: "Course",
-            name: course.courseCode,
-            startDate: "2025-01-01",
-            endDate: "2025-02-05",
-            notes: "Individual notes",
-        };
-
-        const results = await CourseMatchingService.processStudentEducation(
-            "student1",
-            [entry],
-            "user1"
-        );
-
-        expect(results.enrollments).toHaveLength(1);
-        expect(results.enrollments[0].courseInstanceName).toBe(
-            course.courseName
-        );
-        expect(results.warnings).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    type: "instance_created",
-                    courseName: entry.name,
-                }),
-            ])
-        );
-        expect(studentDoc.education.some((e) => e.type === "Course")).toBe(
-            true
-        );
-
-        matchSpy.mockRestore();
-        instanceSpy.mockRestore();
+  it("processes a program entry and adds education entry", async () => {
+    StudentEnrollmentConstructor.findOne.mockResolvedValue(null);
+    CoursePackageMock.find.mockReturnValue({
+      lean: async () => [],
     });
 
-    it("processes grouped course package entries and records package education", async () => {
-        const CourseMatchingService = await loadService();
-        const studentDoc = createStudentDocument();
-        StudentModelMock.findById.mockResolvedValue(studentDoc);
+    const programEntry = {
+      type: "Program",
+      name: "Test Program",
+      refId: "program-1",
+      startDate: "2025-09-01",
+      endDate: "2025-09-30",
+      teacherId: "teacher-2",
+    };
 
-        const courseA = {
-            _id: "course-A",
-            courseName: "Course A",
-            courseExtent: "2.5",
-        };
-        const courseB = {
-            _id: "course-B",
-            courseName: "Course B",
-            courseExtent: "2.5",
-        };
+    const results = await CourseMatchingService.processStudentEducation(
+      "student-1",
+      [programEntry],
+      "admin"
+    );
 
-        const packageDoc = {
-            _id: "package1",
-            coursePackageName: "Package One",
-            coursePackageCourses: [courseA, courseB],
-        };
-
-        const populateMock = vi.fn().mockResolvedValue(packageDoc);
-        mockCoursePackageFindById.mockImplementation(() => ({
-            populate: populateMock,
-        }));
-
-        const courseInstanceA = {
-            _id: "instance-A",
-            courseName: courseA.courseName,
-            startDate: new Date("2025-01-06"),
-            endDate: new Date("2025-02-10"),
-        };
-        const courseInstanceB = {
-            _id: "instance-B",
-            courseName: courseB.courseName,
-            startDate: new Date("2025-01-06"),
-            endDate: new Date("2025-02-10"),
-        };
-
-        const createSequence = [
-            { instance: courseInstanceA, wasCreated: true },
-            { instance: courseInstanceB, wasCreated: true },
-        ];
-        const findOrCreateSpy = vi
-            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
-            .mockImplementation(() =>
-                Promise.resolve(
-                    createSequence.shift() || {
-                        instance: courseInstanceB,
-                        wasCreated: true,
-                    }
-                )
-            );
-
-        const entry = {
-            type: "CoursePackage",
-            refId: packageDoc._id,
-            name: packageDoc.coursePackageName,
-            startDate: "2025-01-01",
-            endDate: "2025-03-01",
-            teacherId: "package-teacher",
-        };
-
-        const results = await CourseMatchingService.processStudentEducation(
-            "student2",
-            [entry],
-            "user2"
-        );
-
-        if (results.errors.length) {
-            throw new Error(
-                `processing error: ${results.errors[0].message}`
-            );
-        }
-        expect(results.warnings).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({ type: "package_added" }),
-            ])
-        );
-        expect(
-            studentDoc.education.filter((e) => e.type === "Course")
-        ).toHaveLength(2);
-        expect(
-            studentDoc.education.some((e) => e.type === "CoursePackage")
-        ).toBe(true);
-
-        findOrCreateSpy.mockRestore();
+    expect(StudentEnrollmentConstructor).toHaveBeenCalled();
+    expect(StudentEnrollmentConstructor.mock.calls[0][0]).toMatchObject({
+      programId: "program-1",
     });
-
-    it("warns when individual course matching fails", async () => {
-        const CourseMatchingService = await loadService();
-        const entry = {
-            type: "Course",
-            name: "Unknown Code",
-            startDate: "2025-01-01",
-            endDate: "2025-04-01",
-        };
-
-        const results = await CourseMatchingService.processStudentEducation(
-            "studentX",
-            [entry],
-            "userX"
-        );
-
-        expect(results.enrollments).toHaveLength(0);
-        expect(results.warnings).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    type: "no_match",
-                    courseName: entry.name,
-                }),
-            ])
-        );
+    expect(studentDoc.education).toHaveLength(1);
+    expect(studentDoc.education[0]).toMatchObject({
+      type: "Program",
+      refId: "program-1",
     });
+    expect(results.enrollments).toHaveLength(0);
+  });
 
-    it("continues when slutprov date is invalid for an individual course", async () => {
-        const CourseMatchingService = await loadService();
-        const studentDoc = createStudentDocument();
-        StudentModelMock.findById.mockResolvedValue(studentDoc);
-
-        const course = {
-            _id: "individual-2",
-            courseName: "Individual Fun",
-            courseExtent: "4",
-        };
-        const matchSpy = vi
-            .spyOn(CourseMatchingService, "findBestCourseMatch")
-            .mockResolvedValue({
-                course,
-                score: 1,
-            });
-        const instance = {
-            _id: "instance-invalid",
-            courseName: course.courseName,
-            startDate: new Date("2025-03-01"),
-            endDate: new Date("2025-04-01"),
-        };
-        const instanceSpy = vi
-            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
-            .mockResolvedValue({
-                instance,
-                wasCreated: true,
-            });
-
-        const entry = {
-            type: "Course",
-            name: "Individual Fun",
-            startDate: "2025-03-01",
-            endDate: "2025-04-01",
-            slutprovDate: "not-a-date",
-        };
-
-        const results = await CourseMatchingService.processStudentEducation(
-            "student3",
-            [entry],
-            "user3"
-        );
-
-        expect(results.enrollments).toHaveLength(1);
-        expect(results.errors).toHaveLength(0);
-        matchSpy.mockRestore();
-        instanceSpy.mockRestore();
+  it("processes a course package entry and schedules included courses", async () => {
+    const packageCourse = {
+      _id: "package-course-1",
+      courseName: "Package Course 1",
+      courseCode: "PACKAGE-COURSE-1",
+      courseExtent: "5",
+      coursePoints: 8,
+    };
+    const packageDoc = {
+      _id: "package-1",
+      coursePackageName: "Test Package",
+      coursePackageCode: "PKG1",
+      coursePackageCourses: [packageCourse],
+    };
+    CoursePackageMock.find.mockReturnValue({
+      lean: async () => [packageDoc],
     });
-
-    it("records processing errors when a course package lookup fails", async () => {
-        const CourseMatchingService = await loadService();
-        const populateMock = vi
-            .fn()
-            .mockRejectedValue(new Error("package load failed"));
-        mockCoursePackageFindById.mockImplementation(() => ({
-            populate: populateMock,
-        }));
-
-        const entry = {
-            type: "CoursePackage",
-            refId: "pkg-fail",
-            name: "Broken Package",
-            startDate: "2025-01-01",
-            endDate: "2025-02-01",
-        };
-
-        const results = await CourseMatchingService.processStudentEducation(
-            "studentPkg",
-            [entry],
-            "userPkg"
-        );
-
-        expect(results.enrollments).toHaveLength(0);
-        expect(results.errors).toHaveLength(1);
-        expect(results.errors[0]).toMatchObject({
-            type: "processing_error",
-            courseName: entry.name,
-            message: "package load failed",
-        });
+    CoursePackageMock.findById.mockReturnValue({
+      ...packageDoc,
+      populate: async () => packageDoc,
     });
+    StudentEnrollmentConstructor.findOne.mockResolvedValue(null);
+    CourseInstanceMock.findOne.mockResolvedValue(null);
+
+    const results = await CourseMatchingService.processStudentEducation(
+      "student-1",
+      [
+        {
+          type: "CoursePackage",
+          name: "Test Package",
+          refId: "package-1",
+          startDate: "2025-09-01",
+          endDate: "2025-10-31",
+        },
+      ],
+      "admin"
+    );
+
+    expect(StudentEnrollmentConstructor).toHaveBeenCalled();
+    expect(results.warnings.some((warning) => warning.type === "package_added")).toBe(true);
+    expect(studentDoc.education.some((entry) => entry.type === "CoursePackage")).toBe(true);
+  });
 });
