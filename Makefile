@@ -19,7 +19,7 @@ endif
 
 # --- Targets -------------------------------------------------------
 
-.PHONY: deploy deploy-old estimate format start-backend dev test citest stop
+.PHONY: deploy deploy-old estimate format start-backend dev test citest stop npmup
 
 deploy:
 	@echo "Pulling latest code..."
@@ -113,3 +113,6 @@ test:
 
 stop:
 	$(DC) down
+
+npmup:
+	rm -rf node_modules package-lock.json && npm dedupe && npm install --include=dev

@@ -10,9 +10,9 @@
     "docs": "jsdoc -c jsdoc.json"
   },
   "dependencies": {
-    "dotenv": "^16.5.0",
-    "glob": "^11.0.3",
-    "openai": "^5.7.0",
+    "dotenv": "^17.2.3",
+    "glob": "^13.0.0",
+    "openai": "^6.15.0",
     "recast": "^0.23.11"
   },
   "type": "module"
