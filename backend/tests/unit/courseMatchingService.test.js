@@ -64,6 +64,15 @@ vi.mock("../../src/models/Student.js", () => ({
     default: StudentModelMock,
 }));
 
+vi.mock("../../src/models/Event.js", () => ({
+    __esModule: true,
+    default: class EventMock {
+        constructor() {
+            this.save = vi.fn().mockResolvedValue(this);
+        }
+    },
+}));
+
 const createStudentDocument = () => ({
     _id: "student1",
     name: "Test Student",
@@ -371,5 +380,112 @@ describe("processStudentEducation", () => {
         ).toBe(true);
 
         findOrCreateSpy.mockRestore();
+    });
+
+    it("warns when individual course matching fails", async () => {
+        const CourseMatchingService = await loadService();
+        const entry = {
+            type: "Course",
+            name: "Unknown Code",
+            startDate: "2025-01-01",
+            endDate: "2025-04-01",
+        };
+
+        const results = await CourseMatchingService.processStudentEducation(
+            "studentX",
+            [entry],
+            "userX"
+        );
+
+        expect(results.enrollments).toHaveLength(0);
+        expect(results.warnings).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: "no_match",
+                    courseName: entry.name,
+                }),
+            ])
+        );
+    });
+
+    it("continues when slutprov date is invalid for an individual course", async () => {
+        const CourseMatchingService = await loadService();
+        const studentDoc = createStudentDocument();
+        StudentModelMock.findById.mockResolvedValue(studentDoc);
+
+        const course = {
+            _id: "individual-2",
+            courseName: "Individual Fun",
+            courseExtent: "4",
+        };
+        const matchSpy = vi
+            .spyOn(CourseMatchingService, "findBestCourseMatch")
+            .mockResolvedValue({
+                course,
+                score: 1,
+            });
+        const instance = {
+            _id: "instance-invalid",
+            courseName: course.courseName,
+            startDate: new Date("2025-03-01"),
+            endDate: new Date("2025-04-01"),
+        };
+        const instanceSpy = vi
+            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+            .mockResolvedValue({
+                instance,
+                wasCreated: true,
+            });
+
+        const entry = {
+            type: "Course",
+            name: "Individual Fun",
+            startDate: "2025-03-01",
+            endDate: "2025-04-01",
+            slutprovDate: "not-a-date",
+        };
+
+        const results = await CourseMatchingService.processStudentEducation(
+            "student3",
+            [entry],
+            "user3"
+        );
+
+        expect(results.enrollments).toHaveLength(1);
+        expect(results.errors).toHaveLength(0);
+        matchSpy.mockRestore();
+        instanceSpy.mockRestore();
+    });
+
+    it("records processing errors when a course package lookup fails", async () => {
+        const CourseMatchingService = await loadService();
+        const populateMock = vi
+            .fn()
+            .mockRejectedValue(new Error("package load failed"));
+        mockCoursePackageFindById.mockImplementation(() => ({
+            populate: populateMock,
+        }));
+
+        const entry = {
+            type: "CoursePackage",
+            refId: "pkg-fail",
+            name: "Broken Package",
+            startDate: "2025-01-01",
+            endDate: "2025-02-01",
+        };
+
+        const results = await CourseMatchingService.processStudentEducation(
+            "studentPkg",
+            [entry],
+            "userPkg"
+        );
+
+        expect(results.enrollments).toHaveLength(0);
+        expect(results.errors).toHaveLength(1);
+        expect(results.errors[0]).toMatchObject({
+            type: "processing_error",
+            courseName: entry.name,
+            message: "package load failed",
+        });
     });
 });
