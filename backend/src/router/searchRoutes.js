@@ -31,7 +31,6 @@ router.get("/courses", authenticateUser, async (req, res) => {
 
             // Filter students by this teacher's ID
             query.teacherId = teacher._id;
-            console.log(`🔍 Teacher ${teacher._id} fetching their courses`);
         }
 
         const students = await Student.find(query);
@@ -90,7 +89,6 @@ router.get("/search", authenticateUser, async (req, res) => {
 
             // Filter students by this teacher's ID
             studentQuery.teacherId = teacher._id;
-            console.log(`🔍 Teacher ${teacher._id} searching their students`);
         }
 
         if (type === "Datum" && date) {
@@ -99,17 +97,30 @@ router.get("/search", authenticateUser, async (req, res) => {
                 return res.status(400).json({ message: "Ogiltigt datum" });
             }
 
-            // Only include students whose startDate <= date <= endDate.
-            // Do NOT include students just because they have an exam (finalExamDate) on this date.
-            // This ensures the date search is strictly for enrollment period, not exam dates.
-            const students = await Student.find({
-                ...studentQuery,
-                startDate: { $lte: parsedDate },
-                endDate: { $gte: parsedDate },
-            }).select("_id name email");
+            // New logic: Find enrollments starting or ending on this date
+            const startOfDay = new Date(parsedDate.setHours(0, 0, 0, 0));
+            const endOfDay = new Date(parsedDate.setHours(23, 59, 59, 999));
+
+            const enrollments = await StudentEnrollment.find({
+                $or: [
+                    { startDate: { $gte: startOfDay, $lte: endOfDay } },
+                    { endDate: { $gte: startOfDay, $lte: endOfDay } },
+                ],
+            }).populate({
+                path: 'studentId',
+                select: '_id name email',
+                match: studentQuery // Applies teacher filter if necessary
+            });
+
+            const students = enrollments
+                .filter(e => e.studentId) // Filter out enrollments where student doesn't match teacher filter
+                .map(e => e.studentId);
+
+            // Deduplicate students
+            const uniqueStudents = Array.from(new Map(students.map(s => [s._id.toString(), s])).values());
 
             results.push(
-                ...students.map((student) => ({
+                ...uniqueStudents.map((student) => ({
                     id: student._id,
                     name: student.name,
                     type: "Elev",
@@ -215,34 +226,16 @@ router.get("/search", authenticateUser, async (req, res) => {
 
 router.get("/details/:type/:id", async (req, res) => {
     const { type, id } = req.params;
-    console.log(`🔍 Details request: ${type}/${id}`);
 
     try {
         let result;
 
         switch (type) {
             case "Elev":
-                console.log("🔍 Looking for student with ID:", id);
-                
-                // First try simple findById
                 const student = await Student.findById(id);
-                console.log("📚 Student found:", student ? "Yes" : "No");
-                
                 if (!student) {
-                    console.log("❌ Student not found in database");
-                    return res
-                        .status(404)
-                        .json({ message: "Student not found" });
+                    return res.status(404).json({ message: "Student not found" });
                 }
-                
-                console.log("✅ Student data:", {
-                    name: student.name,
-                    email: student.email,
-                    education: student.education?.length || 0
-                });
-
-                // For now, just return basic student data to debug the issue
-                console.log("📤 Returning basic student data");
                 result = {
                     _id: student._id,
                     name: student.name,
@@ -253,107 +246,47 @@ router.get("/details/:type/:id", async (req, res) => {
                     teacherId: student.teacherId
                 };
                 break;
+            case "Lärare":
+                const teacherUser = await User.findById(id).lean();
+                if (!teacherUser) {
+                    return res.status(404).json({ message: "User not found" });
+                }
 
-                // COMMENTED OUT FOR DEBUGGING - Complex population code
-                /*
-                const populatedStudent = student.toObject();
-                populatedStudent.education = Array.isArray(
-                    populatedStudent.education
-                )
-                    ? populatedStudent.education
-                    : [];
+                const teacherProfile = await Teacher.findOne({ userId: id }).lean();
+                if (!teacherProfile) {
+                    return res.status(404).json({ message: "Teacher profile not found" });
+                }
 
-                for (const edu of populatedStudent.education) {
-                    if (!edu.refId) continue;
+                const enrollments = await StudentEnrollment.find({
+                    teacherId: teacherProfile._id,
+                })
+                    .populate("studentId", "name email")
+                    .populate("mainCourseId", "courseName courseCode")
+                    .lean();
 
-                    try {
-                        let populatedRef = null;
+                const studentsMap = new Map();
+                const coursesMap = new Map();
 
-                        if (edu.type === "Course") {
-                            populatedRef = await Course.findById(
-                                edu.refId
-                            ).select(
-                                "courseName courseCode coursePoints courseExtent"
-                            );
-                        } else if (edu.type === "CoursePackage") {
-                            populatedRef = await CoursePackage.findById(
-                                edu.refId
-                            ).select("coursePackageName coursePackageCode");
-                        } else if (edu.type === "Program") {
-                            populatedRef = await Program.findById(
-                                edu.refId
-                            ).select("programName");
-                        }
-
-                        if (populatedRef) {
-                            edu.refId = populatedRef;
-                        }
-                    } catch (populateError) {
-                        console.error(
-                            `Error populating ${edu.type}:`,
-                            populateError
+                for (const enrollment of enrollments) {
+                    if (enrollment.studentId) {
+                        studentsMap.set(
+                            enrollment.studentId._id.toString(),
+                            enrollment.studentId
                         );
-                        edu.refId = null;
+                    }
+                    if (enrollment.mainCourseId) {
+                        coursesMap.set(
+                            enrollment.mainCourseId._id.toString(),
+                            enrollment.mainCourseId
+                        );
                     }
                 }
 
-                // Fetch enrollments from the new course versioning system
-                const studentEnrollments = await StudentEnrollment.find({
-                    studentId: id,
-                })
-                    .populate("courseInstanceId")
-                    .populate("mainCourseId")
-                    .populate("teacherId", "name email")
-                    .sort({ startDate: -1 });
-
-                // Convert enrollments to education format for display
-                const enrollmentEducation = studentEnrollments.map(
-                    (enrollment) => ({
-                        _id: enrollment._id,
-                        type: "Course",
-                        refId: enrollment.mainCourseId,
-                        name: enrollment.mainCourseId?.courseName,
-                        startDate: enrollment.startDate,
-                        endDate: enrollment.endDate,
-                        status: enrollment.status,
-                        grade: enrollment.grade,
-                        comments: enrollment.notes,
-                        enrollmentId: enrollment._id,
-                        courseInstanceId: enrollment.courseInstanceId?._id,
-                        courseInstance: enrollment.courseInstanceId,
-                        addedAt: enrollment.createdAt,
-                        addedBy: enrollment.teacherId?.name || "System",
-                        isEnrollment: true, // Flag to identify this came from enrollment system
-                    })
-                );
-
-                // Use only enrollment data as education entries
-                populatedStudent.education = enrollmentEducation;
-
-                // Add enrollment statistics
-                const enrollments = studentEnrollments;
-                populatedStudent.enrollmentStats = {
-                    totalEnrollments: enrollments.length,
-                    activeEnrollments: enrollments.filter(
-                        (e) => e.status === "enrolled" || e.status === "active"
-                    ).length,
-                    completedEnrollments: enrollments.filter(
-                        (e) => e.status === "completed"
-                    ).length,
-                    droppedEnrollments: enrollments.filter(
-                        (e) => e.status === "dropped"
-                    ).length,
+                result = {
+                    ...teacherUser,
+                    students: Array.from(studentsMap.values()),
+                    courses: Array.from(coursesMap.values()),
                 };
-
-                result = populatedStudent;
-                */
-                break;
-
-            case "Lärare":
-                result = await User.findOne({
-                    _id: id,
-                    roles: "teacher",
-                }).select("username email role roles");
                 break;
 
             case "Personal":
@@ -372,82 +305,52 @@ router.get("/details/:type/:id", async (req, res) => {
                 break;
 
             case "Kurs":
-                console.log("🔍 Looking for course with ID:", id);
-                
                 try {
-                    // First try to find the course directly in Course model
-                    const course = await Course.findById(id);
-                    console.log("📚 Direct course lookup:", course ? "Found" : "Not found");
-                    
-                    let courseName = course ? (course.courseName || "Okänd kurs") : "Okänd kurs";
-                    
-                    // If not found directly, try to find students through their education array
-                    console.log("🔍 Looking for students with this course in their education array");
-                    
-                    const studentsWithCourse = await Student.find({
-                        'education.refId': id
-                    }).select('_id name email').lean();
-                    
-                    console.log("📚 Found students with course in education:", studentsWithCourse.length);
-                    
-                    // Also try StudentEnrollment approach
-                    const courseEnrollments = await StudentEnrollment
-                        .find({ mainCourseId: id })
-                        .populate("studentId", "name _id")
-                        .lean();
-                    
-                    console.log("📚 Found enrollments:", courseEnrollments.length);
-                    
-                    // Combine both approaches
-                    const enrollmentStudents = courseEnrollments.map((e) => e.studentId).filter(s => s !== null);
-                    const allStudents = [...studentsWithCourse, ...enrollmentStudents];
-                    
-                    // Remove duplicates based on _id
-                    const uniqueStudents = allStudents.filter((student, index, self) => 
-                        index === self.findIndex(s => s._id.toString() === student._id.toString())
-                    );
-                    
-                    console.log("👥 Total unique students found:", uniqueStudents.length);
+                    const course = await Course.findById(id).lean();
+                    if (!course) {
+                        return res.status(404).json({ message: "Course not found" });
+                    }
 
-                    // If we didn't find course name directly and have students, try to get it from student education
-                    if (courseName === "Okänd kurs" && studentsWithCourse.length > 0) {
-                        const studentWithEdu = await Student.findById(studentsWithCourse[0]._id)
-                            .populate('education.refId');
-                        
-                        const courseEdu = studentWithEdu?.education?.find(edu => 
-                            edu.refId && edu.refId._id.toString() === id
-                        );
-                        
-                        if (courseEdu && courseEdu.refId) {
-                            courseName = courseEdu.refId.courseName || 
-                                       courseEdu.refId.programName || 
-                                       courseEdu.refId.coursePackageName || 
-                                       courseName; // Keep existing name if nothing found
+                    const courseEnrollments = await StudentEnrollment.find({
+                        mainCourseId: id,
+                    })
+                        .populate("studentId", "name email")
+                        .populate("teacherId")
+                        .lean();
+
+                    const students = courseEnrollments
+                        .map((e) => e.studentId)
+                        .filter(Boolean);
+
+                    const teachersMap = new Map();
+                    for (const enrollment of courseEnrollments) {
+                        if (enrollment.teacherId) {
+                            const teacherUser = await User.findById(
+                                enrollment.teacherId.userId
+                            )
+                                .select("username")
+                                .lean();
+                            if (teacherUser) {
+                                teachersMap.set(enrollment.teacherId._id.toString(), {
+                                    _id: enrollment.teacherId._id,
+                                    username: teacherUser.username,
+                                });
+                            }
                         }
                     }
-                    
+
+                    const uniqueStudents = Array.from(
+                        new Map(students.map((s) => [s._id.toString(), s])).values()
+                    );
+
                     result = {
-                        courseId: id,
-                        courseName: courseName,
-                        teacher: {
-                            _id: null,
-                            username: "Okänd lärare"
-                        },
-                        students: uniqueStudents
+                        ...course,
+                        students: uniqueStudents,
+                        teachers: Array.from(teachersMap.values()),
                     };
-                    
-                    console.log("✅ Returning combined result:", result);
                 } catch (courseError) {
                     console.error("❌ Error in Kurs case:", courseError);
-                    result = {
-                        courseId: id,
-                        courseName: "Fel vid hämtning av kurs",
-                        teacher: {
-                            _id: null,
-                            username: "Okänd lärare"
-                        },
-                        students: []
-                    };
+                    return res.status(500).json({ message: "Serverfel vid hämtning av kursdetaljer" });
                 }
                 break;
 
@@ -464,13 +367,6 @@ router.get("/details/:type/:id", async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error("❌ Fetch details error:", error);
-        console.error("❌ Error stack:", error.stack);
-        console.error("❌ Error details:", {
-            type,
-            id,
-            message: error.message,
-            name: error.name
-        });
         res.status(500).json({ message: "Serverfel vid hämtning av detaljer" });
     }
 });
