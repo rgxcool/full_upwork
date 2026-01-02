@@ -72,6 +72,10 @@ vi.mock("../../src/controllers/studentController.js", () => ({
     normalizeMunicipalityName: vi.fn((value) => value),
     getClosestMunicipality: vi.fn(() => null),
 }));
+vi.mock("../../src/utils/slutprovDateCalculator.js", () => ({
+    __esModule: true,
+    calculateSlutprovDate: vi.fn(),
+}));
 
 import CourseMatchingService from "../../src/utils/courseMatchingService.js";
 import Student from "../../src/models/Student.js";
@@ -97,6 +101,7 @@ import {
 } from "../../src/controllers/courseMatchingController.js";
 import { createOrFindTeacher } from "../../src/utils/teacherService.js";
 import { createGlobalNotification } from "../../src/controllers/notificationController.js";
+import { calculateSlutprovDate } from "../../src/utils/slutprovDateCalculator.js";
 
 const createRes = () => {
     const res = {
@@ -130,6 +135,7 @@ const createPopulateChain = (result) => {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    calculateSlutprovDate.mockResolvedValue(null);
     Student.prototype.save = vi.fn().mockImplementation(function () {
         return Promise.resolve(this);
     });
@@ -329,6 +335,134 @@ describe("uploadStudentsForMatching", () => {
             })
         );
     });
+
+    it("deduplicates missing package errors and filters instance-created warnings", async () => {
+        const req = createReq();
+        const res = createRes();
+        const coursePackage = {
+            _id: "pkg-1",
+            coursePackageCode: "MATHPKG",
+            coursePackageName: "Mathematik paket",
+        };
+
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "student@example.com",
+                name: "Student",
+                teacher: "Teacher One",
+                additionalInfo: "Notes",
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: "MATHPKG",
+                        startDate: "2024-01-01",
+                        endDate: "2024-02-01",
+                        slutprovDate: "2024-03-01",
+                    },
+                ],
+            },
+        ]);
+
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([coursePackage]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+
+        CourseMatchingService.processStudentEducation.mockResolvedValue({
+            enrollments: [{ type: "CoursePackage", name: coursePackage.coursePackageName }],
+            warnings: [
+                { type: "instance_created", message: "Skip this" },
+                { type: "custom_warning", message: "Keep this" },
+            ],
+            errors: [
+                {
+                    type: "missing_package",
+                    packageName: "PKG1",
+                    message: "First",
+                },
+                {
+                    type: "missing_package",
+                    packageName: "PKG1",
+                    message: "Second",
+                },
+            ],
+        });
+
+        await uploadStudentsForMatching(req, res);
+
+        const payload = res.json.mock.calls[0][0];
+        expect(payload).toEqual(
+            expect.objectContaining({
+                success: true,
+                results: expect.objectContaining({
+                    warnings: [expect.objectContaining({ type: "custom_warning" })],
+                    errors: [
+                        expect.objectContaining({
+                            type: "missing_package",
+                            error: "First",
+                        }),
+                    ],
+                }),
+            })
+        );
+    });
+
+    it("returns 422 when no enrollments can be created", async () => {
+        const req = createReq();
+        const res = createRes();
+        const course = {
+            _id: "course-1",
+            courseCode: "MAT101",
+            courseName: "Matte",
+        };
+
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "student@example.com",
+                name: "Student",
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: "MAT101",
+                        startDate: "2024-01-01",
+                        endDate: "2024-02-01",
+                    },
+                ],
+            },
+        ]);
+
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([course]),
+        });
+
+        CourseMatchingService.processStudentEducation.mockResolvedValue({
+            enrollments: [],
+            warnings: [],
+            errors: [],
+        });
+
+        Student.findById.mockReturnValue({
+            lean: vi.fn().mockResolvedValue({ _id: "stu1", education: [] }),
+        });
+
+        await uploadStudentsForMatching(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(422);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                success: false,
+                errorTypes: expect.objectContaining({
+                    no_enrollments_created: 1,
+                }),
+                summary: expect.stringContaining("Inga registreringar skapade"),
+            })
+        );
+    });
 });
 
 describe("processStudentEducation controller", () => {
@@ -361,6 +495,53 @@ describe("processStudentEducation controller", () => {
                 results: expect.any(Object),
             })
         );
+    });
+
+    it("returns 400 when studentId or education entries missing", async () => {
+        const req = { body: {} };
+        const res = createRes();
+
+        await processStudentEducation(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({
+            error: "Student ID and education entries are required",
+        });
+    });
+
+    it("returns 404 when student not found", async () => {
+        const req = {
+            body: {
+                studentId: "missing",
+                educationEntries: [{ type: "Course", name: "MAT101" }],
+            },
+        };
+        const res = createRes();
+        Student.findById.mockResolvedValue(null);
+
+        await processStudentEducation(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: "Student not found" });
+    });
+
+    it("handles internal errors gracefully", async () => {
+        const req = {
+            body: {
+                studentId: "stu123",
+                educationEntries: [{ type: "Course", name: "MAT101" }],
+            },
+        };
+        const res = createRes();
+        Student.findById.mockResolvedValue({ _id: "stu123" });
+        CourseMatchingService.processStudentEducation.mockRejectedValue(
+            new Error("boom")
+        );
+
+        await processStudentEducation(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
     });
 });
 
@@ -395,6 +576,35 @@ describe("findCourseMatch", () => {
             })
         );
     });
+
+    it("returns no match when service returns null", async () => {
+        const req = { query: { courseName: "MATH" } };
+        const res = createRes();
+        CourseMatchingService.findBestCourseMatch.mockResolvedValue(null);
+
+        await findCourseMatch(req, res);
+
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                success: false,
+                message: "No matching course found",
+                suggestions: [],
+            })
+        );
+    });
+
+    it("handles internal errors when searching for match", async () => {
+        const req = { query: { courseName: "MATH" } };
+        const res = createRes();
+        CourseMatchingService.findBestCourseMatch.mockRejectedValue(
+            new Error("boom")
+        );
+
+        await findCourseMatch(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
 });
 
 describe("getCourseInstances", () => {
@@ -420,6 +630,17 @@ describe("getCourseInstances", () => {
             })
         );
     });
+
+    it("returns 500 when fetching instances fails", async () => {
+        const req = { query: {} };
+        const res = createRes();
+        CourseInstance.find.mockRejectedValue(new Error("boom"));
+
+        await getCourseInstances(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
 });
 
 describe("getStudentEnrollments", () => {
@@ -439,6 +660,17 @@ describe("getStudentEnrollments", () => {
             expect.objectContaining({ success: true, enrollments: expect.any(Array) })
         );
     });
+
+    it("handles errors when fetching student enrollments", async () => {
+        const req = { params: { studentId: "stu1" }, query: {} };
+        const res = createRes();
+        StudentEnrollment.find.mockRejectedValue(new Error("boom"));
+
+        await getStudentEnrollments(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
 });
 
 describe("getCourseInstanceEnrollments", () => {
@@ -457,6 +689,17 @@ describe("getCourseInstanceEnrollments", () => {
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({ success: true, enrollments: expect.any(Array) })
         );
+    });
+
+    it("handles errors when fetching course instance enrollments", async () => {
+        const req = { params: { instanceId: "inst1" }, query: {} };
+        const res = createRes();
+        StudentEnrollment.find.mockRejectedValue(new Error("boom"));
+
+        await getCourseInstanceEnrollments(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
     });
 });
 
@@ -499,6 +742,21 @@ describe("updateEnrollmentStatus", () => {
         expect(res.status).toHaveBeenCalledWith(404);
         expect(res.json).toHaveBeenCalledWith({ error: "Enrollment not found" });
     });
+
+    it("returns 500 when updating status fails unexpectedly", async () => {
+        const req = {
+            params: { enrollmentId: "enr-2" },
+            body: { status: "done" },
+            user: { userId: "u1" },
+        };
+        const res = createRes();
+        StudentEnrollment.findById.mockRejectedValue(new Error("boom"));
+
+        await updateEnrollmentStatus(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
 });
 
 describe("updateEnrollmentDates", () => {
@@ -535,6 +793,17 @@ describe("updateEnrollmentDates", () => {
         expect(res.status).toHaveBeenCalledWith(404);
         expect(res.json).toHaveBeenCalledWith({ error: "Enrollment not found" });
     });
+
+    it("returns 500 when enrollment date update fails", async () => {
+        const req = { params: { enrollmentId: "enroll-3" }, body: {} };
+        const res = createRes();
+        StudentEnrollment.findById.mockRejectedValue(new Error("boom"));
+
+        await updateEnrollmentDates(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
 });
 
 describe("getCourseStatistics", () => {
@@ -565,6 +834,24 @@ describe("getCourseStatistics", () => {
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({ success: true, statistics: { total: 3 } })
         );
+    });
+
+    it("returns 500 when fetching statistics fails", async () => {
+        const req = {
+            query: {
+                startDate: "2025-01-01",
+                endDate: "2025-12-31",
+            },
+        };
+        const res = createRes();
+        CourseMatchingService.getCourseStatistics.mockRejectedValue(
+            new Error("boom")
+        );
+
+        await getCourseStatistics(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
     });
 });
 
@@ -607,6 +894,67 @@ describe("createCourseInstance", () => {
             })
         );
     });
+
+    it("updates existing course instance when data provided", async () => {
+        const req = {
+            body: {
+                mainCourseId: "course1",
+                startDate: "2025-01-01",
+                endDate: "2025-02-01",
+                courseName: "Updated Name",
+            },
+            user: { userId: "user1" },
+        };
+        const res = createRes();
+        const instance = {
+            _id: "ci1",
+            save: vi.fn().mockResolvedValue(true),
+        };
+        CourseMatchingService.findOrCreateCourseInstance.mockResolvedValue({
+            instance,
+            wasCreated: false,
+        });
+        CourseInstance.findByIdAndUpdate.mockResolvedValue({
+            _id: "ci1",
+            courseName: "Updated Name",
+        });
+
+        await createCourseInstance(req, res);
+
+        expect(CourseInstance.findByIdAndUpdate).toHaveBeenCalledWith(
+            "ci1",
+            expect.objectContaining({
+                courseName: "Updated Name",
+            })
+        );
+        expect(instance.save).toHaveBeenCalled();
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                success: true,
+                message: "Course instance updated successfully",
+                wasCreated: false,
+            })
+        );
+    });
+
+    it("returns 500 if creating course instance fails", async () => {
+        const req = {
+            body: {
+                mainCourseId: "course1",
+                startDate: "2025-01-01",
+                endDate: "2025-02-01",
+            },
+        };
+        const res = createRes();
+        CourseMatchingService.findOrCreateCourseInstance.mockRejectedValue(
+            new Error("boom")
+        );
+
+        await createCourseInstance(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
 });
 
 describe("updateCourseInstance", () => {
@@ -644,6 +992,64 @@ describe("updateCourseInstance", () => {
             })
         );
     });
+
+    it("auto-calculates slutprovDate when teacher or end date change", async () => {
+        const req = {
+            params: { instanceId: "inst-auto" },
+            body: {
+                responsibleTeacher: "teacher1",
+                endDate: "2025-03-01",
+            },
+        };
+        const res = createRes();
+        const instance = {
+            _id: "inst-auto",
+            courseName: "Auto",
+            responsibleTeacher: "teacher1",
+            endDate: new Date("2025-02-01"),
+        };
+        CourseInstance.findById.mockResolvedValue(instance);
+        const calculatedDate = new Date("2025-02-24");
+        calculateSlutprovDate.mockResolvedValue(calculatedDate);
+        CourseInstance.findByIdAndUpdate.mockResolvedValue({
+            _id: "inst-auto",
+            courseName: "Auto",
+        });
+
+        await updateCourseInstance(req, res);
+
+        expect(calculateSlutprovDate).toHaveBeenCalledWith(
+            "teacher1",
+            new Date("2025-03-01")
+        );
+        expect(CourseInstance.findByIdAndUpdate).toHaveBeenCalledWith(
+            "inst-auto",
+            expect.objectContaining({
+                slutprovDate: calculatedDate,
+            }),
+            { new: true, runValidators: true }
+        );
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                success: true,
+                message: "Course instance updated successfully",
+            })
+        );
+    });
+
+    it("returns 500 when update fails", async () => {
+        const req = {
+            params: { instanceId: "inst-500" },
+            body: {},
+        };
+        const res = createRes();
+        CourseInstance.findById.mockRejectedValue(new Error("boom"));
+
+        await updateCourseInstance(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
 });
 
 describe("deleteCourseInstance", () => {
@@ -672,6 +1078,17 @@ describe("deleteCourseInstance", () => {
             message: "Course instance and related enrollments deleted",
         });
     });
+
+    it("returns 500 when deleting instance fails", async () => {
+        const req = { params: { instanceId: "inst-err" } };
+        const res = createRes();
+        CourseInstance.findByIdAndDelete.mockRejectedValue(new Error("boom"));
+
+        await deleteCourseInstance(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
 });
 
 describe("deleteAllCourseInstances", () => {
@@ -687,5 +1104,16 @@ describe("deleteAllCourseInstances", () => {
             success: true,
             message: "All course instances (2) and related enrollments (3) deleted",
         });
+    });
+
+    it("returns 500 when bulk deletion fails", async () => {
+        const req = {};
+        const res = createRes();
+        CourseInstance.deleteMany.mockRejectedValue(new Error("boom"));
+
+        await deleteAllCourseInstances(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
     });
 });
