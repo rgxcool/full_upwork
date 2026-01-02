@@ -196,7 +196,7 @@ beforeEach(() => {
     StudentEnrollmentQuery = {
         populate: vi.fn().mockReturnThis(),
         lean: vi.fn().mockResolvedValue([]),
-        sort: vi.fn().mockReturnThis(),
+        sort: vi.fn().mockResolvedValue([]),
     };
     StudentEnrollmentMock.find.mockReset();
     StudentEnrollmentMock.find.mockImplementation(() => StudentEnrollmentQuery);
@@ -1128,6 +1128,66 @@ describe("PUT /student/:id", () => {
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ error: "Failed to update student" });
     });
+
+    it("links a teacher when only a teacher name is provided", async () => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const studentDoc = {
+            _id: "put-teacher",
+            teacher: "Linked Teacher",
+            teacherId: null,
+            education: [],
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-linked" });
+        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
+        StudentEnrollmentQuery.lean.mockResolvedValue([]);
+
+        const res = createRes();
+        global.Teacher = TeacherMock;
+        try {
+            await handler(
+                { params: { id: "put-teacher" }, body: { name: "Updated Student" } },
+                res
+            );
+        } finally {
+            delete global.Teacher;
+        }
+
+        expect(TeacherMock.findOne).toHaveBeenCalledWith({
+            name: "Linked Teacher",
+        });
+        expect(Student.findByIdAndUpdate).toHaveBeenCalledWith(
+            "put-teacher",
+            expect.objectContaining({
+                $set: expect.objectContaining({
+                    teacherId: "teacher-linked",
+                }),
+            }),
+            { new: true }
+        );
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Failed to update student" });
+    });
+
+    it("returns 404 when the updated student cannot be found", async () => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const studentDoc = {
+            _id: "put-404",
+            education: [],
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        Student.findByIdAndUpdate.mockResolvedValue(null);
+        StudentEnrollmentQuery.lean.mockResolvedValue([]);
+
+        const res = createRes();
+        await handler(
+            { params: { id: "put-404" }, body: { name: "Ghost" } },
+            res
+        );
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: "Student not found" });
+    });
 });
 
 describe("POST /students/:id/mark-comments-seen", () => {
@@ -1159,6 +1219,24 @@ describe("POST /students/:id/mark-comments-seen", () => {
             updatedStudent: studentDoc,
         });
     });
+
+    it("returns 500 when marking comments seen fails", async () => {
+        const handler = findRouteHandler(
+            "/students/:id/mark-comments-seen",
+            "POST",
+            1
+        );
+        Student.findById.mockRejectedValueOnce(new Error("boom seen"));
+        const req = { params: { id: "seen-err" }, userId: "auth-user" };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+            error: "Failed to mark comments as seen.",
+        });
+    });
 });
 
 describe("PATCH /student/:studentId/education/:educationId/grade", () => {
@@ -1177,6 +1255,24 @@ describe("PATCH /student/:studentId/education/:educationId/grade", () => {
 
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith({ error: "Invalid grade." });
+    });
+
+    it("returns 404 when the student is missing", async () => {
+        const handler = findRouteHandler(
+            "/student/:studentId/education/:educationId/grade",
+            "PATCH"
+        );
+        Student.findById.mockResolvedValue(null);
+        const req = {
+            params: { studentId: "grade-missing", educationId: "edu-missing" },
+            body: { grade: "C" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: "Student not found" });
     });
 
     it("handles missing education entry", async () => {
@@ -1220,6 +1316,42 @@ describe("PATCH /student/:studentId/education/:educationId/grade", () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
+    });
+
+    it("updates a course grade and returns the refreshed student", async () => {
+        const handler = findRouteHandler(
+            "/student/:studentId/education/:educationId/grade",
+            "PATCH"
+        );
+        const educationEntry = {
+            _id: "edu-grade",
+            type: "Course",
+            refId: { toString: () => "ref-1" },
+            grade: "F",
+        };
+        const studentDoc = {
+            _id: "grade-success",
+            education: [educationEntry],
+            save: vi.fn().mockResolvedValue(undefined),
+        };
+        const populatedStudent = { _id: "grade-success", education: [educationEntry] };
+        Student.findById
+            .mockResolvedValueOnce(studentDoc)
+            .mockReturnValueOnce({
+                populate: vi.fn().mockResolvedValue(populatedStudent),
+            });
+        const req = {
+            params: { studentId: "grade-success", educationId: "edu-grade" },
+            body: { grade: "B" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(educationEntry.grade).toBe("B");
+        expect(studentDoc.save).toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(populatedStudent);
     });
 });
 
@@ -1341,6 +1473,24 @@ describe("PUT /student/:id/education/:courseId/grade", () => {
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith(studentDoc);
     });
+
+    it("returns 500 when updating grade fails unexpectedly", async () => {
+        const handler = findRouteHandler(
+            "/student/:id/education/:courseId/grade",
+            "PUT"
+        );
+        Student.findById.mockRejectedValueOnce(new Error("boom database"));
+        const req = {
+            params: { id: "st-500", courseId: "course-500" },
+            body: { grade: "A" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Failed to update grade" });
+    });
 });
 
 describe("GET /students/earnings", () => {
@@ -1356,6 +1506,17 @@ describe("GET /students/earnings", () => {
             { municipality: 1, education: 1 }
         );
         expect(res.json).toHaveBeenCalledWith([{ _id: "earn-1" }]);
+    });
+
+    it("returns 500 when earnings query fails", async () => {
+        const handler = findRouteHandler("/students/earnings", "GET");
+        Student.find.mockRejectedValueOnce(new Error("boom"));
+        const res = createRes();
+
+        await handler({}, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
     });
 });
 

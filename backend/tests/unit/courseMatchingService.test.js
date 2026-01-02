@@ -1170,13 +1170,72 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         findMatchSpy.mockRestore();
         createSpy.mockRestore();
 
-        expect(result.enrollments).toHaveLength(1);
-        expect(StudentEnrollmentMock.instances[0].slutprovDate).toEqual(
-            new Date("2025-03-29")
-        );
-    });
+    expect(result.enrollments).toHaveLength(1);
+    expect(StudentEnrollmentMock.instances[0].slutprovDate).toEqual(
+        new Date("2025-03-29")
+    );
+  });
 
-    it("continues when individual course taxpvt date is invalid", async () => {
+  it("adds an education entry when an individual course is newly created", async () => {
+    const match = {
+      course: {
+        _id: "course-add-ed",
+        courseName: "Add Education",
+        courseCode: "ADD101",
+        courseExtent: 5,
+      },
+      score: 1,
+    };
+    const findMatchSpy = vi
+      .spyOn(CourseMatchingService, "findBestCourseMatch")
+      .mockResolvedValue(match);
+
+    const instance = {
+      _id: "ci-add-ed",
+      courseName: "Add Education",
+      startDate: new Date("2025-05-01"),
+      endDate: new Date("2025-06-01"),
+    };
+    const createSpy = vi
+      .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+      .mockResolvedValue({ instance, wasCreated: true });
+
+    StudentEnrollmentMock.findOne.mockResolvedValue(null);
+    const studentDoc = new StudentMock({
+      _id: "stu-add-ed",
+      education: [],
+      email: "add@student.com",
+    });
+    StudentMock.findById.mockResolvedValue(studentDoc);
+
+    const result = await CourseMatchingService.processStudentEducation(
+      "stu-add-ed",
+      [
+        {
+          type: "Course",
+          name: "ADD101",
+          startDate: "2025-05-01",
+          endDate: "2025-06-01",
+        },
+      ],
+      "user-add-ed"
+    );
+
+    findMatchSpy.mockRestore();
+    createSpy.mockRestore();
+
+    expect(studentDoc.education).toHaveLength(1);
+    expect(studentDoc.save).toHaveBeenCalled();
+    expect(studentDoc.education[0]).toEqual(
+      expect.objectContaining({
+        type: "Course",
+        refId: "course-add-ed",
+      })
+    );
+    expect(result.enrollments).toHaveLength(1);
+  });
+
+  it("continues when individual course taxpvt date is invalid", async () => {
         const match = {
             course: {
                 _id: "course-bad-date",
@@ -1225,12 +1284,67 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         findMatchSpy.mockRestore();
         createSpy.mockRestore();
 
-        expect(result.enrollments).toHaveLength(1);
-        expect(StudentEnrollmentMock.instances[0].slutprovDate).toBeUndefined();
-        expect(result.errors).toEqual([]);
-    });
+    expect(result.enrollments).toHaveLength(1);
+    expect(StudentEnrollmentMock.instances[0].slutprovDate).toBeUndefined();
+    expect(result.errors).toEqual([]);
+  });
 
-    it("skips package enrollments when provided slutprov date is invalid", async () => {
+  it("logs and skips when calculating sluttprov date fails", async () => {
+    const match = {
+      course: {
+        _id: "course-guard",
+        courseName: "Guard Course",
+        courseCode: "GUARD101",
+        courseExtent: 5,
+      },
+      score: 1,
+    };
+    const findMatchSpy = vi
+      .spyOn(CourseMatchingService, "findBestCourseMatch")
+      .mockResolvedValue(match);
+
+    const instance = {
+      _id: "ci-guard",
+      courseName: "Guard Course",
+      startDate: new Date("2025-03-01"),
+      endDate: new Date("2025-04-01"),
+    };
+    const createSpy = vi
+      .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+      .mockResolvedValue({ instance, wasCreated: true });
+
+    StudentEnrollmentMock.findOne.mockResolvedValue(null);
+    const studentDoc = new StudentMock({
+      _id: "stu-guard",
+      education: [],
+      email: "guard@student.com",
+    });
+    StudentMock.findById.mockResolvedValue(studentDoc);
+
+    const result = await CourseMatchingService.processStudentEducation(
+      "stu-guard",
+      [
+        {
+          type: "Course",
+          name: "GUARD101",
+          startDate: "2025-03-01",
+          endDate: "2025-04-01",
+          slutprovDate: "not-a-date",
+        },
+      ],
+      "user-guard"
+    );
+
+    findMatchSpy.mockRestore();
+    createSpy.mockRestore();
+
+    expect(studentDoc.education).toHaveLength(0);
+    expect(studentDoc.save).not.toHaveBeenCalled();
+    expect(result.enrollments).toHaveLength(1);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("skips package enrollments when provided slutprov date is invalid", async () => {
         const packageDoc = {
             _id: "pkg-invalid-slutprov",
             coursePackageName: "Invalid Slutprov Package",
