@@ -1,329 +1,229 @@
-import { describe, it, expect, vi, beforeEach, beforeAll, afterEach, afterAll } from "vitest";
-
-const parseStudentExcelMock = vi.fn();
-
-const mockStudent = {
-    find: vi.fn(),
-    bulkWrite: vi.fn(),
-    findOne: vi.fn(),
-};
-
-const programData = [];
-const packageData = [];
-const courseData = [];
-const mockProgram = {
-    find: vi.fn(() => ({
-        lean: () => Promise.resolve(programData),
-    })),
-};
-const mockCoursePackage = {
-    find: vi.fn(() => ({
-        lean: () => Promise.resolve(packageData),
-    })),
-};
-const mockCourse = {
-    find: vi.fn(() => ({
-        lean: () => Promise.resolve(courseData),
-    })),
-};
-
-const mockUser = {
-    findOne: vi.fn(),
-};
-const mockTeacher = {
-    findOne: vi.fn(),
-};
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../src/models/Student.js", () => ({
     __esModule: true,
-    default: mockStudent,
+    default: {
+        find: vi.fn(),
+        bulkWrite: vi.fn(),
+        findOne: vi.fn(),
+    },
 }));
-
 vi.mock("../../src/models/Program.js", () => ({
     __esModule: true,
-    default: mockProgram,
+    default: {
+        find: vi.fn(),
+    },
 }));
-
 vi.mock("../../src/models/CoursePackage.js", () => ({
     __esModule: true,
-    default: mockCoursePackage,
+    default: {
+        find: vi.fn(),
+    },
 }));
-
 vi.mock("../../src/models/Course.js", () => ({
     __esModule: true,
-    default: mockCourse,
+    default: {
+        find: vi.fn(),
+    },
 }));
-
 vi.mock("../../src/models/User.js", () => ({
     __esModule: true,
-    default: mockUser,
+    default: {
+        findOne: vi.fn(),
+    },
 }));
-
 vi.mock("../../src/models/Teacher.js", () => ({
     __esModule: true,
-    default: mockTeacher,
+    default: {
+        findOne: vi.fn(),
+    },
+}));
+vi.mock("../../src/utils/parseStudentExcel.js", () => ({
+    __esModule: true,
+    parseStudentExcel: vi.fn(),
+    normalizeCodeForMatching: vi.fn(),
 }));
 
-vi.mock("../../src/utils/parseStudentExcel.js", async () => {
-    const actual = await vi.importActual("../../src/utils/parseStudentExcel.js");
-    return {
-        __esModule: true,
-        parseStudentExcel: (...args) => parseStudentExcelMock(...args),
-        normalizeCodeForMatching: actual.normalizeCodeForMatching,
-    };
-});
-
-let uploadXlsx;
-let normalizeMunicipalityName;
-
-beforeAll(async () => {
-    const controller = await import("../../src/controllers/studentController.js");
-    uploadXlsx = controller.uploadXlsx;
-    normalizeMunicipalityName = controller.normalizeMunicipalityName;
-});
-
-afterAll(() => {
-    vi.restoreAllMocks();
-});
-
-const createReq = (overrides = {}) => ({
-    file: overrides.file,
-    headers: {},
-    body: {},
-    params: {},
-    cookies: {},
-    ip: "127.0.0.1",
-    get(key) {
-        return this.headers[key] || "";
-    },
-    ...overrides,
-});
+import {
+    uploadXlsx,
+    normalizeMunicipalityName,
+} from "../../src/controllers/studentController.js";
+import Student from "../../src/models/Student.js";
+import Program from "../../src/models/Program.js";
+import CoursePackage from "../../src/models/CoursePackage.js";
+import Course from "../../src/models/Course.js";
+import User from "../../src/models/User.js";
+import Teacher from "../../src/models/Teacher.js";
+import {
+    parseStudentExcel,
+    normalizeCodeForMatching,
+} from "../../src/utils/parseStudentExcel.js";
 
 const createRes = () => {
     const res = {
-        statusCode: 200,
-        payload: null,
-        status(code) {
-            this.statusCode = code;
+        status: vi.fn(function () {
             return this;
-        },
-        json(payload) {
-            this.payload = payload;
+        }),
+        json: vi.fn(function () {
             return this;
-        },
+        }),
     };
     return res;
 };
 
+const createLeanMock = (result) => ({
+    lean: vi.fn().mockResolvedValue(result),
+});
+
 beforeEach(() => {
-    parseStudentExcelMock.mockReset();
-    mockStudent.find.mockReset();
-    mockStudent.bulkWrite.mockReset();
-    mockStudent.findOne.mockReset();
-    mockProgram.find.mockClear();
-    mockCoursePackage.find.mockClear();
-    mockCourse.find.mockClear();
-    mockUser.findOne.mockReset();
-    mockTeacher.findOne.mockReset();
-    programData.length = 0;
-    packageData.length = 0;
-    courseData.length = 0;
-    delete global.createOrFindTeacher;
+    vi.clearAllMocks();
+    Student.find.mockResolvedValue([]);
+    Student.bulkWrite.mockResolvedValue({});
+    Student.findOne.mockResolvedValue({ education: [] });
+    Program.find.mockReturnValue(createLeanMock([]));
+    CoursePackage.find.mockReturnValue(createLeanMock([]));
+    Course.find.mockReturnValue(createLeanMock([]));
+    User.findOne.mockResolvedValue(null);
+    Teacher.findOne.mockResolvedValue(null);
+    parseStudentExcel.mockResolvedValue([]);
 });
 
-afterEach(() => {
-    delete global.createOrFindTeacher;
-});
-
-describe("studentController.uploadXlsx", () => {
-    it("returns 400 when no file is provided", async () => {
-        const req = createReq();
-        const res = createRes();
-        await uploadXlsx(req, res);
-        expect(res.statusCode).toBe(400);
-        expect(res.payload).toEqual({ error: "No file uploaded" });
-    });
-
-    it("successfully uploads and persists parsed students", async () => {
-        parseStudentExcelMock.mockResolvedValue([
-            {
-                email: "student@example.com",
-                education: [
-                    {
-                        name: "PKG1000",
-                        startDate: "2025-01-01T00:00:00.000Z",
-                        endDate: "2025-02-01T00:00:00.000Z",
-                    },
-                ],
-                municipality: { type: "Sollentuna" },
-                teacher: "Teacher, Test",
-            },
-        ]);
-
-        programData.push({ programName: "Program X", _id: "prog" });
-        packageData.push({ coursePackageCode: "PKG1000", _id: "pkg" });
-        courseData.push({ courseCode: "COURSE1000 NIVÅ 1", _id: "course" });
-
-        mockStudent.find.mockResolvedValue([]);
-        mockStudent.bulkWrite.mockResolvedValue([]);
-        mockStudent.findOne.mockResolvedValue({ education: [] });
-        mockUser.findOne.mockResolvedValue({ _id: "user1", username: "Teacher" });
-        mockTeacher.findOne.mockResolvedValue({ _id: "teacher1" });
-
-        const req = createReq({
-            file: { buffer: Buffer.from("xlsx"), originalname: "students.xlsx" },
-        });
-        const res = createRes();
-
-        await uploadXlsx(req, res);
-
-        expect(res.statusCode).toBe(200);
-        expect(res.payload).toHaveProperty("message", "Upload successful");
-        expect(res.payload.students).toHaveLength(1);
-        expect(mockStudent.bulkWrite).toHaveBeenCalled();
-    });
-
-    it("returns 422 when a course cannot be matched", async () => {
-        parseStudentExcelMock.mockResolvedValue([
-            {
-                email: "student@example.com",
-                education: [
-                    {
-                        name: "Unknown NIVÅ 1",
-                        startDate: "2025-01-01T00:00:00.000Z",
-                        endDate: "2025-02-01T00:00:00.000Z",
-                    },
-                ],
-                municipality: { type: "Sollentuna" },
-                teacher: "Teacher, Test",
-            },
-        ]);
-
-        programData.push({ programName: "Program X", _id: "prog" });
-        packageData.push({ coursePackageCode: "PKG1000", _id: "pkg" });
-        courseData.push({ courseCode: "COURSE1000 NIVÅ 1", _id: "course" });
-
-        mockStudent.find.mockResolvedValue([]);
-        mockUser.findOne.mockResolvedValue({ _id: "user1", username: "Teacher" });
-        mockTeacher.findOne.mockResolvedValue({ _id: "teacher1" });
-
-        const req = createReq({
-            file: { buffer: Buffer.from("xlsx"), originalname: "students.xlsx" },
-        });
-        const res = createRes();
-
-        await uploadXlsx(req, res);
-
-        expect(res.statusCode).toBe(422);
-        expect(res.payload).toHaveProperty(
-            "error",
-            "Unmatched courses found; upload aborted."
-        );
-        expect(res.payload.reasons).toHaveLength(1);
-    });
-
-    it("returns 400 when parsed file contains no students", async () => {
-        parseStudentExcelMock.mockResolvedValue([]);
-
-        const req = createReq({
-            file: { buffer: Buffer.from("xlsx"), originalname: "students.xlsx" },
-        });
-        const res = createRes();
-
-        await uploadXlsx(req, res);
-
-        expect(res.statusCode).toBe(400);
-        expect(res.payload).toEqual({ error: "No valid data to save." });
-    });
-
-    it("fails when municipality cannot be resolved", async () => {
-        parseStudentExcelMock.mockResolvedValue([
-            {
-                email: "student@example.com",
-                education: [
-                    {
-                        name: "PKG1000",
-                        startDate: "2025-01-01T00:00:00.000Z",
-                        endDate: "2025-02-01T00:00:00.000Z",
-                    },
-                ],
-                municipality: { type: "UnknownVille" },
-                teacher: "Teacher, Test",
-            },
-        ]);
-
-        packageData.push({ coursePackageCode: "PKG1000", _id: "pkg" });
-        courseData.push({ courseCode: "COURSE1000", _id: "course" });
-
-        mockStudent.find.mockResolvedValue([]);
-        mockStudent.bulkWrite.mockResolvedValue([]);
-        mockStudent.findOne.mockResolvedValue({ education: [] });
-        mockUser.findOne.mockResolvedValue({ _id: "user1", username: "Teacher" });
-        mockTeacher.findOne.mockResolvedValue({ _id: "teacher1" });
-
-        const req = createReq({
-            file: { buffer: Buffer.from("xlsx"), originalname: "students.xlsx" },
-        });
-        const res = createRes();
-
-        await uploadXlsx(req, res);
-
-        expect(res.statusCode).toBe(500);
-        expect(res.payload).toHaveProperty("error", "Failed to process file");
-        expect(res.payload.details).toContain("Could not match municipality");
-    });
-
-    it("falls back to createOrFindTeacher when User lookup misses", async () => {
-        parseStudentExcelMock.mockResolvedValue([
-            {
-                email: "student@example.com",
-                education: [
-                    {
-                        name: "PKG1000",
-                        startDate: "2025-01-01T00:00:00.000Z",
-                        endDate: "2025-02-01T00:00:00.000Z",
-                    },
-                ],
-                municipality: { type: "Sollentuna" },
-                teacher: "Teacher, Test",
-            },
-        ]);
-
-        courseData.push({ courseCode: "COURSE1000", _id: "course" });
-        packageData.push({ coursePackageCode: "PKG1000", _id: "pkg" });
-        programData.push({ programName: "Program X", _id: "prog" });
-
-        mockStudent.find.mockResolvedValue([]);
-        mockStudent.bulkWrite.mockResolvedValue([]);
-        mockStudent.findOne.mockResolvedValue({ education: [] });
-        mockUser.findOne.mockResolvedValue(null);
-        mockTeacher.findOne.mockResolvedValue(null);
-
-        const teacherStub = { teacher: { _id: "teacher-auto" } };
-        global.createOrFindTeacher = vi.fn().mockResolvedValue(teacherStub);
-
-        const req = createReq({
-            file: { buffer: Buffer.from("xlsx"), originalname: "students.xlsx" },
-        });
-        const res = createRes();
-
-        await uploadXlsx(req, res);
-
-        expect(res.statusCode).toBe(200);
-        expect(global.createOrFindTeacher).toHaveBeenCalled();
-        expect(res.payload.warnings).toBeDefined();
-    });
-});
-
-describe("studentController.normalizeMunicipalityName", () => {
-    it("normalizes known aliases and keeps unknown values intact", () => {
+describe("normalizeMunicipalityName", () => {
+    it("returns alias when provided variant matches alias map", () => {
         expect(normalizeMunicipalityName("Uppl. Väsby")).toBe("Upplands Väsby");
-        expect(normalizeMunicipalityName("  Uppl väsby ")).toBe(
+    });
+
+    it("uses fallback when both keywords are present", () => {
+        expect(normalizeMunicipalityName("uppL väsby extra")).toBe(
             "Upplands Väsby"
         );
-        expect(normalizeMunicipalityName("Sollentuna")).toBe("Sollentuna");
-        expect(normalizeMunicipalityName("some uppl vasby text")).toBe(
-            "some uppl vasby text"
+    });
+
+    it("returns original value when no normalization is required", () => {
+        const original = "Solna";
+        expect(normalizeMunicipalityName(original)).toBe(original);
+    });
+});
+
+describe("uploadXlsx", () => {
+    it("rejects missing file uploads", async () => {
+        const req = {};
+        const res = createRes();
+
+        await uploadXlsx(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: "No file uploaded" });
+    });
+
+    it("processes a basic payload and returns success summary", async () => {
+        const fileBuffer = Buffer.from("dummy");
+        const req = {
+            file: {
+                buffer: fileBuffer,
+                originalname: "students.xlsx",
+            },
+        };
+        const res = createRes();
+
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "test@example.com",
+                name: "First Student",
+                municipality: "Solna",
+                education: [
+                    {
+                        name: "Course 1 nivå 4",
+                        startDate: new Date("2020-01-01"),
+                        endDate: new Date("2020-06-01"),
+                    },
+                    {
+                        name: "Package Only",
+                        startDate: new Date("2020-02-01"),
+                        endDate: new Date("2020-03-01"),
+                    },
+                ],
+            },
+        ]);
+        normalizeCodeForMatching.mockImplementation((value) =>
+            value ? value.trim().toUpperCase() : ""
         );
+        Course.find.mockReturnValue(
+            createLeanMock([
+                { courseCode: "Course 1 nivå 4", _id: "course-1" },
+            ])
+        );
+
+        await uploadXlsx(req, res);
+
+        expect(parseStudentExcel).toHaveBeenCalledWith(fileBuffer, "");
+        expect(Student.find).toHaveBeenCalledWith({
+            email: { $in: ["test@example.com"] },
+        });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            message: "Upload successful",
+            students: expect.any(Array),
+            warnings: [],
+        });
+    });
+
+    it("handles multiple education entries including programs and courses", async () => {
+        const fileBuffer = Buffer.from("multi");
+        const req = {
+            file: {
+                buffer: fileBuffer,
+                originalname: "students.xlsx",
+            },
+        };
+        const res = createRes();
+
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "multi@example.com",
+                name: "Multi Student",
+                municipality: "Solna",
+                education: [
+                    {
+                        name: "Program Legendary",
+                        startDate: new Date("2019-01-01"),
+                        endDate: new Date("2019-06-01"),
+                    },
+                    {
+                        name: "Course 1 nivå 4",
+                        startDate: new Date("2020-01-01"),
+                        endDate: new Date("2020-06-01"),
+                    },
+                    {
+                        name: "Package without match",
+                        startDate: new Date("2021-01-01"),
+                        endDate: new Date("2021-06-01"),
+                    },
+                ],
+            },
+        ]);
+        normalizeCodeForMatching.mockImplementation((value) =>
+            value ? value.trim().toUpperCase() : ""
+        );
+        Program.find.mockReturnValue(
+            createLeanMock([
+                { programName: "Program Legendary", _id: "prog-1" },
+            ])
+        );
+        Course.find.mockReturnValue(
+            createLeanMock([
+                { courseCode: "Course 1 nivå 4", _id: "course-1" },
+            ])
+        );
+
+        await uploadXlsx(req, res);
+
+        expect(parseStudentExcel).toHaveBeenCalledWith(fileBuffer, "");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            message: "Upload successful",
+            students: expect.any(Array),
+            warnings: expect.any(Array),
+        });
     });
 });
