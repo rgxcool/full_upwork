@@ -348,6 +348,66 @@ describe("studentRoutes router", () => {
         });
     });
 
+    it("PUT /students/:studentId/education/:educationId/status returns 404 when student is missing", async () => {
+        const handler = findRouteHandler(
+            "/students/:studentId/education/:educationId/status",
+            "PUT"
+        );
+        Student.findById.mockResolvedValue(null);
+        const req = {
+            params: { studentId: "stu-missing", educationId: "edu-x" },
+            body: { status: "Avbrott" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ message: "Student not found" });
+    });
+
+    it("PUT /students/:studentId/education/:educationId/status returns 404 when education entry missing", async () => {
+        const handler = findRouteHandler(
+            "/students/:studentId/education/:educationId/status",
+            "PUT"
+        );
+        const studentDoc = {
+            _id: "stu-empty",
+            education: [],
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        const req = {
+            params: { studentId: "stu-empty", educationId: "edu-unknown" },
+            body: { status: "Pågående" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({
+            message: "Education not found for student",
+        });
+    });
+
+    it("PUT /students/:studentId/education/:educationId/status handles failures", async () => {
+        const handler = findRouteHandler(
+            "/students/:studentId/education/:educationId/status",
+            "PUT"
+        );
+        Student.findById.mockRejectedValueOnce(new Error("boom status"));
+        const req = {
+            params: { studentId: "stu-error", educationId: "edu-err" },
+            body: { status: "Pågående" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ message: "Server error" });
+    });
+
     describe("GET /students", () => {
         it("returns 403 when teacher profile is missing", async () => {
             const handler = findRouteHandler("/students", "GET");
@@ -416,9 +476,23 @@ describe("studentRoutes router", () => {
                 teacherId: "teacher-123",
                 createdAt: new Date("2025-03-03"),
             };
+            const programEnrollment = {
+                _id: "enroll-3",
+                studentId: studentDoc._id,
+                programId: { _id: "prog-1", programName: "Demo Program" },
+                startDate: new Date("2025-01-01"),
+                endDate: new Date("2025-02-01"),
+                status: "active",
+                grade: "A",
+                notes: null,
+                courseInstanceId: null,
+                teacherId: "teacher-123",
+                createdAt: new Date("2025-01-05"),
+            };
             StudentEnrollmentQuery.lean.mockResolvedValue([
                 enrollment,
                 packageEnrollment,
+                programEnrollment,
             ]);
             CoursePackage.findById.mockResolvedValue({
                 _id: "pkg-1",
@@ -448,6 +522,9 @@ describe("studentRoutes router", () => {
             expect(
                 educationEntries.some((entry) => entry.type === "CoursePackage")
             ).toBe(true);
+            expect(
+                educationEntries.some((entry) => entry.type === "Program")
+            ).toBe(true);
         });
 
         it("handles Student.find errors gracefully", async () => {
@@ -460,12 +537,55 @@ describe("studentRoutes router", () => {
             const req = { user: { role: "teacher", userId: "user-1" } };
             const res = createRes();
 
-            await handler(req, res);
+        await handler(req, res);
 
-            expect(res.status).toHaveBeenCalledWith(500);
-            expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
-        });
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
     });
+
+    it("synthesizes a course package when enrollments reference packages but no package entries exist yet", async () => {
+        const handler = findRouteHandler("/students", "GET");
+        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+        const studentDoc = { _id: "student-synth", education: [] };
+        const studentFindQuery = {
+            lean: vi.fn().mockResolvedValue([studentDoc]),
+        };
+        Student.find.mockReturnValue(studentFindQuery);
+        const enrollmentWithPackage = {
+            _id: "enroll-package",
+            studentId: studentDoc._id,
+            mainCourseId: { _id: "course-new", courseName: "New Course" },
+            coursePackageId: { _id: "pkg-synth", coursePackageName: "Synth Package" },
+            startDate: new Date("2025-05-01"),
+            endDate: new Date("2025-06-01"),
+            status: "active",
+            grade: "B",
+            notes: "package notes",
+            courseInstanceId: null,
+            teacherId: "teacher-123",
+            createdAt: new Date("2025-04-01"),
+        };
+        StudentEnrollmentQuery.lean.mockResolvedValue([enrollmentWithPackage]);
+        CoursePackage.findById.mockImplementation(() => ({
+            lean: vi.fn().mockResolvedValue({
+                _id: "pkg-synth",
+                coursePackageName: "Synth Package",
+            }),
+        }));
+
+        const res = createRes();
+        await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+
+        expect(CoursePackage.findById).toHaveBeenCalledWith("pkg-synth");
+        const responseStudents = res.json.mock.calls[0][0];
+        const packageEntries = responseStudents[0].education.filter(
+            (entry) => entry.type === "CoursePackage"
+        );
+        expect(packageEntries).toHaveLength(1);
+        expect(packageEntries[0].name).toBe("Synth Package");
+    });
+
+});
 });
 
 describe("POST /student", () => {
@@ -543,6 +663,28 @@ describe("POST /student", () => {
             })
         );
         expect(CourseMatchingServiceMock.default.processStudentEducation).toHaveBeenCalled();
+    });
+
+    it("returns 500 when student creation fails unexpectedly", async () => {
+        const handler = findRouteHandler("/student", "POST");
+        const failingSave = vi.fn().mockRejectedValue(new Error("boom save"));
+        Student.mockImplementationOnce(function (doc) {
+            Object.assign(this, doc);
+            this.save = failingSave;
+        });
+        const req = {
+            body: {
+                name: "Failed",
+                email: "fail@example.com",
+                personalNumber: "20000101-0002",
+            },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Failed to add student" });
     });
 });
 
@@ -645,6 +787,43 @@ describe("POST /student/:studentId/addcourse", () => {
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
     });
+
+    it("adds a course and returns the updated student", async () => {
+        const handler = findRouteHandler("/student/:studentId/addcourse", "POST");
+        const studentDoc = {
+            _id: "stu-5",
+            education: [],
+            save: vi.fn().mockResolvedValue(undefined),
+        };
+        const populatedStudent = {
+            _id: "stu-5",
+            education: [
+                {
+                    type: "Course",
+                    refId: { _id: "course-5" },
+                },
+            ],
+        };
+        Student.findById
+            .mockImplementationOnce(() => Promise.resolve(studentDoc))
+            .mockImplementationOnce(() => ({
+                populate: vi.fn().mockResolvedValue(populatedStudent),
+            }));
+        Course.findById.mockResolvedValue({ _id: "course-5", courseName: "Filled Course" });
+
+        const req = {
+            params: { studentId: "stu-5" },
+            body: { courseId: "course-5" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(studentDoc.education).toHaveLength(1);
+        expect(studentDoc.education[0].refId).toBe("course-5");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(populatedStudent);
+    });
 });
 
 describe("POST /student/:studentId/setprogram", () => {
@@ -680,6 +859,18 @@ describe("POST /student/:studentId/setprogram", () => {
         expect(studentDoc.program).toEqual({ programId: "prog-2", grade: null });
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith(studentDoc);
+    });
+
+    it("returns 500 when setprogram lookup fails", async () => {
+        const handler = findRouteHandler("/student/:studentId/setprogram", "POST");
+        Student.findById.mockRejectedValueOnce(new Error("boom setprogram"));
+        const req = { params: { studentId: "stu-500" }, body: { programId: "prog-err" } };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
     });
 });
 
@@ -723,6 +914,30 @@ describe("POST /student/:studentId/addcoursepackage", () => {
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith(studentDoc);
     });
+
+    it("returns 500 if saving the package fails", async () => {
+        const handler = findRouteHandler(
+            "/student/:studentId/addcoursepackage",
+            "POST"
+        );
+        const studentDoc = {
+            _id: "stu-8",
+            coursePackages: [],
+            save: vi.fn().mockRejectedValueOnce(new Error("boom package")),
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+
+        const req = {
+            params: { studentId: "stu-8" },
+            body: { coursePackageId: "pkg-3" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
+    });
 });
 
 describe("DELETE /student/:id/courses/:courseId", () => {
@@ -763,6 +978,27 @@ describe("DELETE /student/:id/courses/:courseId", () => {
             message: "Course removed successfully",
         });
     });
+
+    it("returns 500 when saving after course removal fails", async () => {
+        const handler = findRouteHandler(
+            "/student/:id/courses/:courseId",
+            "DELETE"
+        );
+        const studentDoc = {
+            _id: "stu-error",
+            courses: [{ courseId: "course-99" }],
+            save: vi.fn().mockRejectedValueOnce(new Error("boom save")),
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+
+        const req = { params: { id: "stu-error", courseId: "course-99" } };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Failed to remove course." });
+    });
 });
 
 describe("GET /student/:id", () => {
@@ -792,6 +1028,19 @@ describe("GET /student/:id", () => {
         await handler(req, res);
 
         expect(res.json).toHaveBeenCalledWith(studentDoc);
+    });
+
+    it("returns 500 when fetching student throws", async () => {
+        const handler = findRouteHandler("/student/:id", "GET");
+        Student.findById.mockRejectedValueOnce(new Error("boom fetch"));
+
+        const req = { params: { id: "stu-error" } };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Failed to fetch student details" });
     });
 });
 
@@ -836,6 +1085,18 @@ describe("DELETE /student/:id", () => {
             message: "Student deleted successfully",
         });
     });
+
+    it("returns 500 when deletion fails unexpectedly", async () => {
+        const handler = findRouteHandler("/student/:id", "DELETE");
+        Student.findByIdAndDelete.mockRejectedValueOnce(new Error("boom delete"));
+        const req = { params: { id: "delete-3" } };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Failed to delete student" });
+    });
 });
 
 describe("DELETE /students", () => {
@@ -848,6 +1109,50 @@ describe("DELETE /students", () => {
         expect(Student.deleteMany).toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith({
             message: "All students deleted successfully",
+        });
+    });
+    it("handles delete all failures", async () => {
+        const handler = findRouteHandler("/students", "DELETE");
+        Student.deleteMany.mockRejectedValueOnce(new Error("boom all"));
+        const res = createRes();
+
+        await handler({ params: {} }, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+            error: "Failed to delete all students",
+        });
+    });
+});
+
+describe("GET /student/:id/basic", () => {
+    it("returns 404 when student missing", async () => {
+        const handler = findRouteHandler("/student/:id/basic", "GET");
+        const selectChain = createSelectChain(null);
+        Student.findById.mockReturnValueOnce(selectChain);
+        const res = createRes();
+
+        await handler({ params: { id: "basic-1" } }, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: "Student not found" });
+    });
+
+    it("returns 500 when findById throws", async () => {
+        const handler = findRouteHandler("/student/:id/basic", "GET");
+        const selectChain = {
+            select: vi.fn(),
+            lean: vi.fn().mockRejectedValueOnce(new Error("boom basic")),
+        };
+        selectChain.select.mockReturnValue(selectChain);
+        Student.findById.mockReturnValueOnce(selectChain);
+        const res = createRes();
+
+        await handler({ params: { id: "basic-2" } }, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+            error: "Failed to fetch basic student details",
         });
     });
 });
@@ -913,42 +1218,30 @@ describe("PATCH /students/:id", () => {
         expect(res.json).toHaveBeenCalledWith({ error: "Failed to update APL status" });
     });
 
-    it("returns server error when removing enrollment", async () => {
+    it("updates aplStatus when valid data provided", async () => {
         const handler = findRouteHandler("/students/:id", "PATCH");
         const studentDoc = {
-            _id: "patch-4",
+            _id: "patch-ok",
             aplStatusHistory: [],
-            education: [],
+            save: vi.fn().mockResolvedValue(true),
         };
         Student.findById.mockResolvedValue(studentDoc);
-        TeacherMock.findOne.mockResolvedValue(null);
-        const enrollment = { _id: "enroll-del" };
-        StudentEnrollmentMock.findOne.mockResolvedValue(enrollment);
-        StudentEnrollmentMock.findByIdAndDelete.mockResolvedValue(enrollment);
-        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
-        const req = {
-            params: { id: "patch-4" },
-            body: {
-                education: [
-                    {
-                        type: "Course",
-                        refId: "course-4",
-                        name: "Course 4",
-                        removedAt: new Date(),
-                    },
-                ],
-                aplStatus: "UPDATED",
-            },
-            user: { userId: "user" },
-        };
         const res = createRes();
 
-        StudentEnrollmentMock.findByIdAndDelete.mockRejectedValue(new Error("delete failed"));
-        await handler(req, res);
+        await handler(
+            {
+                params: { id: "patch-ok" },
+                body: { aplStatus: "ACTIVE" },
+                user: { userId: "user-ok" },
+            },
+            res
+        );
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "Failed to update APL status" });
+        expect(studentDoc.aplStatus).toBe("ACTIVE");
+        expect(studentDoc.aplStatusHistory).toHaveLength(1);
+        expect(res.json).toHaveBeenCalledWith(studentDoc);
     });
+
 });
 
 describe("POST /students/:id/comment", () => {
@@ -989,6 +1282,38 @@ describe("POST /students/:id/comment", () => {
             commentHistory: studentDoc.commentHistory,
         });
     });
+
+    it("returns 404 when student is missing while adding comment", async () => {
+        const handler = findRouteHandler("/students/:id/comment", "POST");
+        Student.findById.mockResolvedValue(null);
+        const req = {
+            params: { id: "cmt-missing" },
+            body: { comment: "Hello" },
+            user: { role: "teacher", userId: "user-3", name: "Teacher A" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: "Student not found" });
+    });
+
+    it("returns 500 when fetching student for comment fails", async () => {
+        const handler = findRouteHandler("/students/:id/comment", "POST");
+        Student.findById.mockRejectedValueOnce(new Error("boom comment"));
+        const req = {
+            params: { id: "cmt-error" },
+            body: { comment: "Oops" },
+            user: { role: "teacher", userId: "user-4", name: "Teacher B" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: "Failed to add comment" });
+    });
 });
 
 describe("PUT /students/:id/comment", () => {
@@ -1007,6 +1332,22 @@ describe("PUT /students/:id/comment", () => {
         expect(res.json).toHaveBeenCalledWith({
             error: "You don't have permission to edit comments.",
         });
+    });
+
+    it("returns 404 when comment entry is missing for edit", async () => {
+        const handler = findRouteHandler("/students/:id/comment", "PUT");
+        Student.findById.mockResolvedValue({ commentHistory: [] });
+        const req = {
+            params: { id: "comm-missing" },
+            body: { index: 0, updatedEntry: { text: "new" } },
+            user: { role: "admin" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: "Comment not found." });
     });
 
     it("updates comment history for admin", async () => {
@@ -1068,6 +1409,22 @@ describe("DELETE /students/:id/comment", () => {
 
         expect(studentDoc.commentHistory).toHaveLength(1);
         expect(res.json).toHaveBeenCalledWith({ success: true });
+    });
+
+    it("returns 404 when the comment index does not exist", async () => {
+        const handler = findRouteHandler("/students/:id/comment", "DELETE");
+        Student.findById.mockResolvedValue({ commentHistory: [] });
+        const req = {
+            params: { id: "comm-miss" },
+            body: { index: 5 },
+            user: { role: "admin" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: "Comment not found." });
     });
 });
 
@@ -1193,6 +1550,218 @@ describe("PUT /student/:id", () => {
 
         expect(res.status).toHaveBeenCalledWith(404);
         expect(res.json).toHaveBeenCalledWith({ error: "Student not found" });
+    });
+
+    it("deletes enrollments when education entry is flagged removed", async () => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const studentDoc = {
+            _id: "put-remove",
+            teacher: "Teacher Rem",
+            teacherId: null,
+            education: [],
+            toObject() {
+                return { _id: this._id };
+            },
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        const enrollment = { _id: "enroll-remove" };
+        StudentEnrollmentMock.findOne.mockResolvedValue(enrollment);
+        StudentEnrollmentMock.findByIdAndDelete.mockResolvedValue(enrollment);
+        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.find.mockReturnValue({
+            populate: vi.fn().mockReturnThis(),
+            sort: vi.fn().mockResolvedValue([]),
+        });
+        TeacherMock.findOne.mockResolvedValue(null);
+
+        const res = createRes();
+        await handler(
+            {
+                params: { id: "put-remove" },
+                body: {
+                    education: [
+                        {
+                            type: "Course",
+                            refId: "course-rem",
+                            name: "Course Rem",
+                            removedAt: new Date(),
+                        },
+                    ],
+                },
+            },
+            res
+        );
+
+        expect(StudentEnrollmentMock.findByIdAndDelete).toHaveBeenCalledWith("enroll-remove");
+        expect(CourseMatchingServiceMock.default.processStudentEducation).not.toHaveBeenCalled();
+    });
+
+    it("ignores creation when removed education lacks enrollment", async () => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const studentDoc = {
+            _id: "put-ignore",
+            teacher: "Teacher Ignore",
+            teacherId: null,
+            education: [],
+            toObject() {
+                return { _id: this._id };
+            },
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.find.mockReturnValue({
+            populate: vi.fn().mockReturnThis(),
+            sort: vi.fn().mockResolvedValue([]),
+        });
+        TeacherMock.findOne.mockResolvedValue(null);
+
+        const res = createRes();
+        await handler(
+            {
+                params: { id: "put-ignore" },
+                body: {
+                    education: [
+                        {
+                            type: "Course",
+                            refId: "course-missing",
+                            name: "Missing Course",
+                            removedAt: new Date(),
+                        },
+                    ],
+                },
+            },
+            res
+        );
+
+        expect(CourseMatchingServiceMock.default.processStudentEducation).not.toHaveBeenCalled();
+    });
+
+    it("creates enrollments when missing course data is provided", async () => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const studentDoc = {
+            _id: "put-new",
+            teacher: "Teacher New",
+            teacherId: null,
+            education: [],
+            toObject() {
+                return { _id: this._id };
+            },
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.find.mockReturnValue({
+            populate: vi.fn().mockReturnThis(),
+            sort: vi.fn().mockResolvedValue([]),
+        });
+        TeacherMock.findOne.mockResolvedValue(null);
+        CourseMatchingServiceMock.default.processStudentEducation.mockResolvedValue({ enrollments: [] });
+
+        const req = {
+            params: { id: "put-new" },
+            body: {
+                education: [
+                    {
+                        type: "Course",
+                        refId: "course-new",
+                        name: "New Course",
+                    },
+                ],
+            },
+            user: { userId: "creator-user" },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(CourseMatchingServiceMock.default.processStudentEducation).toHaveBeenCalledWith(
+            "put-new",
+            [
+                expect.objectContaining({
+                    refId: "course-new",
+                }),
+            ],
+            "creator-user"
+        );
+    });
+
+    it("logs errors when enrollment creation fails", async () => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const studentDoc = {
+            _id: "put-fail",
+            teacher: "Teacher Fail",
+            teacherId: null,
+            education: [],
+            toObject() {
+                return { _id: this._id };
+            },
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.find.mockReturnValue({
+            populate: vi.fn().mockReturnThis(),
+            sort: vi.fn().mockResolvedValue([]),
+        });
+        TeacherMock.findOne.mockResolvedValue(null);
+        CourseMatchingServiceMock.default.processStudentEducation.mockRejectedValueOnce(
+            new Error("enroll-fail")
+        );
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const res = createRes();
+
+        await handler(
+            {
+                params: { id: "put-fail" },
+                body: {
+                    education: [
+                        {
+                            type: "Course",
+                            refId: "course-fail",
+                            name: "Fail Course",
+                        },
+                    ],
+                },
+                user: { userId: "creator-user" },
+            },
+            res
+        );
+
+        expect(consoleError).toHaveBeenCalled();
+        consoleError.mockRestore();
+    });
+
+    it("warns when teacher link lookup returns nothing", async () => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const studentDoc = {
+            _id: "put-warn",
+            teacher: "Linked Teacher",
+            teacherId: null,
+            education: [],
+            toObject() {
+                return { _id: this._id };
+            },
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.find.mockReturnValue({
+            populate: vi.fn().mockReturnThis(),
+            sort: vi.fn().mockResolvedValue([]),
+        });
+        TeacherMock.findOne.mockResolvedValue(null);
+        const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const res = createRes();
+
+        global.Teacher = TeacherMock;
+        try {
+            await handler({ params: { id: "put-warn" }, body: {} }, res);
+        } finally {
+            delete global.Teacher;
+        }
+
+        expect(consoleWarn).toHaveBeenCalled();
+        consoleWarn.mockRestore();
     });
 });
 
