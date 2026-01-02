@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach, afterAll } from "vitest";
 
 const parseStudentExcelMock = vi.fn();
 
@@ -128,6 +128,11 @@ beforeEach(() => {
     programData.length = 0;
     packageData.length = 0;
     courseData.length = 0;
+    delete global.createOrFindTeacher;
+});
+
+afterEach(() => {
+    delete global.createOrFindTeacher;
 });
 
 describe("studentController.uploadXlsx", () => {
@@ -157,7 +162,7 @@ describe("studentController.uploadXlsx", () => {
 
         programData.push({ programName: "Program X", _id: "prog" });
         packageData.push({ coursePackageCode: "PKG1000", _id: "pkg" });
-        courseData.push({ courseCode: "COURSE1000", _id: "course" });
+        courseData.push({ courseCode: "COURSE1000 NIVÅ 1", _id: "course" });
 
         mockStudent.find.mockResolvedValue([]);
         mockStudent.bulkWrite.mockResolvedValue([]);
@@ -196,7 +201,7 @@ describe("studentController.uploadXlsx", () => {
 
         programData.push({ programName: "Program X", _id: "prog" });
         packageData.push({ coursePackageCode: "PKG1000", _id: "pkg" });
-        courseData.push({ courseCode: "COURSE1000", _id: "course" });
+        courseData.push({ courseCode: "COURSE1000 NIVÅ 1", _id: "course" });
 
         mockStudent.find.mockResolvedValue([]);
         mockUser.findOne.mockResolvedValue({ _id: "user1", username: "Teacher" });
@@ -216,6 +221,98 @@ describe("studentController.uploadXlsx", () => {
         );
         expect(res.payload.reasons).toHaveLength(1);
     });
+
+    it("returns 400 when parsed file contains no students", async () => {
+        parseStudentExcelMock.mockResolvedValue([]);
+
+        const req = createReq({
+            file: { buffer: Buffer.from("xlsx"), originalname: "students.xlsx" },
+        });
+        const res = createRes();
+
+        await uploadXlsx(req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.payload).toEqual({ error: "No valid data to save." });
+    });
+
+    it("fails when municipality cannot be resolved", async () => {
+        parseStudentExcelMock.mockResolvedValue([
+            {
+                email: "student@example.com",
+                education: [
+                    {
+                        name: "PKG1000",
+                        startDate: "2025-01-01T00:00:00.000Z",
+                        endDate: "2025-02-01T00:00:00.000Z",
+                    },
+                ],
+                municipality: { type: "UnknownVille" },
+                teacher: "Teacher, Test",
+            },
+        ]);
+
+        packageData.push({ coursePackageCode: "PKG1000", _id: "pkg" });
+        courseData.push({ courseCode: "COURSE1000", _id: "course" });
+
+        mockStudent.find.mockResolvedValue([]);
+        mockStudent.bulkWrite.mockResolvedValue([]);
+        mockStudent.findOne.mockResolvedValue({ education: [] });
+        mockUser.findOne.mockResolvedValue({ _id: "user1", username: "Teacher" });
+        mockTeacher.findOne.mockResolvedValue({ _id: "teacher1" });
+
+        const req = createReq({
+            file: { buffer: Buffer.from("xlsx"), originalname: "students.xlsx" },
+        });
+        const res = createRes();
+
+        await uploadXlsx(req, res);
+
+        expect(res.statusCode).toBe(500);
+        expect(res.payload).toHaveProperty("error", "Failed to process file");
+        expect(res.payload.details).toContain("Could not match municipality");
+    });
+
+    it("falls back to createOrFindTeacher when User lookup misses", async () => {
+        parseStudentExcelMock.mockResolvedValue([
+            {
+                email: "student@example.com",
+                education: [
+                    {
+                        name: "PKG1000",
+                        startDate: "2025-01-01T00:00:00.000Z",
+                        endDate: "2025-02-01T00:00:00.000Z",
+                    },
+                ],
+                municipality: { type: "Sollentuna" },
+                teacher: "Teacher, Test",
+            },
+        ]);
+
+        courseData.push({ courseCode: "COURSE1000", _id: "course" });
+        packageData.push({ coursePackageCode: "PKG1000", _id: "pkg" });
+        programData.push({ programName: "Program X", _id: "prog" });
+
+        mockStudent.find.mockResolvedValue([]);
+        mockStudent.bulkWrite.mockResolvedValue([]);
+        mockStudent.findOne.mockResolvedValue({ education: [] });
+        mockUser.findOne.mockResolvedValue(null);
+        mockTeacher.findOne.mockResolvedValue(null);
+
+        const teacherStub = { teacher: { _id: "teacher-auto" } };
+        global.createOrFindTeacher = vi.fn().mockResolvedValue(teacherStub);
+
+        const req = createReq({
+            file: { buffer: Buffer.from("xlsx"), originalname: "students.xlsx" },
+        });
+        const res = createRes();
+
+        await uploadXlsx(req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(global.createOrFindTeacher).toHaveBeenCalled();
+        expect(res.payload.warnings).toBeDefined();
+    });
 });
 
 describe("studentController.normalizeMunicipalityName", () => {
@@ -225,5 +322,8 @@ describe("studentController.normalizeMunicipalityName", () => {
             "Upplands Väsby"
         );
         expect(normalizeMunicipalityName("Sollentuna")).toBe("Sollentuna");
+        expect(normalizeMunicipalityName("some uppl vasby text")).toBe(
+            "some uppl vasby text"
+        );
     });
 });
