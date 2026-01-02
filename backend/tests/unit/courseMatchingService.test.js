@@ -33,6 +33,10 @@ class StudentEnrollmentMock {
         Object.assign(this, data);
         this._id = data._id || `enr-${Math.random().toString(16).slice(2)}`;
         this.save = vi.fn().mockResolvedValue(this);
+        if (StudentEnrollmentMock.forceMissingCourseInstance) {
+            this.courseInstanceId = undefined;
+        }
+        StudentEnrollmentMock.instances.push(this);
     }
 
     toObject() {
@@ -40,6 +44,8 @@ class StudentEnrollmentMock {
     }
 
     static findOne = vi.fn();
+    static forceMissingCourseInstance = false;
+    static instances = [];
 }
 
 class StudentMock {
@@ -93,6 +99,8 @@ const resetMocks = () => {
     StudentEnrollmentMock.findOne.mockReset();
     StudentMock.findById.mockReset();
     courseInstanceSaveMock.mockReset();
+    StudentEnrollmentMock.forceMissingCourseInstance = false;
+    StudentEnrollmentMock.instances = [];
     delete global._StudentModel;
 };
 
@@ -148,8 +156,15 @@ describe("CourseMatchingService.findBestCourseMatch", () => {
         CourseMock.find.mockResolvedValueOnce([]);
         CourseMock.find.mockResolvedValueOnce([]);
 
-        const match = await CourseMatchingService.findBestCourseMatch("unknown");
+const match = await CourseMatchingService.findBestCourseMatch("unknown");
         expect(match).toBeNull();
+    });
+
+    it("returns null and skips database call when normalization yields no characters", async () => {
+        CourseMock.find.mockReset();
+        const result = await CourseMatchingService.findBestCourseMatch("   ");
+        expect(result).toBeNull();
+        expect(CourseMock.find).not.toHaveBeenCalled();
     });
 });
 
@@ -162,8 +177,8 @@ describe("CourseMatchingService.findOrCreateCourseInstance", () => {
             endDate: new Date("2025-03-01"),
             responsibleTeacher: "old",
             slutprovDate: new Date("2025-03-01"),
-            save: vi.fn().mockResolvedValue(this),
         };
+        existingInstance.save = vi.fn().mockResolvedValue(existingInstance);
         CourseInstanceMock.findOne.mockResolvedValue(existingInstance);
 
         const result =
@@ -178,6 +193,68 @@ describe("CourseMatchingService.findOrCreateCourseInstance", () => {
         expect(result.wasCreated).toBe(false);
         expect(existingInstance.save).toHaveBeenCalled();
         expect(CourseMock.findById).not.toHaveBeenCalled();
+    });
+
+    it("patches slutprovDate on existing instance when explicitly provided without teacher", async () => {
+        const existingInstance = {
+            _id: "ci-patch",
+            courseName: "Patch Course",
+            startDate: new Date("2025-02-01"),
+            endDate: new Date("2025-03-01"),
+        };
+        existingInstance.save = vi.fn().mockResolvedValue(existingInstance);
+        CourseInstanceMock.findOne.mockResolvedValue(existingInstance);
+
+        const result = await CourseMatchingService.findOrCreateCourseInstance(
+            "course-patch",
+            new Date("2025-02-01"),
+            new Date("2025-03-01"),
+            "user",
+            null,
+            new Date("2025-03-05")
+        );
+
+        expect(result.wasCreated).toBe(false);
+        expect(existingInstance.slutprovDate).toEqual(new Date("2025-03-05"));
+        expect(existingInstance.save).toHaveBeenCalled();
+    });
+
+    it("clears slutprovDate when teacher overrides and no explicit date provided", async () => {
+        const existingInstance = {
+            _id: "ci-clear",
+            courseName: "Clear Course",
+            startDate: new Date("2025-02-01"),
+            endDate: new Date("2025-03-01"),
+            responsibleTeacher: "other",
+            slutprovDate: new Date("2025-03-05"),
+        };
+        existingInstance.save = vi.fn().mockResolvedValue(existingInstance);
+        CourseInstanceMock.findOne.mockResolvedValue(existingInstance);
+
+        const result = await CourseMatchingService.findOrCreateCourseInstance(
+            "course-clear",
+            new Date("2025-02-01"),
+            new Date("2025-03-01"),
+            "user",
+            "teacher-new"
+        );
+
+        expect(result.wasCreated).toBe(false);
+        expect(existingInstance.slutprovDate).toBeUndefined();
+        expect(existingInstance.save).toHaveBeenCalled();
+    });
+
+    it("throws when the referenced main course cannot be found", async () => {
+        CourseInstanceMock.findOne.mockResolvedValue(null);
+        CourseMock.findById.mockResolvedValue(null);
+
+        await expect(
+            CourseMatchingService.findOrCreateCourseInstance(
+                "missing-course",
+                new Date("2025-05-01"),
+                new Date("2025-06-01")
+            )
+        ).rejects.toThrow("Main course not found: missing-course");
     });
 });
 
@@ -284,6 +361,9 @@ describe("CourseMatchingService.processStudentEducation", () => {
         );
 
         expect(CoursePackageMock.findById).toHaveBeenCalledWith("pkg-1");
+        expect(packageQuery.populate).toHaveBeenCalledWith(
+            "coursePackageCourses"
+        );
         expect(result.errors).toEqual([]);
         expect(studentDoc.save).toHaveBeenCalled();
     });
@@ -373,6 +453,8 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         );
 
         expect(result.enrollments).toHaveLength(0);
+        expect(StudentEnrollmentMock.instances[0].slutprovDate).toBeUndefined();
+        expect(StudentEnrollmentMock.instances[0].programId).toBe("prog-1");
         expect(studentDoc.education).toEqual([
             {
                 type: "Program",
@@ -481,76 +563,6 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         expect(studentDoc.save).toHaveBeenCalled();
     });
 
-    it("promotes course entries matching package codes to CoursePackage processing", async () => {
-        const packageDoc = {
-            _id: "pkg-match",
-            coursePackageCode: "PKG1",
-            coursePackageName: "Package Match",
-            coursePackageCourses: [
-                {
-                    _id: "pkg-course-1",
-                    courseName: "Matched Course",
-                    courseExtent: 5,
-                },
-            ],
-        };
-        coursePackages = [packageDoc];
-
-        const packageQuery = {
-            populate: vi.fn().mockResolvedValue(packageDoc),
-        };
-        CoursePackageMock.findById.mockReturnValue(packageQuery);
-
-        const courseInstance = {
-            _id: "ci-package-match",
-            courseName: "Matched Course",
-            startDate: new Date("2025-02-01"),
-            endDate: new Date("2025-03-01"),
-        };
-        const findOrCreateSpy = vi
-            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
-            .mockResolvedValue({
-                instance: courseInstance,
-                wasCreated: true,
-            });
-
-        const studentDoc = new StudentMock({
-            _id: "stu-pkg-match",
-            education: [],
-            email: "pkg-match@student.com",
-        });
-        StudentMock.findById.mockResolvedValue(studentDoc);
-        StudentEnrollmentMock.findOne.mockResolvedValue(null);
-
-        const result = await CourseMatchingService.processStudentEducation(
-            "stu-pkg-match",
-            [
-                {
-                    type: "Course",
-                    name: "PKG1",
-                    startDate: "2025-02-01",
-                    endDate: "2025-04-01",
-                },
-            ],
-            "user-code-match"
-        );
-
-        findOrCreateSpy.mockRestore();
-
-        expect(CoursePackageMock.findById).toHaveBeenCalledWith("pkg-match");
-        expect(result.warnings).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    type: "package_added",
-                    packageName: "Package Match",
-                }),
-            ])
-        );
-        expect(studentDoc.education.some((entry) => entry.type === "CoursePackage")).toBe(
-            true
-        );
-    });
-
     it("warns when course entry has start/end but no match", async () => {
         const findMatchSpy = vi
             .spyOn(CourseMatchingService, "findBestCourseMatch")
@@ -625,6 +637,67 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         createSpy.mockRestore();
 
         expect(result.enrollments).toHaveLength(0);
+    });
+
+    it("handles individual course entries without explicit dates by using the next Monday", async () => {
+        const match = {
+            course: {
+                _id: "course-node-date",
+                courseName: "No Date Course",
+                courseCode: "NDATE101",
+                courseExtent: "5",
+            },
+            score: 1,
+        };
+        const findMatchSpy = vi
+            .spyOn(CourseMatchingService, "findBestCourseMatch")
+            .mockResolvedValue(match);
+
+        const nextMonday = new Date("2025-04-07");
+        const getNextMondaySpy = vi
+            .spyOn(CourseMatchingService, "getNextMonday")
+            .mockReturnValue(nextMonday);
+
+        const courseEnd = new Date("2025-05-12");
+        const instance = {
+            _id: "ci-no-date",
+            courseName: "No Date Course",
+            startDate: nextMonday,
+            endDate: courseEnd,
+        };
+        const createSpy = vi
+            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+            .mockResolvedValue({ instance, wasCreated: true });
+
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        const studentDoc = new StudentMock({
+            _id: "stu-no-date",
+            education: [],
+            email: "nodate@student.com",
+        });
+        StudentMock.findById.mockResolvedValue(studentDoc);
+
+        const result = await CourseMatchingService.processStudentEducation(
+            "stu-no-date",
+            [
+                {
+                    type: "Course",
+                    name: "NDATE101",
+                },
+            ],
+            "user-no-date"
+        );
+
+        expect(getNextMondaySpy).toHaveBeenCalled();
+
+        findMatchSpy.mockRestore();
+        createSpy.mockRestore();
+        getNextMondaySpy.mockRestore();
+        expect(result.enrollments).toHaveLength(1);
+        expect(StudentEnrollmentMock.instances[0].startDate).toEqual(
+            nextMonday
+        );
+        expect(studentDoc.education).toHaveLength(1);
     });
 
     it("records instance_created warning when a new individual course instance is created", async () => {
@@ -733,16 +806,17 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
                     name: "ERR101",
                     startDate: "2025-01-01",
                     endDate: "2025-02-01",
+                    teacherId: "teacher-event",
                 },
             ],
             "user-event"
         );
 
+        expect(getWednesdaySpy).toHaveBeenCalled();
+
         findMatchSpy.mockRestore();
         createSpy.mockRestore();
         getWednesdaySpy.mockRestore();
-
-        expect(getWednesdaySpy).toHaveBeenCalled();
         expect(result.errors).toEqual([]);
     });
 
@@ -977,5 +1051,385 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
                 message: error.message,
             },
         ]);
+    });
+
+    it("adds CoursePackage entries to education and surfaces package_added warnings", async () => {
+        const packageDoc = {
+            _id: "pkg-force",
+            coursePackageCode: "PKG1",
+            coursePackageName: "Forced Package",
+            coursePackageCourses: [
+                {
+                    _id: "pkg-course-1",
+                    courseName: "Forced Course",
+                    courseExtent: 5,
+                },
+            ],
+        };
+        coursePackages = [packageDoc];
+
+        const packageQuery = {
+            populate: vi.fn().mockResolvedValue(packageDoc),
+        };
+        CoursePackageMock.findById.mockReturnValue(packageQuery);
+
+        const courseInstance = {
+            _id: "ci-force-1",
+            courseName: "Forced Course",
+            startDate: new Date("2025-02-03"),
+            endDate: new Date("2025-03-03"),
+        };
+        const findOrCreateSpy = vi
+            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+            .mockResolvedValue({ instance: courseInstance, wasCreated: true });
+
+        const studentDoc = new StudentMock({
+            _id: "stu-force",
+            education: [],
+            email: "force@student.com",
+        });
+        StudentMock.findById.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+
+        const result = await CourseMatchingService.processStudentEducation(
+            "stu-force",
+            [
+                {
+                    type: "CoursePackage",
+                    refId: "pkg-force",
+                    startDate: "2025-02-01",
+                    endDate: "2025-04-01",
+                },
+            ],
+            "user-force"
+        );
+
+        findOrCreateSpy.mockRestore();
+
+        expect(packageQuery.populate).toHaveBeenCalledWith(
+            "coursePackageCourses"
+        );
+        expect(CoursePackageMock.findById).toHaveBeenCalledWith("pkg-force");
+        expect(CoursePackageMock.find).toHaveBeenCalled();
+        expect(result.warnings).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ type: "package_added" }),
+            ])
+        );
+        expect(studentDoc.education.some((entry) => entry.type === "CoursePackage")).toBe(
+            true
+        );
+    });
+
+    it("uses explicit slutprov date when provided for individual courses", async () => {
+        const match = {
+            course: {
+                _id: "course-explicit",
+                courseName: "Explicit Slutprov",
+                courseCode: "EXPL101",
+                courseExtent: 5,
+            },
+            score: 1,
+        };
+        const findMatchSpy = vi
+            .spyOn(CourseMatchingService, "findBestCourseMatch")
+            .mockResolvedValue(match);
+
+        const instance = {
+            _id: "ci-explicit",
+            courseName: "Explicit Slutprov",
+            startDate: new Date("2025-03-01"),
+            endDate: new Date("2025-04-01"),
+        };
+        const createSpy = vi
+            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+            .mockResolvedValue({ instance, wasCreated: true });
+
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        const studentDoc = new StudentMock({
+            _id: "stu-explicit",
+            education: [],
+            email: "explict@student.com",
+        });
+        StudentMock.findById.mockResolvedValue(studentDoc);
+
+        const result = await CourseMatchingService.processStudentEducation(
+            "stu-explicit",
+            [
+                {
+                    type: "Course",
+                    name: "EXPL101",
+                    startDate: "2025-03-01",
+                    endDate: "2025-04-01",
+                    slutprovDate: "2025-03-29",
+                },
+            ],
+            "user-explicit"
+        );
+
+        findMatchSpy.mockRestore();
+        createSpy.mockRestore();
+
+        expect(result.enrollments).toHaveLength(1);
+        expect(StudentEnrollmentMock.instances[0].slutprovDate).toEqual(
+            new Date("2025-03-29")
+        );
+    });
+
+    it("continues when individual course taxpvt date is invalid", async () => {
+        const match = {
+            course: {
+                _id: "course-bad-date",
+                courseName: "Bad Date Course",
+                courseCode: "BAD101",
+                courseExtent: 5,
+            },
+            score: 1,
+        };
+        const findMatchSpy = vi
+            .spyOn(CourseMatchingService, "findBestCourseMatch")
+            .mockResolvedValue(match);
+
+        const instance = {
+            _id: "ci-bad-date",
+            courseName: "Bad Date Course",
+            startDate: new Date("2025-03-01"),
+            endDate: new Date("2025-04-01"),
+        };
+        const createSpy = vi
+            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+            .mockResolvedValue({ instance, wasCreated: true });
+
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        const studentDoc = new StudentMock({
+            _id: "stu-bad-date",
+            education: [],
+            email: "baddate@student.com",
+        });
+        StudentMock.findById.mockResolvedValue(studentDoc);
+
+        const result = await CourseMatchingService.processStudentEducation(
+            "stu-bad-date",
+            [
+                {
+                    type: "Course",
+                    name: "BAD101",
+                    startDate: "2025-03-01",
+                    endDate: "2025-04-01",
+                    slutprovDate: "not-a-date",
+                },
+            ],
+            "user-bad-date"
+        );
+
+        findMatchSpy.mockRestore();
+        createSpy.mockRestore();
+
+        expect(result.enrollments).toHaveLength(1);
+        expect(StudentEnrollmentMock.instances[0].slutprovDate).toBeUndefined();
+        expect(result.errors).toEqual([]);
+    });
+
+    it("skips package enrollments when provided slutprov date is invalid", async () => {
+        const packageDoc = {
+            _id: "pkg-invalid-slutprov",
+            coursePackageName: "Invalid Slutprov Package",
+            coursePackageCourses: [
+                {
+                    _id: "inv-course-1",
+                    courseName: "Invalid Slutprov Course",
+                    courseExtent: 5,
+                },
+            ],
+        };
+        coursePackages = [packageDoc];
+
+        const packageQuery = {
+            populate: vi.fn().mockResolvedValue(packageDoc),
+        };
+        CoursePackageMock.findById.mockReturnValue(packageQuery);
+
+        const instance = {
+            _id: "ci-invalid",
+            courseName: "Invalid Slutprov Course",
+        };
+        const findOrCreateSpy = vi
+            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+            .mockResolvedValue({ instance, wasCreated: true });
+
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        const studentDoc = new StudentMock({
+            _id: "stu-invalid",
+            education: [],
+            email: "invalid@student.com",
+        });
+        StudentMock.findById.mockResolvedValue(studentDoc);
+
+        const result = await CourseMatchingService.processStudentEducation(
+            "stu-invalid",
+            [
+                {
+                    type: "CoursePackage",
+                    name: "Invalid Slutprov Package",
+                    refId: "pkg-invalid-slutprov",
+                    startDate: "2025-05-01",
+                    endDate: "2025-06-01",
+                    slutprovDate: "not-a-date",
+                },
+            ],
+            "user-invalid"
+        );
+
+        findOrCreateSpy.mockRestore();
+
+        expect(result.enrollments).toHaveLength(1);
+        expect(StudentEnrollmentMock.instances[0].slutprovDate).toBeUndefined();
+    });
+
+    it("filters duplicate education entries before adding a new one", async () => {
+        const match = {
+            course: {
+                _id: "course-dup-ed",
+                courseName: "Education Dup",
+                courseCode: "EDU101",
+                courseExtent: 5,
+            },
+            score: 1,
+        };
+        const findMatchSpy = vi
+            .spyOn(CourseMatchingService, "findBestCourseMatch")
+            .mockResolvedValue(match);
+
+        const instance = {
+            _id: "ci-dup-ed",
+            courseName: "Education Dup",
+            startDate: new Date("2025-07-01"),
+            endDate: new Date("2025-08-01"),
+        };
+        const createSpy = vi
+            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+            .mockResolvedValue({ instance, wasCreated: true });
+
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        const studentDoc = new StudentMock({
+            _id: "stu-dup-ed",
+            education: [
+                {
+                    type: "Course",
+                    refId: "course-dup-ed",
+                    startDate: new Date("2025-07-01"),
+                    endDate: new Date("2025-08-01"),
+                },
+            ],
+            email: "duplicate@student.com",
+        });
+        StudentMock.findById.mockResolvedValue(studentDoc);
+
+        const result = await CourseMatchingService.processStudentEducation(
+            "stu-dup-ed",
+            [
+                {
+                    type: "Course",
+                    name: "EDU101",
+                    startDate: "2025-07-01",
+                    endDate: "2025-08-01",
+                },
+            ],
+            "user-dup-ed"
+        );
+
+        findMatchSpy.mockRestore();
+        createSpy.mockRestore();
+
+        expect(studentDoc.education).toHaveLength(1);
+        expect(result.enrollments).toHaveLength(1);
+    });
+
+    it("filters out enrollments that lack courseInstanceId", async () => {
+        StudentEnrollmentMock.forceMissingCourseInstance = true;
+
+        const match = {
+            course: {
+                _id: "course-no-instance-id",
+                courseName: "No Instance ID",
+                courseCode: "NOID101",
+                courseExtent: 5,
+            },
+            score: 1,
+        };
+        const findMatchSpy = vi
+            .spyOn(CourseMatchingService, "findBestCourseMatch")
+            .mockResolvedValue(match);
+
+        const instance = {
+            _id: "ci-no-id",
+            courseName: "No Instance ID",
+            startDate: new Date("2025-09-01"),
+            endDate: new Date("2025-10-01"),
+        };
+        const createSpy = vi
+            .spyOn(CourseMatchingService, "findOrCreateCourseInstance")
+            .mockResolvedValue({ instance, wasCreated: true });
+
+        StudentEnrollmentMock.findOne.mockResolvedValue(null);
+        const studentDoc = new StudentMock({
+            _id: "stu-no-instance-id",
+            education: [],
+            email: "noinstance@student.com",
+        });
+        StudentMock.findById.mockResolvedValue(studentDoc);
+
+        let result;
+        try {
+            result = await CourseMatchingService.processStudentEducation(
+                "stu-no-instance-id",
+                [
+                    {
+                        type: "Course",
+                        name: "NOID101",
+                        startDate: "2025-09-01",
+                        endDate: "2025-10-01",
+                    },
+                ],
+                "user-no-instance"
+            );
+        } finally {
+            StudentEnrollmentMock.forceMissingCourseInstance = false;
+        }
+
+        findMatchSpy.mockRestore();
+        createSpy.mockRestore();
+
+        expect(result.enrollments).toHaveLength(0);
+    });
+
+    it("does not duplicate program education when already present", async () => {
+        const studentDoc = {
+            _id: "stu-program-existing",
+            education: [
+                {
+                    type: "Program",
+                    refId: "prog-dup",
+                },
+            ],
+            save: vi.fn().mockResolvedValue(null),
+            email: "existing@prog.com",
+        };
+        StudentMock.findById.mockResolvedValue(studentDoc);
+
+        const result = await CourseMatchingService.processStudentEducation(
+            "stu-program-existing",
+            [
+                {
+                    type: "Program",
+                    refId: "prog-dup",
+                    name: "Program Duplicate",
+                },
+            ],
+            "user-program-existing"
+        );
+
+        expect(result.enrollments).toHaveLength(0);
+        expect(studentDoc.save).not.toHaveBeenCalled();
     });
 });
