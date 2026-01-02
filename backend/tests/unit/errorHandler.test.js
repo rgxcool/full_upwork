@@ -104,11 +104,15 @@ describe("errorHandler utilities", () => {
         expect(new ConflictError().statusCode).toBe(409);
     });
 
-it("records errors and honors Sentry configuration", () => {
-    const error = new AppError("boom", 500);
-    const req = buildReq();
-    const loggerSpy = vi.spyOn(logger, "error");
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    it("adds the console transport when not in production", () => {
+        expect(logger.add).toHaveBeenCalled();
+    });
+
+    it("records errors and honors Sentry configuration", () => {
+        const error = new AppError("boom", 500);
+        const req = buildReq();
+        const loggerSpy = vi.spyOn(logger, "error");
+        const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
         process.env.SENTRY_DSN = "https://dsn";
         errorMonitor.recordError(error, req);
@@ -161,6 +165,24 @@ it("records errors and honors Sentry configuration", () => {
 
         errorMonitor.resetMetrics();
         expect(errorMonitor.errorCounts.size).toBe(0);
+    });
+
+    it("keeps only the latest 100 slow queries", () => {
+        errorMonitor.resetMetrics();
+        errorMonitor.performanceMetrics.slowQueries = new Array(100).fill({
+            operation: "old",
+            duration: 2000,
+            timestamp: "old",
+        });
+
+        errorMonitor.recordPerformance("GET /slow", 1501, true);
+
+        expect(errorMonitor.performanceMetrics.slowQueries).toHaveLength(100);
+        expect(
+            errorMonitor.performanceMetrics.slowQueries.some(
+                (entry) => entry.operation === "GET /slow"
+            )
+        ).toBe(true);
     });
 
     it("produces top error ordering", () => {
@@ -260,6 +282,18 @@ describe("global error handler", () => {
         fallbackError.stack = "stack";
 
         globalErrorHandler(fallbackError, req, res);
+
+        expect(res.statusCode).toBe(500);
+        expect(res.body.error.message).toBe("Server Error");
+        expect(res.body.error.stack).toBe("stack");
+    });
+
+    it("falls back to generic status/message when error omits them entirely", () => {
+        const req = buildReq();
+        const res = buildRes();
+        const bareError = { stack: "stack" };
+
+        globalErrorHandler(bareError, req, res);
 
         expect(res.statusCode).toBe(500);
         expect(res.body.error.message).toBe("Server Error");
