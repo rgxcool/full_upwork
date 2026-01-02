@@ -16,5 +16,32 @@ services:
       retries: 5
       start_period: 10s
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: mindful_app
+    restart: unless-stopped
+    environment:
+      PORT: 5001
+      MONGO_URI: mongodb://mongo:27017/mindfullearning
+      MONGODB_URI: mongodb://mongo:27017/mindfullearning
+      CLIENT_URL: http://localhost:5173
+      ALLOWED_ORIGINS: http://localhost:5173
+      JWT_SECRET: change-me
+    ports:
+      - "5001:5001"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/public/uploads
+      - backend_logs:/app/logs
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+
 volumes:
   mongo_data:
+  backend_uploads:
+  backend_logs:

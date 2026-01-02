@@ -147,8 +147,6 @@ if (!process.env.JWT_SECRET) {
 if (process.env.NODE_ENV !== "test") {
     mongoose
         .connect(process.env.MONGO_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
             maxPoolSize: parseInt(process.env.MAX_CONCURRENT_REQUESTS) || 50,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
