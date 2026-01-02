@@ -103,7 +103,7 @@ vi.mock("mongoose", () => {
         ObjectId: objectIdMock,
     };
     const schema = vi.fn(function (definition, options) {
-        return {
+        const schemaObj = {
             definition,
             options,
             Types: types,
@@ -112,6 +112,12 @@ vi.mock("mongoose", () => {
             statics: {},
             index: vi.fn(),
         };
+        const virtualChain = {
+            get: vi.fn(() => virtualChain),
+            set: vi.fn(() => virtualChain),
+        };
+        schemaObj.virtual = vi.fn(() => virtualChain);
+        return schemaObj;
     });
     schema.Types = types;
     StudentEnrollmentMock = {

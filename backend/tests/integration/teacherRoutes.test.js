@@ -48,7 +48,11 @@ const TEACHER_COLORS = [
 
 const buildAuthHeader = (role = "admin") => {
     const token = jwt.sign(
-        { userId: new mongoose.Types.ObjectId().toString(), role },
+        {
+            userId: new mongoose.Types.ObjectId().toString(),
+            role,
+            roles: [role],
+        },
         process.env.JWT_SECRET
     );
     return { Authorization: `Bearer ${token}` };
@@ -61,7 +65,7 @@ const createUser = async (overrides = {}) => {
             overrides.email ||
             `teacher_${new mongoose.Types.ObjectId().toString()}@example.com`,
         password: overrides.password,
-        role: overrides.role || "teacher",
+        roles: overrides.roles || [overrides.role || "teacher"],
         createdAt: overrides.createdAt || new Date(),
         updatedAt: overrides.updatedAt || new Date(),
     });
@@ -121,7 +125,7 @@ describe("Teacher Routes", () => {
                     id: user._id.toString(),
                     username: user.username,
                     email: user.email,
-                    role: user.role,
+                    roles: user.roles,
                 },
             });
         });

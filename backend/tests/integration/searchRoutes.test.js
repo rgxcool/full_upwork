@@ -32,6 +32,7 @@ const mockAuthenticateUser = vi.hoisted(() => (req, _res, next) => {
 
     req.user = {
         role: role || "admin",
+        roles: role ? [role] : ["admin"],
         userId: userId || "test-user",
     };
     req.userId = req.user.userId;
@@ -285,7 +286,7 @@ describe("Search Routes", () => {
                 username: "AnnUser",
                 email: "ann-user@example.com",
                 password: "password",
-                role: "admin",
+            roles: ["admin"],
             });
 
             const response = await request(searchApp)
@@ -517,7 +518,7 @@ describe("Search Routes", () => {
                 username: "TeacherUser",
                 email: "teacher-user@example.com",
                 password: "password",
-                role: "teacher",
+                roles: ["teacher"],
             });
 
             const response = await request(searchApp)
@@ -526,9 +527,11 @@ describe("Search Routes", () => {
 
             expect(response.body).toEqual({
                 _id: user._id.toString(),
+                id: user._id.toString(),
                 username: "TeacherUser",
                 email: "teacher-user@example.com",
                 role: "teacher",
+                roles: ["teacher"],
             });
         });
 
@@ -537,7 +540,7 @@ describe("Search Routes", () => {
                 username: "AdminUser",
                 email: "admin-user@example.com",
                 password: "password",
-                role: "admin",
+                roles: ["admin"],
             });
 
             const response = await request(searchApp)
@@ -546,9 +549,11 @@ describe("Search Routes", () => {
 
             expect(response.body).toEqual({
                 _id: user._id.toString(),
+                id: user._id.toString(),
                 username: "AdminUser",
                 email: "admin-user@example.com",
                 role: "admin",
+                roles: ["admin"],
             });
         });
 
@@ -718,7 +723,7 @@ describe("Search Routes", () => {
                 username: "Update User",
                 email: "update-user@example.com",
                 password: "password",
-                role: "admin",
+                roles: ["admin"],
             });
 
             const response = await request(searchApp)
