@@ -134,7 +134,7 @@ const createPopulateChain = (result) => {
 };
 
 beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     calculateSlutprovDate.mockResolvedValue(null);
     Student.prototype.save = vi.fn().mockImplementation(function () {
         return Promise.resolve(this);
@@ -452,14 +452,422 @@ describe("uploadStudentsForMatching", () => {
 
         await uploadStudentsForMatching(req, res);
 
+        const payload = res.json.mock.calls[0][0];
         expect(res.status).toHaveBeenCalledWith(422);
+        expect(payload.success).toBe(false);
+        expect(payload.errorTypes.no_enrollments_created).toBe(1);
+        expect(payload.reasons).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: "no_enrollments_created",
+                    educationCodes: "MAT101",
+                }),
+            ])
+        );
+        expect(payload.summary).toContain("Inga registreringar skapade");
+    });
+
+    it("deduplicates entries with the same email before processing", async () => {
+        const req = createReq();
+        const res = createRes();
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "dup@example.com",
+                name: "Student",
+                teacher: "Teacher One",
+                additionalInfo: "Notes",
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: "MATHPKG",
+                        startDate: "2024-01-01",
+                        endDate: "2024-01-31",
+                    },
+                ],
+            },
+            {
+                email: "dup@example.com",
+                name: "Student Duplicate",
+                teacher: "Teacher One",
+                additionalInfo: "More notes",
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: "ENGCOURSE",
+                        startDate: "2024-02-01",
+                        endDate: "2024-02-28",
+                    },
+                ],
+            },
+        ]);
+
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                {
+                    _id: "pkg-1",
+                    coursePackageCode: "MATHPKG",
+                    coursePackageName: "Matematikk paket",
+                },
+            ]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                {
+                    _id: "course-1",
+                    courseCode: "ENGCOURSE",
+                    courseName: "Engelska",
+                },
+            ]),
+        });
+
+        CourseMatchingService.processStudentEducation.mockImplementation(
+            async (_studentId, entries) => ({
+                enrollments: entries.map((entry) => ({
+                    type: entry.type || "Course",
+                    name: entry.name || entry.packageName,
+                })),
+                warnings: [],
+                errors: [],
+            })
+        );
+
+        await uploadStudentsForMatching(req, res);
+
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.success).toBe(true);
+        expect(payload.results.students).toHaveLength(1);
+        expect(payload.results.enrollments).toHaveLength(2);
+    });
+
+    it("returns 400 when parsed file contains no valid students", async () => {
+        const req = createReq();
+        const res = createRes();
+        parseStudentExcel.mockResolvedValue([]);
+
+        await uploadStudentsForMatching(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: "No valid data found in file." });
+    });
+
+    it("sanitizes richText before matching course codes", async () => {
+        const req = createReq();
+        const res = createRes();
+
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "richtext@example.com",
+                name: "Rich Student",
+                additionalInfo: { richText: [{ text: "Some info" }] },
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: { richText: [{ text: "MATH101" }] },
+                        startDate: "2025-01-01",
+                        endDate: "2025-02-01",
+                    },
+                ],
+            },
+        ]);
+
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                {
+                    _id: "course-2",
+                    courseCode: "MATH101",
+                    courseName: "Matematik 101",
+                },
+            ]),
+        });
+
+        await uploadStudentsForMatching(req, res);
+
+        const entryArgs = CourseMatchingService.processStudentEducation.mock.calls[0][1][0];
+        expect(entryArgs.name).toBe("MATH101");
+    });
+
+    it("returns 422 when a course name cannot be matched", async () => {
+        const req = createReq();
+        const res = createRes();
+
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "nomatch@example.com",
+                name: "No Match",
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: "UNKNOWNCODE",
+                        startDate: "2025-01-01",
+                        endDate: "2025-02-01",
+                    },
+                ],
+            },
+        ]);
+
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                { courseCode: "MAT101", courseName: "Matematik 1" },
+            ]),
+        });
+
+        await uploadStudentsForMatching(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(422);
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.errorTypes.no_match).toBe(1);
+        expect(payload.reasons).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: "no_match",
+                    courseCode: "UNKNOWNCODE",
+                }),
+            ])
+        );
+    });
+
+    it("records teacher creation errors without aborting the upload", async () => {
+        const req = createReq();
+        const res = createRes();
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "teachererror@example.com",
+                name: "Teacher Error",
+                teacher: "Problem Teacher",
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: "COURSE123",
+                        startDate: "2025-01-01",
+                        endDate: "2025-02-01",
+                    },
+                ],
+            },
+        ]);
+
+        createOrFindTeacher.mockRejectedValueOnce(new Error("teacher creation failed"));
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                {
+                    _id: "course-3",
+                    courseCode: "COURSE123",
+                    courseName: "Course 123",
+                },
+            ]),
+        });
+
+        CourseMatchingService.processStudentEducation.mockResolvedValue({
+            enrollments: [{ type: "Course", name: "COURSE123" }],
+            warnings: [],
+            errors: [],
+        });
+
+        await uploadStudentsForMatching(req, res);
+
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.success).toBe(true);
+        expect(payload.results.errors).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: "teacher_creation",
+                    teacher: "Problem Teacher",
+                    error: expect.stringContaining("teacher creation failed"),
+                }),
+            ])
+        );
+    });
+
+    it("returns 422 when the municipality cannot be normalized or matched", async () => {
+        const req = createReq();
+        const res = createRes();
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "badmuni@example.com",
+                name: "Bad Mun",
+                municipality: "Atlantis",
+                education: [
+                    {
+                        name: "MAT101",
+                        startDate: "2025-01-01",
+                        endDate: "2025-02-01",
+                    },
+                ],
+            },
+        ]);
+
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                {
+                    _id: "course-4",
+                    courseCode: "MAT101",
+                    courseName: "Matte 101",
+                },
+            ]),
+        });
+
+        await uploadStudentsForMatching(req, res);
+
+        expect(res.status).not.toHaveBeenCalled();
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.success).toBe(true);
+        expect(payload.results.errors).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: "student_creation",
+                    reasons: expect.arrayContaining([
+                        expect.objectContaining({
+                            type: "invalid_municipality",
+                            message: expect.stringContaining("Ogiltig kommun"),
+                        }),
+                    ]),
+                }),
+            ])
+        );
+    });
+
+    it("records enrollment_error when processing a package fails", async () => {
+        const req = createReq();
+        const res = createRes();
+
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "pkgerr@example.com",
+                name: "Package Error",
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: "MATHPKG",
+                        startDate: "2025-01-01",
+                        endDate: "2025-01-15",
+                    },
+                    {
+                        name: "GOODCOURSE",
+                        startDate: "2025-02-01",
+                        endDate: "2025-02-15",
+                    },
+                ],
+            },
+        ]);
+
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                {
+                    _id: "pkg-2",
+                    coursePackageCode: "MATHPKG",
+                    coursePackageName: "Mattepaket",
+                },
+            ]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                {
+                    _id: "course-5",
+                    courseCode: "GOODCOURSE",
+                    courseName: "Good Course",
+                },
+            ]),
+        });
+
+        CourseMatchingService.processStudentEducation
+            .mockRejectedValueOnce(new Error("package fail"))
+            .mockResolvedValueOnce({
+                enrollments: [{ type: "Course", name: "GOODCOURSE" }],
+                warnings: [],
+                errors: [],
+            });
+
+        await uploadStudentsForMatching(req, res);
+
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.results.errors).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: "enrollment_error",
+                    packageName: "Mattepaket",
+                }),
+            ])
+        );
+    });
+
+    it("records enrollment_error when processing a course fails", async () => {
+        const req = createReq();
+        const res = createRes();
+
+        parseStudentExcel.mockResolvedValue([
+            {
+                email: "courseerr@example.com",
+                name: "Course Error",
+                municipality: { type: "Lidingö" },
+                education: [
+                    {
+                        name: "FAILCOURSE",
+                        startDate: "2025-01-01",
+                        endDate: "2025-01-15",
+                    },
+                    {
+                        name: "GOODCOURSE",
+                        startDate: "2025-02-01",
+                        endDate: "2025-02-15",
+                    },
+                ],
+            },
+        ]);
+
+        CoursePackage.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+        Course.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                { _id: "course-6", courseCode: "FAILCOURSE", courseName: "Fail Course" },
+                { _id: "course-7", courseCode: "GOODCOURSE", courseName: "Good Course" },
+            ]),
+        });
+
+        CourseMatchingService.processStudentEducation
+            .mockRejectedValueOnce(new Error("course fail"))
+            .mockResolvedValueOnce({
+                enrollments: [{ type: "Course", name: "GOODCOURSE" }],
+                warnings: [],
+                errors: [],
+            });
+
+        await uploadStudentsForMatching(req, res);
+
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.results.errors).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: "enrollment_error",
+                    courseCode: "FAILCOURSE",
+                }),
+            ])
+        );
+    });
+
+    it("returns 500 when parsing the uploaded file fails", async () => {
+        const req = createReq();
+        const res = createRes();
+        parseStudentExcel.mockRejectedValue(new Error("parse failure"));
+
+        await uploadStudentsForMatching(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({
                 success: false,
-                errorTypes: expect.objectContaining({
-                    no_enrollments_created: 1,
-                }),
-                summary: expect.stringContaining("Inga registreringar skapade"),
+                error: "Ett internt serverfel uppstod vid bearbetning av filen.",
             })
         );
     });
@@ -655,6 +1063,28 @@ describe("getStudentEnrollments", () => {
 
         expect(StudentEnrollment.find).toHaveBeenCalledWith(
             expect.objectContaining({ studentId: "stu1", status: "enrolled" })
+        );
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ success: true, enrollments: expect.any(Array) })
+        );
+    });
+
+    it("applies date filters when provided", async () => {
+        const req = {
+            params: { studentId: "stu1" },
+            query: { startDate: "2025-01-01", endDate: "2025-02-01" },
+        };
+        const res = createRes();
+
+        await getStudentEnrollments(req, res);
+
+        const queryArg = StudentEnrollment.find.mock.calls[0][0];
+        expect(queryArg.studentId).toBe("stu1");
+        expect(queryArg.$and).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ startDate: expect.any(Object) }),
+                expect.objectContaining({ endDate: expect.any(Object) }),
+            ])
         );
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({ success: true, enrollments: expect.any(Array) })
