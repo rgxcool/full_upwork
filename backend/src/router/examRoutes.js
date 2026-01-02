@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from 'mongoose';
 const router = express.Router();
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
@@ -238,6 +239,10 @@ router.put(
     "/calendar-events/move-group",
     authenticateUser,
     async (req, res) => {
+        // Start a new session for the transaction
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
         try {
             const { teacherId, fromDate, toDate, courseInstanceIds } = req.body;
             if (!teacherId || !fromDate || !toDate) {
@@ -253,7 +258,7 @@ router.put(
             if (req.user.role === "teacher") {
                 const teacher = await Teacher.findOne({
                     userId: req.user.userId,
-                });
+                }).session(session);
                 if (
                     teacher &&
                     teacher._id.toString() === teacherId.toString()
@@ -281,23 +286,23 @@ router.put(
                 toKey.getDate()
             );
 
-            // Update enrollments for this teacher on fromDate
-            const enrollmentsUpdated = await StudentEnrollment.updateMany(
+            // Date range for the fromDate
+            const fromDateStart = new Date(fromLocal.toISOString().split("T")[0] + "T00:00:00.000Z");
+            const fromDateEnd = new Date(fromLocal.toISOString().split("T")[0] + "T23:59:59.999Z");
+
+            // 1. Update enrollments
+            const enrollmentsUpdateResult = await StudentEnrollment.updateMany(
                 {
                     teacherId,
                     slutprovDate: {
-                        $gte: new Date(
-                            fromLocal.toISOString().split("T")[0] +
-                                "T00:00:00.000Z"
-                        ),
-                        $lte: new Date(
-                            fromLocal.toISOString().split("T")[0] +
-                                "T23:59:59.999Z"
-                        ),
+                        $gte: fromDateStart,
+                        $lte: fromDateEnd,
                     },
                 },
-                { $set: { slutprovDate: toLocal } }
+                { $set: { slutprovDate: toLocal } },
+                { session }
             );
+
 
             // Update CourseInstance.slutprovDate if courseInstanceIds are provided
             let courseInstancesUpdated = 0;
@@ -319,38 +324,45 @@ router.put(
                     },
                     { 
                         $set: { slutprovDate: toLocal }
-                    }
+                    },
+                    { session }
                 );
                 courseInstancesUpdated = result.modifiedCount;
                 console.log(`📅 Updated ${courseInstancesUpdated} CourseInstances from ${fromDate} to ${toDate}`);
             }
 
-            // Update students with manual finalExamDate for this teacher on fromDate
-            const students = await Student.find({
-                teacherId,
-                finalExamDate: {
-                    $gte: new Date(
-                        fromLocal.toISOString().split("T")[0] + "T00:00:00.000Z"
-                    ),
-                    $lte: new Date(
-                        fromLocal.toISOString().split("T")[0] + "T23:59:59.999Z"
-                    ),
+            // 3. Update students with manual finalExamDate (OPTIMIZED)
+            const studentUpdateResult = await Student.updateMany(
+                {
+                    teacherId,
+                    finalExamDate: {
+                        $gte: fromDateStart,
+                        $lte: fromDateEnd,
+                    },
                 },
-            });
-            for (const s of students) {
-                s.finalExamDate = toLocal;
-                await s.save();
-            }
+                { $set: { finalExamDate: toLocal } },
+                { session }
+            );
+
+
+            // Commit the transaction
+            await session.commitTransaction();
+
 
             res.json({
-                message: "Group moved",
-                enrollmentsModified: enrollmentsUpdated.modifiedCount,
+                message: "Group moved successfully",
+                enrollmentsModified: enrollmentsUpdateResult.modifiedCount,
                 courseInstancesModified: courseInstancesUpdated,
-                studentsModified: students.length,
+                studentsModified: studentUpdateResult.modifiedCount,
             });
         } catch (error) {
-            console.error("❌ Failed to move group:", error);
-            res.status(500).json({ error: "Failed to move group" });
+            // If an error occurred, abort the transaction
+            await session.abortTransaction();
+            console.error("❌ Failed to move group (transaction rolled back):", error);
+            res.status(500).json({ error: "Failed to move group. The operation was rolled back." });
+        } finally {
+            // End the session
+            session.endSession();
         }
     }
 );

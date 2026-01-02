@@ -125,7 +125,7 @@ export async function createOrFindTeacher(
             username,
             email,
             password: hashedPassword,
-            role: "teacher",
+            roles: ["teacher"],
             createdAt: new Date(),
             updatedAt: new Date(),
         });

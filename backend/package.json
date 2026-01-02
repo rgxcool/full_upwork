@@ -20,32 +20,47 @@
     "keywords": [],
     "author": "",
     "license": "ISC",
+    "volta": {
+        "node": "25.2.1",
+        "npm": "11.7.0"
+    },
     "dependencies": {
-        "axios": "^1.11.0",
-        "bcrypt": "^5.1.1",
+        "axios": "^1.13.2",
+        "bcrypt": "^6.0.0",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",
-        "dotenv": "^16.4.7",
+        "dotenv": "^17.2.3",
         "exceljs": "^4.4.0",
-        "express": "^4.21.2",
-        "express-rate-limit": "^7.1.5",
+        "express": "^5.2.1",
+        "express-rate-limit": "^8.2.1",
         "fastest-levenshtein": "^1.0.16",
         "gridfs-stream": "^1.1.1",
-        "helmet": "^7.1.0",
-        "jsonwebtoken": "^9.0.2",
-        "mime-types": "^3.0.1",
-        "mongoose": "^8.16.4",
-        "multer": "^1.4.5-lts.1",
-        "nodemailer": "^6.10.0",
-        "nodemon": "^3.1.10",
-        "pm2": "^6.0.8",
-        "winston": "^3.11.0"
+        "helmet": "^8.1.0",
+        "jsonwebtoken": "^9.0.3",
+        "mime-types": "^3.0.2",
+        "mongoose": "^9.0.2",
+        "multer": "^2.0.2",
+        "nodemailer": "^7.0.12",
+        "nodemon": "^3.1.11",
+        "pm2": "^6.0.14",
+        "winston": "^3.19.0"
     },
     "devDependencies": {
-        "eslint": "^8.56.0",
-        "mongodb-memory-server": "^9.1.3",
-        "supertest": "^6.3.3",
-        "vite": "^7.0.6",
-        "vitest": "^3.2.4"
-    }
+        "@vitest/coverage-v8": "^4.0.16",
+        "eslint": "^9.39.2",
+        "supertest": "^7.1.4",
+        "vite": "^7.3.0",
+        "vitest": "^4.0.16"
+    },
+    "compilerOptions": {
+        "target": "ES2025",
+        "module": "ESNext",
+        "checkJs": true,
+        "jsx": "react-jsx",
+        "moduleResolution": "node"
+    },
+    "include": [
+        "backend/**/*.js",
+        "frontend/**/*.js"
+    ]
 }
