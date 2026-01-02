@@ -371,6 +371,115 @@ describe("examRoutes", () => {
     expect(students).toContain("Chemistry");
   });
 
+  it("ignores invalid education entries while still falling back to enrollment data", async () => {
+    const student = createStudent();
+    student.education = [
+      {
+        type: "Other",
+        startDate: null,
+        endDate: null,
+        refId: { courseName: "Broken" },
+      },
+    ];
+    studentFindResult = [student];
+    StudentEnrollment.findOne.mockResolvedValueOnce({
+      mainCourseId: { courseName: "Fallback Course" },
+    });
+    const res = await request(app)
+      .get("/api/calendar-events/syncable")
+      .set("x-user-role", "teacher");
+    expect(res.status).toBe(200);
+    expect(StudentEnrollment.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ studentId: student._id })
+    );
+  });
+
+  it("skips malformed enrollments and falls back to student teacher data", async () => {
+    const student = createStudent();
+    student.finalExamDate = null;
+    studentFindResult = [student];
+    enrollmentFindResult = [
+      {
+        ...createEnrollment(),
+        studentId: student,
+        mainCourseId: { courseName: "Auto Good" },
+        teacherId: null,
+      },
+      {
+        ...createEnrollment(),
+        _id: "enroll-bad",
+        studentId: student,
+        mainCourseId: null, // triggers continue
+        slutprovDate: new Date("2025-04-15T00:00:00.000Z"),
+      },
+    ];
+    mockExamAttendanceFindOne.mockResolvedValue({
+      examTime: "12:00",
+      examMunicipality: "Veranda",
+      examLocation: "Auto Hall",
+      attended: true,
+      paidExamFee: true,
+    });
+    const res = await request(app)
+      .get("/api/calendar-events/syncable")
+      .set("x-user-role", "teacher");
+    expect(res.status).toBe(200);
+    const autoEvent = res.body.find(
+      (event) => event.extendedProps.courseName === "Auto Good"
+    );
+    expect(autoEvent).toBeTruthy();
+    expect(autoEvent.extendedProps.teacher).toBe("tutor");
+  });
+
+  it("merges duplicate students in auto events and updates attendance info", async () => {
+    const student = createStudent();
+    student.finalExamDate = null;
+    studentFindResult = [student];
+    enrollmentFindResult = [
+      {
+        ...createEnrollment(),
+        studentId: student,
+        mainCourseId: { courseName: "Auto Course" },
+        teacherId: teacherDoc,
+      },
+      {
+        ...createEnrollment(),
+        _id: "enroll-dup",
+        studentId: student,
+        mainCourseId: { courseName: "Another Course" },
+        teacherId: teacherDoc,
+        courseInstanceId: { _id: "ci-2" },
+      },
+    ];
+    mockExamAttendanceFindOne.mockResolvedValue({
+      examTime: "09:00",
+      examMunicipality: "Overlap",
+      examLocation: "Hall B",
+      attended: true,
+      paidExamFee: true,
+    });
+    const res = await request(app)
+      .get("/api/calendar-events/syncable")
+      .set("x-user-role", "teacher");
+    expect(res.status).toBe(200);
+    const mergedStudent =
+      res.body[0].extendedProps.students.find((s) => s._id === student._id);
+    expect(mergedStudent.courseName).toContain("Auto Course");
+    expect(mergedStudent.courseName).toContain("Another Course");
+    expect(mergedStudent.examMunicipality).toBe("Overlap");
+  });
+
+  it("returns 500 when the syncable endpoint throws", async () => {
+    Student.find.mockImplementationOnce(() =>
+      Promise.reject(new Error("sync boom"))
+    );
+    const res = await request(app)
+      .get("/api/calendar-events/syncable")
+      .set("x-user-role", "teacher");
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Kunde inte hämta synkade events.");
+  });
+
   it("handles automatic enrollments even when teacher references are missing", async () => {
     const student = createStudent();
     student.finalExamDate = null;
@@ -619,6 +728,18 @@ describe("examRoutes", () => {
     expect(res.body[0]).toHaveProperty("attended");
   });
 
+  it("returns 500 when attendance lookup fails", async () => {
+    examAttendanceFindResult = [];
+    mockExamAttendanceFind.mockReturnValueOnce({
+      select: () => Promise.reject(new Error("boom attendance")),
+    });
+    const res = await request(app).get(
+      "/api/calendar-events/attendance/2025-04-15/teacher-1"
+    );
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Failed to fetch attendance data");
+  });
+
   it("creates calendar events and handles persistence errors", async () => {
     const res = await request(app)
       .post("/api/calendar-events")
@@ -649,6 +770,18 @@ describe("examRoutes", () => {
       .get("/api/calendar-events")
       .set("x-user-role", "teacher");
     expect(failRes.status).toBe(403);
+  });
+
+  it("fetches a calendar event by id and surfaces errors", async () => {
+    CalendarEvent.findById.mockResolvedValueOnce({ _id: "event-view" });
+    const res = await request(app).get("/api/calendar-events/event-view");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ _id: "event-view" });
+
+    CalendarEvent.findById.mockRejectedValueOnce(new Error("boom id"));
+    const err = await request(app).get("/api/calendar-events/event-crash");
+    expect(err.status).toBe(500);
+    expect(err.body.error).toBe("Kunde inte hämta event.");
   });
 
   it("moves calendar event groups with proper authorization", async () => {
@@ -756,6 +889,15 @@ describe("examRoutes", () => {
     expect(student.save).toHaveBeenCalled();
   });
 
+  it("returns 500 when updating an exam throws", async () => {
+    Student.findById.mockRejectedValueOnce(new Error("boom update"));
+    const res = await request(app)
+      .put("/api/update-exam/aaaaaaaaaaaaaaaaaaaaaaaa")
+      .send({ examTime: "11:00" });
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Serverfel");
+  });
+
   it("handles mark-attendance missings and student lookups", async () => {
     Student.findOne.mockResolvedValueOnce(null);
     const res = await request(app)
@@ -771,6 +913,24 @@ describe("examRoutes", () => {
       .send({ attended: true });
     expect(res.status).toBe(500);
     expect(res.body.message).toBe("Server error");
+  });
+
+  it("marks attendance for a found student", async () => {
+    const studentDoc = {
+      _id: "attend-1",
+      name: "Attend Student",
+      personalNumber: "300",
+      save: vi.fn().mockResolvedValue(true),
+      attendedExam: false,
+    };
+    Student.findOne.mockResolvedValueOnce(studentDoc);
+    const res = await request(app)
+      .put("/api/mark-attendance/ 300 ")
+      .send({ attended: true });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toBe("Attendance marked");
+    expect(studentDoc.attendedExam).toBe(true);
+    expect(studentDoc.save).toHaveBeenCalled();
   });
 
   it("validates examtime-location payloads and applies updates", async () => {
