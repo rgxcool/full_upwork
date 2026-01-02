@@ -134,7 +134,7 @@ router.get("/search", authenticateUser, async (req, res) => {
                         { username: { $regex: q, $options: "i" } },
                         { email: { $regex: q, $options: "i" } },
                     ],
-                }).select("_id username email role"),
+                }).select("_id username email role roles"),
             ]);
 
             results.push(
@@ -147,7 +147,10 @@ router.get("/search", authenticateUser, async (req, res) => {
                 ...users.map((user) => ({
                     id: user._id,
                     name: user.username,
-                    type: user.role || "Användare",
+                    type:
+                        user.role ||
+                        (Array.isArray(user.roles) ? user.roles[0] : null) ||
+                        "Användare",
                     extra: `Email: ${user.email}`,
                 }))
             );
@@ -349,14 +352,14 @@ router.get("/details/:type/:id", async (req, res) => {
             case "Lärare":
                 result = await User.findOne({
                     _id: id,
-                    role: "teacher",
-                }).select("username email role");
+                    roles: "teacher",
+                }).select("username email role roles");
                 break;
 
             case "Personal":
                 result = await User.findOne({
                     _id: id,
-                    role: {
+                    roles: {
                         $in: [
                             "admin",
                             "systemadmin",
@@ -365,7 +368,7 @@ router.get("/details/:type/:id", async (req, res) => {
                             "coordinator",
                         ],
                     },
-                }).select("username email role");
+                }).select("username email role roles");
                 break;
 
             case "Kurs":

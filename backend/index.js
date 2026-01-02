@@ -6,10 +6,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load environment variables
-const envFile =
-    process.env.NODE_ENV === "production"
-        ? ".env.production"
-        : ".env.development";
+let envFile = ".env.development";
+if (process.env.NODE_ENV === "production") {
+    envFile = ".env.production";
+} else if (process.env.NODE_ENV === "test") {
+    envFile = ".env.test";
+}
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 console.log(`🚀 Running in ${process.env.NODE_ENV} mode`);
@@ -129,7 +131,7 @@ app.use("/", router);
 console.log("Router successfully mounted!");
 
 // Ensure preflight (OPTIONS) requests are handled
-app.options("*", cors());
+app.options(/.*/, cors());
 
 app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
 

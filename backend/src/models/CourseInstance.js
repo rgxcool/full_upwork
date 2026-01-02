@@ -75,15 +75,14 @@ const courseInstanceSchema = new mongoose.Schema(
 );
 
 // Validation: endDate must be after startDate
-courseInstanceSchema.pre("validate", function (next) {
-    if (this.endDate <= this.startDate) {
-        next(new Error("End date must be after start date"));
+courseInstanceSchema.pre("validate", function () {
+    if (this.startDate && this.endDate && this.endDate <= this.startDate) {
+        this.invalidate("endDate", "End date must be after start date");
     }
-    next();
 });
 
 // Auto-calculate slutprovDate based on teacher and course end date
-courseInstanceSchema.pre("save", async function (next) {
+courseInstanceSchema.pre("save", async function () {
     // Only auto-calculate if:
     // 1. responsibleTeacher is set
     // 2. endDate is set
@@ -106,7 +105,6 @@ courseInstanceSchema.pre("save", async function (next) {
         }
     }
     // If slutprovDate is already set, we preserve it (could be manually set via drag-and-drop)
-    next();
 });
 
 // Method to check if instance overlaps with date range

@@ -18,13 +18,14 @@ export const register = async (req, res) => {
         const { name, email, password, role } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
         const allowedRoles = ["admin", "user", "moderator"];
-        const userRole = role && allowedRoles.includes(role) ? role : "user";
+        const primaryRole = role && allowedRoles.includes(role) ? role : "user";
+        const roles = [primaryRole];
 
         const newUser = await User.create({
             name,
             email,
             password: hashedPassword,
-            role: userRole,
+            roles,
         });
 
         console.log(
@@ -38,6 +39,7 @@ export const register = async (req, res) => {
                 name: newUser.name,
                 email: newUser.email,
                 role: newUser.role,
+                roles: newUser.roles,
             },
         });
     } catch (error) {
@@ -67,16 +69,17 @@ export const login = async (req, res) => {
             return res.status(401).json({ error: "Fel email eller lösenord" });
         }
 
-        const token = jwt.sign(
-            {
-                userId: user._id,
-                role: user.role,
-                name: user.name,
-                email: user.email,
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: "7d" }
-        );
+        const tokenPayload = {
+            userId: user._id,
+            roles: user.roles,
+            role: user.role,
+            name: user.name,
+            email: user.email,
+        };
+
+        const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+            expiresIn: "7d",
+        });
 
         res.cookie("token", token, {
             httpOnly: true,
@@ -92,6 +95,7 @@ export const login = async (req, res) => {
                 name: user.name || user.username || "",
                 email: user.email,
                 role: user.role,
+                roles: user.roles,
             },
         });
     } catch (error) {
@@ -124,10 +128,16 @@ export const authenticateUser = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const roles = decoded.roles || (decoded.role ? [decoded.role] : []);
+        const userWithRoles = {
+            ...decoded,
+            roles,
+            role: decoded.role || (roles[0] ?? null),
+        };
 
         // 🛠 Set full decoded user with fallback `id`
-        req.user = decoded;
-        req.userId = decoded.userId;
+        req.user = userWithRoles;
+        req.userId = userWithRoles.userId;
 
         if (!req.userId) {
             return res
@@ -193,6 +203,7 @@ export const getSession = async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
+                roles: user.roles,
             },
         });
     } catch (error) {

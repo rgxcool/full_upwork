@@ -9,40 +9,41 @@ import {
 } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import app from "../../index.js";
 import bcrypt from "bcrypt";
 import User from "../../src/models/User.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
+import CourseInstance from "../../src/models/CourseInstance.js";
+import StudentEnrollment from "../../src/models/StudentEnrollment.js";
+import {
+    connectTestDatabase,
+    disconnectTestDatabase,
+} from "../helpers/mongoTest.js";
 
-let mongoServer;
 let authToken;
 let testUser;
 let testStudent;
 let testCourse;
+let testCourseInstance;
+let testEnrollment;
 
 describe("API Integration Tests", () => {
     beforeAll(async () => {
-        // Start in-memory MongoDB server
-        mongoServer = await MongoMemoryServer.create();
-        const mongoUri = mongoServer.getUri();
-
-        // Connect to test database
-        await mongoose.connect(mongoUri);
-    });
+        await connectTestDatabase();
+    }, 60000);
 
     afterAll(async () => {
-        // Clean up
-        await mongoose.disconnect();
-        await mongoServer.stop();
-    });
+        await disconnectTestDatabase();
+    }, 60000);
 
     beforeEach(async () => {
         // Clear database before each test
         await User.deleteMany({});
         await Student.deleteMany({});
         await Course.deleteMany({});
+        await CourseInstance.deleteMany({});
+        await StudentEnrollment.deleteMany({});
 
         // Create test user with a valid bcrypt hash
         const hashed = await bcrypt.hash("testPassword123!", 10);
@@ -50,7 +51,7 @@ describe("API Integration Tests", () => {
             name: "Test Admin",
             email: "testadmin@example.com",
             password: hashed,
-            role: "admin",
+            roles: ["admin"],
         });
         await testUser.save();
 
@@ -59,7 +60,7 @@ describe("API Integration Tests", () => {
             name: "Test Student",
             email: "teststudent@example.com",
             personalNumber: "123456789012",
-            role: "student",
+            roles: ["student"],
         });
         await testStudent.save();
 
@@ -71,6 +72,26 @@ describe("API Integration Tests", () => {
             courseExtent: "10 weeks",
         });
         await testCourse.save();
+
+        testCourseInstance = new CourseInstance({
+            mainCourseId: testCourse._id,
+            startDate: new Date("2024-01-01T00:00:00.000Z"),
+            endDate: new Date("2024-12-31T00:00:00.000Z"),
+            courseName: testCourse.courseName,
+            courseCode: testCourse.courseCode,
+            coursePoints: testCourse.coursePoints,
+            courseExtent: testCourse.courseExtent,
+        });
+        await testCourseInstance.save();
+
+        testEnrollment = new StudentEnrollment({
+            studentId: testStudent._id,
+            courseInstanceId: testCourseInstance._id,
+            mainCourseId: testCourse._id,
+            startDate: testCourseInstance.startDate,
+            endDate: testCourseInstance.endDate,
+        });
+        await testEnrollment.save();
     });
 
     afterEach(async () => {
@@ -78,6 +99,8 @@ describe("API Integration Tests", () => {
         await User.deleteMany({});
         await Student.deleteMany({});
         await Course.deleteMany({});
+        await CourseInstance.deleteMany({});
+        await StudentEnrollment.deleteMany({});
     });
 
     describe("Authentication Endpoints", () => {
@@ -103,6 +126,8 @@ describe("API Integration Tests", () => {
                     "testadmin@example.com"
                 );
                 expect(response.body.user).toHaveProperty("role", "admin");
+                expect(response.body.user).toHaveProperty("roles");
+                expect(response.body.user.roles).toContain("admin");
                 expect(response.headers).toHaveProperty("set-cookie");
             });
 
@@ -463,10 +488,11 @@ describe("API Integration Tests", () => {
 
                 expect(Array.isArray(response.body)).toBe(true);
                 expect(response.body.length).toBeGreaterThan(0);
-                expect(response.body[0]).toHaveProperty(
-                    "courseName",
-                    "Test Course"
+                const matchedCourse = response.body.find(
+                    (item) => item.name === "Test Course"
                 );
+                expect(matchedCourse).toBeTruthy();
+                expect(matchedCourse).toHaveProperty("type", "Course");
             });
 
             it("should return empty array for no matches", async () => {
@@ -508,7 +534,19 @@ describe("API Integration Tests", () => {
                     "courseName",
                     "Test Course"
                 );
-                expect(response.body).toHaveProperty("courseCode", "TC101");
+                expect(response.body).toHaveProperty(
+                    "courseId",
+                    testCourse._id.toString()
+                );
+                expect(Array.isArray(response.body.students)).toBe(true);
+                const enrolledStudent = response.body.students.find(
+                    (student) =>
+                        student &&
+                        student._id &&
+                        student._id.toString() ===
+                            testStudent._id.toString()
+                );
+                expect(enrolledStudent).toBeTruthy();
             });
         });
     });
