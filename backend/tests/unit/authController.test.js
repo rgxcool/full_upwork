@@ -133,6 +133,17 @@ describe("authController", () => {
         expect(res.body).toEqual({ error: "Fel email eller lösenord" });
     });
 
+    it("returns 500 when login throws", async () => {
+        vi.spyOn(User, "findOne").mockRejectedValueOnce(new Error("boom"));
+        const req = { body: { email: "x", password: "p" } };
+        const res = buildRes();
+
+        await authController.login(req, res);
+
+        expect(res.statusCode).toBe(500);
+        expect(res.body).toEqual({ error: "Server error" });
+    });
+
     it("authenticates token from cookie", () => {
         const token = "token";
         const decoded = { userId: "id", role: "user" };
