@@ -5,8 +5,9 @@ import {
     beforeEach,
     afterEach,
     vi,
+    beforeAll,
+    afterAll,
 } from "vitest";
-
 
 vi.mock("express-rate-limit", () => ({
     __esModule: true,
@@ -19,16 +20,44 @@ vi.mock("express-rate-limit", () => ({
     })),
 }));
 
-import {
-    enhancedRBAC,
-    enhancedAuth,
-    requestLogger,
-    corsConfig,
-    securityAudit,
-    createRateLimiter,
-    rateLimiter,
-    inputValidator,
-} from "../../src/middleware/security.js";
+let enhancedRBAC;
+let enhancedAuth;
+let requestLogger;
+let corsConfig;
+let securityAudit;
+let createRateLimiter;
+let rateLimiter;
+let inputValidator;
+
+const originalNodeEnv = process.env.NODE_ENV;
+const securityModuleBaseUrl = new URL(
+    "../../src/middleware/security.js",
+    import.meta.url
+);
+
+const loadSecurityModule = async (env, tag) => {
+    process.env.NODE_ENV = env;
+    const url = new URL(securityModuleBaseUrl.href);
+    url.searchParams.set("env", `${env}-${tag}`);
+    return import(url.href);
+};
+
+beforeAll(async () => {
+    await loadSecurityModule("development", "dev");
+    const module = await loadSecurityModule("test", "test");
+    enhancedRBAC = module.enhancedRBAC;
+    enhancedAuth = module.enhancedAuth;
+    requestLogger = module.requestLogger;
+    corsConfig = module.corsConfig;
+    securityAudit = module.securityAudit;
+    createRateLimiter = module.createRateLimiter;
+    rateLimiter = module.rateLimiter;
+    inputValidator = module.inputValidator;
+});
+
+afterAll(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+});
 import { logger, AppError, AuthorizationError } from "../../src/utils/errorHandler.js";
 import jwt from "jsonwebtoken";
 
@@ -220,7 +249,7 @@ describe("security middleware helpers", () => {
         expect(error.message).toBe("Not allowed by CORS");
     });
 
-it("securityAudit detects suspicious payloads", () => {
+    it("securityAudit detects suspicious payloads", () => {
         const res = buildRes();
         const next = vi.fn();
         const req = buildReq({
@@ -240,6 +269,24 @@ it("securityAudit detects suspicious payloads", () => {
     it("securityAudit passes clean requests", () => {
         const next = vi.fn();
         securityAudit(buildReq({ url: "/safe" }), buildRes(), next);
+        expect(next).toHaveBeenCalled();
+    });
+
+    it("securityAudit rejects suspicious URLs even without body", () => {
+        const res = buildRes();
+        const next = vi.fn();
+        securityAudit(
+            buildReq({ url: "/api?next=javascript:alert(1)" }),
+            res,
+            next
+        );
+        expect(res.statusCode).toBe(400);
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    it("securityAudit tolerates missing URL values", () => {
+        const next = vi.fn();
+        securityAudit(buildReq({ url: undefined }), buildRes(), next);
         expect(next).toHaveBeenCalled();
     });
 
@@ -361,6 +408,15 @@ it("securityAudit detects suspicious payloads", () => {
             expect(strong.isValid).toBe(true);
             expect(strong.errors.numbers).toBeNull();
         });
+
+        it("rejects emails with leading or trailing dots in local/domain parts", () => {
+            expect(
+                inputValidator.validateEmail(".alice@example.com")
+            ).toBe(false);
+            expect(
+                inputValidator.validateEmail("alice@example.com.")
+            ).toBe(false);
+        });
     });
 });
 
@@ -457,5 +513,14 @@ describe("rate limiter behavior", () => {
         expect(res.statusCode).toBe(429);
         expect(res.body.success).toBe(false);
         expect(res.body.error.retryAfter).toBe(Math.ceil(1000 / 1000));
+    });
+
+    it("createRateLimiter handler falls back to default message when unset", () => {
+        const limiter = createRateLimiter(1000, 1);
+        const res = buildRes();
+        limiter.options.handler(buildReq({ ip: "1.2.3.4" }), res);
+        expect(res.body.error.message).toBe(
+            "Too many requests, please try again later."
+        );
     });
 });
