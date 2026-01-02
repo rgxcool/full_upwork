@@ -51,7 +51,7 @@ describe("API Integration Tests", () => {
             name: "Test Admin",
             email: "testadmin@example.com",
             password: hashed,
-            role: "admin",
+            roles: ["admin"],
         });
         await testUser.save();
 
@@ -60,7 +60,7 @@ describe("API Integration Tests", () => {
             name: "Test Student",
             email: "teststudent@example.com",
             personalNumber: "123456789012",
-            role: "student",
+            roles: ["student"],
         });
         await testStudent.save();
 
@@ -126,6 +126,8 @@ describe("API Integration Tests", () => {
                     "testadmin@example.com"
                 );
                 expect(response.body.user).toHaveProperty("role", "admin");
+                expect(response.body.user).toHaveProperty("roles");
+                expect(response.body.user.roles).toContain("admin");
                 expect(response.headers).toHaveProperty("set-cookie");
             });
 

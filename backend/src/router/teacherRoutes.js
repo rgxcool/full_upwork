@@ -4,7 +4,8 @@ import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { isAuthenticated } from "../middleware/auth.js";
+import { can } from "../middleware/authorization.js";
 
 // Predefined color list for teacher profiles
 const TEACHER_COLORS = [
@@ -76,7 +77,7 @@ router.get(
   "/debug-teachers",
   async (req, res) => {
     try {
-      const teachers = await Teacher.find().populate("userId", "username email role");
+      const teachers = await Teacher.find().populate("userId", "username email roles");
 
       const results = teachers.map((t) => ({
         teacherId: t._id,
@@ -87,7 +88,7 @@ router.get(
               id: t.userId._id,
               username: t.userId.username,
               email: t.userId.email,
-              role: t.userId.role,
+              roles: t.userId.roles,
             }
           : null,
       }));
@@ -105,7 +106,7 @@ router.get(
 router.get(
     "/teachers",
     isAuthenticated,
-    hasRole(["admin", "systemadmin"]),
+    can("teachers:read"),
     async (req, res) => {
         try {
             const teachers = await Teacher.find()
@@ -123,7 +124,7 @@ router.get(
 router.post(
     "/admin/teacher",
     isAuthenticated,
-    hasRole(["admin", "systemadmin"]),
+    can("teachers:create"),
     async (req, res) => {
         console.log("📨 Incoming teacher POST:", req.body);
 
@@ -163,7 +164,7 @@ router.post(
                 username,
                 email,
                 password: hashedPassword,
-                role: "teacher",
+                roles: ["teacher"],
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
@@ -192,7 +193,7 @@ router.post(
                         id: savedUser._id,
                         username: savedUser.username,
                         email: savedUser.email,
-                        role: savedUser.role,
+                        roles: savedUser.roles,
                     },
                     teacher: {
                         id: savedTeacher._id,
@@ -239,7 +240,7 @@ router.post("/teacher", async (req, res) => {
         const user = new User({
             username,
             email,
-            role: "teacher",
+            roles: ["teacher"],
         });
         const savedUser = await user.save();
 
@@ -272,7 +273,7 @@ router.post("/teacher", async (req, res) => {
 router.put(
     "/teachers/:id",
     isAuthenticated,
-    hasRole(["admin", "systemadmin"]),
+    can("teachers:update"),
     async (req, res) => {
         try {
             const { id } = req.params;
@@ -325,7 +326,7 @@ router.put(
 router.put(
     "/teachers/:id/password",
     isAuthenticated,
-    hasRole(["admin", "systemadmin"]),
+    can("teachers:update"),
     async (req, res) => {
         try {
             const { id } = req.params;
@@ -365,7 +366,7 @@ router.put(
 router.delete(
     "/teachers/:id",
     isAuthenticated,
-    hasRole(["admin", "systemadmin"]),
+    can("teachers:delete"),
     async (req, res) => {
         try {
             const { id } = req.params;
@@ -406,7 +407,7 @@ router.delete(
 router.put(
     "/teachers/:id/unassign-all-students",
     isAuthenticated,
-    hasRole(["admin", "systemadmin"]),
+    can("teachers:unassign"),
     async (req, res) => {
         try {
             const { id } = req.params;

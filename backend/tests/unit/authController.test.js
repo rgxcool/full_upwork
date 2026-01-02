@@ -155,7 +155,8 @@ describe("authController", () => {
 
         authController.authenticateUser(req, res, next);
 
-        expect(req.user).toEqual(decoded);
+        expect(req.user).toMatchObject(decoded);
+        expect(req.user).toHaveProperty("roles", ["user"]);
         expect(req.userId).toBe(decoded.userId);
         expect(next).toHaveBeenCalled();
     });

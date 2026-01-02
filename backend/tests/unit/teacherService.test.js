@@ -43,13 +43,19 @@ const TEACHER_COLORS = [
     "#000000",
 ];
 
-const buildUser = (overrides = {}) => ({
-    username: "Teacher One",
-    email: "teacher.one@example.com",
-    password: "hashed-password",
-    role: "teacher",
-    ...overrides,
-});
+const buildUser = (overrides = {}) => {
+    const { role, ...restOverrides } = overrides;
+    const defaultRole = role || "teacher";
+    const roles = overrides.roles || [defaultRole];
+
+    return {
+        username: "Teacher One",
+        email: "teacher.one@example.com",
+        password: "hashed-password",
+        roles,
+        ...restOverrides,
+    };
+};
 
 describe("teacherService", () => {
     beforeAll(async () => {
