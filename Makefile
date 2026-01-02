@@ -1,5 +1,3 @@
-.SHELLFLAGS := -eu -o pipefail -c
-
 CITEST_IMAGE ?= mindful-citest
 COMPOSE_MONGO_SERVICE ?= mongo
 COMPOSE_PROJECT_NAME ?= mindful-new
