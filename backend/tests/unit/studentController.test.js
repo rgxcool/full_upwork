@@ -281,4 +281,100 @@ describe("uploadXlsx", () => {
     expect(createOrFindTeacherMock).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
   });
+
+  it("skips education entries with empty normalized names", async () => {
+    parseModule.parseStudentExcel.mockResolvedValue([
+      {
+        email: "skip@example.com",
+        name: "Skipping Student",
+        municipality: "Solna",
+        teacher: "Teacher, Skip",
+        education: [{ name: "()" }],
+      },
+    ]);
+    const res = createMockRes();
+    const req = {
+      file: { buffer: Buffer.from("data"), originalname: "skip.xlsx" },
+    };
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await uploadXlsx(req, res);
+
+    expect(consoleWarn).toHaveBeenCalledWith(
+      expect.stringContaining("Skipping entry with empty normalized name")
+    );
+    expect(Student.bulkWrite).toHaveBeenCalledTimes(1);
+    consoleWarn.mockRestore();
+  });
+
+  it("provides suggestions when unmatched courses are prevalidated", async () => {
+    parseModule.parseStudentExcel.mockResolvedValue([
+      {
+        email: "suggest@example.com",
+        name: "Suggest Student",
+        municipality: "Solna",
+        education: [{ name: "SOMECOURSE NIVÅ 1" }],
+      },
+    ]);
+    CoursePackage.find.mockReturnValue(
+      createLeanResult([{ coursePackageCode: "OTHERPKG", _id: "pkg-1" }])
+    );
+    Course.find.mockReturnValue(
+      createLeanResult([{ courseCode: "SOMECOURSE NIVÅ 2", _id: "course-1" }])
+    );
+    const res = createMockRes();
+    const req = {
+      file: { buffer: Buffer.from("data"), originalname: "suggest.xlsx" },
+    };
+
+    await uploadXlsx(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.reasons[0].message).toContain("closest course");
+  });
+
+  it("matches program entries and creates teachers when missing", async () => {
+    parseModule.parseStudentExcel.mockResolvedValue([
+      {
+        email: "program@example.com",
+        name: "Program Student",
+        municipality: "Solna",
+        teacher: "New Teacher, Lead",
+        subject: "Mathematics",
+        education: [{ name: "Test Program" }],
+      },
+    ]);
+    Program.find.mockReturnValue(
+      createLeanResult([{ programName: "Test Program", _id: "prog-1" }])
+    );
+    CoursePackage.find.mockReturnValue(createLeanResult([]));
+    Course.find.mockReturnValue(createLeanResult([]));
+    const res = createMockRes();
+    const req = {
+      file: { buffer: Buffer.from("data"), originalname: "program.xlsx" },
+    };
+    const normalizeSpy = vi
+      .spyOn(parseModule, "normalizeCodeForMatching")
+      .mockReturnValue("testprogram");
+
+    try {
+      await uploadXlsx(req, res);
+    } finally {
+      normalizeSpy.mockRestore();
+    }
+
+    expect(createOrFindTeacherMock).toHaveBeenCalledWith(
+      "New Teacher, Lead",
+      null,
+      "Mathematics"
+    );
+    const bulkOps = Student.bulkWrite.mock.calls[0][0];
+    const studentUpdate = bulkOps[0].updateOne.update.$set;
+    expect(studentUpdate.teacherId).toBe("created-teacher");
+    expect(studentUpdate.education[0]).toMatchObject({
+      type: "Program",
+      refId: "prog-1",
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
 });
