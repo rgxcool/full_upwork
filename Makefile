@@ -10,9 +10,11 @@ DC := $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT_NAME)
 ifeq ($(GITHUB_ACTIONS),true)
 CITEST_DOCKER_TARGET := cicd
 CITEST_BACKEND_MOUNT :=
+CITEST_REPORTER:=verbose
 else
 CITEST_DOCKER_TARGET := test
 CITEST_BACKEND_MOUNT := -v $(CURDIR)/backend:/app/backend
+CITEST_REPORTER=dot
 endif
 
 # --- Targets -------------------------------------------------------
@@ -91,7 +93,7 @@ citest:
 			started_mongo=1; \
 		fi; \
 		echo "Building CI image ($(CITEST_DOCKER_TARGET)): $(CITEST_IMAGE)"; \
-		docker build --target "$(CITEST_DOCKER_TARGET)" --progress=plain -t "$(CITEST_IMAGE)" .; \
+		docker build --target "$(CITEST_DOCKER_TARGET)" --progress=auto -t "$(CITEST_IMAGE)" .; \
 		echo "Running tests (network: $$network)"; \
 		docker run --rm --network "$$network" \
 			-e MONGO_URI="mongodb://$$service:27017" \
@@ -107,7 +109,7 @@ format:
 
 test:
 	NODE_ENV=test NODE_OPTIONS="--require ./backend/tests/setup-crypto.cjs" npx vitest run \
-		--coverage --coverage.provider=v8 --reporter=dot
+		--coverage --coverage.provider=v8 --reporter=$(CITEST_REPORTER)
 
 stop:
 	$(DC) down
