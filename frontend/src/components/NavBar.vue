@@ -667,11 +667,18 @@
         { name: 'Prövningar', link: '/examform', role: 'student' },
       ]
       const filteredMenuItems = computed(() => {
-        return menuItems.filter((item) => {
+        if (!isLoggedIn.value) return []
+        const userRole = store.getters.userRole
+        console.log('🔍 Filtering menu items. User role:', userRole, 'User data:', store.state.user)
+        const filtered = menuItems.filter((item) => {
           if (secretMenuNames.includes(item.name)) return false
           if (!item.role) return true
-          return hasPermission(item.role)
+          const hasPerm = hasPermission(item.role)
+          console.log(`  - ${item.name}: hasPermission(${JSON.stringify(item.role)}) = ${hasPerm}`)
+          return hasPerm
         })
+        console.log('✅ Filtered menu items:', filtered.map(i => i.name))
+        return filtered
       })
       const secretMenuItems = computed(() => {
         return menuItems.filter((item) => {

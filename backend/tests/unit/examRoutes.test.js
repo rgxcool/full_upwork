@@ -32,8 +32,12 @@ let examAttendanceFindResult = [];
 vi.mock("../../src/controllers/authController.js", () => ({
   authenticateUser: (req, res, next) => {
     const role = req.headers["x-user-role"] || "teacher";
+    const rolesHeader = req.headers["x-user-roles"];
+    const roles = rolesHeader ? JSON.parse(rolesHeader) : undefined;
+    
     req.user = {
       role,
+      roles: roles || (role ? [role] : []),
       userId: req.headers["x-user-id"] || "user-id",
       _id: req.headers["x-user-objectid"] || "user-obj-id",
     };
@@ -835,6 +839,132 @@ describe("examRoutes", () => {
     expect(res.body.error).toBe(
       "Failed to move group. The operation was rolled back."
     );
+  });
+
+  it("correctly enforces permission checks for move-group endpoint", async () => {
+    // Setup mocks for successful operations
+    StudentEnrollment.updateMany.mockResolvedValue({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValue({ modifiedCount: 0 });
+    CourseInstance.updateMany.mockResolvedValue({ modifiedCount: 0 });
+
+    const validPayload = {
+      teacherId: "teacher-1",
+      fromDate: "2025-04-01",
+      toDate: "2025-04-10",
+      courseInstanceIds: [],
+    };
+
+    // Test 1: User with role 'user' should get 403 Forbidden
+    const userResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "user")
+      .send(validPayload);
+    expect(userResponse.status).toBe(403);
+    expect(userResponse.body.error).toBe(
+      "Only admins or the responsible teacher can move exam dates"
+    );
+
+    // Test 2: User with roles array ['user'] should get 403 Forbidden
+    const userRolesResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "user")
+      .set("x-user-roles", JSON.stringify(["user"]))
+      .send(validPayload);
+    expect(userRolesResponse.status).toBe(403);
+    expect(userRolesResponse.body.error).toBe(
+      "Only admins or the responsible teacher can move exam dates"
+    );
+
+    // Test 3: User with role 'admin' should get 200 OK
+    StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    const adminResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "admin")
+      .send(validPayload);
+    expect(adminResponse.status).toBe(200);
+
+    // Test 4: User with roles array ['admin'] should get 200 OK
+    StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    const adminRolesResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "user") // role is 'user' but roles array has 'admin'
+      .set("x-user-roles", JSON.stringify(["admin"]))
+      .send(validPayload);
+    expect(adminRolesResponse.status).toBe(200);
+
+    // Test 5: User with roles array ['systemadmin'] should get 200 OK
+    StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    const systemAdminResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "systemadmin")
+      .send(validPayload);
+    expect(systemAdminResponse.status).toBe(200);
+
+    // Test 6: Teacher who is the responsible teacher should get 200 OK
+    const responsibleTeacher = {
+      _id: "teacher-1",
+      userId: "teacher-user-id",
+    };
+    Teacher.findOne.mockReturnValueOnce(
+      createSessionQuery(responsibleTeacher)
+    );
+    StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    const responsibleTeacherResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "teacher")
+      .set("x-user-id", "teacher-user-id")
+      .send({
+        ...validPayload,
+        teacherId: "teacher-1", // Same as the teacher's _id
+      });
+    expect(responsibleTeacherResponse.status).toBe(200);
+
+    // Test 7: Teacher who is NOT the responsible teacher should get 403 Forbidden
+    const nonResponsibleTeacher = {
+      _id: "teacher-2", // Different teacher
+      userId: "teacher-user-id",
+    };
+    Teacher.findOne.mockReturnValueOnce(
+      createSessionQuery(nonResponsibleTeacher)
+    );
+    const nonResponsibleTeacherResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "teacher")
+      .set("x-user-id", "teacher-user-id")
+      .send({
+        ...validPayload,
+        teacherId: "teacher-1", // Different from teacher's _id
+      });
+    expect(nonResponsibleTeacherResponse.status).toBe(403);
+    expect(nonResponsibleTeacherResponse.body.error).toBe(
+      "Only admins or the responsible teacher can move exam dates"
+    );
+
+    // Test 8: Teacher with roles array ['teacher'] who is responsible should get 200 OK
+    Teacher.findOne.mockReturnValueOnce(
+      createSessionQuery(responsibleTeacher)
+    );
+    StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    const teacherRolesResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "user")
+      .set("x-user-roles", JSON.stringify(["teacher"]))
+      .set("x-user-id", "teacher-user-id")
+      .send({
+        ...validPayload,
+        teacherId: "teacher-1",
+      });
+    expect(teacherRolesResponse.status).toBe(200);
   });
 
   it("updates calendar events via id and surfaces missing events", async () => {
