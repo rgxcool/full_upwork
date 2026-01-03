@@ -33,6 +33,7 @@ COPY Makefile vitest.config.js ./
 # ----------------------------
 FROM test-base AS cicd
 COPY backend ./backend
+COPY frontend ./frontend
 CMD ["make", "test"]
 
 
