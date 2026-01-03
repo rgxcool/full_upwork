@@ -8,7 +8,7 @@
           :auto-apply="true" 
           inline 
           :enable-time="false"
-          locale="sv"
+          :locale="svLocale"
           :firstDayOfWeek="1"
         />
       </aside>
@@ -62,6 +62,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { VueDatePicker as DatePicker } from "@vuepic/vue-datepicker";
 import "@vuepic/vue-datepicker/dist/main.css";
+import { sv } from 'date-fns/locale';
 import EventModal from '../Modals/EventModal.vue'; 
 import AddEventModal from '../Modals/AddEventModal.vue';
 import AddMeetingModal from '../Modals/AddMeetingModal.vue';
@@ -79,6 +80,7 @@ export default {
       eventType: null,
       teachers: [],
       currentTeacherId: null,
+      svLocale: sv,
       calendarOptions: {
         plugins: [dayGridPlugin, interactionPlugin],
         initialView: 'dayGridWeek',
@@ -345,8 +347,11 @@ export default {
             }, { withCredentials: true })
             .then(() => {
               console.log("✅ Synced event moved successfully!");
-              // Refresh events to show updated dates
-              this.fetchEvents();
+              // Don't refresh immediately - the event is already in the correct visual position
+              // The backend has been updated, so the data is correct
+              // Refreshing immediately can cause the event to reset to its old position
+              // if the database query happens before the update is fully committed
+              // The event will be in the correct position on the next natural refresh
             })
             .catch((err) => {
               console.error("❌ Kunde inte flytta synced event:", err.response?.data || err.message);

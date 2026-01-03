@@ -7,7 +7,7 @@
       <DatePicker
         v-model="form.date"
         :enable-time="true"
-        locale="sv"
+        :locale="svLocale"
         :auto-apply="true"
       />
 
@@ -41,12 +41,14 @@
 <script>
 import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
+import { sv } from 'date-fns/locale'
 import axios from 'axios'
 
 export default {
   components: { DatePicker },
   data() {
     return {
+      svLocale: sv,
       form: {
         date: new Date(),
         student: '',
