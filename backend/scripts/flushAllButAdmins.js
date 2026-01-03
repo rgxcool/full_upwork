@@ -1,16 +1,15 @@
 // Usage: node backend/scripts/flushAllButAdmins.js
-import mongoose from 'mongoose';
-import Student from '../src/models/Student.js';
-import Teacher from '../src/models/Teacher.js';
-import User from '../src/models/User.js';
-import CourseInstance from '../src/models/CourseInstance.js';
-import StudentEnrollment from '../src/models/StudentEnrollment.js';
-import CalendarEvent from '../src/models/Event.js';
-
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mindfullearning';
+import mongoose from "mongoose";
+import Student from "../src/models/Student.js";
+import Teacher from "../src/models/Teacher.js";
+import User from "../src/models/User.js";
+import CourseInstance from "../src/models/CourseInstance.js";
+import StudentEnrollment from "../src/models/StudentEnrollment.js";
+import CalendarEvent from "../src/models/Event.js";
 
 async function main() {
-  await mongoose.connect(MONGO_URI);
+  const mongoUri = process.env.MONGODB_URI;
+  await mongoose.connect(mongoUri);
 
   // Delete all students
   const students = await Student.deleteMany({});

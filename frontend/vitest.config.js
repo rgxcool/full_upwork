@@ -30,6 +30,7 @@ export default defineConfig({
             enabled: true,
             provider: 'v8',
         },
+        envDir: __dirname,
         environment: 'jsdom',
         globals: true,
         setupFiles: ['./tests/setup.js'],

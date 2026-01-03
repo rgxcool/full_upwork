@@ -2,11 +2,10 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.development" }); // switch to .env.production if needed
 import Student from "../src/models/Student.js";
-const MONGODB_URI =
-  process.env.MONGODB_URI || "mongodb://localhost:27017/mindfullearning";
 const run = async () => {
   try {
-    await mongoose.connect("mongodb://localhost:27017/mindfullearning", {
+    const mongoUri = process.env.MONGODB_URI;
+    await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

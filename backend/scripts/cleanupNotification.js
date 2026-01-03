@@ -1,11 +1,9 @@
 import mongoose from "mongoose";
-import Notification from '../src/models/Notification.js';
-
-const MONGODB_URI = 'mongodb://localhost:27017/mindfullearning';
+import Notification from "../src/models/Notification.js";
 
 async function main() {
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(process.env.MONGODB_URI);
     console.log("🔌 Ansluten till databasen");
 
     const notifications = await Notification.find({});

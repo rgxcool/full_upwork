@@ -1,14 +1,13 @@
 // Usage: node backend/scripts/inspectFinalExamGrouping.js
-import mongoose from 'mongoose';
-import Student from '../src/models/Student.js';
-import Teacher from '../src/models/Teacher.js';
-import User from '../src/models/User.js';
-import Course from '../src/models/Course.js';
-
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mindfullearning';
+import mongoose from "mongoose";
+import Student from "../src/models/Student.js";
+import Teacher from "../src/models/Teacher.js";
+import User from "../src/models/User.js";
+import Course from "../src/models/Course.js";
 
 async function main() {
-  await mongoose.connect(MONGO_URI);
+  const mongoUri = process.env.MONGODB_URI;
+  await mongoose.connect(mongoUri);
   const students = await Student.find({ dropout: { $ne: true } })
     .populate({ path: 'teacherId', populate: { path: 'userId', select: 'username' } });
   await Student.populate(students, { path: 'education.refId', model: 'Course', select: 'courseName courseCode' });

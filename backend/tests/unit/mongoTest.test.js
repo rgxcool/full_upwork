@@ -1,39 +1,33 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import mongoose from "mongoose";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-    getTestMongoUri,
     connectTestDatabase,
     disconnectTestDatabase,
+    getTestMongoUri,
 } from "../helpers/mongoTest.js";
 
 describe("mongoTest helpers", () => {
-    const originalMongoUri = process.env.MONGO_URI;
+    const defaultUri = "mongodb://127.0.0.1:27017/mindfullearning";
+    const originalMongoUri = process.env.MONGODB_URI;
 
     beforeEach(() => {
-        delete process.env.MONGO_URI;
+        process.env.MONGODB_URI = defaultUri;
     });
 
     afterEach(() => {
         if (typeof originalMongoUri === "undefined") {
-            delete process.env.MONGO_URI;
+            delete process.env.MONGODB_URI;
         } else {
-            process.env.MONGO_URI = originalMongoUri;
+            process.env.MONGODB_URI = originalMongoUri;
         }
         vi.restoreAllMocks();
         mongoose.connection.readyState = 0;
     });
 
-    it("builds a uri for the default Mongo host", () => {
+    it("builds a uri for the configured Mongo host", () => {
         const uri = getTestMongoUri();
         expect(uri).toMatch(/^mongodb:\/\/127\.0\.0\.1:27017\//);
         expect(uri).toContain("mindful_test_");
-    });
-
-    it("respects a custom MONGO_URI base when provided", () => {
-        process.env.MONGO_URI = "mongodb://custom-host:12345/mybase";
-        const uri = getTestMongoUri();
-        expect(uri).toMatch(/^mongodb:\/\/custom-host:12345\//);
-        expect(uri.split("/").pop()).toMatch(/^mindful_test_/);
     });
 
     it("connectTestDatabase calls mongoose.connect and returns the uri", async () => {

@@ -1,10 +1,9 @@
 import mongoose from "mongoose";
-import Student from "../src/models/Student.js"; 
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mindfullearning';
+import Student from "../src/models/Student.js";
 
 const cleanDuplicateCourses = async () => {
-    await mongoose.connect(MONGODB_URI);
+    const mongoUri = process.env.MONGODB_URI;
+    await mongoose.connect(mongoUri);
     console.log('Connected to MongoDB for cleanup.');
 
 

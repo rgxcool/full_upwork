@@ -15,8 +15,10 @@ dotenv.config({ path: path.resolve(__dirname, "../.env.production") }); // Adjus
 
 async function createSystemAdmin() {
   try {
+    const mongoUri = process.env.MONGODB_URI;
+
     // Connect to MongoDB
-    await mongoose.connect(process.env.MONGO_URI, {
+    await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
