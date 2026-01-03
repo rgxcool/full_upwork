@@ -394,7 +394,7 @@
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
   import axios from 'axios'
-  import DatePicker from '@vuepic/vue-datepicker'
+  import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
   import '@vuepic/vue-datepicker/dist/main.css'
   import NotificationBox from './notificationBox.vue'
 

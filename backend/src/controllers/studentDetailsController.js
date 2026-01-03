@@ -31,8 +31,12 @@ export const getStudentDetails = async (req, res) => {
             return res.status(404).json({ error: "Student not found" });
         }
 
+        const user = await User.findOne({ email: student.email });
+
         // Manually populate education references (if present as array)
         const populatedStudent = student.toObject();
+        populatedStudent.user = user ? user.toObject() : null;
+        
         const existingEducation = Array.isArray(populatedStudent.education)
             ? populatedStudent.education
             : [];

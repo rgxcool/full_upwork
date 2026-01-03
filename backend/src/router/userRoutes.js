@@ -3,6 +3,8 @@ import User from "../models/User.js";
 import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { isAuthenticated, hasRole } from "../middleware/auth.js";
+
 
 const router = express.Router();
 
@@ -72,5 +74,39 @@ router.post("/reset-password", async (req, res) => {
             .send({ message: "Ett fel uppstod vid lösenordsändring." });
     }
 });
+
+router.put(
+    "/:userId/roles",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { roles } = req.body;
+            const { userId } = req.params;
+
+            if (!roles || !Array.isArray(roles)) {
+                return res
+                    .status(400)
+                    .send({ message: "Roles must be an array." });
+            }
+
+            const user = await User.findById(userId);
+
+            if (!user) {
+                return res.status(404).send({ message: "User not found." });
+            }
+
+            user.roles = roles;
+            await user.save();
+
+            res.send({ message: "User roles updated successfully.", user });
+        } catch (error) {
+            console.error("Error updating user roles:", error);
+            res.status(500).send({
+                message: "An error occurred while updating user roles.",
+            });
+        }
+    }
+);
 
 export default router;

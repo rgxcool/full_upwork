@@ -248,16 +248,19 @@ describe("Search Routes", () => {
                 name: "Date Student",
                 personalNumber: "555555-5555",
                 email: "date-student@example.com",
-                startDate: new Date("2024-01-01"),
-                endDate: new Date("2024-01-10"),
+            });
+            await StudentEnrollment.create({
+                studentId: matchingStudent._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: new mongoose.Types.ObjectId(),
+                startDate: new Date("2024-01-05T00:00:00.000Z"),
+                endDate: new Date("2024-02-05T00:00:00.000Z"),
             });
 
             await Student.create({
                 name: "Outside Student",
                 personalNumber: "666666-6666",
                 email: "outside-student@example.com",
-                startDate: new Date("2024-02-01"),
-                endDate: new Date("2024-02-10"),
             });
 
             const response = await request(searchApp)
@@ -444,18 +447,28 @@ describe("Search Routes", () => {
                 name: "Teacher Match",
                 personalNumber: "141414-1414",
                 email: "teacher-match@example.com",
-                startDate: new Date("2024-02-01"),
-                endDate: new Date("2024-02-10"),
                 teacherId: teacher._id,
             });
+            await StudentEnrollment.create({
+                studentId: matchStudent._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: new mongoose.Types.ObjectId(),
+                startDate: new Date("2024-02-05T00:00:00.000Z"),
+                endDate: new Date("2024-03-05T00:00:00.000Z"),
+            });
 
-            await Student.create({
+            const otherStudent = await Student.create({
                 name: "Other Teacher",
                 personalNumber: "151515-1515",
                 email: "other-teacher@example.com",
-                startDate: new Date("2024-02-01"),
-                endDate: new Date("2024-02-10"),
                 teacherId: new mongoose.Types.ObjectId(),
+            });
+            await StudentEnrollment.create({
+                studentId: otherStudent._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: new mongoose.Types.ObjectId(),
+                startDate: new Date("2024-02-05T00:00:00.000Z"),
+                endDate: new Date("2024-03-05T00:00:00.000Z"),
             });
 
             const response = await request(searchApp)
@@ -520,18 +533,19 @@ describe("Search Routes", () => {
                 password: "password",
                 roles: ["teacher"],
             });
+            await Teacher.create({ userId: user._id, subject: "Test Subject" });
 
             const response = await request(searchApp)
                 .get(`/api/details/Lärare/${user._id}`)
                 .expect(200);
 
-            expect(response.body).toEqual({
+            expect(response.body).toMatchObject({
                 _id: user._id.toString(),
-                id: user._id.toString(),
                 username: "TeacherUser",
                 email: "teacher-user@example.com",
-                role: "teacher",
                 roles: ["teacher"],
+                students: [],
+                courses: [],
             });
         });
 
@@ -547,12 +561,10 @@ describe("Search Routes", () => {
                 .get(`/api/details/Personal/${user._id}`)
                 .expect(200);
 
-            expect(response.body).toEqual({
+            expect(response.body).toMatchObject({
                 _id: user._id.toString(),
-                id: user._id.toString(),
                 username: "AdminUser",
                 email: "admin-user@example.com",
-                role: "admin",
                 roles: ["admin"],
             });
         });
@@ -567,75 +579,17 @@ describe("Search Routes", () => {
             });
         });
 
-        it("falls back to student education for course details", async () => {
+        it("returns 404 when course is not found", async () => {
             const courseId = new mongoose.Types.ObjectId();
-            const studentId = new mongoose.Types.ObjectId();
-
-            const studentFindQuery = {
-                select: vi.fn().mockReturnThis(),
-                lean: vi.fn().mockResolvedValue([
-                    {
-                        _id: studentId,
-                        name: "Course Student",
-                        email: "course-detail@example.com",
-                    },
-                ]),
-            };
-
-            const enrollmentQuery = {
-                populate: vi.fn().mockReturnThis(),
-                lean: vi.fn().mockResolvedValue([
-                    {
-                        studentId: {
-                            _id: studentId,
-                            name: "Course Student",
-                        },
-                    },
-                ]),
-            };
-
-            const studentWithEdu = {
-                education: [
-                    {
-                        refId: {
-                            _id: courseId,
-                            courseName: "Fallback Course",
-                        },
-                    },
-                ],
-            };
-
-            vi.spyOn(Course, "findById").mockResolvedValue(null);
-            vi.spyOn(Student, "find").mockReturnValue(studentFindQuery);
-            vi.spyOn(StudentEnrollment, "find").mockReturnValue(
-                enrollmentQuery
-            );
-            vi.spyOn(Student, "findById").mockReturnValue({
-                populate: vi.fn().mockResolvedValue(studentWithEdu),
-            });
 
             const response = await request(searchApp)
                 .get(`/api/details/Kurs/${courseId}`)
-                .expect(200);
+                .expect(404);
 
-            expect(response.body).toMatchObject({
-                courseId: courseId.toString(),
-                courseName: "Fallback Course",
-                teacher: {
-                    _id: null,
-                    username: "Okänd lärare",
-                },
-                students: [
-                    {
-                        _id: studentId.toString(),
-                        name: "Course Student",
-                        email: "course-detail@example.com",
-                    },
-                ],
-            });
+            expect(response.body).toEqual({ message: "Course not found" });
         });
 
-        it("returns fallback data when course lookup fails", async () => {
+        it("returns 500 when course lookup fails", async () => {
             const courseId = new mongoose.Types.ObjectId();
 
             vi.spyOn(Course, "findById").mockRejectedValue(
@@ -644,16 +598,10 @@ describe("Search Routes", () => {
 
             const response = await request(searchApp)
                 .get(`/api/details/Kurs/${courseId}`)
-                .expect(200);
+                .expect(500);
 
             expect(response.body).toEqual({
-                courseId: courseId.toString(),
-                courseName: "Fel vid hämtning av kurs",
-                teacher: {
-                    _id: null,
-                    username: "Okänd lärare",
-                },
-                students: [],
+                message: "Serverfel vid hämtning av kursdetaljer",
             });
         });
 

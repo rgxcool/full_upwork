@@ -13,16 +13,12 @@ import 'vuetify/styles'
 import './assets/styles/global.css'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
-import { VTimePicker } from 'vuetify/labs/VTimePicker'
 
 document.documentElement.lang = 'sv'
 
 // ✅ Correct Vuetify instance creation
 const vuetify = createVuetify({
-  components: {
-    ...components,
-    VTimePicker, // ✅ manually added time picker
-  },
+  components,
   directives,
   icons: {
     defaultSet: 'mdi',
