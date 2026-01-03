@@ -34,7 +34,7 @@ jobs:
               with:
                   path: backend/node_modules
                   key: npm${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
-                  restorekeys: |
+                  restore-keys: |
                       npm-${{ runner.os }}-
 
             - name: Install frontend dependencies
@@ -46,7 +46,7 @@ jobs:
               with:
                   path: frontend/node_modules
                   key: npm${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-                  restorekeys: |
+                  restore-keys: |
                       npm-${{ runner.os }}-
 
             - name: Start MongoDB
