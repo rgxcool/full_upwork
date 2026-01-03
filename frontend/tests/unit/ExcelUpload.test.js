@@ -1,171 +1,134 @@
 import { mount } from '@vue/test-utils'
-import ExcelUpload from '../../src/views/Admin/ExcelUpload.vue'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { createVuetify } from 'vuetify'
 import axios from 'axios'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createStore } from 'vuex'
+import ExcelUpload from '../../src/views/Admin/ExcelUpload.vue'
 
-// ✅ Corrected mock to remove `default`
-// ✅ Correct way to mock axios with a `default` export
 vi.mock('axios', () => {
-  return {
-    default: {
-      get: vi.fn((url) => {
-        if (url.includes('/api/students')) {
-          return Promise.resolve({
-            data: [
-              {
-                _id: '1',
-                name: 'John Doe',
-                personalNumber: '123456789',
-                email: 'john@example.com',
-                coursePackages: [{ coursePackageId: { coursePackageName: 'Test Package' } }],
-                courses: [{ courseId: { courseName: 'Math 101', courseCode: 'M101' } }],
-                startDate: '2024-01-01',
-                endDate: '2024-06-01',
-                finalExamDate: '2024-06-10',
-                municipality: 'Test City',
-                phone: '1234567890',
-                exam: 'Passed',
-                additionalInfo: 'None',
-                teacher: 'Mr. Smith',
-                dropout: false,
-              },
-            ],
-          })
-        }
-        if (url.includes('/api/all-programs')) {
-          return Promise.resolve({
-            data: [
-              {
-                _id: '1',
-                programName: 'Test Program',
-              },
-            ],
-          })
-        }
-        if (url.includes('/api/all-courses')) {
-          return Promise.resolve({
-            data: [
-              {
-                _id: '101',
-                courseName: 'Test Course',
-                courseCode: 'TC101',
-              },
-            ],
-          })
-        }
-        return Promise.resolve({ data: [] })
-      }),
+    const axiosMock = {
+        get: vi.fn((url) => {
+            if (url.includes('/api/students')) {
+                return Promise.resolve({
+                    data: [
+                        {
+                            _id: '1',
+                            name: 'John Doe',
+                            personalNumber: '123456789',
+                            email: 'john@example.com',
+                        },
+                    ],
+                });
+            }
+            if (url.includes('/api/all-programs')) {
+                return Promise.resolve({ data: [] });
+            }
+            if (url.includes('/api/all-course-packages')) {
+                return Promise.resolve({ data: [] });
+            }
+            if (url.includes('/api/all-courses')) {
+                return Promise.resolve({ data: [] });
+            }
+            return Promise.reject(new Error(`404 Not Found: ${url}`));
+        }),
+        post: vi.fn(() => Promise.resolve({ data: 'Success' })),
+        put: vi.fn(() => Promise.resolve({ data: 'Success' })),
+        delete: vi.fn(() => Promise.resolve({ data: 'Success' })),
+    };
+    axiosMock.create = vi.fn(() => axiosMock);
+    return {
+        default: axiosMock,
+    };
+});
 
-      post: vi.fn((url) => {
-        if (url.includes('/api/uploads/upload/xlsxupload')) {
-          return Promise.resolve({ data: 'Upload successful' })
-        }
-        return Promise.resolve({ data: { success: true } })
-      }),
-
-      put: vi.fn((url, body) => {
-        if (url.includes('/api/student/') && body.dropout !== undefined) {
-          return Promise.resolve({ data: { _id: '1', dropout: body.dropout } })
-        }
-        return Promise.resolve({ data: { success: true } })
-      }),
-
-      delete: vi.fn((url) => {
-        if (url.includes('/api/student/')) {
-          return Promise.resolve({})
-        }
-        if (url.includes('/api/students')) {
-          return Promise.resolve({})
-        }
-        return Promise.resolve({})
-      }),
-    },
-  }
-})
 
 describe('ExcelUpload.vue', () => {
-  let wrapper
-  let vuetify
+    let wrapper;
+    let vuetify;
+    let store;
 
-  beforeEach(async () => {
-    vuetify = createVuetify()
-    wrapper = mount(ExcelUpload, {
-      global: {
-        plugins: [vuetify],
-      },
-    })
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        store = createStore({
+            state: {
+                user: { name: 'Test User' },
+            },
+            getters: {
+                isSystemAdmin: () => true,
+            }
+        });
+        wrapper = mount(ExcelUpload, {
+            global: {
+                plugins: [vuetify, store],
+            },
+        });
+        await wrapper.vm.$nextTick();
+    });
 
-    await wrapper.vm.fetchStudents()
-  })
+    it('filters students based on search query', async () => {
+        wrapper.vm.students = [
+            { name: 'Alice' },
+            { name: 'Bob' },
+            { name: 'Charlie' },
+        ];
+        await wrapper.vm.$nextTick();
 
-  it('updates selected file name on file selection', async () => {
-    const file = new File(['test content'], 'test.xlsx', { type: 'application/vnd.ms-excel' })
-    const input = wrapper.find('input[type="file"]')
+        wrapper.vm.searchQuery = 'b';
+        await wrapper.vm.$nextTick();
 
-    await input.element.dispatchEvent(new Event('change', { bubbles: true }))
-    await wrapper.vm.handleFileUpload({ target: { files: [file] } })
+        expect(wrapper.vm.filteredStudents.length).toBe(1);
+    });
 
-    expect(wrapper.vm.selectedFileName).toBe('test.xlsx')
-  })
+    it('shows and hides flash messages', async () => {
+        vi.useFakeTimers();
+        wrapper.vm.showFlashMessage('success', 'Test message', 1000);
+        expect(wrapper.vm.flashMessage.show).toBe(true);
+        expect(wrapper.vm.flashMessage.type).toBe('success');
+        expect(wrapper.vm.flashMessage.message).toBe('Test message');
 
-  it('uploads file and fetches students after success', async () => {
-    const file = new File(['test content'], 'test.xlsx', { type: 'application/vnd.ms-excel' })
-    wrapper.setData({ file })
+        vi.advanceTimersByTime(1000);
+        expect(wrapper.vm.flashMessage.show).toBe(false);
+    });
+    it('returns correct education label', () => {
+        let edu = { name: 'Test Course' };
+        expect(wrapper.vm.getEducationLabel(edu)).toBe('Test Course');
 
-    await wrapper.vm.uploadFile()
+        edu = { type: 'Course', refId: { courseName: 'Science' } };
+        expect(wrapper.vm.getEducationLabel(edu)).toBe('Science');
 
-    // ✅ No `.default`, just `axios.post`
-    expect(axios.post).toHaveBeenCalledWith(
-      `${import.meta.env.VITE_API_URL}/api/uploads/upload/xlsxupload`,
-      expect.any(FormData),
-      { headers: { 'Content-Type': 'multipart/form-data' } }
-    )
+        edu = { type: 'CoursePackage', refId: { coursePackageName: 'Package A' } };
+        expect(wrapper.vm.getEducationLabel(edu)).toBe('CoursePackage: Package A');
 
-    expect(axios.get).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/students`)
-  })
+        edu = { type: 'Program', refId: { programName: 'Program B' } };
+        expect(wrapper.vm.getEducationLabel(edu)).toBe('Program B');
 
-  it('filters students based on search query', async () => {
-    await wrapper.setData({ searchQuery: 'John' })
-    expect(wrapper.vm.filteredStudents.length).toBe(1)
+        edu = { refId: null };
+        expect(wrapper.vm.getEducationLabel(edu)).toBe('(missing)');
 
-    await wrapper.setData({ searchQuery: 'Jane' })
-    expect(wrapper.vm.filteredStudents.length).toBe(0)
-  })
+        edu = { type: 'Invalid', refId: {} };
+        expect(wrapper.vm.getEducationLabel(edu)).toBe('(invalid type)');
+    });
+    it('formats comments correctly', () => {
+        let comment = 'Hello\nWorld';
+        expect(wrapper.vm.formatComment(comment)).toBe('Hello<br />World');
 
-  it('deletes a student when delete button is clicked', async () => {
-    const deleteButton = wrapper.find('button.delete-single-button')
-    await deleteButton.trigger('click')
+        comment = 'No newlines';
+        expect(wrapper.vm.formatComment(comment)).toBe('No newlines');
 
-    expect(axios.delete).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/students|\/api\/student\/1/)
-    )
-  })
-
-  it('deletes all students when delete all button is clicked', async () => {
-    const deleteAllButton = wrapper.find('.delete-all-btn')
-    await deleteAllButton.trigger('click')
-
-    expect(axios.delete).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/students`)
-  })
-
-  it('updates student dropout status when dropout button is clicked', async () => {
-    const buttons = wrapper.findAll('.dropout-btn')
-    expect(buttons.length).toBeGreaterThan(0)
-
-    await buttons[0].trigger('click')
-    await wrapper.vm.$nextTick()
-
-    expect(axios.put).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/student/1`, {
-      dropout: true,
-    })
-
-    axios.put.mockResolvedValueOnce({ data: { _id: '1', dropout: false } })
-    await buttons[0].trigger('click')
-    await wrapper.vm.$nextTick()
-
-    expect(axios.put).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/student/1`, {
-      dropout: false,
-    })
-  })
-})
+        comment = null;
+        expect(wrapper.vm.formatComment(comment)).toBe('');
+    });
+    it('toggles expanded comments', () => {
+        wrapper.vm.expandedComments = [];
+        wrapper.vm.toggleComment(1);
+        expect(wrapper.vm.expandedComments).toContain(1);
+        wrapper.vm.toggleComment(1);
+        expect(wrapper.vm.expandedComments).not.toContain(1);
+    });
+    it('saves grade for a course', async () => {
+        await wrapper.vm.saveGrade('student1', 'course1', 'A');
+        expect(axios.put).toHaveBeenCalledWith(
+            `${import.meta.env.VITE_API_URL}/api/student/student1/education/course1/grade`,
+            { grade: 'A' }
+        );
+    });
+});

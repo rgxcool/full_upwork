@@ -11,7 +11,7 @@ CITEST_BACKEND_MOUNT :=
 CITEST_REPORTER:=verbose
 else
 CITEST_DOCKER_TARGET := test
-CITEST_BACKEND_MOUNT := -v $(CURDIR)/backend:/app/backend
+CITEST_BACKEND_MOUNT := -v $(CURDIR)/backend:/app/backend -v $(CURDIR)/frontend:/app/frontend
 CITEST_REPORTER=dot
 endif
 
@@ -107,7 +107,11 @@ format:
 
 test:
 	NODE_ENV=test NODE_OPTIONS="--require ./backend/tests/setup-crypto.cjs" npx vitest run \
+		--coverage --coverage.provider=v8 --reporter=$(CITEST_REPORTER); \
+	cd frontend && NODE_ENV=test npx vitest run \
 		--coverage --coverage.provider=v8 --reporter=$(CITEST_REPORTER)
+
+
 
 stop:
 	$(DC) down

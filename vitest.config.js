@@ -10,7 +10,7 @@ if (
 export default defineConfig({
         test: {
                 environment: 'node',
-                exclude: ["frontend/**", "node_modules/**", "dist/**"],
+                exclude: ["node_modules/**", "dist/**"],
                 include: ["backend/tests/**/*.test.js"],
                 maxWorkers: 12,
                 silent: true,
