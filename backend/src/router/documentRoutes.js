@@ -24,12 +24,13 @@ router.post('/documents/upload', upload.single('file'), async (req, res) => {
     
     console.log('File details:', req.file);
 
-    const { studentId, type } = req.body;
+    const { studentId, type, enrollmentId } = req.body;
     const doc = await Document.create({
       student: studentId,
       filename: req.file.filename, // Ensure this is populated
       originalName: req.file.originalname,
-      type: type || 'GENERAL'
+      type: type || 'GENERAL',
+      enrollmentId: enrollmentId || null,
     });
     res.status(201).json(doc);
   } catch (error) {
@@ -39,7 +40,18 @@ router.post('/documents/upload', upload.single('file'), async (req, res) => {
 });
 
 router.get('/documents/:studentId', async (req, res) => {
-  const docs = await Document.find({ student: req.params.studentId });
+  const { type, enrollmentId } = req.query;
+  const filter = { student: req.params.studentId };
+
+  if (type) {
+    filter.type = type;
+  }
+
+  if (enrollmentId) {
+    filter.enrollmentId = enrollmentId;
+  }
+
+  const docs = await Document.find(filter);
   res.json(docs);
 });
 

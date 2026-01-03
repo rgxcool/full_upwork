@@ -239,9 +239,37 @@ router.put(
     "/calendar-events/move-group",
     authenticateUser,
     async (req, res) => {
-        // Start a new session for the transaction
-        const session = await mongoose.startSession();
-        session.startTransaction();
+        // Check if transactions are supported (they require a replica set)
+        // For local development with standalone MongoDB, skip transactions
+        let session = null;
+        let useTransaction = false;
+
+        // Only attempt transactions in production or if explicitly enabled
+        // For local dev, skip transactions to avoid "replica set" errors
+        const isProduction = process.env.NODE_ENV === 'production';
+        const enableTransactions = process.env.ENABLE_MONGODB_TRANSACTIONS === 'true';
+
+        if (isProduction || enableTransactions) {
+            try {
+                session = await mongoose.startSession();
+                await session.startTransaction();
+                useTransaction = true;
+            } catch (error) {
+                // If transactions aren't supported, continue without them
+                console.log("⚠️ Transactions not supported, proceeding without transaction:", error.message);
+                if (session) {
+                    try {
+                        session.endSession();
+                    } catch (e) {
+                        // Ignore
+                    }
+                }
+                session = null;
+                useTransaction = false;
+            }
+        } else {
+            console.log("ℹ️ Running without transactions (local development mode)");
+        }
 
         try {
             const { teacherId, fromDate, toDate, courseInstanceIds } = req.body;
@@ -264,9 +292,13 @@ router.put(
             let isResponsibleTeacher = false;
 
             if (userRoles.includes("teacher")) {
-                const teacher = await Teacher.findOne({
+                const teacherQuery = Teacher.findOne({
                     userId: req.user.userId,
-                }).session(session);
+                });
+                if (useTransaction && session) {
+                    teacherQuery.session(session);
+                }
+                const teacher = await teacherQuery;
                 if (
                     teacher &&
                     teacher._id.toString() === teacherId.toString()
@@ -302,6 +334,9 @@ router.put(
                 fromLocal.toISOString().split("T")[0] + "T23:59:59.999Z"
             );
 
+            // Prepare options for updateMany operations
+            const updateOptions = useTransaction && session ? { session } : {};
+
             // 1. Update enrollments
             const enrollmentsUpdateResult = await StudentEnrollment.updateMany(
                 {
@@ -312,7 +347,7 @@ router.put(
                     },
                 },
                 { $set: { slutprovDate: toLocal } },
-                { session }
+                updateOptions
             );
 
             // Update CourseInstance.slutprovDate if courseInstanceIds are provided
@@ -336,7 +371,7 @@ router.put(
                     {
                         $set: { slutprovDate: toLocal },
                     },
-                    { session }
+                    updateOptions
                 );
                 courseInstancesUpdated = result.modifiedCount;
                 console.log(
@@ -354,11 +389,13 @@ router.put(
                     },
                 },
                 { $set: { finalExamDate: toLocal } },
-                { session }
+                updateOptions
             );
 
-            // Commit the transaction
-            await session.commitTransaction();
+            // Commit the transaction if we're using one
+            if (useTransaction && session) {
+                await session.commitTransaction();
+            }
 
             res.json({
                 message: "Group moved successfully",
@@ -367,18 +404,30 @@ router.put(
                 studentsModified: studentUpdateResult.modifiedCount,
             });
         } catch (error) {
-            // If an error occurred, abort the transaction
-            await session.abortTransaction();
+            // If an error occurred and we're using a transaction, abort it
+            if (useTransaction && session) {
+                try {
+                    await session.abortTransaction();
+                } catch (abortError) {
+                    console.error("Error aborting transaction:", abortError);
+                }
+            }
             console.error(
-                "❌ Failed to move group (transaction rolled back):",
+                "❌ Failed to move group:",
                 error
             );
             res.status(500).json({
                 error: "Failed to move group. The operation was rolled back.",
             });
         } finally {
-            // End the session
-            session.endSession();
+            // End the session if we created one
+            if (session) {
+                try {
+                    session.endSession();
+                } catch (endError) {
+                    console.error("Error ending session:", endError);
+                }
+            }
         }
     }
 );

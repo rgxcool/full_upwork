@@ -17,7 +17,12 @@ const DocumentSchema = new mongoose.Schema({
   type: {
     type: String,
     default: 'GENERAL',
-    enum: ['GENERAL', 'ACTION_PLAN', 'REPORT']
+    enum: ['GENERAL', 'ACTION_PLAN', 'REPORT', 'COURSE_ARCHIVE']
+  },
+  enrollmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'StudentEnrollment',
+    default: null,
   },
   createdAt: { 
     type: Date, 
