@@ -20,11 +20,40 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 25
+
+            - name: Install backend dependencies
+              working-directory: backend
+              run: npm ci
+
+            - name: Cache backend npm dependencies
+              uses: actions/cache@v4
+              with:
+                  path: backend/node_modules
+                  key: npm${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
+                  restore-keys: |
+                      npm-${{ runner.os }}-
+
+            - name: Install frontend dependencies
+              working-directory: frontend
+              run: npm ci
+
+            - name: Cache frontend npm dependencies
+              uses: actions/cache@v4
+              with:
+                  path: frontend/node_modules
+                  key: npm${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+                  restore-keys: |
+                      npm-${{ runner.os }}-
+
             - name: Start MongoDB
               run: docker compose -f docker-compose.yml -p mindful-new up -d mongo
 
-            - name: Run backend tests
-              run: make citest
+            - name: Run tests
+              run: make test
 
             - name: Tear down MongoDB
               if: always()
