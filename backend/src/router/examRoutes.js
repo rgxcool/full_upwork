@@ -1,5 +1,5 @@
 import express from "express";
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 const router = express.Router();
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
@@ -252,10 +252,18 @@ router.put(
             }
 
             // Permission check: Only admins or the responsible teacher can move events
-            const isAdmin = ["admin", "systemadmin"].includes(req.user.role);
+            // Support both role (singular) and roles (array) for backward compatibility
+            const userRole =
+                req.user.role || (req.user.roles && req.user.roles[0]) || null;
+            const userRoles =
+                req.user.roles || (req.user.role ? [req.user.role] : []);
+
+            const isAdmin = userRoles.some((role) =>
+                ["admin", "systemadmin"].includes(role)
+            );
             let isResponsibleTeacher = false;
 
-            if (req.user.role === "teacher") {
+            if (userRoles.includes("teacher")) {
                 const teacher = await Teacher.findOne({
                     userId: req.user.userId,
                 }).session(session);
@@ -287,8 +295,12 @@ router.put(
             );
 
             // Date range for the fromDate
-            const fromDateStart = new Date(fromLocal.toISOString().split("T")[0] + "T00:00:00.000Z");
-            const fromDateEnd = new Date(fromLocal.toISOString().split("T")[0] + "T23:59:59.999Z");
+            const fromDateStart = new Date(
+                fromLocal.toISOString().split("T")[0] + "T00:00:00.000Z"
+            );
+            const fromDateEnd = new Date(
+                fromLocal.toISOString().split("T")[0] + "T23:59:59.999Z"
+            );
 
             // 1. Update enrollments
             const enrollmentsUpdateResult = await StudentEnrollment.updateMany(
@@ -302,7 +314,6 @@ router.put(
                 { $set: { slutprovDate: toLocal } },
                 { session }
             );
-
 
             // Update CourseInstance.slutprovDate if courseInstanceIds are provided
             let courseInstancesUpdated = 0;
@@ -322,13 +333,15 @@ router.put(
                         _id: { $in: courseInstanceIds },
                         responsibleTeacher: teacherId,
                     },
-                    { 
-                        $set: { slutprovDate: toLocal }
+                    {
+                        $set: { slutprovDate: toLocal },
                     },
                     { session }
                 );
                 courseInstancesUpdated = result.modifiedCount;
-                console.log(`📅 Updated ${courseInstancesUpdated} CourseInstances from ${fromDate} to ${toDate}`);
+                console.log(
+                    `📅 Updated ${courseInstancesUpdated} CourseInstances from ${fromDate} to ${toDate}`
+                );
             }
 
             // 3. Update students with manual finalExamDate (OPTIMIZED)
@@ -344,10 +357,8 @@ router.put(
                 { session }
             );
 
-
             // Commit the transaction
             await session.commitTransaction();
-
 
             res.json({
                 message: "Group moved successfully",
@@ -358,8 +369,13 @@ router.put(
         } catch (error) {
             // If an error occurred, abort the transaction
             await session.abortTransaction();
-            console.error("❌ Failed to move group (transaction rolled back):", error);
-            res.status(500).json({ error: "Failed to move group. The operation was rolled back." });
+            console.error(
+                "❌ Failed to move group (transaction rolled back):",
+                error
+            );
+            res.status(500).json({
+                error: "Failed to move group. The operation was rolled back.",
+            });
         } finally {
             // End the session
             session.endSession();

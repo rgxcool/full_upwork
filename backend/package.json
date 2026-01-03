@@ -60,7 +60,7 @@
         "moduleResolution": "node"
     },
     "include": [
-        "backend/**/*.js",
-        "frontend/**/*.js"
+        "src/**/*.js",
+        "tests/**/*.js"
     ]
 }

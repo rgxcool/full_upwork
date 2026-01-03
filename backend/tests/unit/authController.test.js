@@ -40,6 +40,7 @@ describe("authController", () => {
             name: "Name",
             email: "email@example.com",
             role: "admin",
+            roles: ["admin"],
         };
         vi.spyOn(User, "create").mockResolvedValueOnce(createdUser);
 
@@ -63,6 +64,7 @@ describe("authController", () => {
                 name: createdUser.name,
                 email: createdUser.email,
                 role: createdUser.role,
+                roles: createdUser.roles,
             },
         });
     });
@@ -86,6 +88,7 @@ describe("authController", () => {
             name: "User",
             email: "u@example.com",
             role: "teacher",
+            roles: ["teacher"],
             password: "hashed",
         };
         vi.spyOn(User, "findOne").mockResolvedValueOnce(user);
@@ -106,6 +109,7 @@ describe("authController", () => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
+                roles: user.roles,
             },
         });
     });
@@ -224,6 +228,7 @@ describe("authController", () => {
             name: "Name",
             email: "email",
             role: "role",
+            roles: ["role"],
         };
         vi.spyOn(User, "findById").mockReturnValueOnce({
             select: vi.fn().mockResolvedValueOnce(user),
@@ -240,6 +245,7 @@ describe("authController", () => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
+                roles: user.roles,
             },
         });
     });

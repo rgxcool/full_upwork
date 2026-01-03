@@ -1,52 +1,8 @@
 # Mindful Learning – Etapp
 
-
----
-
-## Användare
-
-### Flik 1 – Allmänt
-- Kontaktuppgifter
-- All information om användaren
-- Interna kommentarer från personal
-  - Elever: behov av stöd, anpassningar vid prov
-  - Personal: semester eller annan intern information
-- Markering om elev är reviderad eller har avvikelse
-
-### Flik 2 – Studieplan
-#### Elev
-- Kurser och kurspaket
-- Ansvarig lärare
-- Kursstatus:
-  - Antagen
-  - Betygsatt
-  - Avbrott
-  - Ej påbörjad
-  - Reviderad
-
-#### Lärare
+## Lärare
 - Aktiva kurser
 - Elever kopplade till respektive kurs
-
-### Flik 3 – APL
-- Visas endast för elever som läser kurspaket
-
-### Flik 4 – Behörigheter
-- Visar användarens behörigheter
-- Möjlighet att ändra vid behov
-
-### Flik 5 – Dokument
-- Alla dokument uppladdade av personal
-  - Handlingsplan
-  - CV
-  - APL-kontrakt
-
-### Flik 6 – Kursarkiv
-- Alla kursrelaterade dokument
-  - Slutprov
-  - Delprov
-
----
 
 ## Navigering
 

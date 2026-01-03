@@ -28,28 +28,62 @@ export default createStore({
 
   getters: {
     isLoggedIn: (state) => !!state.user,
-    userRole: (state) => state.user?.role || 'guest',
-    isAdmin: (state) => ['admin', 'systemadmin'].includes(state.user?.role),
-    isSystemAdmin: (state) => state.user?.role === 'systemadmin',
+    userRole: (state) => {
+      // Support both role (singular) and roles (array) for backward compatibility
+      if (state.user?.role) return state.user.role;
+      if (state.user?.roles && state.user.roles.length > 0) return state.user.roles[0];
+      return 'guest';
+    },
+    isAdmin: (state) => {
+      const role = state.user?.role || (state.user?.roles && state.user.roles[0]) || 'guest';
+      return ['admin', 'systemadmin'].includes(role);
+    },
+    isSystemAdmin: (state) => {
+      const role = state.user?.role || (state.user?.roles && state.user.roles[0]) || 'guest';
+      return role === 'systemadmin';
+    },
     tasks: (state) => state.tasks,
 
     /**
      * Check if the user has the required role (or higher)
      */
     hasPermission: (state) => (requiredRole) => {
-      const userRole = state.user?.role || 'guest'
+      // Support both role (singular) and roles (array) for backward compatibility
+      const userRole = state.user?.role || (state.user?.roles && state.user.roles[0]) || 'guest';
       const userIndex = ROLE_HIERARCHY.indexOf(userRole)
+      
+      // If user role not found in hierarchy, deny access
+      if (userIndex === -1) {
+        console.warn(`⚠️ User role "${userRole}" not found in hierarchy`)
+        return false
+      }
 
-      // Om requiredRole är en array: returnera true om användaren uppfyller någon av dem
+      // Om requiredRole är en array: returnera true om användaren har en av rollerna ELLER har högre roll
       if (Array.isArray(requiredRole)) {
         return requiredRole.some((role) => {
+          // Check if user has the exact role
+          if (userRole === role) return true
+          // Check if user has a higher role in hierarchy (higher index = higher authority)
           const requiredIndex = ROLE_HIERARCHY.indexOf(role)
+          if (requiredIndex === -1) {
+            console.warn(`⚠️ Required role "${role}" not found in hierarchy`)
+            return false
+          }
+          // User with higher index can access items requiring lower index roles
           return userIndex >= requiredIndex
         })
       }
 
       // Annars, anta att det är en sträng
+      // Check if user has the exact role
+      if (userRole === requiredRole) return true
+      // Check if user has a higher role in hierarchy (higher index = higher authority)
       const requiredIndex = ROLE_HIERARCHY.indexOf(requiredRole)
+      if (requiredIndex === -1) {
+        console.warn(`⚠️ Required role "${requiredRole}" not found in hierarchy`)
+        return false
+      }
+      // User with higher index can access items requiring lower index roles
       return userIndex >= requiredIndex
     }
 
@@ -57,7 +91,12 @@ export default createStore({
 
   mutations: {
     SET_USER(state, user) {
-      console.log(`🔹 Vuex: Setting user -> ${user?.role || 'guest'}`)
+      // Ensure role is set from roles array if role is missing
+      if (user && !user.role && user.roles && user.roles.length > 0) {
+        user.role = user.roles[0];
+      }
+      const roleDisplay = user?.role || (user?.roles && user.roles[0]) || 'guest';
+      console.log(`🔹 Vuex: Setting user -> ${roleDisplay}`)
       state.user = user
     },
     LOGOUT(state) {
