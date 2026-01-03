@@ -349,12 +349,6 @@ export default {
       return localStudent.value.commentHistory.filter((comment) => !comment.isDeleted);
     });
     
-    watch(() => props.student, (newStudent) => {
-        localStudent.value = newStudent;
-        initializeEditData();
-    }, { deep: true, immediate: true });
-
-
     const initializeEditData = () => {
         editData.value = {
             name: localStudent.value.name || '',
@@ -370,6 +364,11 @@ export default {
             specialNeeds: localStudent.value.specialNeeds || '',
         };
     };
+    
+    watch(() => props.student, (newStudent) => {
+        localStudent.value = newStudent;
+        initializeEditData();
+    }, { deep: true, immediate: true });
 
     const toggleEditMode = () => {
       editMode.value = !editMode.value;
