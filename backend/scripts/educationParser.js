@@ -2,12 +2,10 @@ import mongoose from "mongoose";
 import { parseCourses } from "./courseParser.js";
 import { parseCoursePackages } from "./coursePackageParser.js";
 
-const MONGODB_URI =
-    process.env.MONGODB_URI || "mongodb://localhost:27017/mindfullearning";
-
 async function parseEducationData(filePath) {
     console.log("🔗 Connecting to MongoDB...");
-    await mongoose.connect(MONGODB_URI);
+    const mongoUri = process.env.MONGODB_URI;
+    await mongoose.connect(mongoUri);
 
     try {
         await parseCourses(filePath);

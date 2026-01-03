@@ -20,8 +20,9 @@ function getRandomHexColor() {
 }
 
 async function createNextAvailableTeacher() {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, {
+    try {
+    const mongoUri = process.env.MONGODB_URI;
+    await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

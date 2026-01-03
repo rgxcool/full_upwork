@@ -49,7 +49,6 @@
         "@vitest/coverage-v8": "^4.0.16",
         "eslint": "^9.39.2",
         "supertest": "^7.1.4",
-        "vite": "^7.3.0",
         "vitest": "^4.0.16"
     },
     "compilerOptions": {

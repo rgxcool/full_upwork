@@ -45,10 +45,10 @@ CMD ["make", "test"]
 
 
 # ----------------------------
-# development backend server
+# devleopment backend server
 # ----------------------------
 FROM node:25-alpine AS dev
-ENV APP_HOME=/app NODE_ENV=development
+ENV APP_HOME=/app NODE_ENV=test
 WORKDIR $APP_HOME
 
 RUN mkdir -p logs public/uploads

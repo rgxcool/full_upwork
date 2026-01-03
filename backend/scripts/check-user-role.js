@@ -16,7 +16,7 @@ let envLoaded = false;
 for (const envFile of possibleEnvFiles) {
     try {
         dotenv.config({ path: envFile });
-        if (process.env.MONGO_URI) {
+        if (process.env.MONGODB_URI) {
             envLoaded = true;
             break;
         }
@@ -31,15 +31,10 @@ if (!envLoaded) {
 }
 
 const checkUserRole = async () => {
-    if (!process.env.MONGO_URI) {
-        console.error(
-            "MONGO_URI not found in environment variables. Make sure your .env file is set up correctly."
-        );
-        process.exit(1);
-    }
+    const mongoUri = process.env.MONGODB_URI;
 
     try {
-        await mongoose.connect(process.env.MONGO_URI, {
+        await mongoose.connect(mongoUri, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });
@@ -73,4 +68,3 @@ const checkUserRole = async () => {
 };
 
 checkUserRole();
-

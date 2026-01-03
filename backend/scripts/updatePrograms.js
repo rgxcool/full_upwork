@@ -1,9 +1,11 @@
-import mongoose from 'mongoose'
-import Program from '../src/models/Program.js'
-import dotenv from "dotenv"
-dotenv.config({ path: "../.env.development" }) // 👈 explicitly load the .env
+import mongoose from "mongoose";
+import Program from "../src/models/Program.js";
+import dotenv from "dotenv";
 
-await mongoose.connect(process.env.MONGO_URI)
+dotenv.config({ path: "../.env.development" }); // 👈 explicitly load the .env
+
+const mongoUri = process.env.MONGODB_URI;
+await mongoose.connect(mongoUri);
 
 const programs = await Program.find({})
 

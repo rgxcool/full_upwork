@@ -1,10 +1,9 @@
-import mongoose from 'mongoose';
-import Program from '../src/models/Program.js';
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mindfullearning';
+import mongoose from "mongoose";
+import Program from "../src/models/Program.js";
 
 async function cleanupProgramCourses() {
-  await mongoose.connect(MONGODB_URI);
+  const mongoUri = process.env.MONGODB_URI;
+  await mongoose.connect(mongoUri);
   console.log('Connected to MongoDB for cleanup.');
 
   try {
