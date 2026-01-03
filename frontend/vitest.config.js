@@ -2,7 +2,7 @@ import vue from '@vitejs/plugin-vue'
 import crypto from 'node:crypto'
 import path from 'path'
 import { defineConfig } from 'vite'
-import removeMissingSourceMapPlugin from '../scripts/vite/removeMissingSourceMapPlugin.js'
+import removeMissingSourceMapPlugin from './removeMissingSourceMapPlugin.js'
 
 if (typeof crypto.getRandomValues !== 'function') {
     crypto.getRandomValues = (array) => crypto.randomFillSync(array)

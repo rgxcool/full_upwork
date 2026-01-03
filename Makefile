@@ -111,8 +111,6 @@ test:
 	cd frontend && NODE_ENV=test npx vitest run \
 		--coverage --coverage.provider=v8 --reporter=$(CITEST_REPORTER)
 
-
-
 stop:
 	$(DC) down
 
