@@ -34,7 +34,24 @@ CMD ["make", "test"]
 
 
 # ----------------------------
-# local container
+# test runner
 # ----------------------------
 FROM test-base AS test
 CMD ["make", "test"]
+
+
+# ----------------------------
+# development backend server
+# ----------------------------
+FROM node:25-alpine AS dev
+ENV APP_HOME=/app NODE_ENV=development
+WORKDIR $APP_HOME
+
+RUN mkdir -p logs public/uploads
+
+# Copy installed dependencies from the deps stage
+COPY --from=deps $APP_HOME ./
+
+EXPOSE 5001
+
+CMD ["node", "backend/index.js"]

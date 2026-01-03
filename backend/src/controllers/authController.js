@@ -88,14 +88,17 @@ export const login = async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
+        // Ensure role is always set from roles array (for backward compatibility)
+        const primaryRole = user.roles && user.roles.length > 0 ? user.roles[0] : (user.role || 'guest');
+        
         res.json({
             message: "Login successful",
             user: {
                 userId: user._id, // ✅ Standard key
                 name: user.name || user.username || "",
                 email: user.email,
-                role: user.role,
-                roles: user.roles,
+                role: primaryRole,
+                roles: user.roles || [],
             },
         });
     } catch (error) {
@@ -197,13 +200,16 @@ export const getSession = async (req, res) => {
             return res.status(404).json({ error: "User not found" });
         }
 
+        // Ensure role is always set from roles array (for backward compatibility)
+        const primaryRole = user.roles && user.roles.length > 0 ? user.roles[0] : (user.role || 'guest');
+        
         res.json({
             user: {
                 userId: user._id, // ✅ Match login response
                 name: user.name,
                 email: user.email,
-                role: user.role,
-                roles: user.roles,
+                role: primaryRole,
+                roles: user.roles || [],
             },
         });
     } catch (error) {
