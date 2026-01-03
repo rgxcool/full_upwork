@@ -191,4 +191,61 @@ describe('EducationEditor.vue', () => {
         )
         expect(wrapper.vm.successMessage).toContain('John Doe has been enrolled')
     })
+
+    it('fetches courses when a program is selected', async () => {
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/api/program/1/courses')) {
+                return Promise.resolve({
+                    data: [
+                        {
+                            _id: '202',
+                            courseName: 'Selected Course',
+                            courseCode: 'SC202',
+                        },
+                    ],
+                })
+            }
+            return Promise.resolve({ data: [] })
+        })
+
+        wrapper.vm.selectedProgram = '1'
+        await wrapper.vm.fetchAllCourses()
+
+        expect(wrapper.vm.allCourses[0]).toMatchObject({
+            _id: '202',
+            displayText: 'Selected Course (SC202)',
+        })
+    })
+
+    it('alerts when course data is invalid', async () => {
+        const originalAlert = globalThis.alert
+        globalThis.alert = vi.fn()
+
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/api/program/1/courses')) {
+                return Promise.resolve({ data: null })
+            }
+            return Promise.resolve({ data: [] })
+        })
+
+        wrapper.vm.selectedProgram = '1'
+        await wrapper.vm.fetchAllCourses()
+
+        expect(globalThis.alert).toHaveBeenCalledWith('Invalid course data received.')
+
+        globalThis.alert = originalAlert
+    })
+
+    it('filters students when search query is present', async () => {
+        wrapper.vm.students = [
+            { name: 'Alpha' },
+            { name: 'Beta' },
+            { name: 'Gamma' },
+        ]
+        wrapper.vm.searchQuery = 'be'
+        await wrapper.vm.$nextTick()
+
+        expect(wrapper.vm.filteredStudents).toHaveLength(1)
+        expect(wrapper.vm.filteredStudents[0].name).toBe('Beta')
+    })
 })
