@@ -11,7 +11,7 @@ CITEST_BACKEND_MOUNT :=
 CITEST_REPORTER:=verbose
 else
 CITEST_DOCKER_TARGET := test
-CITEST_BACKEND_MOUNT := -v $(CURDIR)/backend:/app/backend
+CITEST_BACKEND_MOUNT := -v $(CURDIR)/backend:/app/backend -v $(CURDIR)/frontend:/app/frontend
 CITEST_REPORTER=dot
 endif
 
@@ -66,38 +66,8 @@ start-backend:
 	cd backend && pm2 start ecosystem.config.cjs --env production
 
 citest:
-	@bash -c ' \
-		set -euo pipefail; \
-		project="$(COMPOSE_PROJECT_NAME)"; \
-		service="$(COMPOSE_MONGO_SERVICE)"; \
-		dc="$(DOCKER_COMPOSE) -p $$project"; \
-		network="$${project}_default"; \
-		started_mongo=0; \
-		cleanup() { \
-			if [ "$$started_mongo" -eq 1 ]; then \
-				$$dc stop $$service >/dev/null 2>&1 || true; \
-			fi; \
-		}; \
-		trap cleanup EXIT; \
-		container_id="$$( $$dc ps -q $$service 2>/dev/null || true )"; \
-		if [ -n "$$container_id" ]; then \
-			running="$$( docker inspect -f "{{.State.Running}}" "$$container_id" 2>/dev/null || echo false )"; \
-		else \
-			running=false; \
-		fi; \
-		if [ "$$running" != "true" ]; then \
-			echo "MongoDB is not running; starting $$service..."; \
-			$$dc up -d $$service; \
-			started_mongo=1; \
-		fi; \
-		echo "Building CI image ($(CITEST_DOCKER_TARGET)): $(CITEST_IMAGE)"; \
-		docker build --target "$(CITEST_DOCKER_TARGET)" --progress=auto -t "$(CITEST_IMAGE)" .; \
-		echo "Running tests (network: $$network)"; \
-		docker run --rm --network "$$network" \
-			-e MONGO_URI="mongodb://$$service:27017" \
-			$(CITEST_BACKEND_MOUNT) \
-			"$(CITEST_IMAGE)"; \
-	'
+	docker build --target "$(CITEST_DOCKER_TARGET)" -t "$(CITEST_IMAGE)" --progress=auto .; \
+	docker run --rm -e MONGO_URI="mongodb://$$service:27017" $(CITEST_BACKEND_MOUNT) "$(CITEST_IMAGE)"
 
 dev:
 	$(DC) up --build
@@ -106,8 +76,8 @@ format:
 	npx eslint --no-config-lookup --fix
 
 test:
-	NODE_ENV=test NODE_OPTIONS="--require ./backend/tests/setup-crypto.cjs" npx vitest run \
-		--coverage --coverage.provider=v8 --reporter=$(CITEST_REPORTER)
+	cd backend && NODE_ENV=test npx vitest run --reporter=$(CITEST_REPORTER); \
+	cd ../frontend && NODE_ENV=test npx vitest run --reporter=$(CITEST_REPORTER)
 
 stop:
 	$(DC) down

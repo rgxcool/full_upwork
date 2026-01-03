@@ -11,38 +11,7 @@ on:
             - develop
 
 jobs:
-    test:
-        runs-on: ubuntu-latest
-
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
-
-            - name: "Debug repository structure"
-              run: ls -R frontend # ✅ List all files inside frontend/ to confirm package-lock.json exists
-
-            - name: Set up Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-
-            - name: Cache npm dependencies
-              uses: actions/cache@v4
-              with:
-                  path: frontend/node_modules
-                  key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-                  restore-keys: |
-                      npm-${{ runner.os }}-
-
-            - name: Install dependencies
-              working-directory: frontend # ✅ Ensure npm runs inside frontend/
-              run: npm ci # ✅ Use npm ci for faster installs
-
-            - name: Run tests
-              working-directory: frontend # ✅ Ensure Vitest runs inside frontend/
-              run: npx vitest --run
-
-    backend-tests:
+    tests:
         runs-on: ubuntu-latest
         env:
             COMPOSE_PROJECT_NAME: mindful-new
