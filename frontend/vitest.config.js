@@ -1,15 +1,7 @@
-import vue from '@vitejs/plugin-vue'
-import crypto from 'node:crypto'
-import path from 'path'
-import { defineConfig } from 'vite'
-import removeMissingSourceMapPlugin from './removeMissingSourceMapPlugin.js'
-
-if (typeof crypto.getRandomValues !== 'function') {
-    crypto.getRandomValues = (array) => crypto.randomFillSync(array)
-}
-if (typeof globalThis.crypto === 'undefined') {
-    globalThis.crypto = crypto
-}
+import vue from '@vitejs/plugin-vue';
+import path from 'path';
+import { defineConfig } from "vitest/config";
+import removeMissingSourceMapPlugin from './removeMissingSourceMapPlugin.js';
 
 export default defineConfig({
     plugins: [
@@ -34,18 +26,22 @@ export default defineConfig({
         },
     },
     test: {
-        sourcemapIgnoreList: (path) => path.includes('node_modules'),
+        coverage: {
+            enabled: true,
+            provider: 'v8',
+        },
         environment: 'jsdom',
         globals: true,
         setupFiles: ['./tests/setup.js'],
+        silent: true,
+        sourcemapIgnoreList: (path) => path.includes('node_modules'),
         transformMode: {
             web: [/\.vue$/],
         },
         maxWorkers: 12,
-        silent: true
     },
     server: {
-        sourcemapIgnoreList: (relativePath) => relativePath.includes('node_modules'),
+        sourcemapIgnoreList: (path) => path.includes('node_modules'),
         proxy: {
             '/api': {
                 target: 'http://localhost:5001',
@@ -54,4 +50,4 @@ export default defineConfig({
             },
         },
     },
-})
+});
