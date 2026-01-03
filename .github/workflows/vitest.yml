@@ -50,11 +50,11 @@ jobs:
                       npm-${{ runner.os }}-
 
             - name: Start MongoDB
-              run: docker compose f dockercompose.yml p mindfulnew up d mongo
+              run: docker compose -f docker-compose.yml -p mindful-new up -d mongo
 
             - name: Run tests
               run: make test
 
             - name: Tear down MongoDB
               if: always()
-              run: docker compose f dockercompose.yml p mindfulyyyynew down
+              run: docker compose -f docker-compose.yml -p mindful-new down
