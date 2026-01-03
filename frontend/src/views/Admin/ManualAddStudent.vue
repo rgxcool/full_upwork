@@ -404,7 +404,7 @@
 
 <script setup>
   import axios from 'axios'
-  import Datepicker from '@vuepic/vue-datepicker'
+  import { VueDatePicker as Datepicker } from '@vuepic/vue-datepicker'
   import '@vuepic/vue-datepicker/dist/main.css'
   import { ref, reactive, watch, onMounted, computed } from 'vue'
 

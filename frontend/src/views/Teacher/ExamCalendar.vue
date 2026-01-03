@@ -60,7 +60,7 @@
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import DatePicker from "@vuepic/vue-datepicker";
+import { VueDatePicker as DatePicker } from "@vuepic/vue-datepicker";
 import "@vuepic/vue-datepicker/dist/main.css";
 import EventModal from '../Modals/EventModal.vue'; 
 import AddEventModal from '../Modals/AddEventModal.vue';
