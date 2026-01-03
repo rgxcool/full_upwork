@@ -1,158 +1,251 @@
 import { mount } from '@vue/test-utils'
-import EducationEditor from '../../src/views/Admin/EducationEditor.vue'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { createVuetify } from 'vuetify'
 import axios from 'axios'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import EducationEditor from '../../src/views/Admin/EducationEditor.vue'
 
 // ✅ Ensure axios is properly mocked without wrapping in `default`
-vi.mock('axios', () => ({
-  default: {
-    get: vi.fn((url) => {
-      if (url.includes('/api/students')) {
-        return Promise.resolve({
-          data: [
-            {
-              _id: '1',
-              name: 'John Doe',
-              personalNumber: '123456789',
-              email: 'john@example.com',
-              courses: [{ courseId: { courseName: 'Math 101', courseCode: 'M101' } }],
-              startDate: '2024-01-01',
-              endDate: '2024-06-01',
-              finalExamDate: '2024-06-10',
-              municipality: 'Test City',
-              phone: '1234567890',
-              teacher: 'Mr. Smith',
-              dropout: false,
-            },
-          ],
-        })
-      }
-      if (url.includes('/api/all-programs')) {
-        return Promise.resolve({
-          data: [{ _id: '1', programName: 'Test Program' }],
-        })
-      }
-      if (url.includes('/api/program/1/courses')) {
-        return Promise.resolve({
-          data: [
-            {
-              _id: '101',
-              courseName: 'Test Course',
-              courseCode: 'TC101',
-              displayText: 'Test Course (TC101)',
-            },
-          ],
-        })
-      }
-      return Promise.reject(new Error(`404 Not Found: ${url}`))
-    }),
+vi.mock('axios', () => {
+    const axiosMock = {
+        get: vi.fn((url) => {
+            if (url.includes('/api/students')) {
+                return Promise.resolve({
+                    data: [
+                        {
+                            _id: '1',
+                            name: 'John Doe',
+                            personalNumber: '123456789',
+                            email: 'john@example.com',
+                            courses: [{ courseId: { courseName: 'Math 101', courseCode: 'M101' } }],
+                            startDate: '2024-01-01',
+                            endDate: '2024-06-01',
+                            finalExamDate: '2024-06-10',
+                            municipality: 'Test City',
+                            phone: '1234567890',
+                            teacher: 'Mr. Smith',
+                            dropout: false,
+                        },
+                    ],
+                })
+            }
+            if (url.includes('/api/all-programs')) {
+                return Promise.resolve({
+                    data: [{ _id: '1', programName: 'Test Program' }],
+                })
+            }
+            if (url.includes('/api/program/1/courses')) {
+                return Promise.resolve({
+                    data: [
+                        {
+                            _id: '101',
+                            courseName: 'Test Course',
+                            courseCode: 'TC101',
+                            displayText: 'Test Course (TC101)',
+                        },
+                    ],
+                })
+            }
+            return Promise.reject(new Error(`404 Not Found: ${url}`))
+        }),
 
-    post: vi.fn(() => Promise.resolve({ data: 'Course added successfully' })),
+        post: vi.fn(() => Promise.resolve({ data: 'Course added successfully' })),
 
-    put: vi.fn(() => Promise.resolve({ data: { _id: '1', dropout: true } })),
+        put: vi.fn(() => Promise.resolve({ data: { _id: '1', dropout: true } })),
 
-    delete: vi.fn(() => Promise.resolve({})),
-  },
-}))
+        delete: vi.fn(() => Promise.resolve({})),
+    }
+
+    axiosMock.create = vi.fn(() => axiosMock)
+
+    return {
+        default: axiosMock,
+    }
+})
 
 describe('EducationEditor.vue', () => {
-  let wrapper
-  let vuetify
+    let wrapper
+    let vuetify
 
-  beforeEach(async () => {
-    vi.clearAllMocks()
+    const mountEditor = async () => {
+        wrapper = mount(EducationEditor, {
+            global: {
+                plugins: [vuetify],
+            },
+        })
+        await wrapper.vm.$nextTick()
+    }
 
-    // ✅ Declare mock data before assignment
-    let mockStudents = [
-      { _id: '1', name: 'John Doe', personalNumber: '123456789', email: 'john@example.com' },
-    ]
-    let mockPrograms = [{ _id: '1', programName: 'Test Program' }]
-    let mockCourses = [
-      {
-        _id: '101',
-        courseName: 'Test Course',
-        courseCode: 'TC101',
-        displayText: 'Test Course (TC101)',
-      },
-    ]
+    beforeEach(async () => {
+        vi.resetAllMocks()
 
-    // ✅ Set axios mocks to return preloaded data
-    axios.get.mockImplementation((url) => {
-      if (url.includes('/api/students')) return Promise.resolve({ data: mockStudents })
-      if (url.includes('/api/all-programs')) return Promise.resolve({ data: mockPrograms })
-      if (url.includes('/api/program/1/courses')) return Promise.resolve({ data: mockCourses })
-      return Promise.reject(new Error(`404 Not Found: ${url}`))
+        const mockStudents = [
+            { _id: '1', name: 'John Doe', personalNumber: '123456789', email: 'john@example.com' },
+        ]
+        const mockPrograms = [{ _id: '1', programName: 'Test Program' }]
+        const mockCourses = [
+            {
+                _id: '101',
+                courseName: 'Test Course',
+                courseCode: 'TC101',
+                displayText: 'Test Course (TC101)',
+            },
+        ]
+
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/api/students')) return Promise.resolve({ data: mockStudents })
+            if (url.includes('/api/all-programs')) return Promise.resolve({ data: mockPrograms })
+            if (url.includes('/api/program/1/courses')) return Promise.resolve({ data: mockCourses })
+            return Promise.reject(new Error(`404 Not Found: ${url}`))
+        })
+
+        axios.post.mockResolvedValue({ data: 'Course added successfully' })
+        axios.put.mockResolvedValue({ data: { _id: '1', dropout: true } })
+        axios.delete.mockResolvedValue({})
+
+        await mountEditor()
     })
 
-    vuetify = createVuetify()
-    wrapper = mount(EducationEditor, {
-      global: {
-        plugins: [vuetify],
-      },
+    it('fetches and loads students correctly', async () => {
+        console.log('MOCKED AXIOS:', axios.get.mock.calls) // ✅ Debug what axios is being called with
+
+        await wrapper.vm.fetchInitialData() // ✅ Manually call fetchInitialData() if needed
+
+        console.log('STUDENT DATA:', wrapper.vm.students) // ✅ Debug fetched students
+
+        expect(axios.get).toHaveBeenCalledWith(
+            `${import.meta.env.VITE_API_URL}/api/students`,
+            { withCredentials: true }
+        )
+        expect(wrapper.vm.students.length).toBe(1)
     })
 
-    await wrapper.vm.$nextTick()
-  })
+    it('handles error on fetchInitialData', async () => {
+        await wrapper.unmount()
+        axios.get.mockRejectedValue(new Error('Network Error'))
+        await mountEditor()
+        expect(wrapper.vm.students.length).toBe(0)
+    })
+    it('does not fetch courses if no program is selected', async () => {
+        wrapper.vm.selectedProgram = null;
+        await wrapper.vm.fetchAllCourses();
+    });
+    it('handles error when fetching courses', async () => {
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/api/program/1/courses')) {
+                return Promise.reject(new Error('Network Error'))
+            }
+            return Promise.resolve({ data: [] })
+        })
+        wrapper.vm.selectedProgram = '1'
+        await wrapper.vm.fetchAllCourses()
+    })
+    it('does not add course if no student is selected', async () => {
+        wrapper.vm.selectedStudent = null;
+        wrapper.vm.selectedIndividualCourse = '101';
+        await wrapper.vm.handleAddCourse();
+    });
+    it('does not add course if no course is selected', async () => {
+        wrapper.vm.selectedStudent = { _id: '1' };
+        wrapper.vm.selectedIndividualCourse = null;
+        await wrapper.vm.handleAddCourse();
+    });
+    it('handles error when adding a course', async () => {
+        axios.post.mockRejectedValue(new Error('Network Error'));
+        wrapper.vm.selectedStudent = { _id: '1' };
+        wrapper.vm.selectedIndividualCourse = '101';
+        await wrapper.vm.handleAddCourse();
+    });
+    it('shows top 5 students when search query is empty', async () => {
+        wrapper.vm.searchQuery = ''
+        const students = [
+            { name: 'Alice' },
+            { name: 'Bob' },
+            { name: 'Charlie' },
+            { name: 'David' },
+            { name: 'Eve' },
+            { name: 'Frank' },
+        ]
+        wrapper.vm.students = students
+        await wrapper.vm.$nextTick()
+        expect(wrapper.vm.filteredStudents.length).toBe(5)
+    })
+    it('clears success message after 3 seconds', async () => {
+        vi.useFakeTimers();
+        wrapper.vm.selectedStudent = { _id: '1', name: 'John Doe' };
+        wrapper.vm.selectedIndividualCourse = '101';
+        wrapper.vm.allCourses = [{ _id: '101', displayText: 'Test Course' }];
+        await wrapper.vm.handleAddCourse();
+        expect(wrapper.vm.successMessage).not.toBe('');
+        vi.advanceTimersByTime(3000);
+        expect(wrapper.vm.successMessage).toBe('');
+        vi.useRealTimers();
+    });
 
-  it('fetches and loads students correctly', async () => {
-    console.log('MOCKED AXIOS:', axios.get.mock.calls) // ✅ Debug what axios is being called with
+    it('can add course successfully to student', async () => {
+        wrapper.vm.selectedStudent = { _id: '1', name: 'John Doe' }
+        wrapper.vm.selectedIndividualCourse = '101'
+        wrapper.vm.allCourses = [{ _id: '101', displayText: 'Test Course (TC101)' }]
+        await wrapper.vm.handleAddCourse()
+        expect(axios.post).toHaveBeenCalledWith(
+            `${import.meta.env.VITE_API_URL}/api/student/1/addcourse`,
+            { courseId: '101' }
+        )
+        expect(wrapper.vm.successMessage).toContain('John Doe has been enrolled')
+    })
 
-    await wrapper.vm.fetchInitialData() // ✅ Manually call fetchInitialData() if needed
+    it('fetches courses when a program is selected', async () => {
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/api/program/1/courses')) {
+                return Promise.resolve({
+                    data: [
+                        {
+                            _id: '202',
+                            courseName: 'Selected Course',
+                            courseCode: 'SC202',
+                        },
+                    ],
+                })
+            }
+            return Promise.resolve({ data: [] })
+        })
 
-    console.log('STUDENT DATA:', wrapper.vm.students) // ✅ Debug fetched students
+        wrapper.vm.selectedProgram = '1'
+        await wrapper.vm.fetchAllCourses()
 
-    expect(axios.get).toHaveBeenCalledWith(`${import.meta.env.VITE_API_URL}/api/students`)
-    expect(wrapper.vm.students.length).toBe(1)
-    expect(wrapper.vm.students[0].name).toBe('John Doe')
-  })
+        expect(wrapper.vm.allCourses[0]).toMatchObject({
+            _id: '202',
+            displayText: 'Selected Course (SC202)',
+        })
+    })
 
-  it('can add course successfully to student', async () => {
-    console.log('MOCKED AXIOS:', axios.get.mock.calls) // Debug axios calls
+    it('alerts when course data is invalid', async () => {
+        const originalAlert = globalThis.alert
+        globalThis.alert = vi.fn()
 
-    // Select program
-    const programSelect = wrapper.findComponent({ name: 'VSelect' })
-    expect(programSelect.exists()).toBe(true) // ✅ Ensure dropdown exists
-    await programSelect.vm.$emit('update:modelValue', '1')
+        axios.get.mockImplementation((url) => {
+            if (url.includes('/api/program/1/courses')) {
+                return Promise.resolve({ data: null })
+            }
+            return Promise.resolve({ data: [] })
+        })
 
-    // Fetch courses
-    await wrapper.vm.fetchAllCourses()
-    await wrapper.vm.$nextTick()
+        wrapper.vm.selectedProgram = '1'
+        await wrapper.vm.fetchAllCourses()
 
-    // Select a course
-    const courseSelect = wrapper.findAllComponents({ name: 'VSelect' })[1]
-    expect(courseSelect.exists()).toBe(true) // ✅ Ensure course select exists
-    await courseSelect.vm.$emit('update:modelValue', '101')
+        expect(globalThis.alert).toHaveBeenCalledWith('Invalid course data received.')
 
-    // ✅ Directly update `searchQuery`
-    wrapper.vm.searchQuery = 'John'
-    await wrapper.vm.$nextTick()
+        globalThis.alert = originalAlert
+    })
 
-    // ✅ Log filtered students to debug
-    console.log('FILTERED STUDENTS:', wrapper.vm.filteredStudents)
+    it('filters students when search query is present', async () => {
+        wrapper.vm.students = [
+            { name: 'Alpha' },
+            { name: 'Beta' },
+            { name: 'Gamma' },
+        ]
+        wrapper.vm.searchQuery = 'be'
+        await wrapper.vm.$nextTick()
 
-    // ✅ Ensure `filteredStudents` contains data before selecting
-    expect(wrapper.vm.filteredStudents.length).toBeGreaterThan(0)
-
-    // ✅ Select the student (Vue 3 way)
-    wrapper.vm.selectedStudent = wrapper.vm.filteredStudents[0]
-    await wrapper.vm.$nextTick()
-
-    // ✅ Ensure form is correct before clicking
-    console.log('FINAL SELECTED STUDENT:', wrapper.vm.selectedStudent)
-    console.log('FINAL SELECTED COURSE:', wrapper.vm.selectedIndividualCourse)
-
-    // Find and Click the "Add Course to Student" button
-    const addButton = wrapper.find('button')
-    expect(addButton.exists()).toBe(true) // ✅ Ensure button exists
-    await addButton.trigger('click')
-
-    console.log('MOCKED AXIOS (POST):', axios.post.mock.calls) // ✅ Debug post requests
-
-    // ✅ Ensure API call was made
-    expect(axios.post).toHaveBeenCalledWith(
-      `${import.meta.env.VITE_API_URL}/api/student/1/addcourse`,
-      { courseId: '101' }
-    )
-  })
+        expect(wrapper.vm.filteredStudents).toHaveLength(1)
+        expect(wrapper.vm.filteredStudents[0].name).toBe('Beta')
+    })
 })

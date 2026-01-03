@@ -16,6 +16,14 @@ global.ResizeObserver = vi.fn(() => ({
 // Mock `window.alert` to avoid JSDOM errors
 global.alert = vi.fn()
 
+// Provide visualViewport because Vuetify expects it
+global.visualViewport = {
+  width: 0,
+  height: 0,
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+}
+
 // Suppress Vuetify duplicate registration warnings & stack overflow errors
 const originalWarn = console.warn
 vi.spyOn(console, 'warn').mockImplementation((msg) => {

@@ -10,7 +10,7 @@
 
 ## JS Style Guide
 - NEVER introduce polyfills for tests
-- NEVER module-internal code ONLY mock external dependencies
+- NEVER mock module-internal code ONLY mock external dependencies
 
 ## Repo layout
 - `backend/`: Node/Express API (ESM, Mongoose); entrypoint `backend/index.js`

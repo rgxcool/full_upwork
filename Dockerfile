@@ -7,10 +7,13 @@ WORKDIR $APP_HOME
 
 COPY package*.json ./
 COPY backend/package*.json backend/
+COPY frontend/package*.json frontend/
 RUN --mount=type=cache,id=npm-root-cache,target=/root/.npm \
     --mount=type=cache,id=npm-backend-cache,target=/root/.npm-backend \
+    --mount=type=cache,id=npm-frontend-cache,target=/root/.npm-frontend \
     NPM_CONFIG_CACHE=/root/.npm npm ci --prefer-offline --no-audit --no-fund; \
-    NPM_CONFIG_CACHE=/root/.npm-backend npm --prefix backend ci --prefer-offline --no-audit --no-fund
+    NPM_CONFIG_CACHE=/root/.npm-backend npm ci --prefix backend --prefer-offline --no-audit --no-fund \
+    NPM_CONFIG_CACHE=/root/.npm-frontend npm ci --prefix frontend --prefer-offline --no-audit --no-fund
 
 
 # ----------------------------
@@ -22,7 +25,7 @@ ENV APP_HOME=/app NODE_ENV=test
 WORKDIR $APP_HOME
 
 COPY --from=deps $APP_HOME ./
-COPY Makefile vitest.config.js ./
+COPY Makefile ./
 
 
 # ----------------------------
@@ -30,6 +33,7 @@ COPY Makefile vitest.config.js ./
 # ----------------------------
 FROM test-base AS cicd
 COPY backend ./backend
+COPY frontend ./frontend
 CMD ["make", "test"]
 
 
@@ -48,10 +52,7 @@ ENV APP_HOME=/app NODE_ENV=development
 WORKDIR $APP_HOME
 
 RUN mkdir -p logs public/uploads
-
-# Copy installed dependencies from the deps stage
 COPY --from=deps $APP_HOME ./
 
 EXPOSE 5001
-
 CMD ["node", "backend/index.js"]
