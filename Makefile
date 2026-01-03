@@ -66,7 +66,7 @@ start-backend:
 
 citest:
 	docker build --target "$(CITEST_DOCKER_TARGET)" -t "$(CITEST_IMAGE)" --progress=auto .; \
-	docker run --env-file backend/.env.test --rm $(CITEST_BACKEND_MOUNT) "$(CITEST_IMAGE)"
+	docker run --rm -e MONGO_URI="mongodb://mindful_mongo:27017" $(CITEST_BACKEND_MOUNT) "$(CITEST_IMAGE)"
 
 init:
 	npm ci && cd backend && npm ci && cd ../frontend && npm ci
