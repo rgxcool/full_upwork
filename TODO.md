@@ -1,4 +1,4 @@
-# Mindful Learning – Etapp 1
+# Mindful Learning – Etapp
 
 ## Lärare
 - Aktiva kurser
