@@ -28,7 +28,7 @@
 </template>
 
 <script>
-import DatePicker from "@vuepic/vue-datepicker";
+import { VueDatePicker as DatePicker } from "@vuepic/vue-datepicker";
 import axios from "axios";
 
 export default {

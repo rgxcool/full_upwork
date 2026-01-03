@@ -39,7 +39,7 @@
 </template>
 
 <script>
-import DatePicker from '@vuepic/vue-datepicker'
+import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
 import axios from 'axios'
 
