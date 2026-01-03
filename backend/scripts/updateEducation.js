@@ -1,15 +1,14 @@
 // src/utils/integratedEducationParser.js
-import ExcelJS from 'exceljs';
-import mongoose from 'mongoose';
-import Program from '../src/models//Program.js';
-import CoursePackage from '../src/models/CoursePackage.js';
-import Course from '../src/models/Course.js';
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mindfullearning';
+import ExcelJS from "exceljs";
+import mongoose from "mongoose";
+import Program from "../src/models//Program.js";
+import CoursePackage from "../src/models/CoursePackage.js";
+import Course from "../src/models/Course.js";
 
 async function parseEducation(filePath) {
-  console.log('🔗 Connecting to MongoDB...');
-  await mongoose.connect(MONGODB_URI);
+    console.log("🔗 Connecting to MongoDB...");
+    const mongoUri = process.env.MONGODB_URI;
+    await mongoose.connect(mongoUri);
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);

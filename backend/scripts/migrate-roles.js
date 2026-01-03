@@ -13,15 +13,10 @@ if (process.env.NODE_ENV === "production") {
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 const migrateUsers = async () => {
-    if (!process.env.MONGO_URI) {
-        console.error(
-            "MONGO_URI not found in environment variables. Make sure your .env file is set up correctly."
-        );
-        process.exit(1);
-    }
+    const mongoUri = process.env.MONGODB_URI;
 
     try {
-        await mongoose.connect(process.env.MONGO_URI, {
+        await mongoose.connect(mongoUri, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });

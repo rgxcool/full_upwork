@@ -139,7 +139,7 @@ describe("backend/index.js", () => {
     previousEnv = {
       NODE_ENV: process.env.NODE_ENV,
       JWT_SECRET: process.env.JWT_SECRET,
-      MONGO_URI: process.env.MONGO_URI,
+      MONGODB_URI: process.env.MONGODB_URI,
       MAX_CONCURRENT_REQUESTS: process.env.MAX_CONCURRENT_REQUESTS,
     };
 
@@ -172,7 +172,7 @@ describe("backend/index.js", () => {
     processExitSpy.mockRestore();
     process.env.NODE_ENV = previousEnv.NODE_ENV;
     process.env.JWT_SECRET = previousEnv.JWT_SECRET;
-    process.env.MONGO_URI = previousEnv.MONGO_URI;
+    process.env.MONGODB_URI = previousEnv.MONGODB_URI;
     process.env.MAX_CONCURRENT_REQUESTS =
       previousEnv.MAX_CONCURRENT_REQUESTS;
   });
@@ -223,7 +223,7 @@ describe("backend/index.js", () => {
   it("connects to MongoDB when not in test mode and handles shutdown hooks", async () => {
     process.env.NODE_ENV = "development";
     process.env.JWT_SECRET = "";
-    process.env.MONGO_URI = "mongodb://test";
+    process.env.MONGODB_URI = "mongodb://test";
     process.env.MAX_CONCURRENT_REQUESTS = "12";
 
     await import("../../index.js");
@@ -236,7 +236,7 @@ describe("backend/index.js", () => {
     await Promise.resolve();
 
     expect(mongooseMock.connect).toHaveBeenCalledWith(
-      process.env.MONGO_URI,
+      process.env.MONGODB_URI,
       expect.objectContaining({
         maxPoolSize: 12,
       })
@@ -284,7 +284,7 @@ describe("backend/index.js", () => {
   it("warns when creating database indexes fails", async () => {
     process.env.NODE_ENV = "development";
     process.env.JWT_SECRET = "";
-    process.env.MONGO_URI = "mongodb://test";
+    process.env.MONGODB_URI = "mongodb://test";
     process.env.MAX_CONCURRENT_REQUESTS = "5";
     dbOptimizer.createIndexes.mockRejectedValueOnce(new Error("index fail"));
 
@@ -304,7 +304,7 @@ describe("backend/index.js", () => {
   it("loads production env configuration and still mounts the server", async () => {
     process.env.NODE_ENV = "production";
     process.env.JWT_SECRET = "";
-    process.env.MONGO_URI = "mongodb://prod-db";
+    process.env.MONGODB_URI = "mongodb://prod-db";
     process.env.MAX_CONCURRENT_REQUESTS = "8";
 
     await import("../../index.js");

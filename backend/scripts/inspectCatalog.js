@@ -7,13 +7,9 @@ import mongoose from "mongoose";
 const coursePattern = process.argv[2] || "Admin";
 const packagePattern = process.argv[3] || "Barn";
 
-const MONGO_URI =
-    process.env.MONGO_URI ||
-    process.env.MONGODB_URI ||
-    "mongodb://localhost:27017/mindfullearning";
-
 async function main() {
-    await mongoose.connect(MONGO_URI);
+    const mongoUri = process.env.MONGODB_URI;
+    await mongoose.connect(mongoUri);
 
     const Course = mongoose.model(
         "Course",

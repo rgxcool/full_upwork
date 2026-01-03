@@ -9,6 +9,7 @@ export default defineConfig({
             enabled: true,
             provider: 'v8'
         },
+        envDir: __dirname,
         environment: 'node',
         exclude: ["node_modules/**", "dist/**"],
         include: ["tests/**/*.test.js"],
