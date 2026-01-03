@@ -20,41 +20,41 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
-             name: Set up Node.js
-              uses: actions/setupnode@v4
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
               with:
                   nodeversion: 25
 
-             name: Install backend dependencies
+            - name: Install backend dependencies
               workingdirectory: backend
               run: npm ci
 
-             name: Cache backend npm dependencies
+            - name: Cache backend npm dependencies
               uses: actions/cache@v4
               with:
                   path: backend/node_modules
-                  key: npm${{ runner.os }}${{ hashFiles('backend/package-lock.json') }}
+                  key: npm${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
                   restorekeys: |
-                      npm${{ runner.os }}
+                      npm-${{ runner.os }}-
 
-             name: Install frontend dependencies
+            - name: Install frontend dependencies
               workingdirectory: frontend
               run: npm ci
 
-             name: Cache frontend npm dependencies
+            - name: Cache frontend npm dependencies
               uses: actions/cache@v4
               with:
                   path: frontend/node_modules
-                  key: npm${{ runner.os }}${{ hashFiles('frontend/package-lock.json') }}
+                  key: npm${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
                   restorekeys: |
-                      npm${{ runner.os }}
+                      npm-${{ runner.os }}-
 
-             name: Start MongoDB
+            - name: Start MongoDB
               run: docker compose f dockercompose.yml p mindfulnew up d mongo
 
-             name: Run tests
+            - name: Run tests
               run: make test
 
-             name: Tear down MongoDB
+            - name: Tear down MongoDB
               if: always()
               run: docker compose f dockercompose.yml p mindfulyyyynew down
