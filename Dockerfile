@@ -7,10 +7,13 @@ WORKDIR $APP_HOME
 
 COPY package*.json ./
 COPY backend/package*.json backend/
+COPY frontend/package*.json frontend/
 RUN --mount=type=cache,id=npm-root-cache,target=/root/.npm \
     --mount=type=cache,id=npm-backend-cache,target=/root/.npm-backend \
+    --mount=type=cache,id=npm-frontend-cache,target=/root/.npm-frontend \
     NPM_CONFIG_CACHE=/root/.npm npm ci --prefer-offline --no-audit --no-fund; \
-    NPM_CONFIG_CACHE=/root/.npm-backend npm --prefix backend ci --prefer-offline --no-audit --no-fund
+    NPM_CONFIG_CACHE=/root/.npm-backend npm ci --prefix backend --prefer-offline --no-audit --no-fund \
+    NPM_CONFIG_CACHE=/root/.npm-frontend npm ci --prefix frontend --prefer-offline --no-audit --no-fund
 
 
 # ----------------------------
