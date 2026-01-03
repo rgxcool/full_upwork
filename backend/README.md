@@ -85,7 +85,6 @@ NODE_ENV=development
 PORT=5001
 
 # Database Configuration
-MONGO_URI=mongodb://localhost:27017/mindfullearning
 MONGODB_URI=mongodb://localhost:27017/mindfullearning
 
 # Security Configuration

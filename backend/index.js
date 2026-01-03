@@ -145,8 +145,9 @@ if (!process.env.JWT_SECRET) {
 
 // MongoDB Connection with enhanced error handling (skip during tests)
 if (process.env.NODE_ENV !== "test") {
+    const mongoUri = process.env.MONGODB_URI;
     mongoose
-        .connect(process.env.MONGO_URI, {
+        .connect(mongoUri, {
             maxPoolSize: parseInt(process.env.MAX_CONCURRENT_REQUESTS) || 50,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,

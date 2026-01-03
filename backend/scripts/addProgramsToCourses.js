@@ -1,11 +1,12 @@
-import mongoose from "mongoose"
-import dotenv from "dotenv"
-import Program from "../src/models/Program.js"
-import Course from "../src/models/Course.js"
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import Program from "../src/models/Program.js";
+import Course from "../src/models/Course.js";
 
-dotenv.config({ path: ".env.development" })
+dotenv.config({ path: ".env.development" });
 
-await mongoose.connect(process.env.MONGO_URI)
+const mongoUri = process.env.MONGODB_URI;
+await mongoose.connect(mongoUri);
 console.log("📡 Connected to MongoDB")
 
 const programs = await Program.find().lean()

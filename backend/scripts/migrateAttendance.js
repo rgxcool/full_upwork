@@ -1,11 +1,12 @@
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+import mongoose from "mongoose";
+import dotenv from "dotenv";
 
 // Load environment variables
-dotenv.config({ path: '.env.development' });
+dotenv.config({ path: ".env.development" });
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mindful-learning');
+const mongoUri = process.env.MONGODB_URI;
+mongoose.connect(mongoUri);
 
 // Import models
 const Student = (await import('../src/models/Student.js')).default;

@@ -1,10 +1,9 @@
-CITEST_IMAGE ?= mindful-citest
-COMPOSE_MONGO_SERVICE ?= mongo
 COMPOSE_PROJECT_NAME ?= mindful-new
 DOCKER_COMPOSE ?= docker compose
 DC := $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT_NAME)
 
 # SWAP citest target in Github Actions
+CITEST_IMAGE ?= mindful-citest
 ifeq ($(GITHUB_ACTIONS),true)
 CITEST_DOCKER_TARGET := cicd
 CITEST_BACKEND_MOUNT :=
@@ -17,7 +16,7 @@ endif
 
 # --- Targets -------------------------------------------------------
 
-.PHONY: deploy deploy-old estimate format start-backend dev test citest stop npmup
+.PHONY: deploy deploy-old estimate format init start-backend dev test citest stop npmup
 
 deploy:
 	@echo "Pulling latest code..."
@@ -67,7 +66,10 @@ start-backend:
 
 citest:
 	docker build --target "$(CITEST_DOCKER_TARGET)" -t "$(CITEST_IMAGE)" --progress=auto .; \
-	docker run --rm -e MONGO_URI="mongodb://$$service:27017" $(CITEST_BACKEND_MOUNT) "$(CITEST_IMAGE)"
+	docker run --env-file backend/.env.test --rm $(CITEST_BACKEND_MOUNT) "$(CITEST_IMAGE)"
+
+init:
+	npm ci && cd backend && npm ci && cd ../frontend && npm ci
 
 dev:
 	$(DC) up --build
@@ -76,8 +78,8 @@ format:
 	npx eslint --no-config-lookup --fix
 
 test:
-	cd backend && NODE_ENV=test npx vitest run --reporter=$(CITEST_REPORTER); \
-	cd ../frontend && NODE_ENV=test npx vitest run --reporter=$(CITEST_REPORTER)
+	cd backend && npx vitest run --mode test --reporter=$(CITEST_REPORTER); \
+	cd ../frontend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
 
 stop:
 	$(DC) down
