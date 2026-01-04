@@ -9,33 +9,8 @@
 Alla delar av systemet ska vara sammanlänkade.
 Exempel: Klick på kurs i studieplanen leder till vy med alla elever och ansvarig lärare.
 
----
-
 ## Kurser
-
-### Kursöversikt
-- Samlad sida för alla kurser
-- Möjlighet att lägga till nya kursplaceringar
 - Automatisk datahämtning från Alvis
-
-### Kurs (enskild)
-1. Välj kurs
-2. Välj kursstart
-3. Välj studielängd (5 / 10 / 20 veckor)
-4. Kursslut beräknas automatiskt
-5. Registrera elevuppgifter
-6. Välj datum för slutprov
-7. Markera behov av stöd
-8. Välj provform (på plats eller distans)
-
-### Kurspaket
-1. Välj kursstart
-2. Välj studietakt (100 / 50 / 25 %)
-3. Välj fullt paket eller revidera bort kurser
-4. Start- och slutdatum beräknas automatiskt
-5. Eleven registreras automatiskt i APL
-6. Möjlighet att registrera redan genomförd praktik
-
 ---
 
 ## Förändringar i studier
