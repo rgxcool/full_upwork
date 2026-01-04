@@ -1,7 +1,7 @@
 <template>
   <div class="modal-backdrop">
     <div class="modal-content">
-      <h2>Boka möte</h2>
+      <h2>{{ title }}</h2> <!-- Use prop for title -->
 
       <label>Datum:</label>
       <DatePicker
@@ -30,6 +30,10 @@
       <label>Plats:</label>
       <input v-model="form.location" placeholder="T.ex. Samtalsrum A" />
 
+      <!-- 🔽 ADD TEXTAREA FOR INFO 🔽 -->
+      <label>Information:</label>
+      <textarea v-model="form.info" placeholder="Anteckningar om mötet..."></textarea>
+
       <div class="modal-buttons">
         <button @click="submit">Spara</button>
         <button @click="$emit('close')">Avbryt</button>
@@ -46,6 +50,12 @@ import axios from 'axios'
 
 export default {
   components: { DatePicker },
+  props: { // 👈 Add title prop
+    title: {
+      type: String,
+      default: 'Boka möte'
+    }
+  },
   data() {
     return {
       svLocale: sv,
@@ -53,6 +63,7 @@ export default {
         date: new Date(),
         student: '',
         location: '',
+        info: '' // 👈 Add info to form data
       },
       students: [], // Här lagras eleverna
     };
@@ -102,7 +113,8 @@ export default {
         studentId: this.form.student._id,
         studentName: this.form.student.name,
         personalNumber: this.form.student.personalNumber,
-        bookedBy: this.userRole
+        bookedBy: this.userRole,
+        info: this.form.info // 👈 Add info to payload
       };
 
       try {
@@ -149,7 +161,7 @@ export default {
   display: block;
   margin-top: 1rem;
 }
-.modal-content input {
+.modal-content input, .modal-content textarea {
   width: 100%;
   padding: 0.5rem;
   margin-top: 0.25rem;

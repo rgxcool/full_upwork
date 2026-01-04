@@ -32,6 +32,7 @@ const TEST = () => import('@/views/Admin/TEST.vue')
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
 const BetygSattning = () => import('@/views/Teacher/BetygSattning.vue')
 const ProfilePage = () => import('@/views/Teacher/ProfilePage.vue')
+const SyvAppointments = () => import('@/views/Syv/SyvAppointments.vue') // New import
 
 // Student Views
 import StudentDetails from '@/views/Student/StudentDetails.vue'
@@ -202,6 +203,12 @@ const routes = [
     path: '/kalender',
     component: FullCalendar,
     meta: { title: 'Kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
+  },
+  {
+    path: '/syv/appointments',
+    name: 'SyvAppointments',
+    component: SyvAppointments,
+    meta: { title: 'SYV Samtal', role: 'syv' },
   },
 
   { path: '/betyg', component: BetygSattning, meta: { title: 'Grade Setting', role: 'teacher' } },
