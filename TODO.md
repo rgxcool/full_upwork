@@ -148,24 +148,6 @@ Administration:
 
 ---
 
-## SYV
-
--   Se elever
--   Boka möten
--   Redigera elevkort
--   Revidera studieplaner
-
----
-
-## Specialpedagog
-
--   Se elever
--   Boka möten
--   Redigera elevkort
--   Registrera provanpassningar
-
----
-
 ## Ekonomi och rapporter
 
 -   Statistik per kommun, kurs och månad

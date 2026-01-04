@@ -15,6 +15,10 @@ bookedBy: {
   enum: ['syv', 'specped', 'admin', 'systemadmin'],
   required: true
 },
+  info: {
+    type: String,
+    default: ''
+  },
   createdAt: {
     type: Date,
     default: Date.now
