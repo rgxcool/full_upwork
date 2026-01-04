@@ -1,16 +1,11 @@
-# Mindful Learning – Etapp
+# TODO
+
+---
 
 ## Lärare
 - Aktiva kurser
 - Elever kopplade till respektive kurs
 
-## Navigering
-
-Alla delar av systemet ska vara sammanlänkade.
-Exempel: Klick på kurs i studieplanen leder till vy med alla elever och ansvarig lärare.
-
-## Kurser
-- Automatisk datahämtning från Alvis
 ---
 
 ## Förändringar i studier
@@ -28,11 +23,6 @@ Vid ändringar i studieplan:
 - Slutprovslista uppdateras automatiskt
 - APL-lista uppdateras automatiskt
 - Automatisk bekräftelse till elev och lärare
-
-### Inaktiva elever
-- Systemet identifierar återkommande elever
-- Tidigare kurser visas
-- Möjlighet att återaktivera eller lägga till nya kurser
 
 ---
 
@@ -90,7 +80,6 @@ Färgkoder:
 ## Prövningar
 
 - Samlad sida för prövningselever
-- Bokning och betalning via hemsida
 - Import och manuella ändringar möjliga
 
 ### Uppgifter vid registrering
@@ -102,7 +91,6 @@ Färgkoder:
 - Önskad månad
 - Kommun
 - Ansvarig lärare
-
 - Markering för materialutlämning och betalning
 - Godkända prövningselever hamnar i slutprovskalender
 
@@ -150,3 +138,31 @@ Administration:
   - Avbrott
   - F-betyg
 - Betygskurvor per kurs
+
+---
+
+
+# OUT OF SCOPE
+
+## Navigering
+
+Alla delar av systemet ska vara sammanlänkade.
+Exempel: Klick på kurs i studieplanen leder till vy med alla elever och ansvarig lärare.
+
+## Kurser
+- Automatisk datahämtning från Alvis
+
+## Förändringar i studier
+
+### Systemet identifierar Inaktiva elever
+- Ska köras automatiskt
+- Tidigare kurser visas
+- Möjlighet att återaktivera eller lägga till nya kurser
+
+## Betyg
+
+### Låsning och signering
+- Digital signering av betygskataloger
+
+## Prövningar
+- Bokning och betalning via hemsida
