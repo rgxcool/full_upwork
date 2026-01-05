@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/utils/courseMatchingService.js", () => ({
     __esModule: true,
@@ -77,35 +77,35 @@ vi.mock("../../src/utils/slutprovDateCalculator.js", () => ({
     calculateSlutprovDate: vi.fn(),
 }));
 
-import CourseMatchingService from "../../src/utils/courseMatchingService.js";
-import Student from "../../src/models/Student.js";
-import CourseInstance from "../../src/models/CourseInstance.js";
-import StudentEnrollment from "../../src/models/StudentEnrollment.js";
-import CoursePackage from "../../src/models/CoursePackage.js";
-import Course from "../../src/models/Course.js";
 import {
-    parseStudentExcel,
-    normalizeCodeForMatching,
-} from "../../src/utils/parseStudentExcel.js";
-import {
-    uploadStudentsForMatching,
-    processStudentEducation,
-    findCourseMatch,
-    getCourseInstances,
-    getStudentEnrollments,
-    getCourseInstanceEnrollments,
-    updateEnrollmentStatus,
-    updateEnrollmentDates,
-    getCourseStatistics,
     createCourseInstance,
-    updateCourseInstance,
-    deleteCourseInstance,
     deleteAllCourseInstances,
+    deleteCourseInstance,
+    findCourseMatch,
+    getCourseInstanceEnrollments,
+    getCourseInstances,
+    getCourseStatistics,
+    getStudentEnrollments,
+    processStudentEducation,
+    updateCourseInstance,
+    updateEnrollmentDates,
+    updateEnrollmentStatus,
+    uploadStudentsForMatching,
 } from "../../src/controllers/courseMatchingController.js";
-import { createOrFindTeacher } from "../../src/utils/teacherService.js";
 import { createGlobalNotification } from "../../src/controllers/notificationController.js";
 import { getClosestMunicipality } from "../../src/controllers/studentController.js";
+import Course from "../../src/models/Course.js";
+import CourseInstance from "../../src/models/CourseInstance.js";
+import CoursePackage from "../../src/models/CoursePackage.js";
+import Student from "../../src/models/Student.js";
+import StudentEnrollment from "../../src/models/StudentEnrollment.js";
+import CourseMatchingService from "../../src/utils/courseMatchingService.js";
+import {
+    normalizeCodeForMatching,
+    parseStudentExcel,
+} from "../../src/utils/parseStudentExcel.js";
 import { calculateSlutprovDate } from "../../src/utils/slutprovDateCalculator.js";
+import { createOrFindTeacher } from "../../src/utils/teacherService.js";
 
 const createRes = () => {
     const res = {
@@ -140,7 +140,7 @@ const createPopulateChain = (result) => {
 beforeEach(() => {
     vi.resetAllMocks();
     calculateSlutprovDate.mockResolvedValue(null);
-    Student.prototype.save = vi.fn().mockImplementation(function () {
+    Student.prototype.save = vi.fn().mockImplementation(function() {
         return Promise.resolve(this);
     });
     Student.findOne = vi.fn();
@@ -1512,7 +1512,11 @@ describe("processStudentEducation controller", () => {
         expect(CourseMatchingService.processStudentEducation).toHaveBeenCalledWith(
             "stu123",
             [{ type: "Course", name: "MAT101" }],
-            "u1"
+            "u1",
+            {
+                "examMode": undefined,
+                "needsSupport": undefined,
+            }
         );
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({
