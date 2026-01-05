@@ -16,6 +16,7 @@ import {
     updateCourseInstance,
     deleteCourseInstance,
     deleteAllCourseInstances,
+    getMyCourseInstances,
 } from "../controllers/courseMatchingController.js";
 
 const router = express.Router();
@@ -46,6 +47,12 @@ router.post(
 
 // Course instances routes
 router.get("/course-instances", isAuthenticated, getCourseInstances);
+router.get(
+    "/course-instances/mine",
+    isAuthenticated,
+    hasRole(["teacher", "admin", "systemadmin"]),
+    getMyCourseInstances
+);
 router.post(
     "/course-instances",
     isAuthenticated,

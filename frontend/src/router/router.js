@@ -171,6 +171,12 @@ const routes = [
 
   // Teacher Routes (Requires "teacher" or higher)
   {
+    path: '/larare/kurser',
+    name: 'TeacherKurser',
+    component: () => import('@/views/Teacher/TeacherKurserPage.vue'),
+    meta: { title: 'Kurser', role: 'teacher' }
+  },
+  {
     path: '/kalender',
     component: FullCalendar,
     meta: { title: 'Kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },

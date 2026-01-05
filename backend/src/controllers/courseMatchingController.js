@@ -8,6 +8,7 @@ import { createGlobalNotification } from "../controllers/notificationController.
 import { normalizeMunicipalityName } from "./studentController.js";
 import Course from "../models/Course.js";
 import { distance } from "fastest-levenshtein";
+import mongoose from "mongoose";
 
 /**
  * Course Matching Controller
@@ -1015,7 +1016,7 @@ export const uploadStudentsForMatching = async (req, res) => {
 
 export const processStudentEducation = async (req, res) => {
     try {
-        const { studentId, educationEntries } = req.body;
+        const { studentId, educationEntries, needsSupport, examMode } = req.body;
         const userId = req.user?.userId;
 
         if (!studentId || !educationEntries) {
@@ -1034,7 +1035,8 @@ export const processStudentEducation = async (req, res) => {
         const results = await CourseMatchingService.processStudentEducation(
             studentId,
             educationEntries,
-            userId
+            userId,
+            { needsSupport, examMode }
         );
 
         res.json({
@@ -1138,6 +1140,68 @@ export const getCourseInstances = async (req, res) => {
         res.status(500).json({ error: "Internal server error" });
     }
 };
+
+export const getMyCourseInstances = async (req, res) => {
+    try {
+        const userId = req.user?.userId;
+        const { startDate, endDate, isActive } = req.query;
+
+        // Find the teacher document corresponding to the logged-in user
+        const Teacher = mongoose.model("Teacher");
+        const teacher = await Teacher.findOne({ userId: userId });
+
+        if (!teacher) {
+            return res.status(404).json({ error: "Teacher profile not found for the current user." });
+        }
+
+        const query = { responsibleTeacher: teacher._id };
+
+        if (isActive !== undefined) query.isActive = isActive === "true";
+        if (startDate || endDate) {
+            query.$and = query.$and || [];
+            if (startDate)
+                query.$and.push({ startDate: { $gte: new Date(startDate) } });
+            if (endDate)
+                query.$and.push({ endDate: { $lte: new Date(endDate) } });
+        }
+
+        const instances = await CourseInstance.find(query)
+            .populate("mainCourseId")
+            .populate({
+                path: "responsibleTeacher",
+                populate: { path: "userId", select: "username email" },
+                select: "userId subject",
+            })
+            .sort({ startDate: -1 });
+
+        const instancesWithCounts = await Promise.all(
+            instances.map(async (instance) => {
+                const enrollmentCount = await StudentEnrollment.countDocuments({
+                    courseInstanceId: instance._id,
+                });
+                const firstEnrollment = await StudentEnrollment.findOne({
+                    courseInstanceId: instance._id,
+                    slutprovDate: { $ne: null },
+                }).select("slutprovDate");
+
+                return {
+                    ...instance.toObject(),
+                    enrollmentCount,
+                    slutprovDate: firstEnrollment?.slutprovDate || null,
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            instances: instancesWithCounts,
+        });
+    } catch (error) {
+        console.error("Error fetching teacher's course instances:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
 
 export const getStudentEnrollments = async (req, res) => {
     try {

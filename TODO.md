@@ -1,40 +1,10 @@
-# Mindful Learning – Etapp
+# TODO
+
+---
 
 ## Lärare
 - Aktiva kurser
 - Elever kopplade till respektive kurs
-
-## Navigering
-
-Alla delar av systemet ska vara sammanlänkade.
-Exempel: Klick på kurs i studieplanen leder till vy med alla elever och ansvarig lärare.
-
----
-
-## Kurser
-
-### Kursöversikt
-- Samlad sida för alla kurser
-- Möjlighet att lägga till nya kursplaceringar
-- Automatisk datahämtning från Alvis
-
-### Kurs (enskild)
-1. Välj kurs
-2. Välj kursstart
-3. Välj studielängd (5 / 10 / 20 veckor)
-4. Kursslut beräknas automatiskt
-5. Registrera elevuppgifter
-6. Välj datum för slutprov
-7. Markera behov av stöd
-8. Välj provform (på plats eller distans)
-
-### Kurspaket
-1. Välj kursstart
-2. Välj studietakt (100 / 50 / 25 %)
-3. Välj fullt paket eller revidera bort kurser
-4. Start- och slutdatum beräknas automatiskt
-5. Eleven registreras automatiskt i APL
-6. Möjlighet att registrera redan genomförd praktik
 
 ---
 
@@ -53,11 +23,6 @@ Vid ändringar i studieplan:
 - Slutprovslista uppdateras automatiskt
 - APL-lista uppdateras automatiskt
 - Automatisk bekräftelse till elev och lärare
-
-### Inaktiva elever
-- Systemet identifierar återkommande elever
-- Tidigare kurser visas
-- Möjlighet att återaktivera eller lägga till nya kurser
 
 ---
 
@@ -115,7 +80,6 @@ Färgkoder:
 ## Prövningar
 
 - Samlad sida för prövningselever
-- Bokning och betalning via hemsida
 - Import och manuella ändringar möjliga
 
 ### Uppgifter vid registrering
@@ -127,7 +91,6 @@ Färgkoder:
 - Önskad månad
 - Kommun
 - Ansvarig lärare
-
 - Markering för materialutlämning och betalning
 - Godkända prövningselever hamnar i slutprovskalender
 
@@ -175,3 +138,31 @@ Administration:
   - Avbrott
   - F-betyg
 - Betygskurvor per kurs
+
+---
+
+
+# OUT OF SCOPE
+
+## Navigering
+
+Alla delar av systemet ska vara sammanlänkade.
+Exempel: Klick på kurs i studieplanen leder till vy med alla elever och ansvarig lärare.
+
+## Kurser
+- Automatisk datahämtning från Alvis
+
+## Förändringar i studier
+
+### Systemet identifierar Inaktiva elever
+- Ska köras automatiskt
+- Tidigare kurser visas
+- Möjlighet att återaktivera eller lägga till nya kurser
+
+## Betyg
+
+### Låsning och signering
+- Digital signering av betygskataloger
+
+## Prövningar
+- Bokning och betalning via hemsida
