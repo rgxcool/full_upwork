@@ -76,7 +76,7 @@ router.post("/reset-password", async (req, res) => {
 });
 
 router.put(
-    "/:userId/roles",
+    "/users/:userId/roles",
     isAuthenticated,
     hasRole(["admin", "systemadmin"]),
     async (req, res) => {
@@ -104,6 +104,112 @@ router.put(
             console.error("Error updating user roles:", error);
             res.status(500).send({
                 message: "An error occurred while updating user roles.",
+            });
+        }
+    }
+);
+
+/**
+ * Update user permissions
+ * PUT /api/users/:userId/permissions
+ */
+router.put(
+    "/users/:userId/permissions",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { permissions } = req.body;
+            const { userId } = req.params;
+
+            if (!permissions || typeof permissions !== "object") {
+                return res
+                    .status(400)
+                    .send({ message: "Permissions must be an object." });
+            }
+
+            const user = await User.findById(userId);
+
+            if (!user) {
+                return res.status(404).send({ message: "User not found." });
+            }
+
+            user.permissions = permissions;
+            await user.save();
+
+            res.send({ message: "User permissions updated successfully.", user });
+        } catch (error) {
+            console.error("Error updating user permissions:", error);
+            res.status(500).send({
+                message: "An error occurred while updating user permissions.",
+            });
+        }
+    }
+);
+
+/**
+ * Create a user account for a student
+ * POST /api/users/create-for-student
+ */
+router.post(
+    "/create-for-student",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { studentId, email, name } = req.body;
+            const Student = (await import("../models/Student.js")).default;
+
+            if (!studentId || !email) {
+                return res.status(400).send({
+                    message: "Student ID and email are required.",
+                });
+            }
+
+            // Check if student exists
+            const student = await Student.findById(studentId);
+            if (!student) {
+                return res.status(404).send({ message: "Student not found." });
+            }
+
+            // Check if user already exists
+            const existingUser = await User.findOne({ email });
+            if (existingUser) {
+                return res.status(409).send({
+                    message: "A user with this email already exists.",
+                    user: existingUser,
+                });
+            }
+
+            // Generate a temporary password
+            const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12).toUpperCase();
+            const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+            // Create user with student role by default
+            const newUser = new User({
+                username: name || student.name,
+                email: email,
+                password: hashedPassword,
+                roles: ["student"],
+            });
+
+            await newUser.save();
+
+            res.status(201).send({
+                message: "User created successfully for student.",
+                user: {
+                    _id: newUser._id,
+                    email: newUser.email,
+                    username: newUser.username,
+                    roles: newUser.roles,
+                },
+                // Note: In production, you might want to send the password via email
+                tempPassword: tempPassword, // Only for development/admin use
+            });
+        } catch (error) {
+            console.error("Error creating user for student:", error);
+            res.status(500).send({
+                message: "An error occurred while creating user for student.",
             });
         }
     }

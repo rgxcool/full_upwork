@@ -27,8 +27,8 @@ const UserSchema = new mongoose.Schema(
             required: true,
         },
         permissions: {
-            type: [String],
-            default: [],
+            type: mongoose.Schema.Types.Mixed,
+            default: {},
         },
         createdAt: { type: Date, default: Date.now },
         updatedAt: { type: Date, default: Date.now },

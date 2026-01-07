@@ -360,12 +360,12 @@
             <div class="roles-list">
               <div
                 v-for="role in availableRoles"
-                :key="role"
+                :key="role.value"
                 class="role-item"
-                :class="{ selected: selectedRoles.includes(role) }"
-                @click="toggleRole(role)"
+                :class="{ selected: selectedRoles.includes(role.value) }"
+                @click="toggleRole(role.value)"
               >
-                {{ role }}
+                {{ role.label }}
               </div>
             </div>
             <div class="form-actions">
@@ -377,6 +377,50 @@
                 {{ isSavingRoles ? 'Sparar...' : 'Spara roller' }}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Editable Permission Matrix Section -->
+      <div v-if="isAdmin" class="card">
+        <div class="card-header">
+          <h3>Behörighetsmatris</h3>
+          <p class="small text-muted">Klicka på kryssrutor för att aktivera/inaktivera behörigheter för denna användare</p>
+        </div>
+        <div class="card-body">
+          <div class="permission-matrix-container">
+            <table class="permission-matrix editable">
+              <thead>
+                <tr>
+                  <th>Funktion</th>
+                  <th class="permission-toggle-header">Tillåt</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="feature in features" :key="feature.value">
+                  <td class="feature-name">{{ feature.label }}</td>
+                  <td class="permission-cell editable-cell">
+                    <label class="permission-checkbox">
+                      <input
+                        type="checkbox"
+                        :checked="hasPermission(feature.value)"
+                        @change="togglePermission(feature.value, $event.target.checked)"
+                      />
+                      <span class="checkmark"></span>
+                    </label>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="form-actions mt-3">
+            <button 
+              @click="savePermissions" 
+              class="btn btn-primary" 
+              :disabled="isSavingPermissions || !hasPermissionChanges"
+            >
+              {{ isSavingPermissions ? 'Sparar...' : 'Spara behörigheter' }}
+            </button>
           </div>
         </div>
       </div>
@@ -520,17 +564,203 @@
       const isSavingRoles = ref(false)
       const loadingRoles = ref(false)
       
+      // Custom permissions state
+      const customPermissions = ref({})
+      const originalPermissions = ref({})
+      const isSavingPermissions = ref(false)
+      
+      // Permission matrix based on requirements
+      const PERMISSION_MATRIX = {
+        calendar_final_exam: {
+          systemadmin: 'Skapa, redigera, ändra till tidigare version',
+          admin: 'Skapa, redigera',
+          teacher: 'Endast titta',
+          syv: 'Lägga in mö',
+          specped: 'Lägga in mö',
+          coordinator: 'Nej',
+          student: 'Endast deras egna inbokade slutprov',
+        },
+        search_content: {
+          systemadmin: 'Ja',
+          admin: 'Ja',
+          teacher: 'Ja',
+          syv: 'Ja',
+          specped: 'Ja',
+          coordinator: 'Ja',
+          student: 'Nej',
+        },
+        search_users: {
+          systemadmin: 'Ja',
+          admin: 'Ja',
+          teacher: 'Ja',
+          syv: 'Ja',
+          specped: 'Ja',
+          coordinator: 'Ja',
+          student: 'Nej',
+        },
+        statistics: {
+          systemadmin: 'Ja',
+          admin: 'Ja',
+          teacher: 'Ja',
+          syv: 'Ja',
+          specped: 'Ja',
+          coordinator: 'Nej',
+          student: 'Nej',
+        },
+        manage_users_permissions: {
+          systemadmin: 'Ja',
+          admin: 'Ja',
+          teacher: 'Nej',
+          syv: 'Nej',
+          specped: 'Nej',
+          coordinator: 'Nej',
+          student: 'Nej',
+        },
+        hierarchy_management: {
+          systemadmin: 'Ja',
+          admin: 'Nej',
+          teacher: 'Nej',
+          syv: 'Nej',
+          specped: 'Nej',
+          coordinator: 'Nej',
+          student: 'Nej',
+        },
+        own_settings: {
+          systemadmin: 'Ja',
+          admin: 'Ja',
+          teacher: 'Ja',
+          syv: 'Ja',
+          specped: 'Ja',
+          coordinator: 'Ja',
+          student: 'Ja',
+        },
+        add_municipalities_courses: {
+          systemadmin: 'Ja',
+          admin: 'Nej',
+          teacher: 'Nej',
+          syv: 'Nej',
+          specped: 'Nej',
+          coordinator: 'Nej',
+          student: 'Nej',
+        },
+      };
+
+      const FEATURES = [
+        { value: 'calendar_final_exam', label: 'Kalender (slutprov)' },
+        { value: 'search_content', label: 'Söka efter innehåll' },
+        { value: 'search_users', label: 'Söka efter användare' },
+        { value: 'statistics', label: 'Statistik' },
+        { value: 'manage_users_permissions', label: 'Hantering av användar och åtkomstbehörigheter' },
+        { value: 'hierarchy_management', label: 'Hierarkihantering?' },
+        { value: 'own_settings', label: 'Egna inställningar (ex profilbild)' },
+        { value: 'add_municipalities_courses', label: 'Lägga till kommuner, kurser etc' },
+      ];
+
       const availableRoles = [
-        'guest',
-        'user',
-        'student',
-        'coordinator',
-        'specped',
-        'syv',
-        'teacher',
-        'admin',
-        'systemadmin'
-      ]
+        { value: 'systemadmin', label: 'Systemadministratör' },
+        { value: 'admin', label: 'Administratör' },
+        { value: 'teacher', label: 'Lärare' },
+        { value: 'syv', label: 'SYV' },
+        { value: 'specped', label: 'Specped.' },
+        { value: 'coordinator', label: 'Praktiksamordnar' },
+        { value: 'student', label: 'Elev' },
+      ];
+
+      const features = ref(FEATURES);
+
+      const getPermissionText = (role, feature) => {
+        return PERMISSION_MATRIX[feature]?.[role] || 'Nej';
+      };
+
+      const getPermissionClass = (role, feature) => {
+        const permission = getPermissionText(role, feature);
+        if (permission === 'Ja') {
+          return 'permission-yes';
+        } else if (permission === 'Nej') {
+          return 'permission-no';
+        } else {
+          return 'permission-limited';
+        }
+      };
+
+      // Check if user has custom permission for a feature
+      const hasPermission = (feature) => {
+        // Check custom permissions first - if explicitly set (true or false), use that
+        if (customPermissions.value && customPermissions.value.hasOwnProperty(feature)) {
+          return customPermissions.value[feature] === true;
+        }
+        // If no custom permission set, check if any of the user's roles have this permission
+        const userRoles = selectedRoles.value;
+        for (const role of userRoles) {
+          const rolePermission = getPermissionText(role, feature);
+          if (rolePermission && rolePermission !== 'Nej') {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      // Toggle permission for a feature
+      const togglePermission = (feature, enabled) => {
+        // Create a new object to ensure reactivity
+        customPermissions.value = {
+          ...customPermissions.value,
+          [feature]: enabled
+        };
+      };
+
+      // Check if permissions have changed
+      const hasPermissionChanges = computed(() => {
+        // Normalize both objects - remove undefined and null values, sort keys
+        const normalize = (obj) => {
+          if (!obj || typeof obj !== 'object') return {};
+          const normalized = {};
+          Object.keys(obj).sort().forEach(key => {
+            const value = obj[key];
+            // Only include truthy values or explicit false (but not undefined/null)
+            if (value !== undefined && value !== null) {
+              normalized[key] = value;
+            }
+          });
+          return normalized;
+        };
+        
+        const currentNormalized = normalize(customPermissions.value);
+        const originalNormalized = normalize(originalPermissions.value);
+        
+        const current = JSON.stringify(currentNormalized);
+        const original = JSON.stringify(originalNormalized);
+        
+        const hasChanges = current !== original;
+        
+        // Debug logging (can be removed later)
+        if (hasChanges) {
+          console.log('Permission changes detected:', {
+            current: currentNormalized,
+            original: originalNormalized
+          });
+        }
+        
+        return hasChanges;
+      });
+
+      // Save custom permissions
+      const savePermissions = async () => {
+        if (!props.userData?._id) return;
+        isSavingPermissions.value = true;
+        try {
+          await api.put(`/users/${props.userData._id}/permissions`, {
+            permissions: customPermissions.value,
+          });
+          originalPermissions.value = JSON.parse(JSON.stringify(customPermissions.value));
+          alert('Behörigheterna har uppdaterats!');
+        } catch (error) {
+          console.error('Error saving permissions:', error);
+          alert('Kunde inte spara behörigheter.');
+        } finally {
+          isSavingPermissions.value = false;
+        }
+      };
 
       const municipalities = [
         'Botkyrka',
@@ -783,8 +1013,16 @@
         try {
           // The userData should already have roles from the details endpoint
           const roles = props.userData?.roles || []
+          // Ensure we're working with role values (strings), not objects
           selectedRoles.value = Array.isArray(roles) ? [...roles] : []
           originalRoles.value = Array.isArray(roles) ? [...roles] : []
+          
+          // Load custom permissions
+          const permissions = props.userData?.permissions || {}
+          customPermissions.value = permissions && typeof permissions === 'object' 
+            ? JSON.parse(JSON.stringify(permissions))
+            : {}
+          originalPermissions.value = JSON.parse(JSON.stringify(customPermissions.value))
         } catch (error) {
           console.error('Error loading roles:', error)
         } finally {
@@ -792,12 +1030,12 @@
         }
       }
       
-      const toggleRole = (role) => {
-        const index = selectedRoles.value.indexOf(role)
+      const toggleRole = (roleValue) => {
+        const index = selectedRoles.value.indexOf(roleValue)
         if (index > -1) {
           selectedRoles.value.splice(index, 1)
         } else {
-          selectedRoles.value.push(role)
+          selectedRoles.value.push(roleValue)
         }
       }
       
@@ -875,6 +1113,15 @@
         // Non-student specific
         selectedRoles,
         availableRoles,
+        features,
+        getPermissionText,
+        getPermissionClass,
+        customPermissions,
+        hasPermission,
+        togglePermission,
+        savePermissions,
+        isSavingPermissions,
+        hasPermissionChanges,
         loadingRoles,
         isSavingRoles,
         hasChanges,
@@ -1327,6 +1574,187 @@
     color: #6c757d;
     font-style: italic;
     padding: 20px;
+  }
+
+  /* Permission Matrix Styles */
+  .permission-matrix-container {
+    overflow-x: auto;
+    margin-bottom: 20px;
+  }
+
+  .permission-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .permission-matrix.editable {
+    width: 100%;
+  }
+
+  .permission-matrix thead {
+    background: #007bff;
+    color: white;
+  }
+
+  .permission-matrix th {
+    padding: 12px 8px;
+    text-align: center;
+    font-weight: 600;
+    border: 1px solid #0056b3;
+  }
+
+  .permission-matrix th:first-child {
+    text-align: left;
+    background: #0056b3;
+  }
+
+  .permission-toggle-header {
+    text-align: center !important;
+    width: 100px;
+  }
+
+  .permission-matrix td {
+    padding: 10px 8px;
+    border: 1px solid #dee2e6;
+    text-align: center;
+    font-size: 13px;
+  }
+
+  .permission-matrix .feature-name {
+    text-align: left;
+    font-weight: 500;
+    background: #f8f9fa;
+    min-width: 300px;
+  }
+
+  .permission-cell {
+    vertical-align: middle;
+  }
+
+  .editable-cell {
+    text-align: center;
+  }
+
+  /* Custom Checkbox Styles */
+  .permission-checkbox {
+    display: inline-block;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .permission-checkbox input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    height: 0;
+    width: 0;
+  }
+
+  .checkmark {
+    position: relative;
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    background-color: #fff;
+    border: 2px solid #dee2e6;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .permission-checkbox:hover .checkmark {
+    border-color: #007bff;
+    background-color: #f0f8ff;
+  }
+
+  .permission-checkbox input:checked ~ .checkmark {
+    background-color: #28a745;
+    border-color: #28a745;
+  }
+
+  .permission-checkbox input:checked ~ .checkmark:after {
+    content: "";
+    position: absolute;
+    display: block;
+    left: 8px;
+    top: 4px;
+    width: 6px;
+    height: 12px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .text-muted {
+    color: #6c757d;
+    font-size: 0.875rem;
+    margin-top: 5px;
+  }
+
+  .permission-yes {
+    background: #d4edda;
+    color: #155724;
+    font-weight: 500;
+  }
+
+  .permission-no {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .permission-limited {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .permission-legend {
+    padding-top: 15px;
+    border-top: 1px solid #dee2e6;
+  }
+
+  .permission-legend ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .permission-legend li {
+    margin: 5px 0;
+  }
+
+  .legend-yes,
+  .legend-limited,
+  .legend-no {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  .legend-yes {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+  }
+
+  .legend-limited {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+  }
+
+  .legend-no {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+  }
+
+  .mt-3 {
+    margin-top: 1rem;
+  }
+
+  .small {
+    font-size: 0.875rem;
   }
 
   .modal-overlay {
