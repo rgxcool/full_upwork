@@ -150,6 +150,9 @@ router.get("/search", authenticateUser, async (req, res) => {
                 }).select("_id username name email role roles"),
             ]);
 
+            // Get student emails to filter out users that are students
+            const studentEmails = new Set(students.map(s => s.email?.toLowerCase()).filter(Boolean));
+
             results.push(
                 ...students.map((student) => ({
                     id: student._id,
@@ -157,15 +160,21 @@ router.get("/search", authenticateUser, async (req, res) => {
                     type: "Elev",
                     extra: `Email: ${student.email}`,
                 })),
-                ...users.map((user) => ({
-                    id: user._id,
-                    name: user.name || user.username,
-                    type:
-                        user.role ||
-                        (Array.isArray(user.roles) ? user.roles[0] : null) ||
-                        "Användare",
-                    extra: `Email: ${user.email}`,
-                }))
+                // Only include users that are NOT students (by email match)
+                ...users
+                    .filter((user) => {
+                        const userEmail = user.email?.toLowerCase();
+                        return !userEmail || !studentEmails.has(userEmail);
+                    })
+                    .map((user) => ({
+                        id: user._id,
+                        name: user.name || user.username,
+                        type:
+                            user.role ||
+                            (Array.isArray(user.roles) ? user.roles[0] : null) ||
+                            "Användare",
+                        extra: `Email: ${user.email}`,
+                    }))
             );
         }
 
@@ -219,7 +228,19 @@ router.get("/search", authenticateUser, async (req, res) => {
             results.push(...courseMap.values());
         }
 
-        res.json(results);
+        // Deduplicate results by id and type
+        const seen = new Map();
+        const uniqueResults = [];
+        
+        for (const result of results) {
+            const key = `${result.id}_${result.type}`;
+            if (!seen.has(key)) {
+                seen.set(key, true);
+                uniqueResults.push(result);
+            }
+        }
+
+        res.json(uniqueResults);
     } catch (err) {
         console.error("❌ Search error:", err);
         res.status(500).json({ message: "Serverfel under sökning." });

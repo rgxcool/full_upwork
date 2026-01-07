@@ -7,7 +7,7 @@
       </div>
       <div class="card-body">
         <div class="alert alert-warning">
-          <p>Ingen användare hittades för denna elev. En användare måste skapas innan roller kan tilldelas.</p>
+          <p>Ingen användare hittades för denna elev. En användare måste skapas innan behörigheter kan tilldelas.</p>
         </div>
         <button 
           @click="createUserForStudent" 
@@ -24,80 +24,46 @@
       </div>
     </div>
 
-    <!-- Roles Section -->
+    <!-- Editable Permissions Section -->
     <div v-if="hasUser" class="card">
       <div class="card-header">
-        <h3>Användarroller</h3>
-      </div>
-      <div class="card-body">
-        <form @submit.prevent="savePermissions" class="permissions-form">
-          <div class="form-group">
-            <label for="roles" class="form-label">Välj roller</label>
-            <div
-              id="roles"
-              class="roles-list"
-              role="listbox"
-              aria-multiselectable="true"
-            >
-              <div
-                v-for="role in availableRoles"
-                :key="role.value"
-                class="role-item"
-                :class="{ selected: selectedRoles.includes(role.value) }"
-                @click="toggleRole(role.value)"
-              >
-                {{ role.label }}
-              </div>
-            </div>
-            <small class="form-help">Klicka för att välja/avmarkera roller.</small>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary" :disabled="isSaving">
-              {{ isSaving ? 'Sparar...' : 'Spara roller' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Permission Matrix Section -->
-    <div v-if="hasUser" class="card mt-4">
-      <div class="card-header">
-        <h3>Behörighetsmatris</h3>
+        <h3>Behörigheter</h3>
+        <p class="small text-muted">Klicka på kryssrutor för att aktivera/inaktivera behörigheter för denna elev</p>
       </div>
       <div class="card-body">
         <div class="permission-matrix-container">
-          <table class="permission-matrix">
+          <table class="permission-matrix editable">
             <thead>
               <tr>
                 <th>Funktion</th>
-                <th v-for="role in availableRoles" :key="role.value" class="role-header">
-                  {{ role.label }}
-                </th>
+                <th class="permission-toggle-header">Tillåt</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="feature in features" :key="feature.value">
                 <td class="feature-name">{{ feature.label }}</td>
-                <td 
-                  v-for="role in availableRoles" 
-                  :key="`${feature.value}-${role.value}`"
-                  class="permission-cell"
-                  :class="getPermissionClass(role.value, feature.value)"
-                >
-                  {{ getPermissionText(role.value, feature.value) }}
+                <td class="permission-cell editable-cell">
+                  <label class="permission-checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="hasPermission(feature.value)"
+                      @change="togglePermission(feature.value, $event.target.checked)"
+                    />
+                    <span class="checkmark"></span>
+                  </label>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div class="permission-legend mt-3">
-          <p class="small"><strong>Förklaring:</strong></p>
-          <ul class="small">
-            <li><span class="legend-yes">Ja</span> - Full tillgång</li>
-            <li><span class="legend-limited">Begränsad</span> - Begränsad tillgång (se text)</li>
-            <li><span class="legend-no">Nej</span> - Ingen tillgång</li>
-          </ul>
+        <div class="form-actions mt-3">
+          <button 
+            @click="savePermissions" 
+            class="btn btn-primary" 
+            :disabled="isSavingPermissions || !hasPermissionChanges"
+          >
+            {{ isSavingPermissions ? 'Sparar...' : 'Spara behörigheter' }}
+          </button>
         </div>
       </div>
     </div>
@@ -200,16 +166,6 @@ const FEATURES = [
   { value: 'add_municipalities_courses', label: 'Lägga till kommuner, kurser etc' },
 ];
 
-const ROLES = [
-  { value: 'systemadmin', label: 'Systemadministratör' },
-  { value: 'admin', label: 'Administratör' },
-  { value: 'teacher', label: 'Lärare' },
-  { value: 'syv', label: 'SYV' },
-  { value: 'specped', label: 'Specped.' },
-  { value: 'coordinator', label: 'Praktiksamordnar' },
-  { value: 'student', label: 'Elev' },
-];
-
 export default {
   name: 'PermissionsTab',
   props: {
@@ -221,57 +177,94 @@ export default {
   setup(props) {
     const store = useStore();
     const route = useRoute();
-    const isSaving = ref(false);
+    const isSavingPermissions = ref(false);
     const isCreatingUser = ref(false);
     const createdUserPassword = ref(null);
-    const selectedRoles = ref([]);
-    const availableRoles = ref(ROLES);
     const features = ref(FEATURES);
+    
+    // Custom permissions state
+    const customPermissions = ref({});
+    const originalPermissions = ref({});
 
     const isAdmin = computed(() => store.getters.isAdmin);
     const hasUser = computed(() => {
       return props.student && props.student.user && props.student.user._id;
     });
 
-    const getPermissionText = (role, feature) => {
-      return PERMISSION_MATRIX[feature]?.[role] || 'Nej';
+    // Check if user has custom permission for a feature
+    const hasPermission = (feature) => {
+      // Check custom permissions first - if explicitly set (true or false), use that
+      if (customPermissions.value && customPermissions.value.hasOwnProperty(feature)) {
+        return customPermissions.value[feature] === true;
+      }
+      // If no custom permission set, check if any of the user's roles have this permission
+      const userRoles = props.student?.user?.roles || [];
+      for (const role of userRoles) {
+        const rolePermission = PERMISSION_MATRIX[feature]?.[role];
+        if (rolePermission && rolePermission !== 'Nej') {
+          return true;
+        }
+      }
+      return false;
     };
 
-    const getPermissionClass = (role, feature) => {
-      const permission = getPermissionText(role, feature);
-      if (permission === 'Ja') {
-        return 'permission-yes';
-      } else if (permission === 'Nej') {
-        return 'permission-no';
+    // Toggle permission for a feature
+    const togglePermission = (feature, enabled) => {
+      // Create a new object to ensure reactivity
+      customPermissions.value = {
+        ...customPermissions.value,
+        [feature]: enabled
+      };
+    };
+
+    // Check if permissions have changed
+    const hasPermissionChanges = computed(() => {
+      // Normalize both objects - remove undefined and null values, sort keys
+      const normalize = (obj) => {
+        if (!obj || typeof obj !== 'object') return {};
+        const normalized = {};
+        Object.keys(obj).sort().forEach(key => {
+          const value = obj[key];
+          // Only include truthy values or explicit false (but not undefined/null)
+          if (value !== undefined && value !== null) {
+            normalized[key] = value;
+          }
+        });
+        return normalized;
+      };
+      
+      const currentNormalized = normalize(customPermissions.value);
+      const originalNormalized = normalize(originalPermissions.value);
+      
+      const current = JSON.stringify(currentNormalized);
+      const original = JSON.stringify(originalNormalized);
+      
+      return current !== original;
+    });
+
+    // Load permissions when user data is available
+    const loadPermissions = () => {
+      if (props.student?.user?.permissions) {
+        const permissions = props.student.user.permissions;
+        customPermissions.value = permissions && typeof permissions === 'object' 
+          ? JSON.parse(JSON.stringify(permissions))
+          : {};
+        originalPermissions.value = JSON.parse(JSON.stringify(customPermissions.value));
       } else {
-        return 'permission-limited';
+        customPermissions.value = {};
+        originalPermissions.value = {};
       }
     };
 
     onMounted(() => {
-      if (props.student && props.student.user && props.student.user.roles) {
-        selectedRoles.value = [...props.student.user.roles];
-      }
+      loadPermissions();
     });
 
     // Watch for student changes
     watch(() => props.student, (newStudent) => {
-      if (newStudent && newStudent.user && newStudent.user.roles) {
-        selectedRoles.value = [...newStudent.user.roles];
-      } else {
-        selectedRoles.value = [];
-      }
+      loadPermissions();
       createdUserPassword.value = null;
     }, { deep: true });
-
-    const toggleRole = (role) => {
-      const index = selectedRoles.value.indexOf(role);
-      if (index > -1) {
-        selectedRoles.value.splice(index, 1);
-      } else {
-        selectedRoles.value.push(role);
-      }
-    };
 
     const createUserForStudent = async () => {
       if (!props.student || !props.student._id) {
@@ -301,40 +294,37 @@ export default {
     };
 
     const savePermissions = async () => {
-      isSaving.value = true;
+      if (!props.student || !props.student.user || !props.student.user._id) {
+        alert('Ingen användare hittades för denna elev. Kan inte spara behörigheter.');
+        return;
+      }
+      isSavingPermissions.value = true;
       try {
-        if (!props.student || !props.student.user || !props.student.user._id) {
-          alert('Ingen användare hittades för denna elev. Kan inte spara roller.');
-          return;
-        }
-        await api.put(`/users/${props.student.user._id}/roles`, {
-          roles: selectedRoles.value,
+        await api.put(`/users/${props.student.user._id}/permissions`, {
+          permissions: customPermissions.value,
         });
-        alert('Rollerna har uppdaterats!');
-        // Reload to get updated user data
-        window.location.reload();
+        originalPermissions.value = JSON.parse(JSON.stringify(customPermissions.value));
+        alert('Behörigheterna har uppdaterats!');
       } catch (error) {
         console.error('Error saving permissions:', error);
-        alert('Kunde inte spara roller.');
+        alert('Kunde inte spara behörigheter.');
       } finally {
-        isSaving.value = false;
+        isSavingPermissions.value = false;
       }
     };
 
     return {
       isAdmin,
       hasUser,
-      isSaving,
+      isSavingPermissions,
       isCreatingUser,
       createdUserPassword,
-      selectedRoles,
-      availableRoles,
       features,
-      toggleRole,
+      hasPermission,
+      togglePermission,
       savePermissions,
       createUserForStudent,
-      getPermissionText,
-      getPermissionClass,
+      hasPermissionChanges,
     };
   },
 };
@@ -494,6 +484,10 @@ export default {
   font-size: 14px;
 }
 
+.permission-matrix.editable {
+  width: 100%;
+}
+
 .permission-matrix thead {
   background: #007bff;
   color: white;
@@ -511,6 +505,11 @@ export default {
   background: #0056b3;
 }
 
+.permission-toggle-header {
+  text-align: center !important;
+  width: 100px;
+}
+
 .permission-matrix td {
   padding: 10px 8px;
   border: 1px solid #dee2e6;
@@ -522,67 +521,70 @@ export default {
   text-align: left;
   font-weight: 500;
   background: #f8f9fa;
-  min-width: 250px;
+  min-width: 300px;
 }
 
 .permission-cell {
   vertical-align: middle;
 }
 
-.permission-yes {
-  background: #d4edda;
-  color: #155724;
-  font-weight: 500;
+.editable-cell {
+  text-align: center;
 }
 
-.permission-no {
-  background: #f8d7da;
-  color: #721c24;
-}
-
-.permission-limited {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.permission-legend {
-  padding-top: 15px;
-  border-top: 1px solid #dee2e6;
-}
-
-.permission-legend ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.permission-legend li {
-  margin: 5px 0;
-}
-
-.legend-yes,
-.legend-limited,
-.legend-no {
+/* Custom Checkbox Styles */
+.permission-checkbox {
   display: inline-block;
-  width: 20px;
-  height: 20px;
-  border-radius: 3px;
-  margin-right: 8px;
-  vertical-align: middle;
+  position: relative;
+  cursor: pointer;
+  user-select: none;
 }
 
-.legend-yes {
-  background: #d4edda;
-  border: 1px solid #c3e6cb;
+.permission-checkbox input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
 }
 
-.legend-limited {
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
+.checkmark {
+  position: relative;
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background-color: #fff;
+  border: 2px solid #dee2e6;
+  border-radius: 4px;
+  transition: all 0.2s;
 }
 
-.legend-no {
-  background: #f8d7da;
-  border: 1px solid #f5c6cb;
+.permission-checkbox:hover .checkmark {
+  border-color: #007bff;
+  background-color: #f0f8ff;
+}
+
+.permission-checkbox input:checked ~ .checkmark {
+  background-color: #28a745;
+  border-color: #28a745;
+}
+
+.permission-checkbox input:checked ~ .checkmark:after {
+  content: "";
+  position: absolute;
+  display: block;
+  left: 8px;
+  top: 4px;
+  width: 6px;
+  height: 12px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.text-muted {
+  color: #6c757d;
+  font-size: 0.875rem;
+  margin-top: 5px;
 }
 </style>

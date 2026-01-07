@@ -148,11 +148,48 @@ router.put(
 );
 
 /**
+ * Reset user password and return new temporary password
+ * POST /api/users/:userId/reset-password
+ */
+router.post(
+    "/users/:userId/reset-password",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { userId } = req.params;
+
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).send({ message: "User not found." });
+            }
+
+            // Generate a new temporary password
+            const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12).toUpperCase();
+            const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+            user.password = hashedPassword;
+            await user.save();
+
+            res.send({
+                message: "Password reset successfully.",
+                tempPassword: tempPassword, // Return the plain text password for admin display
+            });
+        } catch (error) {
+            console.error("Error resetting password:", error);
+            res.status(500).send({
+                message: "An error occurred while resetting password.",
+            });
+        }
+    }
+);
+
+/**
  * Create a user account for a student
  * POST /api/users/create-for-student
  */
 router.post(
-    "/create-for-student",
+    "/users/create-for-student",
     isAuthenticated,
     hasRole(["admin", "systemadmin"]),
     async (req, res) => {
