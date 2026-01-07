@@ -74,6 +74,21 @@
             <span v-else>{{ student.email || 'Ej angivet' }}</span>
           </div>
 
+          <div v-if="isAdmin && student.user" class="info-item">
+            <label>Lösenord:</label>
+            <div class="password-display" style="display: flex; align-items: center; gap: 10px;">
+              <code v-if="studentPassword" style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px; font-family: monospace;">{{ studentPassword }}</code>
+              <span v-else class="password-placeholder" style="color: #6c757d;">••••••••</span>
+              <button
+                @click="resetPassword"
+                class="btn btn-sm btn-outline-primary"
+                :disabled="resettingPassword"
+              >
+                {{ resettingPassword ? 'Återställer...' : studentPassword ? 'Återställ lösenord' : 'Visa/Återställ lösenord' }}
+              </button>
+            </div>
+          </div>
+
           <div class="info-item">
             <label>Kommun:</label>
             <select
@@ -238,15 +253,25 @@
         <div v-if="changeHistory && changeHistory.length > 0" class="history-list">
           <div v-for="(change, index) in changeHistory" :key="index" class="history-item">
             <div class="history-header">
-              <span class="history-date">{{ formatDate(change.timestamp) }}</span>
-              <span class="history-user">{{ change.changedByRole }}</span>
+              <div class="history-meta">
+                <span class="history-date">{{ formatDateTime(change.timestamp) }}</span>
+                <span class="history-user">{{ formatRole(change.changedByRole) }}</span>
+              </div>
             </div>
             <div class="history-changes">
               <div v-for="field in change.changes" :key="field" class="change-item">
-                <strong>{{ field }}:</strong>
-                <span class="change-from">{{ change.previousValues[field] || 'tomt' }}</span>
-                <span class="change-arrow">→</span>
-                <span class="change-to">{{ change.newValues[field] || 'tomt' }}</span>
+                <div class="change-field-label">{{ getFieldLabel(field) }}</div>
+                <div class="change-values">
+                  <div class="change-value old">
+                    <span class="change-label">Före:</span>
+                    <span class="change-content">{{ formatChangeValue(change.previousValues[field]) }}</span>
+                  </div>
+                  <div class="change-arrow">→</div>
+                  <div class="change-value new">
+                    <span class="change-label">Efter:</span>
+                    <span class="change-content">{{ formatChangeValue(change.newValues[field]) }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -328,6 +353,8 @@ export default {
     const newComment = ref('');
     const editingComment = ref(null);
     const localStudent = ref(props.student);
+    const studentPassword = ref(null);
+    const resettingPassword = ref(false);
 
     const editData = ref({});
 
@@ -460,6 +487,92 @@ export default {
       if (!date) return '';
       return new Date(date).toLocaleDateString('sv-SE');
     };
+
+    const formatDateTime = (date) => {
+      if (!date) return '';
+      const d = new Date(date);
+      return d.toLocaleString('sv-SE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
+
+    const formatRole = (role) => {
+      const roleMap = {
+        'admin': 'Administratör',
+        'systemadmin': 'Systemadministratör',
+        'teacher': 'Lärare',
+        'syv': 'SYV',
+        'specped': 'Specped.',
+        'coordinator': 'Praktiksamordnare',
+        'student': 'Elev'
+      };
+      return roleMap[role] || role;
+    };
+
+    const getFieldLabel = (field) => {
+      const fieldLabels = {
+        'name': 'Namn',
+        'personalNumber': 'Personnummer',
+        'phone': 'Telefon',
+        'email': 'E-post',
+        'municipality': 'Kommun',
+        'aplStatus': 'APL-status',
+        'startDate': 'Startdatum',
+        'endDate': 'Slutdatum',
+        'exam': 'Provstatus',
+        'additionalInfo': 'Övrigt',
+        'specialNeeds': 'Specialbehov'
+      };
+      return fieldLabels[field] || field;
+    };
+
+    const formatChangeValue = (value) => {
+      if (value === null || value === undefined || value === '') {
+        return '<em>tomt</em>';
+      }
+      
+      // Handle date values
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+        try {
+          return formatDate(value);
+        } catch (e) {
+          return value;
+        }
+      }
+      
+      // Handle objects (like municipality)
+      if (typeof value === 'object' && value !== null) {
+        if (value.type) {
+          return value.type;
+        }
+        return JSON.stringify(value);
+      }
+      
+      return value;
+    };
+
+    const resetPassword = async () => {
+      if (!props.student?.user?._id) {
+        alert('Ingen användare hittades för denna elev.');
+        return;
+      }
+      
+      resettingPassword.value = true;
+      try {
+        const response = await api.post(`/users/${props.student.user._id}/reset-password`);
+        studentPassword.value = response.data.tempPassword;
+        alert('Lösenordet har återställts! Det nya lösenordet visas nedan.');
+      } catch (error) {
+        console.error('Error resetting password:', error);
+        alert('Kunde inte återställa lösenord.');
+      } finally {
+        resettingPassword.value = false;
+      }
+    };
     
     onMounted(() => {
         initializeEditData();
@@ -477,6 +590,8 @@ export default {
       isAdmin,
       canComment,
       activeComments,
+      studentPassword,
+      resettingPassword,
       toggleEditMode,
       saveChanges,
       cancelEdit,
@@ -487,6 +602,11 @@ export default {
       canEditComment,
       canDeleteComment,
       formatDate,
+      formatDateTime,
+      formatRole,
+      getFieldLabel,
+      formatChangeValue,
+      resetPassword,
     };
   },
 };
@@ -664,52 +784,123 @@ export default {
   .history-list {
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 20px;
   }
 
   .history-item {
-    padding: 15px;
+    padding: 20px;
     border: 1px solid #dee2e6;
-    border-radius: 4px;
+    border-radius: 8px;
+    background: #f8f9fa;
+    transition: box-shadow 0.2s;
+  }
+
+  .history-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 
   .history-header {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .history-meta {
     display: flex;
-    gap: 10px;
+    gap: 15px;
     align-items: center;
-    margin-bottom: 10px;
+    flex-wrap: wrap;
   }
 
   .history-date {
-    font-weight: 500;
+    font-weight: 600;
+    color: #495057;
+    font-size: 14px;
   }
 
   .history-user {
-    background: #28a745;
+    background: #007bff;
     color: white;
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .history-changes {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
   }
 
   .change-item {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 5px;
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 3px solid #007bff;
   }
 
-  .change-arrow {
+  .change-field-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .change-values {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+  }
+
+  .change-value {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 150px;
+  }
+
+  .change-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     color: #6c757d;
   }
 
-  .change-from {
+  .change-content {
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    word-break: break-word;
+  }
+
+  .change-value.old .change-content {
+    background: #fff5f5;
     color: #dc3545;
     text-decoration: line-through;
   }
 
-  .change-to {
+  .change-value.new .change-content {
+    background: #f0fff4;
     color: #28a745;
+    font-weight: 500;
+  }
+
+  .change-arrow {
+    color: #6c757d;
+    font-size: 20px;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  .change-content em {
+    color: #6c757d;
+    font-style: italic;
   }
     .modal-overlay {
     position: fixed;
