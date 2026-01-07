@@ -34,7 +34,16 @@
                   <span class="drag-handle" title="Dra för att ändra ordning">☰</span>
                   <span class="education-type">{{ element.type }}</span>
                   <span v-if="element.isEnrollment" class="enrollment-badge">Inskriven</span>
-                  <span class="education-name">
+                  <span v-if="element.type === 'Course' && (element.courseInstanceId || element.refId?._id)" class="education-name">
+                    <router-link 
+                      :to="getCourseLink(element)" 
+                      class="course-link"
+                      @click.stop
+                    >
+                      {{ getEducationName(element) }}
+                    </router-link>
+                  </span>
+                  <span v-else class="education-name">
                     {{ getEducationName(element) }}
                   </span>
                 </div>
@@ -172,11 +181,27 @@ export default {
       return new Date(date).toLocaleDateString('sv-SE');
     };
 
+    const getCourseLink = (edu) => {
+      // Always prefer linking to the main course to show all enrolled students
+      // This ensures consistency - clicking a course name shows all students in that course
+      // regardless of which course instance they're enrolled in
+      if (edu.refId?._id) {
+        return `/education/${edu.refId._id}`;
+      }
+      // Fallback: if no main course ID, try course instance (shouldn't happen normally)
+      if (edu.courseInstanceId) {
+        return `/education/${edu.courseInstanceId}?type=instance`;
+      }
+      // Fallback to empty string if no ID available
+      return '#';
+    };
+
     return {
       sortedEducation,
       handleEducationReorder,
       getEducationName,
       formatDate,
+      getCourseLink,
     };
   },
 };
@@ -228,6 +253,18 @@ export default {
 }
 .education-name {
   font-weight: 500;
+}
+
+.course-link {
+  color: #007bff;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.course-link:hover {
+  color: #0056b3;
+  text-decoration: underline;
 }
 .education-grade {
   margin-top: 5px;
