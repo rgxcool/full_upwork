@@ -662,6 +662,7 @@
         { name: 'Lägg till Lärare', link: '/lagg-till-larare', role: 'admin' },
         { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
         { name: 'Elever', link: '/students', role: ['admin', 'teacher'] },
+        { name: 'Kurser', link: '/larare/kurser', role: 'teacher' },
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Prövningar', link: '/examform', role: 'student' },

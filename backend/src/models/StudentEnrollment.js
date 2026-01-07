@@ -16,6 +16,17 @@ const studentEnrollmentSchema = new mongoose.Schema(
             required: true,
         },
 
+        // New fields for teacher enrollment
+        needsSupport: {
+            type: Boolean,
+            default: false,
+        },
+        examMode: {
+            type: String,
+            enum: ["on-site", "remote"],
+            default: "on-site",
+        },
+
         // Main course reference (for easy querying)
         mainCourseId: {
             type: mongoose.Schema.Types.ObjectId,
