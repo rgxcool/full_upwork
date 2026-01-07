@@ -1,33 +1,46 @@
 <!-- DocumentSection.vue -->
 <template>
   <div class="document-section">
-    <form @submit.prevent="uploadFile">
-      <input type="file" @change="handleFileChange" />
-      <button type="submit" :disabled="!selectedFile">Ladda upp</button>
-    </form>
+    <div v-if="!isStudent" class="not-available-message">
+      <p>Dokumenthantering är endast tillgänglig för elever.</p>
+    </div>
+    <div v-else>
+      <form @submit.prevent="uploadFile">
+        <input type="file" @change="handleFileChange" />
+        <button type="submit" :disabled="!selectedFile">Ladda upp</button>
+      </form>
 
-    <ul v-if="documents.length">
-      <li v-for="doc in documents" :key="doc._id">
-        <a :href="`${baseURL}/uploads/${doc.filename}`" target="_blank">{{
-          doc.originalName
-        }}</a>
-        <button @click="deleteFile(doc._id)">🗑️</button>
-      </li>
-    </ul>
+      <ul v-if="documents.length">
+        <li v-for="doc in documents" :key="doc._id">
+          <a :href="`${baseURL}/uploads/${doc.filename}`" target="_blank">{{
+            doc.originalName
+          }}</a>
+          <button @click="deleteFile(doc._id)">🗑️</button>
+        </li>
+      </ul>
 
-    <p v-else>Inga dokument uppladdade än.</p>
+      <p v-else>Inga dokument uppladdade än.</p>
+    </div>
   </div>
 </template>
 
 <script>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import { api } from '@/store/store.js';
 
 export default {
   props: {
     student: {
       type: Object,
-      required: true,
+      required: false,
+    },
+    userData: {
+      type: Object,
+      required: false,
+    },
+    userType: {
+      type: String,
+      default: null,
     },
     type: {
       type: String,
@@ -43,14 +56,31 @@ export default {
     const selectedFile = ref(null);
     const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+    // Determine if this is a student
+    const isStudent = computed(() => {
+      if (props.student) return true;
+      if (props.userData && (props.userType === 'Elev' || props.userType === 'student')) return true;
+      return false;
+    });
+
+    // Get the student ID
+    const studentId = computed(() => {
+      if (props.student?._id) return props.student._id;
+      if (props.userData && (props.userType === 'Elev' || props.userType === 'student')) {
+        return props.userData._id;
+      }
+      return null;
+    });
+
     const fetchDocuments = async () => {
-      if (!props.student?._id) return;
+      const id = studentId.value;
+      if (!id) return;
       try {
         const params = { type: props.type };
         if (props.enrollmentId) {
           params.enrollmentId = props.enrollmentId;
         }
-        const res = await api.get(`/documents/${props.student._id}`, { params });
+        const res = await api.get(`/documents/${id}`, { params });
         documents.value = res.data;
       } catch (error) {
         console.error('Error fetching documents:', error);
@@ -62,11 +92,12 @@ export default {
     };
 
     const uploadFile = async () => {
-      if (!selectedFile.value || !props.student?._id) return;
+      const id = studentId.value;
+      if (!selectedFile.value || !id) return;
 
       const formData = new FormData();
       formData.append('file', selectedFile.value);
-      formData.append('studentId', props.student._id);
+      formData.append('studentId', id);
       formData.append('type', props.type);
       if (props.enrollmentId) {
         formData.append('enrollmentId', props.enrollmentId);
@@ -99,12 +130,22 @@ export default {
       }
     };
 
-    onMounted(fetchDocuments);
-    watch(() => [props.student._id, props.type, props.enrollmentId], fetchDocuments);
+    onMounted(() => {
+      if (isStudent.value) {
+        fetchDocuments();
+      }
+    });
+    
+    watch(() => [studentId.value, props.type, props.enrollmentId], () => {
+      if (isStudent.value) {
+        fetchDocuments();
+      }
+    });
 
     return {
       documents,
       selectedFile,
+      isStudent,
       handleFileChange,
       uploadFile,
       deleteFile,
@@ -123,5 +164,14 @@ form {
 }
 button {
   margin-left: 10px;
+}
+.not-available-message {
+  padding: 20px;
+  text-align: center;
+  color: #666;
+}
+.not-available-message p {
+  margin: 0;
+  font-size: 16px;
 }
 </style>
