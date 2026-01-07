@@ -380,6 +380,58 @@
           </div>
         </div>
       </div>
+
+      <!-- Courses section (for teachers) -->
+      <div v-if="(userType === 'Lärare' || userType === 'teacher') && (userData?.courseInstances?.length > 0 || userData?.courses?.length > 0)" class="card">
+        <div class="card-header">
+          <h3>Ansvariga kurser</h3>
+        </div>
+        <div class="card-body">
+          <!-- Course Instances (where teacher is responsible) -->
+          <div v-if="userData?.courseInstances?.length > 0" class="courses-section">
+            <h4>Kursinstanser</h4>
+            <ul class="courses-list">
+              <li v-for="instance in userData.courseInstances" :key="instance._id" class="course-item">
+                <router-link 
+                  :to="`/education/${instance._id}?type=instance`" 
+                  class="course-link"
+                >
+                  <div class="course-name">{{ instance.courseName }}</div>
+                  <div class="course-details">
+                    <span class="course-code">{{ instance.courseCode }}</span>
+                    <span v-if="instance.startDate && instance.endDate" class="course-dates">
+                      {{ formatDate(instance.startDate) }} - {{ formatDate(instance.endDate) }}
+                    </span>
+                  </div>
+                </router-link>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Main Courses (from enrollments) -->
+          <div v-if="userData?.courses?.length > 0" class="courses-section">
+            <h4 v-if="userData?.courseInstances?.length > 0">Kurser (från inskrivningar)</h4>
+            <h4 v-else>Kurser</h4>
+            <ul class="courses-list">
+              <li v-for="course in userData.courses" :key="course._id" class="course-item">
+                <router-link 
+                  :to="`/education/${course._id}`" 
+                  class="course-link"
+                >
+                  <div class="course-name">{{ course.courseName }}</div>
+                  <div class="course-details">
+                    <span class="course-code">{{ course.courseCode }}</span>
+                  </div>
+                </router-link>
+              </li>
+            </ul>
+          </div>
+
+          <div v-if="(!userData?.courseInstances || userData.courseInstances.length === 0) && (!userData?.courses || userData.courses.length === 0)" class="no-courses">
+            Inga kurser tilldelade
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- Comment Modal -->
@@ -1191,6 +1243,90 @@
 
   .change-to {
     color: #28a745;
+  }
+
+  .courses-section {
+    margin-bottom: 30px;
+  }
+
+  .courses-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .courses-section h4 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .courses-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .course-item {
+    margin-bottom: 10px;
+  }
+
+  .course-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .course-link {
+    display: block;
+    padding: 12px 15px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+    background: #f8f9fa;
+  }
+
+  .course-link:hover {
+    background: #e9ecef;
+    border-color: #007bff;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.1);
+  }
+
+  .course-name {
+    font-weight: 600;
+    color: #007bff;
+    margin-bottom: 5px;
+    font-size: 15px;
+  }
+
+  .course-link:hover .course-name {
+    text-decoration: underline;
+  }
+
+  .course-details {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    font-size: 13px;
+    color: #6c757d;
+    flex-wrap: wrap;
+  }
+
+  .course-code {
+    background: #e9ecef;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .course-dates {
+    color: #495057;
+  }
+
+  .no-courses {
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
+    padding: 20px;
   }
 
   .modal-overlay {

@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import User from "../models/User.js";
 import Course from "../models/Course.js";
+import CourseInstance from "../models/CourseInstance.js";
 import CoursePackage from "../models/CoursePackage.js";
 import Program from "../models/Program.js";
 import Student from "../models/Student.js";
@@ -284,10 +285,30 @@ router.get("/details/:type/:id", async (req, res) => {
                     }
                 }
 
+                // Fetch course instances where this teacher is responsible
+                const courseInstances = await CourseInstance.find({
+                    responsibleTeacher: teacherProfile._id,
+                })
+                    .populate("mainCourseId", "courseName courseCode")
+                    .sort({ startDate: -1 })
+                    .lean();
+
+                // Format course instances for frontend
+                const formattedCourseInstances = courseInstances.map((instance) => ({
+                    _id: instance._id,
+                    courseName: instance.courseName,
+                    courseCode: instance.courseCode,
+                    startDate: instance.startDate,
+                    endDate: instance.endDate,
+                    isCourseInstance: true,
+                    mainCourseId: instance.mainCourseId,
+                }));
+
                 result = {
                     ...teacherUser,
                     students: Array.from(studentsMap.values()),
                     courses: Array.from(coursesMap.values()),
+                    courseInstances: formattedCourseInstances,
                 };
                 break;
 
@@ -330,12 +351,14 @@ router.get("/details/:type/:id", async (req, res) => {
                             const teacherUser = await User.findById(
                                 enrollment.teacherId.userId
                             )
-                                .select("username")
+                                .select("username email")
                                 .lean();
                             if (teacherUser) {
-                                teachersMap.set(enrollment.teacherId._id.toString(), {
-                                    _id: enrollment.teacherId._id,
+                                // Use User ID, not Teacher ID, for the route
+                                teachersMap.set(teacherUser._id.toString(), {
+                                    _id: teacherUser._id, // User ID for the route
                                     username: teacherUser.username,
+                                    email: teacherUser.email || "",
                                 });
                             }
                         }
@@ -353,6 +376,92 @@ router.get("/details/:type/:id", async (req, res) => {
                 } catch (courseError) {
                     console.error("❌ Error in Kurs case:", courseError);
                     return res.status(500).json({ message: "Serverfel vid hämtning av kursdetaljer" });
+                }
+                break;
+
+            case "Kursinstans":
+            case "CourseInstance":
+                try {
+                    const courseInstance = await CourseInstance.findById(id)
+                        .populate("mainCourseId")
+                        .populate({
+                            path: "responsibleTeacher",
+                            populate: { path: "userId", select: "username email" },
+                            select: "userId subject",
+                        })
+                        .lean();
+
+                    if (!courseInstance) {
+                        return res.status(404).json({ message: "Course instance not found" });
+                    }
+
+                    // Get all enrollments for this course instance
+                    const enrollments = await StudentEnrollment.find({
+                        courseInstanceId: id,
+                    })
+                        .populate("studentId", "name email")
+                        .populate("teacherId")
+                        .lean();
+
+                    const students = enrollments
+                        .map((e) => e.studentId)
+                        .filter(Boolean);
+
+                    const uniqueStudents = Array.from(
+                        new Map(students.map((s) => [s._id.toString(), s])).values()
+                    );
+
+                    // Get responsible teacher from course instance (if set)
+                    let teacher = null;
+                    if (courseInstance.responsibleTeacher) {
+                        const responsibleTeacherUserId = courseInstance.responsibleTeacher.userId?._id || courseInstance.responsibleTeacher.userId;
+                        teacher = {
+                            _id: responsibleTeacherUserId, // Use User ID, not Teacher ID
+                            username: courseInstance.responsibleTeacher.userId?.username || "Okänd",
+                            email: courseInstance.responsibleTeacher.userId?.email || "",
+                        };
+                    }
+
+                    // Also collect teachers from enrollments (in case course instance doesn't have responsibleTeacher)
+                    const teachersMap = new Map();
+                    
+                    // Add responsible teacher if it exists
+                    if (teacher) {
+                        teachersMap.set(teacher._id.toString(), teacher);
+                    }
+
+                    // Add teachers from enrollments
+                    for (const enrollment of enrollments) {
+                        if (enrollment.teacherId) {
+                            const teacherUser = await User.findById(
+                                enrollment.teacherId.userId
+                            )
+                                .select("username email")
+                                .lean();
+                            if (teacherUser) {
+                                // Use User ID, not Teacher ID, for the route
+                                teachersMap.set(teacherUser._id.toString(), {
+                                    _id: teacherUser._id, // User ID for the route
+                                    username: teacherUser.username,
+                                    email: teacherUser.email || "",
+                                });
+                            }
+                        }
+                    }
+
+                    const teachers = Array.from(teachersMap.values());
+
+                    result = {
+                        ...courseInstance,
+                        courseName: courseInstance.courseName,
+                        students: uniqueStudents,
+                        teacher: teacher, // Keep for backward compatibility
+                        teachers: teachers, // Array of all teachers (from instance + enrollments)
+                        isCourseInstance: true,
+                    };
+                } catch (courseInstanceError) {
+                    console.error("❌ Error in Kursinstans case:", courseInstanceError);
+                    return res.status(500).json({ message: "Serverfel vid hämtning av kursinstansdetaljer" });
                 }
                 break;
 
