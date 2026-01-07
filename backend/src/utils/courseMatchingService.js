@@ -138,8 +138,7 @@ class CourseMatchingService {
             }
 
             console.log(
-                `✅ Found existing course instance: ${
-                    existingInstance.courseName
+                `✅ Found existing course instance: ${existingInstance.courseName
                 } (${existingInstance.startDate.toDateString()} - ${existingInstance.endDate.toDateString()})`
             );
             return { instance: existingInstance, wasCreated: false };
@@ -173,8 +172,7 @@ class CourseMatchingService {
         await newInstance.save();
 
         console.log(
-            `🆕 Created new course instance: ${
-                newInstance.courseName
+            `🆕 Created new course instance: ${newInstance.courseName
             } (${newInstance.startDate.toDateString()} - ${newInstance.endDate.toDateString()})`
         );
 
@@ -187,7 +185,8 @@ class CourseMatchingService {
     static async processStudentEducation(
         studentId,
         educationEntries,
-        userId = null
+        userId = null,
+        options = {}
     ) {
         const { default: StudentEnrollment } = await import(
             "../models/StudentEnrollment.js"
@@ -211,7 +210,7 @@ class CourseMatchingService {
                     "../models/CoursePackage.js"
                 );
                 const allPackages = await CoursePackage.find({}).lean();
-                
+
                 // Normalize entry as code: uppercase, remove spaces
                 // Normalize entry code using the same function as database codes
                 // (entry.name already has cleanCourseName applied during parsing)
@@ -222,7 +221,7 @@ class CourseMatchingService {
                     const normalizedCode = normalizeCodeForMatching(pkg.coursePackageCode || "");
                     return normalizedCode === normalizedEntryCode;
                 });
-                
+
                 if (packageMatch) {
                     console.log(
                         `[DEBUG] Exact package match found: '${entry.name}' → '${packageMatch.coursePackageCode}' (${packageMatch.coursePackageName})`
@@ -309,9 +308,8 @@ class CourseMatchingService {
                             type: "instance_created",
                             courseName: entry.name,
                             instanceId: instance._id,
-                            message: `Created new course instance for "${
-                                entry.name
-                            }" (${instance.startDate.toDateString()} - ${instance.endDate.toDateString()})`,
+                            message: `Created new course instance for "${entry.name
+                                }" (${instance.startDate.toDateString()} - ${instance.endDate.toDateString()})`,
                         });
                     }
 
@@ -353,8 +351,7 @@ class CourseMatchingService {
                             `[DEBUG] 🔍 Student name: ${studentDocA.name}`
                         );
                         console.log(
-                            `[DEBUG] 🔍 Current education entries: ${
-                                studentDocA.education?.length || 0
+                            `[DEBUG] 🔍 Current education entries: ${studentDocA.education?.length || 0
                             }`
                         );
                     }
@@ -370,12 +367,12 @@ class CourseMatchingService {
                         teacherId:
                             studentDocA?.teacherId || entry.teacherId || null,
                         notes: entry.notes || null,
+                        needsSupport: options.needsSupport || false,
+                        examMode: options.examMode || 'on-site',
                     });
                     console.log(
-                        `[DEBUG] Creating individual course enrollment with teacherId: ${
-                            enrollment.teacherId || "null"
-                        } (studentDocA.teacherId: ${
-                            studentDocA?.teacherId || "null"
+                        `[DEBUG] Creating individual course enrollment with teacherId: ${enrollment.teacherId || "null"
+                        } (studentDocA.teacherId: ${studentDocA?.teacherId || "null"
                         }, entry.teacherId: ${entry.teacherId || "null"})`
                     );
 
@@ -421,8 +418,7 @@ class CourseMatchingService {
                         // Validate the slutprov date
                         if (isNaN(slutprovDate.getTime())) {
                             console.error(
-                                `[ERROR] Invalid slutprov date for individual course: ${
-                                    entry.slutprovDate || "calculated"
+                                `[ERROR] Invalid slutprov date for individual course: ${entry.slutprovDate || "calculated"
                                 }`
                             );
                             continue;
@@ -433,8 +429,7 @@ class CourseMatchingService {
                         await enrollment.save();
 
                         console.log(
-                            `[DEBUG] 🗓️ Student found for individual course: ${
-                                studentDocA ? studentDocA.name : "NOT FOUND"
+                            `[DEBUG] 🗓️ Student found for individual course: ${studentDocA ? studentDocA.name : "NOT FOUND"
                             }`
                         );
 
@@ -498,8 +493,7 @@ class CourseMatchingService {
                             `[DEBUG] 🔍 Student name: ${studentDocA.name}`
                         );
                         console.log(
-                            `[DEBUG] 🔍 Current education entries: ${
-                                studentDocA.education?.length || 0
+                            `[DEBUG] 🔍 Current education entries: ${studentDocA.education?.length || 0
                             }`
                         );
 
@@ -511,11 +505,11 @@ class CourseMatchingService {
                             if (!e.refId) return true;
                             return (
                                 e.refId.toString() !==
-                                    match.course._id.toString() ||
+                                match.course._id.toString() ||
                                 new Date(e.startDate).getTime() !==
-                                    new Date(entry.startDate).getTime() ||
+                                new Date(entry.startDate).getTime() ||
                                 new Date(e.endDate).getTime() !==
-                                    new Date(entry.endDate).getTime()
+                                new Date(entry.endDate).getTime()
                             );
                         });
 
@@ -588,8 +582,8 @@ class CourseMatchingService {
                             typeof courseId === "object"
                                 ? courseId
                                 : await import(
-                                      "../models/Course.js"
-                                  ).default.findById(courseId);
+                                    "../models/Course.js"
+                                ).default.findById(courseId);
                         const extentWeeks =
                             parseFloat(course.courseExtent) || 5; // Use parseFloat to handle 2.5
 
@@ -608,8 +602,8 @@ class CourseMatchingService {
                                 typeof nextCourseId === "object"
                                     ? nextCourseId
                                     : await import(
-                                          "../models/Course.js"
-                                      ).default.findById(nextCourseId);
+                                        "../models/Course.js"
+                                    ).default.findById(nextCourseId);
                             nextExtentWeeks =
                                 parseFloat(nextCourse.courseExtent) || 5;
 
@@ -694,12 +688,14 @@ class CourseMatchingService {
                                 entry.teacherId ||
                                 null,
                             notes: entry.notes || null,
+                            needsSupport: options.needsSupport,
+                            examMode: options.examMode,
+                            needsSupport: options.needsSupport || false,
+                            examMode: options.examMode || 'on-site',
                         });
                         console.log(
-                            `[DEBUG] Creating enrollment with teacherId: ${
-                                enrollment.teacherId || "null"
-                            } (studentDocB.teacherId: ${
-                                studentDocB?.teacherId || "null"
+                            `[DEBUG] Creating enrollment with teacherId: ${enrollment.teacherId || "null"
+                            } (studentDocB.teacherId: ${studentDocB?.teacherId || "null"
                             }, entry.teacherId: ${entry.teacherId || "null"})`
                         );
                         console.log(
@@ -746,8 +742,7 @@ class CourseMatchingService {
                         // Validate the slutprov date
                         if (isNaN(slutprovDate.getTime())) {
                             console.error(
-                                `[ERROR] Invalid slutprov date: ${
-                                    entry.slutprovDate || "calculated"
+                                `[ERROR] Invalid slutprov date: ${entry.slutprovDate || "calculated"
                                 }`
                             );
                             i++;
@@ -758,8 +753,7 @@ class CourseMatchingService {
                         await enrollment.save();
 
                         console.log(
-                            `📅 Slutprov date set for student ${studentId} in course ${
-                                course.courseName
+                            `📅 Slutprov date set for student ${studentId} in course ${course.courseName
                             }: ${slutprovDate.toDateString()}`
                         );
 
@@ -784,11 +778,11 @@ class CourseMatchingService {
                                     e.type === "Course" &&
                                     e.refId &&
                                     e.refId.toString() ===
-                                        course._id.toString() &&
+                                    course._id.toString() &&
                                     new Date(e.startDate).getTime() ===
-                                        courseStart.getTime() &&
+                                    courseStart.getTime() &&
                                     new Date(e.endDate).getTime() ===
-                                        courseEnd.getTime()
+                                    courseEnd.getTime()
                             );
                             if (!exists) {
                                 studentDocC.education.push({
@@ -857,6 +851,8 @@ class CourseMatchingService {
                                         entry.teacherId ||
                                         null,
                                     notes: entry.notes || null,
+                                    needsSupport: options.needsSupport,
+                                    examMode: options.examMode,
                                 });
 
                                 await nextEnrollment.save();
@@ -869,8 +865,7 @@ class CourseMatchingService {
                                     `✅ Created grouped enrollment for student ${studentId} in course ${nextCourse.courseName} (CourseInstance: ${nextCourseInstance._id})`
                                 );
                                 console.log(
-                                    `📅 Same slutprov date for grouped course ${
-                                        nextCourse.courseName
+                                    `📅 Same slutprov date for grouped course ${nextCourse.courseName
                                     }: ${slutprovDate.toDateString()}`
                                 );
 
@@ -891,11 +886,11 @@ class CourseMatchingService {
                                             e.type === "Course" &&
                                             e.refId &&
                                             e.refId.toString() ===
-                                                nextCourse._id.toString() &&
+                                            nextCourse._id.toString() &&
                                             new Date(e.startDate).getTime() ===
-                                                courseStart.getTime() &&
+                                            courseStart.getTime() &&
                                             new Date(e.endDate).getTime() ===
-                                                courseEnd.getTime()
+                                            courseEnd.getTime()
                                     );
                                     if (!nextExists) {
                                         studentDocC.education.push({
@@ -945,11 +940,11 @@ class CourseMatchingService {
                                 e.type === "CoursePackage" &&
                                 e.refId &&
                                 e.refId.toString() ===
-                                    packageDoc._id.toString() &&
+                                packageDoc._id.toString() &&
                                 new Date(e.startDate).getTime() ===
-                                    new Date(entry.startDate).getTime() &&
+                                new Date(entry.startDate).getTime() &&
                                 new Date(e.endDate).getTime() ===
-                                    new Date(entry.endDate).getTime()
+                                new Date(entry.endDate).getTime()
                         );
                         if (!exists) {
                             const packageStartDate = entry.startDate
@@ -992,8 +987,7 @@ class CourseMatchingService {
                                 message: `CoursePackage '${packageDoc.coursePackageName}' added to student education`,
                             });
                             console.log(
-                                `✅ Added CoursePackage education entry for student ${
-                                    studentDocD.name || studentDocD.email
+                                `✅ Added CoursePackage education entry for student ${studentDocD.name || studentDocD.email
                                 } in package ${packageDoc.coursePackageName}`
                             );
                         }
@@ -1109,6 +1103,8 @@ class CourseMatchingService {
                         teacherId:
                             studentDoc?.teacherId || entry.teacherId || null,
                         notes: entry.notes || null,
+                        needsSupport: options.needsSupport,
+                        examMode: options.examMode,
                     });
 
                     console.log(
@@ -1153,8 +1149,7 @@ class CourseMatchingService {
                     // Validate the slutprov date
                     if (isNaN(slutprovDate.getTime())) {
                         console.error(
-                            `[ERROR] Invalid slutprov date for individual course: ${
-                                entry.slutprovDate || "calculated"
+                            `[ERROR] Invalid slutprov date for individual course: ${entry.slutprovDate || "calculated"
                             }`
                         );
                         continue;
@@ -1166,8 +1161,7 @@ class CourseMatchingService {
                     // Note: Calendar events are now generated automatically by the /calendar-events/syncable endpoint
                     // based on StudentEnrollment.slutprovDate, so we don't need to create them here
                     console.log(
-                        `📅 Slutprov date set for student ${studentId} in individual course ${
-                            course.courseName
+                        `📅 Slutprov date set for student ${studentId} in individual course ${course.courseName
                         }: ${slutprovDate.toDateString()}`
                     );
 
@@ -1179,9 +1173,9 @@ class CourseMatchingService {
                                 e.refId &&
                                 e.refId.toString() === course._id.toString() &&
                                 new Date(e.startDate).getTime() ===
-                                    courseStart.getTime() &&
+                                courseStart.getTime() &&
                                 new Date(e.endDate).getTime() ===
-                                    courseEnd.getTime()
+                                courseEnd.getTime()
                         );
                         if (!exists) {
                             studentDoc.education.push({
@@ -1197,8 +1191,7 @@ class CourseMatchingService {
                             });
                             await studentDoc.save();
                             console.log(
-                                `✅ Added individual course education entry for student ${
-                                    studentDoc.name || studentDoc.email
+                                `✅ Added individual course education entry for student ${studentDoc.name || studentDoc.email
                                 } in course ${course.courseName}`
                             );
                         }
@@ -1228,6 +1221,8 @@ class CourseMatchingService {
                         status: "enrolled",
                         teacherId: entry.teacherId || null,
                         notes: entry.notes || null,
+                        needsSupport: options.needsSupport,
+                        examMode: options.examMode,
                     });
                     await programEnrollment.save();
                     results.enrollments.push({
