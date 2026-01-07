@@ -144,8 +144,9 @@ router.get("/search", authenticateUser, async (req, res) => {
                     $or: [
                         { username: { $regex: q, $options: "i" } },
                         { email: { $regex: q, $options: "i" } },
+                        { name: { $regex: q, $options: "i" } },
                     ],
-                }).select("_id username email role roles"),
+                }).select("_id username name email role roles"),
             ]);
 
             results.push(
@@ -157,7 +158,7 @@ router.get("/search", authenticateUser, async (req, res) => {
                 })),
                 ...users.map((user) => ({
                     id: user._id,
-                    name: user.username,
+                    name: user.name || user.username,
                     type:
                         user.role ||
                         (Array.isArray(user.roles) ? user.roles[0] : null) ||
@@ -247,6 +248,7 @@ router.get("/details/:type/:id", async (req, res) => {
                 };
                 break;
             case "Lärare":
+            case "teacher":
                 const teacherUser = await User.findById(id).lean();
                 if (!teacherUser) {
                     return res.status(404).json({ message: "User not found" });
@@ -351,6 +353,21 @@ router.get("/details/:type/:id", async (req, res) => {
                 } catch (courseError) {
                     console.error("❌ Error in Kurs case:", courseError);
                     return res.status(500).json({ message: "Serverfel vid hämtning av kursdetaljer" });
+                }
+                break;
+
+            // Handle other user role types (admin, systemadmin, etc.)
+            case "admin":
+            case "systemadmin":
+            case "syv":
+            case "specped":
+            case "coordinator":
+            case "user":
+            case "guest":
+            case "Användare":
+                result = await User.findById(id).select("username name email role roles").lean();
+                if (!result) {
+                    return res.status(404).json({ message: "User not found" });
                 }
                 break;
 

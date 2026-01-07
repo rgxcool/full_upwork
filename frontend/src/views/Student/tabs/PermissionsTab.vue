@@ -5,6 +5,9 @@
         <h3>Användarroller</h3>
       </div>
       <div class="card-body">
+        <div v-if="!hasUser" class="alert alert-warning">
+          <p>Ingen användare hittades för denna elev. En användare måste skapas innan roller kan tilldelas.</p>
+        </div>
         <form @submit.prevent="savePermissions" class="permissions-form">
           <div class="form-group">
             <label for="roles" class="form-label">Roller</label>
@@ -27,7 +30,7 @@
             <small class="form-help">Klicka för att välja/avmarkera roller.</small>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary" :disabled="isSaving">
+            <button type="submit" class="btn btn-primary" :disabled="isSaving || !hasUser">
               {{ isSaving ? 'Sparar...' : 'Spara roller' }}
             </button>
           </div>
@@ -62,6 +65,9 @@ export default {
     const availableRoles = ref(['student', 'teacher', 'admin', 'systemadmin', 'parent', 'guardian']);
 
     const isAdmin = computed(() => store.getters.isAdmin);
+    const hasUser = computed(() => {
+      return props.student && props.student.user && props.student.user._id;
+    });
 
     onMounted(() => {
       if (props.student && props.student.user && props.student.user.roles) {
@@ -81,6 +87,10 @@ export default {
     const savePermissions = async () => {
       isSaving.value = true;
       try {
+        if (!props.student || !props.student.user || !props.student.user._id) {
+          alert('Ingen användare hittades för denna elev. Kan inte spara roller.');
+          return;
+        }
         await api.put(`/users/${props.student.user._id}/roles`, {
           roles: selectedRoles.value,
         });
@@ -95,6 +105,7 @@ export default {
 
     return {
       isAdmin,
+      hasUser,
       isSaving,
       selectedRoles,
       availableRoles,
@@ -174,5 +185,20 @@ export default {
 .btn-primary {
     background: #007bff;
     color: white;
+}
+.btn-primary:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.alert {
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+.alert-warning {
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
 }
 </style>

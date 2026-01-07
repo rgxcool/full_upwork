@@ -331,13 +331,54 @@
 
     <!-- Non-student section (teachers, etc.) -->
     <section v-else>
-      <div class="info-item" v-for="(value, key) in editablePersonalData" :key="key">
-        <strong>{{ fieldPersonalLabels[key] }}:</strong>
-        <span v-if="!editFields[key]">{{ value || '-' }}</span>
-        <input v-else v-model="editablePersonalData[key]" />
-        <button @click="toggleEdit(key)">
-          <i :class="editFields[key] ? 'fas fa-save' : 'fas fa-edit'"></i>
-        </button>
+      <div class="card">
+        <div class="card-header">
+          <h3>Användarinformation</h3>
+        </div>
+        <div class="card-body">
+          <div class="info-item" v-for="(value, key) in editablePersonalData" :key="key">
+            <strong>{{ fieldPersonalLabels[key] }}:</strong>
+            <span v-if="!editFields[key]">{{ value || '-' }}</span>
+            <input v-else v-model="editablePersonalData[key]" class="form-control" />
+            <button @click="toggleEdit(key)" class="btn btn-sm" :class="editFields[key] ? 'btn-primary' : 'btn-outline-primary'">
+              <i :class="editFields[key] ? 'fas fa-save' : 'fas fa-edit'"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Roles section (Admin only) -->
+      <div v-if="isAdmin" class="card">
+        <div class="card-header">
+          <h3>Användarroller</h3>
+        </div>
+        <div class="card-body">
+          <div v-if="loadingRoles" class="loading">
+            <p>Laddar roller...</p>
+          </div>
+          <div v-else>
+            <div class="roles-list">
+              <div
+                v-for="role in availableRoles"
+                :key="role"
+                class="role-item"
+                :class="{ selected: selectedRoles.includes(role) }"
+                @click="toggleRole(role)"
+              >
+                {{ role }}
+              </div>
+            </div>
+            <div class="form-actions">
+              <button 
+                @click="saveRoles" 
+                class="btn btn-primary" 
+                :disabled="isSavingRoles || !hasChanges"
+              >
+                {{ isSavingRoles ? 'Sparar...' : 'Spara roller' }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -422,6 +463,22 @@
       const editablePersonalData = ref({})
       const showMeetingModal = ref(false)
       const editFields = ref({})
+      const selectedRoles = ref([])
+      const originalRoles = ref([])
+      const isSavingRoles = ref(false)
+      const loadingRoles = ref(false)
+      
+      const availableRoles = [
+        'guest',
+        'user',
+        'student',
+        'coordinator',
+        'specped',
+        'syv',
+        'teacher',
+        'admin',
+        'systemadmin'
+      ]
 
       const municipalities = [
         'Botkyrka',
@@ -656,10 +713,62 @@
       }
 
       // Methods for non-student functionality
-      const updateEditableData = () => {
+      const updateEditableData = async () => {
         editablePersonalData.value = {
           username: props.userData?.username || '',
           email: props.userData?.email || '',
+        }
+        
+        // Load roles if admin
+        if (isAdmin.value && props.userData?._id) {
+          await loadRoles()
+        }
+      }
+      
+      const loadRoles = async () => {
+        if (!props.userData?._id) return
+        loadingRoles.value = true
+        try {
+          // The userData should already have roles from the details endpoint
+          const roles = props.userData?.roles || []
+          selectedRoles.value = Array.isArray(roles) ? [...roles] : []
+          originalRoles.value = Array.isArray(roles) ? [...roles] : []
+        } catch (error) {
+          console.error('Error loading roles:', error)
+        } finally {
+          loadingRoles.value = false
+        }
+      }
+      
+      const toggleRole = (role) => {
+        const index = selectedRoles.value.indexOf(role)
+        if (index > -1) {
+          selectedRoles.value.splice(index, 1)
+        } else {
+          selectedRoles.value.push(role)
+        }
+      }
+      
+      const hasChanges = computed(() => {
+        const current = [...selectedRoles.value].sort().join(',')
+        const original = [...originalRoles.value].sort().join(',')
+        return current !== original
+      })
+      
+      const saveRoles = async () => {
+        if (!props.userData?._id) return
+        isSavingRoles.value = true
+        try {
+          await api.put(`/users/${props.userData._id}/roles`, {
+            roles: selectedRoles.value,
+          })
+          originalRoles.value = [...selectedRoles.value]
+          alert('Rollerna har uppdaterats!')
+        } catch (error) {
+          console.error('Error saving roles:', error)
+          alert('Kunde inte spara roller.')
+        } finally {
+          isSavingRoles.value = false
         }
       }
 
@@ -711,6 +820,14 @@
       return {
         // Student-specific
         student,
+        // Non-student specific
+        selectedRoles,
+        availableRoles,
+        loadingRoles,
+        isSavingRoles,
+        hasChanges,
+        toggleRole,
+        saveRoles,
         loading,
         error,
         editMode,
@@ -1205,5 +1322,51 @@
     padding-bottom: 10px;
     margin-bottom: 15px;
     font-size: 20px;
+  }
+
+  /* Roles section styles */
+  .roles-list {
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    max-height: 220px;
+    overflow: auto;
+    background: white;
+    margin-bottom: 1rem;
+  }
+
+  .role-item {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .role-item:hover {
+    background: #f1f3f5;
+  }
+
+  .role-item.selected {
+    background: #e9f7ef;
+    border-left: 4px solid #2c9316;
+    font-weight: 500;
+  }
+
+  .form-actions {
+    margin-top: 1rem;
+  }
+
+  .btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .btn-outline-primary {
+    background: transparent;
+    border: 1px solid #007bff;
+    color: #007bff;
+  }
+
+  .btn-outline-primary:hover {
+    background: #007bff;
+    color: white;
   }
 </style>
