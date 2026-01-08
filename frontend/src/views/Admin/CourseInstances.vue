@@ -329,8 +329,11 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="enrollment in enrollments" :key="enrollment._id">
-                      <td>{{ enrollment.studentId?.name || 'Okänd student' }}</td>
+                    <tr v-for="enrollment in enrollments" :key="enrollment._id" :class="{ 'dropout-row': enrollment.studentId?.dropout }">
+                      <td>
+                        <div v-if="enrollment.studentId?.dropout" class="inactive-label">INAKTIV</div>
+                        {{ enrollment.studentId?.name || 'Okänd student' }}
+                      </td>
                       <td>
                         <span :class="['status-badge', getStatusClass(enrollment.status)]">
                           {{ getStatusText(enrollment.status) }}
@@ -821,6 +824,22 @@
   .enrollment-count {
     font-weight: bold;
     color: #2c9316;
+  }
+
+  .inactive-label {
+    background-color: #dc3545;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    display: inline-block;
+    margin-bottom: 5px;
+  }
+
+  .dropout-row {
+    background-color: rgba(255, 0, 0, 0.2);
   }
 
   .status-badge {
