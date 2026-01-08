@@ -72,7 +72,7 @@
               <th>Namn</th>
               <th>Personnummer</th>
               <th>Utbildning</th>
-              <th>Edit</th>
+              <th v-if="isAdmin">Edit</th>
               <th>Startdatum</th>
               <th>Slutdatum</th>
               <th>Slutprov</th>
@@ -92,6 +92,7 @@
               :class="{ 'dropout-row': student.dropout }"
             >
               <td>
+                <div v-if="student.dropout" class="inactive-label">INAKTIV</div>
                 <router-link :to="`/student/${student._id}`">{{ student.name }}</router-link>
               </td>
               <td>{{ student.personalNumber }}</td>
@@ -130,8 +131,11 @@
                   <div v-else class="no-courses">Ingen kurs registrerad</div>
                 </div>
               </td>
-              <td>
-                <button class="btn btn-secondary btn-xs" @click="openEditStudent(student)">
+              <td v-if="isAdmin">
+                <button 
+                  class="btn btn-secondary btn-xs" 
+                  @click="openEditStudent(student)"
+                >
                   Edit
                 </button>
               </td>
@@ -294,11 +298,18 @@
                     <label class="form-label">
                       <input
                         type="checkbox"
-                        v-model="editingStudent.dropout"
+                        :checked="editingStudent.dropout"
+                        @change="handleDropoutChangeInEdit"
+                        :disabled="processingDropout"
                         class="form-checkbox"
+                        id="edit-dropout-checkbox"
                       />
                       Avhopp (Dropout)
                     </label>
+                    <span v-if="processingDropout" style="color: #666; font-size: 0.9rem; margin-left: 8px;">Bearbetar...</span>
+                    <p v-if="editingStudent.dropout" style="color: #dc3545; font-weight: bold; margin-top: 8px; font-size: 1.1rem;">
+                      ⚠️ INAKTIV
+                    </p>
                   </div>
                   <div class="form-group">
                     <label class="form-label">
@@ -548,6 +559,7 @@
 <script>
   import axios from 'axios'
   import { api } from '../../store/store.js'
+  import { mapGetters } from 'vuex'
 
   export default {
     data() {
@@ -559,6 +571,9 @@
         uploadSuccess: false,
         editingStudent: null,
         editingStudentDialog: false,
+        originalDropoutState: false,
+        processingDropout: false,
+        dropoutHandledViaEndpoint: false, // Track if dropout was handled via dedicated endpoint
         educationOptions: [],
         educationSelections: [],
         selectedEducation: null,
@@ -579,6 +594,7 @@
     },
 
     computed: {
+      ...mapGetters(['isAdmin']),
       filteredStudents() {
         return this.students
           .map((student) => ({
@@ -780,6 +796,8 @@
         })
 
         this.editingStudent = clone
+        this.originalDropoutState = clone.dropout || false
+        this.dropoutHandledViaEndpoint = false
         console.log(this.editingStudent, 'Current cloned student')
         this.editingStudentDialog = true
 
@@ -790,6 +808,87 @@
         }))
       },
 
+      // Handle dropout checkbox change in edit modal
+      async handleDropoutChangeInEdit(event) {
+        const checked = event.target.checked
+
+        this.processingDropout = true
+
+        try {
+          if (checked) {
+            // Setting to dropout (checked = true) - use dedicated endpoint
+            const confirmed = confirm(
+              `Är du säker på att du vill markera ${this.editingStudent.name} som avbrott (inaktiv)?\n\n` +
+              `Detta kommer att:\n` +
+              `- Ta bort eleven från APL-listor\n` +
+              `- Ta bort eleven från slutprov\n` +
+              `- Skicka en notis till ansvarig lärare`
+            )
+
+            if (!confirmed) {
+              event.target.checked = this.originalDropoutState
+              this.editingStudent.dropout = this.originalDropoutState
+              return
+            }
+
+            const response = await api.post(
+              `/student-details/${this.editingStudent._id}/dropout`
+            )
+            this.editingStudent.dropout = true
+            this.dropoutHandledViaEndpoint = true
+            
+            // Update the student in the local list immediately
+            const index = this.students.findIndex(
+              (student) => student._id === this.editingStudent._id
+            )
+            if (index !== -1) {
+              this.students.splice(index, 1, response.data.student)
+            }
+
+            alert('Eleven har markerats som avbrott (inaktiv).')
+          } else {
+            // Unchecking (setting to false) - use update endpoint
+            const confirmed = confirm(
+              `Är du säker på att du vill ta bort avbrott-status för ${this.editingStudent.name}?\n\n` +
+              `Eleven kommer att:\n` +
+              `- Återfås i APL-listor (om relevant)\n` +
+              `- Kunna registreras för slutprov igen`
+            )
+
+            if (!confirmed) {
+              event.target.checked = true
+              this.editingStudent.dropout = true
+              return
+            }
+
+            const response = await api.delete(
+              `/student-details/${this.editingStudent._id}/dropout`
+            )
+            this.editingStudent.dropout = false
+            this.dropoutHandledViaEndpoint = false // Reset flag so it can be saved normally
+            
+            // Update the student in the local list immediately
+            const index = this.students.findIndex(
+              (student) => student._id === this.editingStudent._id
+            )
+            if (index !== -1) {
+              this.students.splice(index, 1, response.data.student)
+            }
+
+            alert('Avbrott-status har tagits bort för eleven.')
+          }
+        } catch (error) {
+          console.error('Error updating dropout status:', error)
+          const action = checked ? 'markera elev som avbrott' : 'ta bort avbrott-status'
+          alert(`Kunde inte ${action}. ` + (error.response?.data?.error || ''))
+          // Revert checkbox to original state
+          event.target.checked = this.originalDropoutState
+          this.editingStudent.dropout = this.originalDropoutState
+        } finally {
+          this.processingDropout = false
+        }
+      },
+
       // Save student after editing
       async saveEditedStudent() {
         try {
@@ -797,6 +896,12 @@
 
           // Prepare the data for sending
           const studentData = { ...this.editingStudent }
+
+          // If dropout was already handled via dedicated endpoint, exclude it from PUT
+          // (to avoid overwriting the changes made by the dedicated endpoint)
+          if (this.dropoutHandledViaEndpoint) {
+            delete studentData.dropout
+          }
 
           // Convert date strings back to proper format for the API (only if not already in ISO format)
           if (studentData.startDate && !studentData.startDate.includes('T')) {
@@ -846,6 +951,9 @@
           // Close the dialog and reset the editingStudent data
           this.editingStudentDialog = false
           this.editingStudent = null
+          this.originalDropoutState = false
+          this.dropoutHandledViaEndpoint = false
+          this.processingDropout = false
 
           // Show success message
           this.showSuccess('✅ Studenten har sparats framgångsrikt!')
@@ -1091,6 +1199,9 @@
       cancelEdit() {
         this.editingStudentDialog = false
         this.editingStudent = null
+        this.originalDropoutState = false
+        this.dropoutHandledViaEndpoint = false
+        this.processingDropout = false
         this.selectedEducation = null
         this.educationSelections = []
         this.finalExamDate = { date: null, time: null }
@@ -1183,6 +1294,18 @@
 
   .education-controls .right {
     margin-left: auto;
+  }
+
+  .inactive-label {
+    background-color: #dc3545;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    display: inline-block;
+    margin-bottom: 5px;
   }
 
   .dropout-row {

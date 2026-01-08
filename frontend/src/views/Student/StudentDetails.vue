@@ -15,6 +15,10 @@
       </div>
 
       <div v-else-if="student">
+        <div v-if="student.dropout === true || student.dropout === 'true' || student.dropout === 1" class="inactive-banner">
+          <h2>INAKTIV</h2>
+          <p>Denna elev har markerats som avbrott (inaktiv).</p>
+        </div>
         <ul class="nav nav-tabs">
           <li class="nav-item" v-for="tab in tabs" :key="tab.name">
             <a
@@ -124,7 +128,21 @@ export default {
     };
 
     const handleStudentUpdate = async (updatedStudent) => {
-      student.value = { ...student.value, ...updatedStudent };
+      console.log('🔄 Updating student data:', updatedStudent);
+      console.log('🔄 updatedStudent.dropout:', updatedStudent.dropout);
+      console.log('🔄 student.value.dropout before update:', student.value?.dropout);
+      
+      // Ensure dropout is explicitly set
+      student.value = { 
+        ...student.value, 
+        ...updatedStudent,
+        dropout: updatedStudent.dropout === true || updatedStudent.dropout === 'true'
+      };
+      
+      console.log('✅ Updated student.value.dropout:', student.value.dropout);
+      console.log('✅ student.value.dropout type:', typeof student.value.dropout);
+      console.log('✅ Will show banner?', student.value.dropout === true);
+      
       if (isAdmin.value) {
         await loadChangeHistory();
       }
@@ -201,5 +219,24 @@ export default {
 }
 .tab-content {
   padding-top: 20px;
+}
+.inactive-banner {
+  background-color: #dc3545;
+  color: white;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+.inactive-banner h2 {
+  margin: 0 0 10px 0;
+  font-size: 2rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+.inactive-banner p {
+  margin: 0;
+  font-size: 1.1rem;
 }
 </style>

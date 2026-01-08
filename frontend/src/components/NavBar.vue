@@ -362,21 +362,14 @@
           </div>
 
           <div class="notis-list">
-            <div v-for="notification in notifications" :key="notification.id" class="notis-item">
+            <div v-for="notification in notifications" :key="notification._id" class="notis-item">
               <div class="notis-content">
                 <span class="notis-type">{{ notification.type }}</span>
                 <span class="notis-message">{{ notification.message }}</span>
               </div>
               <div class="notis-actions">
-                <button @click="resolveNote(notification.id)" class="resolve-btn">
+                <button @click="resolveNote(notification._id)" class="resolve-btn">
                   Markera som löst
-                </button>
-                <button
-                  v-if="canResetNotifications"
-                  @click="resetNotification(notification.id)"
-                  class="reset-btn"
-                >
-                  Återställ
                 </button>
               </div>
             </div>
@@ -419,6 +412,11 @@
       const showNotisPanel = ref(false)
       const notisPanel = ref(null)
       const notificationIcon = ref(null)
+      
+      // Notification polling configuration
+      const NOTIFICATION_POLL_INTERVAL = 60000 // 60 seconds (increased to avoid rate limiting)
+      let notificationPollInterval = null
+      let isPollingPaused = false
       // Fix missing properties
       const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
       const searchQuery = ref('')
@@ -454,8 +452,74 @@
       const totalNotifications = computed(() => notifications.value.length)
 
       const fetchNotifications = async () => {
-        const res = await axios.get('/api/notifications')
-        notifications.value = res.data
+        // Skip if polling is paused (tab hidden)
+        if (isPollingPaused) {
+          return;
+        }
+        
+        try {
+          console.log('📬 Fetching notifications...');
+          const res = await axios.get('/api/notifications', { withCredentials: true });
+          console.log('📬 Notifications received:', res.data);
+          notifications.value = res.data;
+        } catch (error) {
+          // Handle rate limiting gracefully
+          if (error.response?.status === 429) {
+            console.warn('⚠️ Rate limited - will retry later');
+            // Don't clear notifications on rate limit, just skip this fetch
+            return;
+          }
+          console.error('❌ Error fetching notifications:', error);
+          // Only clear notifications on non-rate-limit errors
+          if (error.response?.status !== 429) {
+            notifications.value = [];
+          }
+        }
+      }
+
+      // Start polling for notifications
+      const startNotificationPolling = () => {
+        // Clear any existing interval
+        stopNotificationPolling();
+        
+        // Only start if user is logged in and can see notifications
+        if (isLoggedIn.value && canSeeNotifications.value) {
+          // Fetch immediately
+          fetchNotifications();
+          
+          // Then poll at regular intervals
+          notificationPollInterval = setInterval(() => {
+            if (!isPollingPaused) {
+              fetchNotifications();
+            }
+          }, NOTIFICATION_POLL_INTERVAL);
+          
+          console.log(`🔄 Started notification polling (every ${NOTIFICATION_POLL_INTERVAL / 1000}s)`);
+        }
+      }
+
+      // Stop polling for notifications
+      const stopNotificationPolling = () => {
+        if (notificationPollInterval) {
+          clearInterval(notificationPollInterval);
+          notificationPollInterval = null;
+          console.log('⏹️ Stopped notification polling');
+        }
+      }
+
+      // Handle page visibility changes (pause polling when tab is hidden)
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          isPollingPaused = true;
+          console.log('⏸️ Paused notification polling (tab hidden)');
+        } else {
+          isPollingPaused = false;
+          // Immediately fetch when tab becomes visible
+          if (isLoggedIn.value && canSeeNotifications.value) {
+            fetchNotifications();
+          }
+          console.log('▶️ Resumed notification polling (tab visible)');
+        }
       }
 
       const resolveNote = async (id) => {
@@ -465,21 +529,15 @@
         await fetchNotifications() // uppdatera listan
       }
 
-      const canResetNotifications = computed(() =>
-        ['admin', 'systemadmin'].includes(userRole.value)
-      )
-
-      const resetNotification = async (id) => {
-        try {
-          await axios.put(`/api/notifications/${id}/reset`)
-          await fetchNotifications() // hämta igen efter reset
-        } catch (err) {
-          console.error('❌ Kunde inte återställa notis:', err)
-        }
-      }
 
       const toggleNotificationPanel = (event) => {
-        showNotisPanel.value = !showNotisPanel.value
+        const wasOpen = showNotisPanel.value;
+        showNotisPanel.value = !showNotisPanel.value;
+        
+        // Fetch immediately when opening the panel
+        if (!wasOpen && showNotisPanel.value && isLoggedIn.value && canSeeNotifications.value) {
+          fetchNotifications();
+        }
       }
 
       const navigateToDetails = (result) => {
@@ -717,12 +775,41 @@
           }
         }
       }
+      // Watch for user login to start/stop polling
+      watch(isLoggedIn, (loggedIn) => {
+        if (loggedIn && canSeeNotifications.value) {
+          console.log('👤 User logged in, starting notification polling...');
+          startNotificationPolling();
+        } else {
+          stopNotificationPolling();
+          notifications.value = [];
+        }
+      }, { immediate: true });
+
+      // Watch for role changes that affect notification visibility
+      watch(canSeeNotifications, (canSee) => {
+        if (canSee && isLoggedIn.value) {
+          startNotificationPolling();
+        } else {
+          stopNotificationPolling();
+        }
+      });
+
       onMounted(() => {
-        document.addEventListener('mousedown', handleClickOutside)
-      })
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+        // Start polling if user is already logged in
+        if (isLoggedIn.value && canSeeNotifications.value) {
+          startNotificationPolling();
+        }
+      });
+      
       onBeforeUnmount(() => {
-        document.removeEventListener('mousedown', handleClickOutside)
-      })
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        stopNotificationPolling();
+      });
 
       const showSecretMenu = ref(false)
       const versionRef = ref(null)
@@ -779,8 +866,6 @@
         resolveNote,
         notifications,
         showNotisPanel,
-        resetNotification,
-        canResetNotifications,
         showProfileMenu,
         toggleProfileMenu,
         profileDropdown,

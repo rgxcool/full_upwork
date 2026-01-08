@@ -8,6 +8,8 @@ import {
     deleteComment,
     markCommentSeen,
     getChangeHistory,
+    setStudentDropout,
+    removeStudentDropout,
 } from "../controllers/studentDetailsController.js";
 
 const router = express.Router();
@@ -52,6 +54,22 @@ router.get(
     isAuthenticated,
     hasRole(["admin", "systemadmin"]),
     getChangeHistory
+);
+
+// Set student as dropout (Avbrott) - admin+ only
+router.post(
+    "/student-details/:id/dropout",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    setStudentDropout
+);
+
+// Remove dropout status from student - admin+ only
+router.delete(
+    "/student-details/:id/dropout",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    removeStudentDropout
 );
 
 export default router;

@@ -180,6 +180,26 @@
             ></textarea>
             <span v-else>{{ student.specialNeeds || 'Ej angivet' }}</span>
           </div>
+
+          <div class="info-item" v-if="isAdmin">
+            <label>Avbrott (Inaktiv):</label>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input
+                type="checkbox"
+                :checked="localStudent.dropout"
+                @change="handleDropoutChange"
+                :disabled="processingDropout"
+                id="dropout-checkbox"
+              />
+              <label for="dropout-checkbox" style="margin: 0; font-weight: normal;">
+                {{ localStudent.dropout ? 'Ta bort avbrott-status' : 'Markera som avbrott' }}
+              </label>
+              <span v-if="processingDropout" style="color: #666; font-size: 0.9rem;">Bearbetar...</span>
+            </div>
+            <p v-if="localStudent.dropout" style="color: #dc3545; font-weight: bold; margin-top: 8px; font-size: 1.1rem;">
+              ⚠️ INAKTIV
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -355,6 +375,7 @@ export default {
     const localStudent = ref(props.student);
     const studentPassword = ref(null);
     const resettingPassword = ref(false);
+    const processingDropout = ref(false);
 
     const editData = ref({});
 
@@ -573,7 +594,98 @@ export default {
         resettingPassword.value = false;
       }
     };
+
+    const handleDropoutChange = async (event) => {
+      const checked = event.target.checked;
+      
+      processingDropout.value = true;
+      
+      try {
+        if (checked) {
+          // Setting to dropout (checked = true) - use dedicated endpoint
+          const confirmed = confirm(
+            `Är du säker på att du vill markera ${localStudent.value.name} som avbrott (inaktiv)?\n\n` +
+            `Detta kommer att:\n` +
+            `- Ta bort eleven från APL-listor\n` +
+            `- Ta bort eleven från slutprov\n` +
+            `- Skicka en notis till ansvarig lärare`
+          );
+
+          if (!confirmed) {
+            event.target.checked = false;
+            return;
+          }
+
+          console.log('📤 Sending dropout request for student:', route.params.id);
+          const response = await api.post(`/student-details/${route.params.id}/dropout`);
+          console.log('✅ Dropout response:', response.data);
+          
+          // Update local student with the response
+          if (response.data && response.data.student) {
+            const updatedStudent = response.data.student;
+            console.log('📝 Updating localStudent with:', updatedStudent);
+            console.log('📝 updatedStudent.dropout:', updatedStudent.dropout);
+            console.log('📝 updatedStudent.dropout type:', typeof updatedStudent.dropout);
+            
+            // Ensure dropout is explicitly set
+            localStudent.value = { 
+              ...localStudent.value, 
+              ...updatedStudent,
+              dropout: updatedStudent.dropout === true || updatedStudent.dropout === 'true'
+            };
+            console.log('✅ localStudent.value.dropout after update:', localStudent.value.dropout);
+            console.log('✅ localStudent.value object:', JSON.stringify(localStudent.value, null, 2));
+            
+            // Emit the full updated student with explicit dropout flag
+            emit('student-updated', {
+              ...updatedStudent,
+              dropout: updatedStudent.dropout === true || updatedStudent.dropout === 'true'
+            });
+          } else {
+            console.warn('⚠️ No student data in response, using fallback');
+            // Fallback: just set dropout flag
+            localStudent.value.dropout = true;
+            emit('student-updated', { dropout: true });
+          }
+          
+          alert('Eleven har markerats som avbrott (inaktiv).');
+        } else {
+          // Unchecking (setting to false) - use update endpoint
+          const confirmed = confirm(
+            `Är du säker på att du vill ta bort avbrott-status för ${localStudent.value.name}?\n\n` +
+            `Eleven kommer att:\n` +
+            `- Återfås i APL-listor (om relevant)\n` +
+            `- Kunna registreras för slutprov igen`
+          );
+
+          if (!confirmed) {
+            event.target.checked = true;
+            return;
+          }
+
+          const response = await api.delete(`/student-details/${route.params.id}/dropout`);
+          localStudent.value.dropout = false;
+          emit('student-updated', response.data.student);
+          alert('Avbrott-status har tagits bort för eleven.');
+        }
+      } catch (error) {
+        console.error('Error updating dropout status:', error);
+        const action = checked ? 'markera elev som avbrott' : 'ta bort avbrott-status';
+        alert(`Kunde inte ${action}. ` + (error.response?.data?.error || ''));
+        // Revert checkbox to original state
+        event.target.checked = localStudent.value.dropout;
+      } finally {
+        processingDropout.value = false;
+      }
+    };
     
+    // Watch for changes to props.student and update localStudent
+    watch(() => props.student, (newStudent) => {
+      if (newStudent) {
+        localStudent.value = newStudent;
+      }
+    }, { immediate: true, deep: true });
+
     onMounted(() => {
         initializeEditData();
     });
@@ -587,6 +699,7 @@ export default {
       showEditModal,
       newComment,
       editingComment,
+      localStudent,
       isAdmin,
       canComment,
       activeComments,
@@ -607,6 +720,8 @@ export default {
       getFieldLabel,
       formatChangeValue,
       resetPassword,
+      handleDropoutChange,
+      processingDropout,
     };
   },
 };

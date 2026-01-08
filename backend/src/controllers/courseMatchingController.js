@@ -1246,7 +1246,7 @@ export const getCourseInstanceEnrollments = async (req, res) => {
         if (status) query.status = status;
 
         const enrollments = await StudentEnrollment.find(query)
-            .populate("studentId", "name email")
+            .populate("studentId", "name email dropout")
             .populate("mainCourseId", "courseName courseCode")
             .populate("teacherId", "username email")
             .populate("gradeBy", "username email")

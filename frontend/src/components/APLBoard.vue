@@ -310,9 +310,11 @@
     } catch {}
   }
 
-  // Only include students with a CoursePackage or manually added
+  // Only include students with a CoursePackage or manually added, and exclude dropout students
   const filteredStudents = computed(() => {
     const hasCoursePackageOrManual = (student) => {
+      // Exclude dropout students
+      if (student.dropout) return false
       if (excludedAplIds.value.has(student._id)) return false
       if (manualAplIds.value.has(student._id)) return true
       if (!Array.isArray(student.education)) return false

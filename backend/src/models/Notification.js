@@ -3,15 +3,18 @@ import mongoose from "mongoose";
 
 const notificationSchema = new mongoose.Schema({
   type: { type: String, required: true }, // t.ex. "grades_pending"
-  resolved: { type: Boolean, default: false },
+  resolved: { type: Boolean, default: false }, // Legacy field - kept for backwards compatibility
   message: String,
   createdAt: { type: Date, default: Date.now },
-  resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Legacy field
+  resolvedByUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // Array of user IDs who have resolved this notification
+  teacher: { type: mongoose.Schema.Types.ObjectId, ref: "Teacher" }, // Teacher record ID for filtering
+  createdByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Admin who created this notification (for dropout notifications)
     // Nytt fält för flexibel metadata
     meta: {
       studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student" },
       courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
-      teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // User ID for reference
       url: { type: String }, // för direktlänk i frontend
     }
 });
