@@ -252,41 +252,15 @@ class CourseMatchingService {
                         results.warnings.push({
                             type: "no_match",
                             courseName: entry.name,
+                            studentId: studentId,
                             message: `Ingen matchande kurs hittades för "${entry.name}". Kursen kommer inte att skapas automatiskt.`,
                         });
                         continue;
                     }
 
-                    // Determine slutprovDate:
-                    console.log(
-                        `[DEBUG] entry.slutprovDate for course ${entry.name}:`,
-                        entry.slutprovDate
-                    );
-                    let slutprovDate = null;
-                    if (entry.slutprovDate) {
-                        // Use explicit slutprovDate if provided
-                        slutprovDate = new Date(entry.slutprovDate);
-                        console.log(
-                            `[DEBUG] Using explicit slutprovDate for course ${entry.name}:`,
-                            slutprovDate
-                        );
-                    } else if (!entry.teacherId) {
-                        // Only use fallback Wednesday if there's no teacher
-                        // If there's a teacher, let the pre-save hook calculate based on teacher rules
-                        slutprovDate = this.getWednesdayOfWeek(
-                            new Date(entry.startDate),
-                            4
-                        );
-                        console.log(
-                            `[DEBUG] Using fallback slutprovDate (no teacher) for course ${entry.name}:`,
-                            slutprovDate
-                        );
-                    } else {
-                        // Teacher is set but no explicit date - let pre-save hook calculate
-                        console.log(
-                            `[DEBUG] No slutprovDate provided, teacher ${entry.teacherId} set - will auto-calculate based on teacher rules`
-                        );
-                    }
+                    // Determine slutprovDate (will be calculated later after enrollment is created)
+                    // For now, pass entry.slutprovDate if available, otherwise null
+                    const initialSlutprovDate = entry.slutprovDate ? new Date(entry.slutprovDate) : null;
 
                     // Find or create course instance, pass responsibleTeacherId
                     const { instance, wasCreated } =
@@ -296,7 +270,7 @@ class CourseMatchingService {
                             new Date(entry.endDate),
                             userId,
                             entry.teacherId || null,
-                            slutprovDate
+                            initialSlutprovDate
                         );
                     console.log(
                         `[DEBUG] CourseInstance created/used for course ${entry.name}:`,
@@ -377,7 +351,58 @@ class CourseMatchingService {
                     );
 
                     await enrollment.save();
-                    // Attach student email for frontend display
+
+                    // Calculate and set slutprov date BEFORE adding to results
+                    const courseStart = new Date(entry.startDate);
+                    let slutprovDate;
+                    if (entry.slutprovDate) {
+                        // Use explicit slutprovDate if provided
+                        slutprovDate = new Date(entry.slutprovDate);
+                        console.log(
+                            `[DEBUG] 📅 Using provided slutprov date for individual course: ${slutprovDate.toDateString()}`
+                        );
+                    } else if (!entry.teacherId) {
+                        // Only use fallback Wednesday if there's no teacher
+                        // If there's a teacher, let the pre-save hook calculate based on teacher rules
+                        slutprovDate = this.getWednesdayOfWeek(
+                            courseStart,
+                            4
+                        );
+                        console.log(
+                            `[DEBUG] 📅 Calculated slutprov date for individual course (Wednesday week 4): ${slutprovDate.toDateString()}`
+                        );
+                    } else {
+                        // Teacher is set but no explicit date - let pre-save hook calculate
+                        // Reload enrollment to get the calculated date from the pre-save hook
+                        const reloadedEnrollment = await StudentEnrollment.findById(enrollment._id);
+                        slutprovDate = reloadedEnrollment?.slutprovDate || null;
+                        if (slutprovDate) {
+                            console.log(
+                                `[DEBUG] 📅 Using auto-calculated slutprov date from pre-save hook: ${slutprovDate.toDateString()}`
+                            );
+                        } else {
+                            // Fallback to Wednesday week 4 if pre-save hook didn't set it
+                            slutprovDate = this.getWednesdayOfWeek(courseStart, 4);
+                            console.log(
+                                `[DEBUG] 📅 Fallback: Calculated slutprov date (Wednesday week 4): ${slutprovDate.toDateString()}`
+                            );
+                        }
+                    }
+
+                    // Validate the slutprov date
+                    if (isNaN(slutprovDate.getTime())) {
+                        console.error(
+                            `[ERROR] Invalid slutprov date for individual course: ${entry.slutprovDate || "calculated"
+                            }`
+                        );
+                        continue;
+                    }
+
+                    // Set slutprov date on enrollment
+                    enrollment.slutprovDate = slutprovDate;
+                    await enrollment.save();
+
+                    // Attach student email for frontend display (AFTER slutprovDate is set)
                     // studentDocA is already loaded above
                     results.enrollments.push({
                         ...enrollment.toObject(),
@@ -388,98 +413,9 @@ class CourseMatchingService {
                         `✅ Created enrollment for student ${studentId} in course ${entry.name} (CourseInstance: ${instance._id})`
                     );
 
-                    // Create calendar event for slutprov for individual courses
-                    try {
-                        console.log(
-                            `[DEBUG] 🗓️ Starting calendar event creation for individual course ${entry.name}`
-                        );
-                        const CalendarEvent = (
-                            await import("../models/Event.js")
-                        ).default;
-
-                        // Use provided slutprov date or calculate as Wednesday of week 4
-                        const courseStart = new Date(entry.startDate);
-                        let slutprovDate;
-                        if (entry.slutprovDate) {
-                            slutprovDate = new Date(entry.slutprovDate);
-                            console.log(
-                                `[DEBUG] 📅 Using provided slutprov date for individual course: ${slutprovDate.toDateString()}`
-                            );
-                        } else {
-                            slutprovDate = this.getWednesdayOfWeek(
-                                courseStart,
-                                4
-                            );
-                            console.log(
-                                `[DEBUG] 📅 Calculated slutprov date for individual course (Wednesday week 4): ${slutprovDate.toDateString()}`
-                            );
-                        }
-
-                        // Validate the slutprov date
-                        if (isNaN(slutprovDate.getTime())) {
-                            console.error(
-                                `[ERROR] Invalid slutprov date for individual course: ${entry.slutprovDate || "calculated"
-                                }`
-                            );
-                            continue;
-                        }
-
-                        // Set slutprov date on enrollment
-                        enrollment.slutprovDate = slutprovDate;
-                        await enrollment.save();
-
-                        console.log(
-                            `[DEBUG] 🗓️ Student found for individual course: ${studentDocA ? studentDocA.name : "NOT FOUND"
-                            }`
-                        );
-
-                        // DISABLED: Individual calendar event creation to prevent duplicates
-                        // Calendar events are now handled by the deduplication system in /calendar-events/syncable
-                        // This prevents duplicate events where students appear both individually and in grouped events
-
-                        // if (studentDocA) {
-                        //     // Check if event already exists for this student and course on this date
-                        //     const existingEvent = await CalendarEvent.findOne({
-                        //         title: { $regex: /^Slutprov/i },
-                        //         start: slutprovDate,
-                        //         'extendedProps.students._id': studentDocA._id,
-                        //         'extendedProps.type': 'slutprov'
-                        //     });
-                        //
-                        //     if (!existingEvent) {
-                        //         const event = new CalendarEvent({
-                        //             title: `Slutprov - ${entry.name}`,
-                        //             start: slutprovDate,
-                        //             color: '#ff6b6b', // Red color for exams
-                        //             extendedProps: {
-                        //                 teacher: studentDocA.teacher || 'Unknown',
-                        //                 teacherId: studentDocA.teacherId || null,
-                        //                 type: 'slutprov',
-                        //                 examMunicipality: studentDocA.examMunicipality || '',
-                        //                 examLocation: studentDocA.examLocation || '',
-                        //                 examTime: studentDocA.examTime || '',
-                        //                 students: [{
-                        //                     _id: studentDocA._id,
-                        //                     name: studentDocA.name,
-                        //                     personalNumber: studentDocA.personalNumber,
-                        //                     additionalInfo: studentDocA.additionalInfo || '',
-                        //                     attended: false
-                        //                 }]
-                        //             }
-                        //         });
-                        //
-                        //         await event.save();
-                        //         console.log(`✅ Created slutprov calendar event for student ${studentDocA.name} in course ${entry.name} on ${slutprovDate.toDateString()}`);
-                        //     } else {
-                        //         console.log(`ℹ️ Slutprov event already exists for student ${studentDocA.name} in course ${entry.name} on ${slutprovDate.toDateString()}`);
-                        //     }
-                        // }
-                    } catch (eventError) {
-                        console.error(
-                            `❌ Failed to create slutprov calendar event for student ${studentId} in course ${entry.name}:`,
-                            eventError
-                        );
-                    }
+                    // DISABLED: Individual calendar event creation to prevent duplicates
+                    // Calendar events are now handled by the deduplication system in /calendar-events/syncable
+                    // Calendar events are automatically created via calendarEventSync utility
 
                     // --- PATCH: Update student's education array for ALL types ---
                     console.log(
@@ -704,24 +640,6 @@ class CourseMatchingService {
                         );
                         await enrollment.save();
 
-                        // Attach student email for frontend display
-                        if (enrollment.courseInstanceId) {
-                            results.enrollments.push({
-                                ...enrollment.toObject(),
-                                studentEmail: studentDocB?.email || "",
-                                courseInstanceName:
-                                    courseInstance.courseName || "",
-                            });
-                            console.log(
-                                `✅ Created enrollment for student ${studentId} in course ${course.courseName} (CourseInstance: ${courseInstance._id})`
-                            );
-                        } else {
-                            console.warn(
-                                "[WARN] Skipping enrollment with missing courseInstanceId:",
-                                enrollment.toObject()
-                            );
-                        }
-
                         // Calculate slutprov date - for grouped courses, use the same date for both
                         let slutprovDate;
                         if (entry.slutprovDate) {
@@ -751,6 +669,24 @@ class CourseMatchingService {
 
                         enrollment.slutprovDate = slutprovDate;
                         await enrollment.save();
+
+                        // Attach student email for frontend display (AFTER slutprovDate is set)
+                        if (enrollment.courseInstanceId) {
+                            results.enrollments.push({
+                                ...enrollment.toObject(),
+                                studentEmail: studentDocB?.email || "",
+                                courseInstanceName:
+                                    courseInstance.courseName || "",
+                            });
+                            console.log(
+                                `✅ Created enrollment for student ${studentId} in course ${course.courseName} (CourseInstance: ${courseInstance._id})`
+                            );
+                        } else {
+                            console.warn(
+                                "[WARN] Skipping enrollment with missing courseInstanceId:",
+                                enrollment.toObject()
+                            );
+                        }
 
                         console.log(
                             `📅 Slutprov date set for student ${studentId} in course ${course.courseName
@@ -1031,6 +967,7 @@ class CourseMatchingService {
                         results.warnings.push({
                             type: "no_match",
                             courseName: entry.name,
+                            studentId: studentId,
                             message: `Ingen matchande kurs hittades för "${entry.name}". Kursen kommer inte att skapas automatiskt.`,
                         });
                         continue;
@@ -1115,26 +1052,7 @@ class CourseMatchingService {
                     );
                     await enrollment.save();
 
-                    // Attach student email for frontend display
-                    // studentDoc is already loaded above
-
-                    if (enrollment.courseInstanceId) {
-                        results.enrollments.push({
-                            ...enrollment.toObject(),
-                            studentEmail: studentDoc?.email || "",
-                            courseInstanceName: courseInstance.courseName || "",
-                        });
-                        console.log(
-                            `✅ Created enrollment for student ${studentId} in individual course ${course.courseName} (CourseInstance: ${courseInstance._id})`
-                        );
-                    } else {
-                        console.warn(
-                            "[WARN] Skipping individual course enrollment with missing courseInstanceId:",
-                            enrollment.toObject()
-                        );
-                    }
-
-                    // Use provided slutprov date or calculate as Wednesday of week 4
+                    // Calculate and set slutprov date BEFORE adding to results
                     let slutprovDate;
                     if (entry.slutprovDate) {
                         slutprovDate = new Date(entry.slutprovDate);
@@ -1159,6 +1077,24 @@ class CourseMatchingService {
 
                     enrollment.slutprovDate = slutprovDate;
                     await enrollment.save(); // Save the updated enrollment with slutprovDate
+
+                    // Attach student email for frontend display (AFTER slutprovDate is set)
+                    // studentDoc is already loaded above
+                    if (enrollment.courseInstanceId) {
+                        results.enrollments.push({
+                            ...enrollment.toObject(),
+                            studentEmail: studentDoc?.email || "",
+                            courseInstanceName: courseInstance.courseName || "",
+                        });
+                        console.log(
+                            `✅ Created enrollment for student ${studentId} in individual course ${course.courseName} (CourseInstance: ${courseInstance._id})`
+                        );
+                    } else {
+                        console.warn(
+                            "[WARN] Skipping individual course enrollment with missing courseInstanceId:",
+                            enrollment.toObject()
+                        );
+                    }
 
                     // Note: Calendar events are now generated automatically by the /calendar-events/syncable endpoint
                     // based on StudentEnrollment.slutprovDate, so we don't need to create them here

@@ -7,37 +7,13 @@
       </div>
 
       <div class="content-grid">
-        <!-- Batch Processing -->
-        <div class="card">
+        <!-- File Upload Section - 30% width, centered -->
+        <div class="card card-upload">
           <div class="card-header">
             <h5>Batch-bearbetning av studenter</h5>
           </div>
 
           <div class="card-body">
-            <!--   Debug section
-            <div
-              class="debug-info"
-              style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px"
-            >
-              <h6>Debug Info:</h6>
-              <p>
-                <strong>Is Logged In:</strong>
-                {{ isLoggedIn }}
-              </p>
-              <p>
-                <strong>User Role:</strong>
-                {{ userRole }}
-              </p>
-              <p>
-                <strong>Is Admin:</strong>
-                {{ isAdmin }}
-              </p>
-              <p>
-                <strong>API Base URL:</strong>
-                {{ api.defaults.baseURL }}
-              </p>
-            </div>
-            -->
             <div class="file-upload-section">
               <label for="studentFile" class="file-upload-label">
                 <span class="label-text">Excel-fil med studenter</span>
@@ -51,7 +27,11 @@
                   accept=".xlsx,.xls"
                   class="file-input-hidden"
                 />
-                <button type="button" class="btn btn-logo file-select-btn" @click="triggerFileSelect">
+                <button
+                  type="button"
+                  class="btn btn-logo file-select-btn"
+                  @click="triggerFileSelect"
+                >
                   <span class="btn-icon">📁</span>
                   <span>Välj fil</span>
                 </button>
@@ -65,45 +45,66 @@
               </div>
             </div>
 
-            <div v-if="uploadedStudents.length > 0" class="upload-summary">
-              <h6>Uppladdade studenter ({{ uploadedStudents.length }}):</h6>
-              <div class="student-list scrollable-student-list">
-                <div v-for="(student, index) in uploadedStudents" :key="index" class="student-item">
-                  <div class="student-header" @click="toggleStudentExpansion(index)">
-                    <span class="student-name">{{ student.name }}</span>
-                    <span class="student-count">({{ getEnrollmentCount(student.email) }} kurser)</span>
-                    <span class="expand-icon">{{ expandedStudents[index] ? '▼' : '▶' }}</span>
-                  </div>
-                  <div v-if="expandedStudents[index]" class="student-education-details">
-                    <div v-if="student.education && student.education.length > 0">
-                      <div v-for="(edu, eduIdx) in student.education" :key="eduIdx" class="education-item">
-                        <strong>{{ edu.type === 'CoursePackage' ? 'Kurspaket' : 'Kurs' }}:</strong> {{ edu.name }}
-                        <span v-if="edu.startDate || edu.endDate" class="education-dates">
-                          ({{ edu.startDate ? new Date(edu.startDate).toLocaleDateString('sv-SE') : '?' }} - 
-                          {{ edu.endDate ? new Date(edu.endDate).toLocaleDateString('sv-SE') : '?' }})
-                        </span>
-                      </div>
-                    </div>
-                    <div v-else class="no-education">
-                      Inga utbildningsposter hittades
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-if="uploadedStudents.length > 5" class="more-students">
-                ... och {{ uploadedStudents.length - 5 }} till
-              </div>
-            </div>
-
             <button
-              class="btn btn-success"
+              class="btn btn-success process-btn"
               @click="processStudents"
               :disabled="isProcessing || !selectedFile"
             >
               {{ isProcessing ? 'Bearbetar...' : 'Bearbeta studenter' }}
             </button>
+          </div>
+        </div>
 
-            <div v-if="processingResults" class="processing-results">
+        <!-- Uploaded Students Section - 100% width -->
+        <div v-if="uploadedStudents.length > 0" class="card card-full-width">
+          <div class="card-header">
+            <h5>Uppladdade studenter ({{ uploadedStudents.length }})</h5>
+          </div>
+          <div class="card-body">
+            <div class="student-list scrollable-student-list">
+              <div v-for="(student, index) in uploadedStudents" :key="index" class="student-item">
+                <div class="student-header" @click="toggleStudentExpansion(index)">
+                  <span class="student-name">{{ student.name }}</span>
+                  <span class="student-count">
+                    ({{ getEnrollmentCount(student.email) }} kurser)
+                  </span>
+                  <span class="expand-icon">{{ expandedStudents[index] ? '▼' : '▶' }}</span>
+                </div>
+                <div v-if="expandedStudents[index]" class="student-education-details">
+                  <div v-if="student.education && student.education.length > 0">
+                    <div
+                      v-for="(edu, eduIdx) in student.education"
+                      :key="eduIdx"
+                      class="education-item"
+                    >
+                      <strong>{{ edu.type === 'CoursePackage' ? 'Kurspaket' : 'Kurs' }}:</strong>
+                      {{ edu.name }}
+                      <span v-if="edu.startDate || edu.endDate" class="education-dates">
+                        ({{
+                          edu.startDate ? new Date(edu.startDate).toLocaleDateString('sv-SE') : '?'
+                        }}
+                        -
+                        {{ edu.endDate ? new Date(edu.endDate).toLocaleDateString('sv-SE') : '?' }})
+                      </span>
+                      <span v-if="edu.slutprovDate" class="slutprov-date">
+                        – Slutprov: {{ new Date(edu.slutprovDate).toLocaleDateString('sv-SE') }}
+                      </span>
+                    </div>
+                  </div>
+                  <div v-else class="no-education">Inga utbildningsposter hittades</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Processing Results Section - 100% width -->
+        <div v-if="processingResults" class="card card-full-width">
+          <div class="card-header">
+            <h5>Bearbetningsresultat</h5>
+          </div>
+          <div class="card-body">
+            <div class="processing-results">
               <h6>Bearbetningsresultat:</h6>
               <div class="result-stats">
                 <div class="stat-item">
@@ -141,10 +142,13 @@
                     }}
                     till
                     {{
-                      enrollment.endDate ? new Date(enrollment.endDate).toLocaleDateString('sv-SE') : ''
+                      enrollment.endDate
+                        ? new Date(enrollment.endDate).toLocaleDateString('sv-SE')
+                        : ''
                     }}
                     <span v-if="enrollment.slutprovDate" class="slutprov-date">
-                      – Slutprov: {{ new Date(enrollment.slutprovDate).toLocaleDateString('sv-SE') }}
+                      – Slutprov:
+                      {{ new Date(enrollment.slutprovDate).toLocaleDateString('sv-SE') }}
                     </span>
                     – {{ enrollment.status }}
                   </li>
@@ -233,11 +237,26 @@
           console.error('Error processing students:', error)
           if (error.response?.status === 422 && Array.isArray(error.response?.data?.reasons)) {
             const reasons = error.response.data.reasons
-              .map((r) =>
-                `- ${r.student || ''} ${r.field ? '(' + r.field + ')' : ''}: ${r.message}`.trim()
-              )
-              .join('\n')
-            alert(`Uppladdning avbröts p.g.a. valideringsfel:\n${reasons}`)
+              .map((r) => {
+                let msg = `${r.studentName || r.student || ''}: ${r.message || ''}`
+                if (r.suggestion) {
+                  msg += `\n  → ${r.suggestion}`
+                }
+                // Show suggestions if available
+                if (r.suggestions && Array.isArray(r.suggestions) && r.suggestions.length > 0) {
+                  const suggestionList = r.suggestions
+                    .map((s) => `${s.code} (${s.name})`)
+                    .join(', ')
+                  msg += `\n  💡 Förslag: ${suggestionList}`
+                }
+                return msg
+              })
+              .join('\n\n')
+            const errorMsg =
+              error.response?.data?.detailedMessage ||
+              error.response?.data?.message ||
+              'Uppladdning avbröts p.g.a. valideringsfel'
+            alert(`${errorMsg}:\n\n${reasons}`)
           } else {
             alert(
               'Ett fel uppstod vid bearbetning av studenter.\n' +
@@ -252,7 +271,7 @@
                 '\n' +
                 'reasons: ' +
                 error.response?.data?.reasons +
-                '\nförmodligen felaktig struktur på dokumentet'
+                '\n'
             )
           }
         } finally {
@@ -297,11 +316,16 @@
         if (warning.message && !warning.message.includes(':')) {
           return warning.message
         }
-        
+
         // Otherwise format based on type
         switch (warning.type) {
           case 'package_added':
-            return warning.message || `Kurspaket "${warning.packageName || 'Okänt paket'}" har lagts till för elev ${warning.studentName || 'okänd'}.`
+            return (
+              warning.message ||
+              `Kurspaket "${warning.packageName || 'Okänt paket'}" har lagts till för elev ${
+                warning.studentName || 'okänd'
+              }.`
+            )
           case 'no_match':
             return `Ingen matchande kurs hittades för "${warning.courseName || 'okänd kurs'}".`
           default:
@@ -318,7 +342,7 @@
         const k = 1024
         const sizes = ['Bytes', 'KB', 'MB', 'GB']
         const i = Math.floor(Math.log(bytes) / Math.log(k))
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
       }
 
       return {
@@ -396,9 +420,16 @@
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     overflow: hidden;
+  }
+
+  .card-upload {
     width: 30%;
     min-width: 400px;
     max-width: 600px;
+  }
+
+  .card-full-width {
+    width: 100%;
   }
 
   .card-header {
@@ -442,6 +473,11 @@
     border: 1px solid #e0e0e0;
     width: 100%;
     box-sizing: border-box;
+  }
+
+  .process-btn {
+    width: 100%;
+    margin-top: 10px;
   }
 
   .file-upload-label {
@@ -554,16 +590,9 @@
     margin-bottom: 5px;
   }
 
-  .upload-summary {
-    margin: 15px 0;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 4px;
-  }
-
   .student-list {
-    max-height: 150px;
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .student-item {
@@ -687,8 +716,8 @@
 
   .warning-list,
   .error-list {
-    max-height: 100px;
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .warning-item,
@@ -792,8 +821,8 @@
   }
 
   .scrollable-student-list {
-    max-height: 120px; /* About 3 students high */
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
     border: 1px solid #eee;
     border-radius: 4px;
     padding: 4px 0;
@@ -801,8 +830,8 @@
   }
 
   .enrollments-scroll-list {
-    max-height: 160px;
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
     border: 1px solid #eee;
     border-radius: 4px;
     padding: 6px 10px;
@@ -828,10 +857,14 @@
       align-items: stretch;
     }
 
-    .card {
+    .card-upload {
       width: 100%;
       min-width: unset;
       max-width: 100%;
+    }
+
+    .card-full-width {
+      width: 100%;
     }
 
     .result-stats {
