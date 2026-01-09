@@ -257,14 +257,25 @@ export const uploadStudentsForMatching = async (req, res) => {
 
         // Build normalized course map using courseCode
         const allCourses = await Course.find({}).lean();
+        console.log(`[DEBUG] Found ${allCourses.length} courses in database`);
         const normalizedCourseMap = {};
         for (const c of allCourses) {
             // Normalize code using the same function as Excel parser
             const norm = normalizeCodeForMatching(c.courseCode || "");
             normalizedCourseMap[norm] = c;
-            console.log(`[DEBUG] Course code mapping: "${c.courseCode}" → "${norm}"`);
+            // Only log first 50 to avoid spam, but log all if there are issues
+            if (Object.keys(normalizedCourseMap).length <= 50) {
+                console.log(`[DEBUG] Course code mapping: "${c.courseCode}" → "${norm}"`);
+            }
         }
         console.log(`[DEBUG] Total courses in map: ${Object.keys(normalizedCourseMap).length}`);
+        // Log all normalized course codes for debugging (limit to first 100)
+        const allNormalizedCodes = Object.keys(normalizedCourseMap).sort();
+        console.log(`[DEBUG] All normalized course codes (first 100): ${allNormalizedCodes.slice(0, 100).join(', ')}`);
+        if (allNormalizedCodes.length === 0) {
+            console.error(`[ERROR] ⚠️ NO COURSES FOUND IN DATABASE! This will cause all matching to fail.`);
+            console.error(`[ERROR] Please check that courses have been imported into the database.`);
+        }
 
         // Pre-validation: if any course or package entry cannot be matched, abort upload
         (function prevalidateUnmatchedCourses() {
@@ -300,6 +311,17 @@ export const uploadStudentsForMatching = async (req, res) => {
                     }
                     
                     console.log(`[DEBUG] Matching entry: "${originalName}" → normalized: "${normalized}"`);
+                    console.log(`[DEBUG] Checking if "${normalized}" exists in course map: ${normalized in normalizedCourseMap}`);
+                    console.log(`[DEBUG] Checking if "${normalized}" exists in package map: ${normalized in normalizedPackageMap}`);
+                    if (!(normalized in normalizedCourseMap) && !(normalized in normalizedPackageMap)) {
+                        // Show closest matches for debugging
+                        const allCodes = [...Object.keys(normalizedCourseMap), ...Object.keys(normalizedPackageMap)];
+                        const closest = allCodes
+                            .map(code => ({ code, dist: distance(normalized, code) }))
+                            .sort((a, b) => a.dist - b.dist)
+                            .slice(0, 5);
+                        console.log(`[DEBUG] Closest matches for "${normalized}":`, closest);
+                    }
                     const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
 
                     // Check if the normalized name exists in either Course or CoursePackage collections
@@ -313,11 +335,13 @@ export const uploadStudentsForMatching = async (req, res) => {
                     );
                     
                     console.log(`[DEBUG] Match results for "${normalized}": package=${matchPkg || 'none'}, course=${matchCourse || 'none'}`);
-                    console.log(`[DEBUG] Available package keys (first 10): ${Object.keys(normalizedPackageMap).slice(0, 10).join(', ')}`);
-                    console.log(`[DEBUG] Available course keys (first 10): ${Object.keys(normalizedCourseMap).slice(0, 10).join(', ')}`);
+                    console.log(`[DEBUG] Available package keys (first 20): ${Object.keys(normalizedPackageMap).slice(0, 20).join(', ')}`);
+                    console.log(`[DEBUG] Available course keys (first 20): ${Object.keys(normalizedCourseMap).slice(0, 20).join(', ')}`);
+                    console.log(`[DEBUG] Total available courses: ${Object.keys(normalizedCourseMap).length}, packages: ${Object.keys(normalizedPackageMap).length}`);
 
                     // If no match found in either collection, add to reasons
                     if (!matchCourse && !matchPkg) {
+                        console.warn(`[WARNING] No match found for "${originalName}" (normalized: "${normalized}")`);
                         // Find closest matches for suggestions
                         const allCodes = [
                             ...Object.keys(normalizedCourseMap),
@@ -562,7 +586,15 @@ export const uploadStudentsForMatching = async (req, res) => {
                             dbStudent.email
                         }) with teacherId: ${dbStudent.teacherId || "null"}`
                     );
-                    results.students.push(dbStudent);
+                    // Convert to plain object for easier manipulation
+                    try {
+                        const studentObj = dbStudent.toObject ? dbStudent.toObject() : (dbStudent.toJSON ? dbStudent.toJSON() : dbStudent);
+                        results.students.push(studentObj);
+                    } catch (objErr) {
+                        console.error("Error converting student to object:", objErr);
+                        // Fallback: use the student as-is
+                        results.students.push(dbStudent);
+                    }
                 } else {
                     // Update existing student with teacher from document if not already assigned
                     const studentTeacherName = studentData.teacher?.trim() || "";
@@ -574,7 +606,15 @@ export const uploadStudentsForMatching = async (req, res) => {
                         dbStudent.teacher = studentTeacherName;
                         await dbStudent.save();
                     }
-                    results.students.push(dbStudent);
+                    // Convert to plain object for easier manipulation
+                    try {
+                        const studentObj = dbStudent.toObject ? dbStudent.toObject() : (dbStudent.toJSON ? dbStudent.toJSON() : dbStudent);
+                        results.students.push(studentObj);
+                    } catch (objErr) {
+                        console.error("Error converting student to object:", objErr);
+                        // Fallback: use the student as-is
+                        results.students.push(dbStudent);
+                    }
                 }
             } catch (error) {
                 console.error(
@@ -874,14 +914,80 @@ export const uploadStudentsForMatching = async (req, res) => {
                     .filter(Boolean)
                     .join(", ") || "Inga kurser/paket angivna";
                 
+                // Find specific unmatched courses for this student from warnings/errors
+                // Check both studentId (ObjectId) and studentId as string
+                const unmatchedCourses = results.warnings
+                    .filter(w => {
+                        if (w.type !== "no_match") return false;
+                        const warningStudentId = w.studentId?.toString();
+                        const dbStudentId = dbStudent._id?.toString();
+                        const matches = warningStudentId === dbStudentId;
+                        if (!matches && warningStudentId) {
+                            console.log(`[DEBUG] Warning studentId mismatch: warning="${warningStudentId}" vs dbStudent="${dbStudentId}"`);
+                        }
+                        return matches;
+                    })
+                    .map(w => w.courseName)
+                    .filter(Boolean);
+                
+                console.log(`[DEBUG] Found ${unmatchedCourses.length} unmatched courses for student ${dbStudent.name}: ${unmatchedCourses.join(', ')}`);
+                console.log(`[DEBUG] Total warnings in results: ${results.warnings.length}, no_match warnings: ${results.warnings.filter(w => w.type === 'no_match').length}`);
+                
+                // Find similar course suggestions for unmatched courses
+                const suggestions = [];
+                for (const unmatchedCode of unmatchedCourses) {
+                    const normalizedUnmatched = normalizeCodeForMatching(unmatchedCode);
+                    const allCodes = [
+                        ...Object.keys(normalizedCourseMap),
+                        ...Object.keys(normalizedPackageMap),
+                    ];
+                    
+                    // Find closest matches
+                    let bestMatches = [];
+                    for (const code of allCodes) {
+                        const dist = distance(normalizedUnmatched, code);
+                        if (dist <= 3 && bestMatches.length < 3) {
+                            const matchItem = normalizedCourseMap[code] || normalizedPackageMap[code];
+                            if (matchItem) {
+                                bestMatches.push({
+                                    code: matchItem.courseCode || matchItem.coursePackageCode,
+                                    name: matchItem.courseName || matchItem.coursePackageName,
+                                    distance: dist,
+                                });
+                            }
+                        }
+                    }
+                    bestMatches.sort((a, b) => a.distance - b.distance);
+                    if (bestMatches.length > 0) {
+                        suggestions.push({
+                            unmatched: unmatchedCode,
+                            suggestions: bestMatches.map(m => `${m.code} (${m.name})`).join(", "),
+                        });
+                    }
+                }
+                
+                const unmatchedCoursesList = unmatchedCourses.length > 0 
+                    ? ` Omatchade kurser: ${unmatchedCourses.join(", ")}.`
+                    : "";
+                
+                let suggestionText = `Kontrollera att kurskoderna/paketkoderna (${studentEducationCodes}) är korrekta och finns i systemet.`;
+                if (suggestions.length > 0) {
+                    const suggestionDetails = suggestions.map(s => 
+                        `"${s.unmatched}" → Förslag: ${s.suggestions}`
+                    ).join("; ");
+                    suggestionText += ` Liknande kurser i systemet: ${suggestionDetails}.`;
+                }
+                
                 zeroEnrollmentErrors.push({
                     type: "no_enrollments_created",
                     student: dbStudent.name || dbStudent.email || "unknown",
                     studentEmail: dbStudent.email || "",
                     studentName: dbStudent.name || "",
                     educationCodes: studentEducationCodes,
-                    message: `Inga kurser kunde matchas eller skapas för student ${dbStudent.name || dbStudent.email || "okänd"}.`,
-                    suggestion: `Kontrollera att kurskoderna/paketkoderna (${studentEducationCodes}) är korrekta och finns i systemet. Se tidigare felmeddelanden för detaljer om omatchade kurser.`,
+                    unmatchedCourses: unmatchedCourses,
+                    suggestions: suggestions,
+                    message: `Inga kurser kunde matchas eller skapas för student ${dbStudent.name || dbStudent.email || "okänd"}.${unmatchedCoursesList}`,
+                    suggestion: suggestionText,
                 });
                 // Cleanup newly created student to avoid dangling records
                 if (wasStudentCreated && dbStudent?._id) {
@@ -956,6 +1062,66 @@ export const uploadStudentsForMatching = async (req, res) => {
         results.warnings = results.warnings.filter(
             (w) => w.type !== "instance_created"
         );
+
+        // Populate education data from enrollments for each student
+        if (results.students && Array.isArray(results.students)) {
+            try {
+                const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
+                for (const student of results.students) {
+                try {
+                    // Ensure we have a valid student ID
+                    const studentId = student._id || student.id;
+                    if (!studentId) {
+                        console.warn(`Student missing ID, skipping education population:`, student.name || student.email);
+                        student.education = Array.isArray(student.education) ? student.education : [];
+                        continue;
+                    }
+
+                    const enrollments = await StudentEnrollment.find({ studentId: studentId })
+                        .populate("mainCourseId", "courseName courseCode")
+                        .populate("coursePackageId", "coursePackageName coursePackageCode")
+                        .lean();
+
+                    const enrollmentEducation = enrollments.map((enrollment) => {
+                        if (enrollment.mainCourseId) {
+                            return {
+                                type: "Course",
+                                refId: enrollment.mainCourseId._id,
+                                name: enrollment.mainCourseId.courseName,
+                                startDate: enrollment.startDate,
+                                endDate: enrollment.endDate,
+                                slutprovDate: enrollment.slutprovDate,
+                            };
+                        } else if (enrollment.coursePackageId) {
+                            return {
+                                type: "CoursePackage",
+                                refId: enrollment.coursePackageId._id,
+                                name: enrollment.coursePackageId.coursePackageName,
+                                startDate: enrollment.startDate,
+                                endDate: enrollment.endDate,
+                                slutprovDate: enrollment.slutprovDate,
+                            };
+                        }
+                        return null;
+                    }).filter(Boolean);
+
+                    // Merge with existing education entries from student document
+                    const existingEducation = Array.isArray(student.education) ? student.education : [];
+                    student.education = [...existingEducation, ...enrollmentEducation];
+                } catch (err) {
+                    console.error(`Error populating education for student ${student._id || student.id || 'unknown'}:`, err);
+                    // If enrollment fetch fails, use existing education or empty array
+                    student.education = Array.isArray(student.education) ? student.education : [];
+                }
+            }
+            } catch (importErr) {
+                console.error("Error importing StudentEnrollment model:", importErr);
+                // If import fails, just use existing education data
+                for (const student of results.students) {
+                    student.education = Array.isArray(student.education) ? student.education : [];
+                }
+            }
+        }
 
         res.json({
             success: true,
