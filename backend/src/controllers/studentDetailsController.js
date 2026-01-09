@@ -185,6 +185,11 @@ export const updateStudentInfo = async (req, res) => {
             student.aplStatus = updates.aplStatus;
         }
 
+        // Track if finalExamDate changed
+        const finalExamDateChanged = 
+            updates.finalExamDate !== undefined && 
+            updates.finalExamDate !== student.finalExamDate;
+
         // Log the changes
         const changeLog = {
             timestamp: new Date(),
@@ -210,6 +215,22 @@ export const updateStudentInfo = async (req, res) => {
         student.changeHistory.push(changeLog);
 
         await student.save();
+
+        // Sync calendar event if finalExamDate was set or changed
+        if (finalExamDateChanged && student.finalExamDate) {
+            try {
+                const { syncCalendarEventsForStudent } = await import(
+                    "../utils/calendarEventSync.js"
+                );
+                await syncCalendarEventsForStudent(student._id);
+            } catch (calendarError) {
+                console.error(
+                    "❌ Error syncing calendar event:",
+                    calendarError
+                );
+                // Don't fail the update if calendar sync fails
+            }
+        }
 
         res.json({
             success: true,

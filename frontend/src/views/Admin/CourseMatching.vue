@@ -38,30 +38,56 @@
               </p>
             </div>
             -->
-            <div class="form-group">
-              <label for="studentFile">Excel-fil med studenter:</label>
-              <input
-                type="file"
-                id="studentFile"
-                ref="studentFileInput"
-                @change="handleFileChange"
-                accept=".xlsx,.xls"
-                class="form-control"
-                style="display: none"
-              />
-              <button type="button" class="btn btn-logo" @click="triggerFileSelect">
-                Välj fil
-              </button>
-              <span class="selected-file-name" v-if="selectedFile">
-                {{ selectedFile.name }}
-              </span>
+            <div class="file-upload-section">
+              <label for="studentFile" class="file-upload-label">
+                <span class="label-text">Excel-fil med studenter</span>
+              </label>
+              <div class="file-upload-controls">
+                <input
+                  type="file"
+                  id="studentFile"
+                  ref="studentFileInput"
+                  @change="handleFileChange"
+                  accept=".xlsx,.xls"
+                  class="file-input-hidden"
+                />
+                <button type="button" class="btn btn-logo file-select-btn" @click="triggerFileSelect">
+                  <span class="btn-icon">📁</span>
+                  <span>Välj fil</span>
+                </button>
+                <div v-if="selectedFile" class="selected-file-display">
+                  <span class="file-icon">📄</span>
+                  <span class="file-name">{{ selectedFile.name }}</span>
+                  <span class="file-size" v-if="selectedFile.size">
+                    ({{ formatFileSize(selectedFile.size) }})
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div v-if="uploadedStudents.length > 0" class="upload-summary">
               <h6>Uppladdade studenter ({{ uploadedStudents.length }}):</h6>
               <div class="student-list scrollable-student-list">
                 <div v-for="(student, index) in uploadedStudents" :key="index" class="student-item">
-                  {{ student.name }} - {{ getEnrollmentCount(student.email) }} kurser
+                  <div class="student-header" @click="toggleStudentExpansion(index)">
+                    <span class="student-name">{{ student.name }}</span>
+                    <span class="student-count">({{ getEnrollmentCount(student.email) }} kurser)</span>
+                    <span class="expand-icon">{{ expandedStudents[index] ? '▼' : '▶' }}</span>
+                  </div>
+                  <div v-if="expandedStudents[index]" class="student-education-details">
+                    <div v-if="student.education && student.education.length > 0">
+                      <div v-for="(edu, eduIdx) in student.education" :key="eduIdx" class="education-item">
+                        <strong>{{ edu.type === 'CoursePackage' ? 'Kurspaket' : 'Kurs' }}:</strong> {{ edu.name }}
+                        <span v-if="edu.startDate || edu.endDate" class="education-dates">
+                          ({{ edu.startDate ? new Date(edu.startDate).toLocaleDateString('sv-SE') : '?' }} - 
+                          {{ edu.endDate ? new Date(edu.endDate).toLocaleDateString('sv-SE') : '?' }})
+                        </span>
+                      </div>
+                    </div>
+                    <div v-else class="no-education">
+                      Inga utbildningsposter hittades
+                    </div>
+                  </div>
                 </div>
               </div>
               <div v-if="uploadedStudents.length > 5" class="more-students">
@@ -85,7 +111,7 @@
                   <span class="stat-value success">{{ processingResults.enrollments.length }}</span>
                 </div>
                 <div class="stat-item">
-                  <span class="stat-label">Varningar:</span>
+                  <span class="stat-label">Notifikationer:</span>
                   <span class="stat-value warning">{{ processingResults.warnings.length }}</span>
                 </div>
                 <div class="stat-item">
@@ -110,28 +136,31 @@
                     –
                     {{
                       enrollment.startDate
-                        ? new Date(enrollment.startDate).toLocaleDateString()
+                        ? new Date(enrollment.startDate).toLocaleDateString('sv-SE')
                         : ''
                     }}
                     till
                     {{
-                      enrollment.endDate ? new Date(enrollment.endDate).toLocaleDateString() : ''
+                      enrollment.endDate ? new Date(enrollment.endDate).toLocaleDateString('sv-SE') : ''
                     }}
+                    <span v-if="enrollment.slutprovDate" class="slutprov-date">
+                      – Slutprov: {{ new Date(enrollment.slutprovDate).toLocaleDateString('sv-SE') }}
+                    </span>
                     – {{ enrollment.status }}
                   </li>
                 </ul>
               </div>
 
               <div v-if="processingResults.warnings.length > 0" class="warnings-section">
-                <h6>Varningar:</h6>
+                <h6>Notifikationer:</h6>
                 <div class="warning-list">
                   <div
                     v-for="(warning, index) in processingResults.warnings"
                     :key="index"
                     class="warning-item"
                   >
-                    <strong>{{ warning.type }}:</strong>
-                    {{ warning.message }}
+                    <span class="notification-icon">ℹ️</span>
+                    <span class="notification-message">{{ formatWarningMessage(warning) }}</span>
                   </div>
                 </div>
               </div>
@@ -171,6 +200,7 @@
       const isProcessing = ref(false)
       const processingResults = ref(null)
       const courses = ref([])
+      const expandedStudents = ref({}) // Track which students are expanded
       // Remove statistics and statsFilters
 
       const studentFileInput = ref(null)
@@ -256,6 +286,41 @@
         return processingResults.value.enrollments.filter((e) => e.studentEmail === email).length
       }
 
+      // Toggle student expansion
+      const toggleStudentExpansion = (index) => {
+        expandedStudents.value[index] = !expandedStudents.value[index]
+      }
+
+      // Format warning messages to be more user-friendly
+      const formatWarningMessage = (warning) => {
+        // If message is already formatted (from backend), use it
+        if (warning.message && !warning.message.includes(':')) {
+          return warning.message
+        }
+        
+        // Otherwise format based on type
+        switch (warning.type) {
+          case 'package_added':
+            return warning.message || `Kurspaket "${warning.packageName || 'Okänt paket'}" har lagts till för elev ${warning.studentName || 'okänd'}.`
+          case 'no_match':
+            return `Ingen matchande kurs hittades för "${warning.courseName || 'okänd kurs'}".`
+          default:
+            // Remove type prefix if present
+            const message = warning.message || ''
+            const colonIndex = message.indexOf(':')
+            return colonIndex > 0 ? message.substring(colonIndex + 1).trim() : message
+        }
+      }
+
+      // Format file size for display
+      const formatFileSize = (bytes) => {
+        if (bytes === 0) return '0 Bytes'
+        const k = 1024
+        const sizes = ['Bytes', 'KB', 'MB', 'GB']
+        const i = Math.floor(Math.log(bytes) / Math.log(k))
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+      }
+
       return {
         isLoggedIn,
         userRole,
@@ -273,6 +338,10 @@
         processStudents,
         // Remove loadStatistics,
         getEnrollmentCount,
+        expandedStudents,
+        toggleStudentExpansion,
+        formatWarningMessage,
+        formatFileSize,
       }
     },
   }
@@ -316,9 +385,10 @@
   }
 
   .content-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 20px;
+    align-items: center;
   }
 
   .card {
@@ -326,6 +396,9 @@
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     overflow: hidden;
+    width: 30%;
+    min-width: 400px;
+    max-width: 600px;
   }
 
   .card-header {
@@ -359,6 +432,98 @@
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
+  }
+
+  .file-upload-section {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .file-upload-label {
+    display: block;
+    margin-bottom: 12px;
+    font-weight: 500;
+    color: #2c3e50;
+    font-size: 14px;
+  }
+
+  .label-text {
+    display: inline-block;
+  }
+
+  .file-upload-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .file-input-hidden {
+    display: none !important;
+  }
+
+  .file-select-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .file-select-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn-icon {
+    font-size: 16px;
+  }
+
+  .selected-file-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: white;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #2c3e50;
+    flex: 1;
+    min-width: 200px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .file-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    color: #2c9316;
+  }
+
+  .file-size {
+    color: #666;
+    font-size: 0.9em;
+    flex-shrink: 0;
   }
 
   .threshold-value {
@@ -406,6 +571,63 @@
     border-bottom: 1px solid #eee;
   }
 
+  .student-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 4px 0;
+    user-select: none;
+  }
+
+  .student-header:hover {
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .student-name {
+    font-weight: 500;
+  }
+
+  .student-count {
+    color: #666;
+    font-size: 0.9em;
+  }
+
+  .expand-icon {
+    margin-left: auto;
+    color: #999;
+    font-size: 0.8em;
+  }
+
+  .student-education-details {
+    margin-top: 8px;
+    margin-left: 20px;
+    padding: 8px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #2c9316;
+  }
+
+  .education-item {
+    padding: 4px 0;
+    font-size: 0.9em;
+  }
+
+  .education-dates {
+    color: #666;
+    font-size: 0.85em;
+    margin-left: 8px;
+  }
+
+  .no-education {
+    color: #999;
+    font-style: italic;
+    font-size: 0.9em;
+  }
+
   .more-students {
     font-style: italic;
     color: #666;
@@ -420,8 +642,8 @@
   }
 
   .result-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 10px;
     margin-bottom: 15px;
   }
@@ -430,6 +652,12 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+  }
+
+  .stat-item:last-child {
+    border-bottom: none;
   }
 
   .stat-label {
@@ -465,9 +693,27 @@
 
   .warning-item,
   .error-item {
-    padding: 5px 0;
+    padding: 8px 0;
     border-bottom: 1px solid #eee;
     font-size: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .notification-icon {
+    flex-shrink: 0;
+    font-size: 16px;
+  }
+
+  .notification-message {
+    flex: 1;
+    line-height: 1.4;
+  }
+
+  .slutprov-date {
+    color: #2c9316;
+    font-weight: 500;
   }
 
   .statistics-section {
@@ -510,11 +756,6 @@
   }
   .btn-logo:hover {
     filter: brightness(0.95);
-  }
-  .selected-file-name {
-    margin-left: 8px;
-    font-size: 13px;
-    color: #2c3e50;
   }
 
   .btn-success {
@@ -584,7 +825,13 @@
 
   @media (max-width: 768px) {
     .content-grid {
-      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .card {
+      width: 100%;
+      min-width: unset;
+      max-width: 100%;
     }
 
     .result-stats {
