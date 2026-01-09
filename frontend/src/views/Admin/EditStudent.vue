@@ -56,11 +56,12 @@
         <div class="col-md-6">
           <label class="form-label">APL status</label>
           <select class="form-select" v-model="form.aplStatus">
-            <option value="GRAY">GRAY</option>
-            <option value="RED">RED</option>
-            <option value="BLUE">BLUE</option>
-            <option value="YELLOW">YELLOW</option>
-            <option value="GREEN">GREEN</option>
+            <option value="GRAY">GRAY - Ny Elev</option>
+            <option value="BLUE">BLUE - Kontaktad</option>
+            <option value="YELLOW">YELLOW - APL på gång</option>
+            <option value="PURPLE">PURPLE - Behöver uppföljning</option>
+            <option value="RED">RED - Snart slut</option>
+            <option value="GREEN">GREEN - Klar praktik</option>
           </select>
         </div>
 
@@ -81,7 +82,7 @@
           <label class="form-label">Provtid (24h)</label>
           <select class="form-select" v-model="form.examTime">
             <option v-for="h in hours" :key="h" :value="h + ':00'">{{ h }}:00</option>
-            <option v-for="h in hours" :key="h+'-30'" :value="h + ':30'">{{ h }}:30</option>
+            <option v-for="h in hours" :key="h + '-30'" :value="h + ':30'">{{ h }}:30</option>
           </select>
         </div>
         <div class="col-md-4">
@@ -100,7 +101,9 @@
       </div>
 
       <div class="mt-3 d-flex gap-2">
-        <button class="btn btn-primary" :disabled="saving" @click="save">{{ saving ? 'Sparar...' : 'Spara' }}</button>
+        <button class="btn btn-primary" :disabled="saving" @click="save">
+          {{ saving ? 'Sparar...' : 'Spara' }}
+        </button>
         <button class="btn btn-secondary" @click="reload">Ladda om</button>
       </div>
 
@@ -168,7 +171,9 @@
 
       async function loadStudents() {
         try {
-          const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, { withCredentials: true })
+          const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
+            withCredentials: true,
+          })
           students.value = res.data
         } catch (e) {
           console.error('❌ Failed to load students', e)
@@ -177,7 +182,9 @@
 
       async function loadTeachers() {
         try {
-          const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`, { withCredentials: true })
+          const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers`, {
+            withCredentials: true,
+          })
           teachers.value = res.data
         } catch (e) {
           console.error('❌ Failed to load teachers', e)
@@ -207,14 +214,18 @@
           }
           dateFields.startDate = s.startDate ? new Date(s.startDate).toISOString().slice(0, 10) : ''
           dateFields.endDate = s.endDate ? new Date(s.endDate).toISOString().slice(0, 10) : ''
-          dateFields.finalExamDate = s.finalExamDate ? new Date(s.finalExamDate).toISOString().slice(0, 10) : ''
+          dateFields.finalExamDate = s.finalExamDate
+            ? new Date(s.finalExamDate).toISOString().slice(0, 10)
+            : ''
 
           // Fetch exam instances
           await loadExamInstances(id)
         } catch (e) {
           console.error('❌ Failed to load student', e?.response?.data || e)
           const serverMsg = e?.response?.data?.error || e?.response?.data?.message
-          errorMessage.value = serverMsg ? `Kunde inte ladda elev: ${serverMsg}` : 'Kunde inte ladda elev.'
+          errorMessage.value = serverMsg
+            ? `Kunde inte ladda elev: ${serverMsg}`
+            : 'Kunde inte ladda elev.'
         }
       }
 
@@ -269,8 +280,10 @@
         const q = (searchQuery.value || '').toLowerCase().trim()
         if (!q) return []
         return students.value
-          .filter((s) =>
-            (s.name || '').toLowerCase().includes(q) || (s.personalNumber || '').toLowerCase().includes(q)
+          .filter(
+            (s) =>
+              (s.name || '').toLowerCase().includes(q) ||
+              (s.personalNumber || '').toLowerCase().includes(q)
           )
           .slice(0, 10)
       })
@@ -308,12 +321,38 @@
         return dt.toISOString().slice(0, 10)
       }
 
-      return { students, teachers, selectedId, searchQuery, showSuggestions, filteredStudents, onSearch, selectStudent, form, dateFields, hours, saving, successMessage, errorMessage, examInstances, loadingExams, save, reload, formatDate }
+      return {
+        students,
+        teachers,
+        selectedId,
+        searchQuery,
+        showSuggestions,
+        filteredStudents,
+        onSearch,
+        selectStudent,
+        form,
+        dateFields,
+        hours,
+        saving,
+        successMessage,
+        errorMessage,
+        examInstances,
+        loadingExams,
+        save,
+        reload,
+        formatDate,
+      }
     },
   }
 </script>
 
 <style scoped>
-  .gap-2 { gap: .5rem; }
-  .autocomplete-list { z-index: 1050; max-height: 260px; overflow-y: auto; }
+  .gap-2 {
+    gap: 0.5rem;
+  }
+  .autocomplete-list {
+    z-index: 1050;
+    max-height: 260px;
+    overflow-y: auto;
+  }
 </style>

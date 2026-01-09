@@ -7,12 +7,16 @@
 Alla delar av systemet ska vara sammanlänkade.
 Exempel: Klick på kurs i studieplanen leder till vy med alla elever och ansvarig lärare.
 
+-   Klart - Man kan klicka på Elevnamn så kommer man till en detaljerad vy där man kan klicka vidare på kurser i studieplan som visar ansvarig(a) lärare samt vilka elever som är kopplade till kursen.
+
 ---
 
 ## Lärare
 
 -   Aktiva kurser
+    -   Klart - man kan se i kursinstanser vilka kurser som är aktiva.
 -   Elever kopplade till respektive kurs
+    -   Klart - Vet dock inte exakt hur ni menade med vart detta ska visas men samma svar som i "Navigering"
 
 ---
 
@@ -24,17 +28,26 @@ När kurs sätts till avbrott:
 (Menas när ELEV sätts till avbrott?)
 
 -   Automatisk notis till lärare
+    -   **Klart - Både admin som sätter avbrottet samt ansvig lärare får notis**
 -   Eleven tas bort från slutprovs- och APL-listor
+    -   **Klart.**
 -   Eleven markeras som inaktiv
+    -   **Både i detalj vy och i elev vyn så är elevn rödmarkerad med notis.**
 -   Möjlighet att återaktivera elev
+    -   **Klart.**
 
 ### Revideringar
 
 Vid ändringar i studieplan:
 
 -   Studieplan uppdateras
+    -   **Vet inte riktigt vad som menas med detta,**
+        -   **När elevens studier blir uppdaterade så uppdateras elev vyn, detalj vyn med studentens nya studieplan. Är det detta som menas?**
 -   APL-lista uppdateras automatiskt
+    -   **Förstår inte denna punkt heller.**
+        -   **Man kan drag 'n' droppa elever i olika fält under APL vyn och då uppdateras deras APL status, elevens information består.**
 -   Automatisk bekräftelse till elev och lärare
+    -   **Måste implementeras.**
 
 ## APL
 
@@ -54,8 +67,13 @@ Färgkoder:
 ### Flik 2 – Avslutad APL
 
 -   Endast grönmarkerade elever
+    -   Betyder detta att endast grönmarkerade elever har möjlighet att "AVSLUTA" sin APL?
+        -   I så fall hur vill ni att det ska se ut?
 -   Kontaktuppgifter och praktikperiod
+    -   Var vill ni att denna information ska visas?
+        -   När man klickar på eleven in APL vyn eller i själva etiketten
 -   Markering om kontrakt är uppladdat
+    -   Samma som ovan, var vill ni att det ska visas?
 
 ### Flik 3 – APL-kontrakt
 

@@ -91,7 +91,7 @@ const StudentSchema = new mongoose.Schema(
 
         aplStatus: {
             type: String,
-            enum: ["GRAY", "RED", "BLUE", "YELLOW", "GREEN"],
+            enum: ["GRAY", "BLUE", "YELLOW", "PURPLE", "RED", "GREEN"],
             default: "GRAY",
         },
 
@@ -99,7 +99,7 @@ const StudentSchema = new mongoose.Schema(
             {
                 status: {
                     type: String,
-                    enum: ["GRAY", "RED", "BLUE", "YELLOW", "GREEN"],
+                    enum: ["GRAY", "BLUE", "YELLOW", "PURPLE", "RED", "GREEN"],
                 },
                 changedAt: { type: Date, default: Date.now },
                 changedBy: { type: String },

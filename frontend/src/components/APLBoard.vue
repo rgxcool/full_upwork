@@ -2,34 +2,41 @@
   <div class="summary centered">
     <div class="summary-header">
       <h2>📊 APL Statusöversikt</h2>
-      <button @click="fetchStudents" class="refresh-btn" title="Uppdatera data">
-        <i class="fas fa-sync-alt"></i>
-      </button>
+      <div class="header-actions">
+        <button @click="summaryExpanded = !summaryExpanded" class="toggle-btn" title="Visa/dölj statusöversikt">
+          <i :class="summaryExpanded ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+        </button>
+        <button @click="fetchStudents" class="refresh-btn" title="Uppdatera data">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
     </div>
-    <div style="margin-bottom: 10px">
-      <v-btn color="primary" small @click="addStudentDialog = true">Lägg till elev till APL</v-btn>
-    </div>
-    <table>
-      <tbody>
-        <tr v-for="status in statusMap" :key="status.key">
-          <td>{{ status.label }}:</td>
-          <td>
-            <strong>{{ statusCounts[status.key] }}</strong>
-          </td>
-        </tr>
-        <tr>
-          <td colspan="2" style="padding-top: 6px">
-            Totalt antal studenter:
-            <strong>{{ totalStudents }}</strong>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <div class="comment-order-toggle">
-      <label>
-        <input type="checkbox" v-model="commentAscOrder" />
-        Visa senaste kommentar längst ner
-      </label>
+    <div v-show="summaryExpanded" class="summary-content">
+      <div style="margin-bottom: 10px">
+        <v-btn color="primary" small @click="openAddStudentDialog">Lägg till elev till APL</v-btn>
+      </div>
+      <table>
+        <tbody>
+          <tr v-for="status in statusMap" :key="status.key">
+            <td>{{ status.label }}:</td>
+            <td>
+              <strong>{{ statusCounts[status.key] }}</strong>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="padding-top: 6px">
+              Totalt antal studenter:
+              <strong>{{ totalStudents }}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="comment-order-toggle">
+        <label>
+          <input type="checkbox" v-model="commentAscOrder" />
+          Visa senaste kommentar längst ner
+        </label>
+      </div>
     </div>
   </div>
   <div class="apl-board">
@@ -223,13 +230,16 @@
             @input="onSearchInput"
           />
           <div v-if="isSearching" style="font-size: 0.9rem; color: #666">Söker...</div>
+          <div v-if="searchError" style="font-size: 0.9rem; color: #d32f2f; margin-top: 8px">
+            {{ searchError }}
+          </div>
           <v-list v-if="showSuggestions && suggestions.length">
             <v-list-item v-for="s in suggestions" :key="s.id" @click="selectSuggestion(s)">
               <v-list-item-title>{{ s.name }}</v-list-item-title>
               <v-list-item-subtitle>{{ s.extra }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
-          <div v-else-if="showSuggestions && !isSearching" style="font-size: 0.9rem; color: #666">
+          <div v-else-if="showSuggestions && !isSearching && !searchError" style="font-size: 0.9rem; color: #666">
             Inga träffar
           </div>
         </v-card-text>
@@ -260,6 +270,7 @@
   const totalStudents = computed(() => filteredStudents.value.length)
 
   const commentAscOrder = ref(true)
+  const summaryExpanded = ref(false) // Start collapsed by default
   const copied = ref(false)
   const blinkedField = ref('')
   const copiedPosition = ref({ x: 0, y: 0 })
@@ -278,6 +289,7 @@
   const suggestions = ref([])
   const isSearching = ref(false)
   const showSuggestions = ref(false)
+  const searchError = ref('')
   const manualAplIds = ref(new Set())
   const excludedAplIds = ref(new Set())
 
@@ -313,14 +325,44 @@
   // Only include students with a CoursePackage or manually added, and exclude dropout students
   const filteredStudents = computed(() => {
     const hasCoursePackageOrManual = (student) => {
+      const studentId = String(student._id)
+      
       // Exclude dropout students
-      if (student.dropout) return false
-      if (excludedAplIds.value.has(student._id)) return false
-      if (manualAplIds.value.has(student._id)) return true
-      if (!Array.isArray(student.education)) return false
-      return student.education.some((edu) => edu.type === 'CoursePackage')
+      if (student.dropout) {
+        console.debug(`[APL Filter] Student ${student.name} (${studentId}) excluded: dropout`)
+        return false
+      }
+      
+      // Check excluded list
+      if (excludedAplIds.value.has(studentId)) {
+        console.debug(`[APL Filter] Student ${student.name} (${studentId}) excluded: in excludedAplIds`)
+        return false
+      }
+      
+      // Manually added students always appear
+      if (manualAplIds.value.has(studentId)) {
+        console.log(`[APL Filter] ✅ Student ${student.name} (${studentId}) included: manually added`)
+        return true
+      }
+      
+      // Check for CoursePackage in education
+      if (!Array.isArray(student.education)) {
+        console.debug(`[APL Filter] Student ${student.name} (${studentId}) excluded: no education array`)
+        return false
+      }
+      
+      const hasCoursePackage = student.education.some((edu) => edu.type === 'CoursePackage')
+      if (hasCoursePackage) {
+        console.debug(`[APL Filter] ✅ Student ${student.name} (${studentId}) included: has CoursePackage`)
+      } else {
+        console.debug(`[APL Filter] Student ${student.name} (${studentId}) excluded: no CoursePackage`)
+      }
+      return hasCoursePackage
     }
-    return (students.value || []).filter(hasCoursePackageOrManual)
+    
+    const filtered = (students.value || []).filter(hasCoursePackageOrManual)
+    console.log(`[APL Filter] Total filtered students: ${filtered.length} out of ${students.value?.length || 0}`)
+    return filtered
   })
 
   // Update studentsByStatus and statusCounts to use filteredStudents
@@ -355,11 +397,12 @@
   }
 
   const statusMap = [
-    { key: 'GRAY', label: 'Ej börjat' },
-    { key: 'RED', label: 'Praktik slut, ej närvarat' },
-    { key: 'BLUE', label: 'Bokade för samtal' },
-    { key: 'YELLOW', label: 'Är i fas' },
-    { key: 'GREEN', label: 'Har kontrakt, skall gå eller har börjat praktik' },
+    { key: 'GRAY', label: 'Ny Elev' },
+    { key: 'BLUE', label: 'Kontaktad' },
+    { key: 'YELLOW', label: 'APL på gång' },
+    { key: 'PURPLE', label: 'Behöver uppföljning' },
+    { key: 'RED', label: 'Snart slut' },
+    { key: 'GREEN', label: 'Klar praktik' },
   ]
 
   const commentStatus = (student) => {
@@ -401,6 +444,10 @@
           seenBy: (comment.seenBy || []).map((id) => id.toString()),
         })),
       }))
+      
+      console.log('📋 Fetched students count:', students.value.length)
+      console.log('📋 Manual APL IDs:', Array.from(manualAplIds.value))
+      console.log('📋 Students with manual IDs:', students.value.filter(s => manualAplIds.value.has(String(s._id))).map(s => ({ name: s.name, id: s._id })))
     } catch (err) {
       console.error('❌ Failed to fetch students:', err)
     }
@@ -475,56 +522,181 @@
     }
   }
 
+  // Debounce timer for search
+  let searchDebounceTimer = null
+
   // Autocomplete search and selection
   const onSearchInput = async () => {
-    showSuggestions.value = false
-    suggestions.value = []
     const q = searchQuery.value.trim()
-    if (q.length < 3) return
-    isSearching.value = true
-    try {
-      const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/search`, {
-        params: { q, type: 'Användare' },
-        withCredentials: true,
-      })
-      // Only keep students (Elev)
-      suggestions.value = (data || []).filter((r) => r.type === 'Elev')
-      showSuggestions.value = true
-    } catch (e) {
-      console.error('❌ Sökning misslyckades:', e)
-    } finally {
-      isSearching.value = false
+    searchError.value = ''
+    
+    if (q.length < 3) {
+      showSuggestions.value = false
+      suggestions.value = []
+      // Clear any pending debounce
+      if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer)
+        searchDebounceTimer = null
+      }
+      return
     }
+    
+    // Clear previous debounce timer
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer)
+    }
+    
+    // Debounce the search - wait 500ms after user stops typing
+    searchDebounceTimer = setTimeout(async () => {
+      console.log('🔍 Searching for:', q)
+      showSuggestions.value = false
+      suggestions.value = []
+      isSearching.value = true
+      
+      try {
+        const apiUrl = `${import.meta.env.VITE_API_URL}/api/search`
+        console.log('📡 Calling search API:', apiUrl, { q, type: 'Användare' })
+        
+        const { data } = await axios.get(apiUrl, {
+          params: { q, type: 'Användare' },
+          withCredentials: true,
+        })
+        
+        console.log('✅ Search response:', data)
+        
+        // Only keep students (Elev)
+        const studentResults = (data || []).filter((r) => r.type === 'Elev')
+        console.log('📚 Filtered student results:', studentResults)
+        
+        suggestions.value = studentResults
+        showSuggestions.value = true
+      } catch (e) {
+        console.error('❌ Sökning misslyckades:', e)
+        console.error('❌ Error details:', e.response?.data || e.message)
+        if (e.response?.status === 429) {
+          searchError.value = 'För många förfrågningar. Vänta lite och försök igen.'
+        } else {
+          searchError.value = `Sökfel: ${e.response?.data?.message || e.message || 'Okänt fel'}`
+        }
+        showSuggestions.value = false
+        suggestions.value = []
+      } finally {
+        isSearching.value = false
+        searchDebounceTimer = null
+      }
+    }, 500) // Wait 500ms after user stops typing
   }
 
-  const selectSuggestion = (s) => {
-    if (!s?.id) return
-    manualAplIds.value.add(s.id)
+  const selectSuggestion = async (s) => {
+    console.log('👆 Selected suggestion:', s)
+    if (!s?.id) {
+      console.error('❌ No ID in suggestion:', s)
+      return
+    }
+    // Ensure ID is stored as string for consistent comparison
+    const studentId = String(s.id)
+    console.log('➕ Adding student to APL:', s.name, 'ID:', studentId)
+    manualAplIds.value.add(studentId)
     saveManualAplIds()
-    // If the student is not in the local list (unlikely), we keep inclusion for when they appear
+    console.log('💾 Saved manualAplIds:', Array.from(manualAplIds.value))
+    
+    // Check if student is already in the list
+    const existingStudent = students.value.find(st => String(st._id) === studentId)
+    if (!existingStudent) {
+      console.log('⚠️ Student not in current list, fetching student details...')
+      try {
+        // Fetch the specific student to add them to the list
+        // Use student-details endpoint which includes enrollments/education
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/student-details/${studentId}`, {
+          withCredentials: true,
+        })
+        if (res.data && res.data.student) {
+          const newStudent = {
+            ...res.data.student,
+            commentHistory: (res.data.student.commentHistory || []).map((comment) => ({
+              ...comment,
+              seenBy: (comment.seenBy || []).map((id) => id.toString()),
+            })),
+          }
+          // Add to students array if not already there
+          const exists = students.value.some(st => String(st._id) === studentId)
+          if (!exists) {
+            students.value.push(newStudent)
+            console.log('✅ Added student to list:', newStudent.name, 'Education:', newStudent.education)
+          }
+        }
+      } catch (err) {
+        console.error('❌ Failed to fetch student details:', err)
+        // Try alternative endpoint
+        try {
+          const res2 = await axios.get(`${import.meta.env.VITE_API_URL}/api/student/${studentId}`, {
+            withCredentials: true,
+          })
+          if (res2.data) {
+            const newStudent = {
+              ...res2.data,
+              commentHistory: (res2.data.commentHistory || []).map((comment) => ({
+                ...comment,
+                seenBy: (comment.seenBy || []).map((id) => id.toString()),
+              })),
+            }
+            const exists = students.value.some(st => String(st._id) === studentId)
+            if (!exists) {
+              students.value.push(newStudent)
+              console.log('✅ Added student to list (via /student endpoint):', newStudent.name)
+            }
+          }
+        } catch (err2) {
+          console.error('❌ Failed to fetch student via alternative endpoint:', err2)
+        }
+      }
+    } else {
+      console.log('✅ Student already in list:', existingStudent.name)
+    }
+    
+    // Refresh students to ensure the newly added student appears
+    console.log('🔄 Refreshing student list...')
+    await fetchStudents()
+    console.log('✅ Student list refreshed')
     searchQuery.value = ''
     suggestions.value = []
     showSuggestions.value = false
+    searchError.value = ''
     addStudentDialog.value = false
+  }
+
+  const openAddStudentDialog = () => {
+    console.log('🔘 Add student button clicked')
+    addStudentDialog.value = true
+    searchQuery.value = ''
+    suggestions.value = []
+    showSuggestions.value = false
+    searchError.value = ''
+    isSearching.value = false
   }
 
   const closeAddDialog = () => {
+    console.log('❌ Closing add student dialog')
     addStudentDialog.value = false
     searchQuery.value = ''
     suggestions.value = []
     showSuggestions.value = false
+    searchError.value = ''
+    isSearching.value = false
   }
 
   const removeFromApl = (student) => {
     if (!student?._id) return
     if (!confirm(`Ta bort ${student.name} från APL?`)) return
+    // Ensure ID is stored as string for consistent comparison
+    const studentId = String(student._id)
     // If they were manually added, remove from manual set
-    if (manualAplIds.value.has(student._id)) {
-      manualAplIds.value.delete(student._id)
+    if (manualAplIds.value.has(studentId)) {
+      manualAplIds.value.delete(studentId)
       saveManualAplIds()
     }
     // Add to excluded set
-    excludedAplIds.value.add(student._id)
+    excludedAplIds.value.add(studentId)
     saveExcludedAplIds()
     // Optimistic local update
     const idx = students.value.findIndex((s) => s._id === student._id)
@@ -740,6 +912,10 @@
 
   .column.green {
     background-color: #ccff90;
+  }
+
+  .column.purple {
+    background-color: #ce93d8;
   }
 
   .tight-title {
@@ -1028,6 +1204,45 @@
     align-items: center;
     gap: 15px;
     margin-bottom: 15px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toggle-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+  }
+
+  .toggle-btn:hover {
+    background: #5a6268;
+  }
+
+  .summary-content {
+    animation: slideDown 0.3s ease-out;
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      max-height: 0;
+    }
+    to {
+      opacity: 1;
+      max-height: 1000px;
+    }
   }
 
   .refresh-btn {
