@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div v-for="education in student.education" :key="education._id" class="education-item">
+    <div v-for="education in sortedEducation" :key="education._id" class="education-item">
       <div class="info">
         <strong>Kurs:</strong>
         {{ education.name || 'Ingen kursdata' }}
@@ -33,6 +33,35 @@
   })
 
   const student = computed(() => props.userData || { education: [] })
+
+  // Sort education: CoursePackages first, then courses chronologically
+  const sortedEducation = computed(() => {
+    if (!student.value?.education || !Array.isArray(student.value.education)) return [];
+    
+    return [...student.value.education].sort((a, b) => {
+      // First, separate CoursePackages from other types
+      const aIsPackage = a.type === 'CoursePackage';
+      const bIsPackage = b.type === 'CoursePackage';
+      
+      // CoursePackages come first
+      if (aIsPackage && !bIsPackage) return -1;
+      if (!aIsPackage && bIsPackage) return 1;
+      
+      // If both are CoursePackages, maintain their relative order (or sort by startDate if available)
+      if (aIsPackage && bIsPackage) {
+        if (!a.startDate && !b.startDate) return 0;
+        if (!a.startDate) return 1;
+        if (!b.startDate) return -1;
+        return new Date(a.startDate) - new Date(b.startDate);
+      }
+      
+      // For courses (non-packages), sort chronologically by startDate
+      if (!a.startDate && !b.startDate) return 0;
+      if (!a.startDate) return 1;
+      if (!b.startDate) return -1;
+      return new Date(a.startDate) - new Date(b.startDate);
+    });
+  })
 
   const statuses = ['Antagen', 'Betygsatt', 'Avbrott', 'Ej påbörjad', 'Reviderad']
 

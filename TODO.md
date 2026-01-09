@@ -7,16 +7,16 @@
 Alla delar av systemet ska vara sammanlänkade.
 Exempel: Klick på kurs i studieplanen leder till vy med alla elever och ansvarig lärare.
 
--   Klart - Man kan klicka på Elevnamn så kommer man till en detaljerad vy där man kan klicka vidare på kurser i studieplan som visar ansvarig(a) lärare samt vilka elever som är kopplade till kursen.
+-   **Klart - Man kan klicka på Elevnamn så kommer man till en detaljerad vy där man kan klicka vidare på kurser i studieplan som visar ansvarig(a) lärare samt vilka elever som är kopplade till kursen.**
 
 ---
 
 ## Lärare
 
 -   Aktiva kurser
-    -   Klart - man kan se i kursinstanser vilka kurser som är aktiva.
+    -   **Klart - man kan se i kursinstanser vilka kurser som är aktiva.**
 -   Elever kopplade till respektive kurs
-    -   Klart - Vet dock inte exakt hur ni menade med vart detta ska visas men samma svar som i "Navigering"
+    -   **Klart - Vet dock inte exakt hur ni menade med vart detta ska visas men samma svar som i "Navigering"**
 
 ---
 
