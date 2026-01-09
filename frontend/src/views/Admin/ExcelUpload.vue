@@ -103,7 +103,7 @@
                     class="course-group"
                   >
                     <div
-                      v-for="course in student.education"
+                      v-for="course in getSortedEducation(student.education)"
                       :key="course._id || course.refId?._id"
                       class="course-item"
                     >
@@ -358,7 +358,7 @@
               <div class="form-section">
                 <h4>Utbildning</h4>
                 <div
-                  v-for="(edu, index) in editingStudent.education.filter((e) => !e.removedAt)"
+                  v-for="(edu, index) in getSortedEducation(editingStudent.education.filter((e) => !e.removedAt))"
                   :key="index"
                   class="education-box"
                 >
@@ -657,6 +657,35 @@
           )
           // Don't auto-save - let user save manually
         }
+      },
+
+      // Sort education: CoursePackages first, then courses chronologically
+      getSortedEducation(education) {
+        if (!education || !Array.isArray(education)) return [];
+        
+        return [...education].sort((a, b) => {
+          // First, separate CoursePackages from other types
+          const aIsPackage = a.type === 'CoursePackage';
+          const bIsPackage = b.type === 'CoursePackage';
+          
+          // CoursePackages come first
+          if (aIsPackage && !bIsPackage) return -1;
+          if (!aIsPackage && bIsPackage) return 1;
+          
+          // If both are CoursePackages, maintain their relative order (or sort by startDate if available)
+          if (aIsPackage && bIsPackage) {
+            if (!a.startDate && !b.startDate) return 0;
+            if (!a.startDate) return 1;
+            if (!b.startDate) return -1;
+            return new Date(a.startDate) - new Date(b.startDate);
+          }
+          
+          // For courses (non-packages), sort chronologically by startDate
+          if (!a.startDate && !b.startDate) return 0;
+          if (!a.startDate) return 1;
+          if (!b.startDate) return -1;
+          return new Date(a.startDate) - new Date(b.startDate);
+        });
       },
 
       getEducationLabel(edu) {

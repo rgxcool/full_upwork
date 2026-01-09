@@ -102,6 +102,35 @@ export default {
     const sortedEducation = ref([]);
     const localStudent = ref(props.student);
 
+    // Sort education: CoursePackages first, then courses chronologically
+    const sortEducation = (education) => {
+      if (!education || !Array.isArray(education)) return [];
+      
+      return [...education].sort((a, b) => {
+        // First, separate CoursePackages from other types
+        const aIsPackage = a.type === 'CoursePackage';
+        const bIsPackage = b.type === 'CoursePackage';
+        
+        // CoursePackages come first
+        if (aIsPackage && !bIsPackage) return -1;
+        if (!aIsPackage && bIsPackage) return 1;
+        
+        // If both are CoursePackages, maintain their relative order (or sort by startDate if available)
+        if (aIsPackage && bIsPackage) {
+          if (!a.startDate && !b.startDate) return 0;
+          if (!a.startDate) return 1;
+          if (!b.startDate) return -1;
+          return new Date(a.startDate) - new Date(b.startDate);
+        }
+        
+        // For courses (non-packages), sort chronologically by startDate
+        if (!a.startDate && !b.startDate) return 0;
+        if (!a.startDate) return 1;
+        if (!b.startDate) return -1;
+        return new Date(a.startDate) - new Date(b.startDate);
+      });
+    };
+
     watch(
       () => props.student,
       (newStudent) => {
@@ -110,12 +139,7 @@ export default {
           sortedEducation.value = [];
           return;
         }
-        sortedEducation.value = [...newStudent.education].sort((a, b) => {
-          if (!a.startDate && !b.startDate) return 0;
-          if (!a.startDate) return 1;
-          if (!b.startDate) return -1;
-          return new Date(a.startDate) - new Date(b.startDate);
-        });
+        sortedEducation.value = sortEducation(newStudent.education);
       },
       { immediate: true, deep: true }
     );
