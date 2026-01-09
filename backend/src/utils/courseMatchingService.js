@@ -252,7 +252,7 @@ class CourseMatchingService {
                         results.warnings.push({
                             type: "no_match",
                             courseName: entry.name,
-                            message: `No matching course found for \"${entry.name}\"`,
+                            message: `Ingen matchande kurs hittades för "${entry.name}". Kursen kommer inte att skapas automatiskt.`,
                         });
                         continue;
                     }
@@ -980,11 +980,13 @@ class CourseMatchingService {
                             });
                             await studentDocD.save();
                             // Surface a non-blocking note so the uploader can see that a package was added
+                            const studentName = studentDocD?.name || studentDocD?.email || "Okänd elev";
                             results.warnings.push({
                                 type: "package_added",
                                 packageName: packageDoc.coursePackageName,
                                 studentId,
-                                message: `CoursePackage '${packageDoc.coursePackageName}' added to student education`,
+                                studentName,
+                                message: `Kurspaket "${packageDoc.coursePackageName}" har lagts till för elev ${studentName}. Paketet innehåller ${packageDoc.coursePackageCourses?.length || 0} kurser som kommer att skapas automatiskt.`,
                             });
                             console.log(
                                 `✅ Added CoursePackage education entry for student ${studentDocD.name || studentDocD.email
@@ -1029,7 +1031,7 @@ class CourseMatchingService {
                         results.warnings.push({
                             type: "no_match",
                             courseName: entry.name,
-                            message: `No course match found for: ${entry.name}`,
+                            message: `Ingen matchande kurs hittades för "${entry.name}". Kursen kommer inte att skapas automatiskt.`,
                         });
                         continue;
                     }

@@ -548,18 +548,20 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         // ----------- GRUPPERA MANUELLA SLUTPROV -----------
         for (const student of studentsWithFinalExam) {
             try {
-                if (
-                    !student.finalExamDate ||
-                    !student.teacherId ||
-                    !student.teacherId.userId
-                ) {
-                    console.warn("skip, saknar fält", student);
+                if (!student.finalExamDate) {
+                    console.warn("skip, saknar finalExamDate", student.name);
                     continue;
+                }
+                
+                // Allow students without teacherId - they'll be grouped separately
+                if (!student.teacherId || !student.teacherId.userId) {
+                    console.warn(`⚠️ Student ${student.name} has no teacherId, will group by date only`);
                 }
 
                 const dateKey = localDateKey(student.finalExamDate);
-                const teacherId = student.teacherId._id.toString();
-                const key = `${teacherId}_${dateKey}`;
+                // Handle students without teacherId - use a default key
+                const teacherId = student.teacherId?._id?.toString() || null;
+                const key = teacherId ? `${teacherId}_${dateKey}` : `no_teacher_${dateKey}`;
 
                 // Hitta kursnamn
                 let courseName = null;
@@ -627,11 +629,11 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                 const endOfDay = new Date(dateKey + "T23:59:59.999Z");
 
                 // Look for attendance record for this student's exam date
-                const attendanceRecord = await ExamAttendance.findOne({
+                const attendanceRecord = student.teacherId?._id ? await ExamAttendance.findOne({
                     examDate: { $gte: startOfDay, $lte: endOfDay },
                     teacherId: student.teacherId._id,
                     studentId: student._id,
-                });
+                }) : null;
 
                 // Use attendance data if available, otherwise fallback to student data
                 const finalAttended = attendanceRecord
@@ -656,11 +658,12 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                         .filter(
                             (s) =>
                                 s.finalExamDate &&
-                                s.teacherId &&
-                                s.teacherId._id.toString() === teacherId &&
                                 new Date(s.finalExamDate)
                                     .toISOString()
-                                    .split("T")[0] === dateKey
+                                    .split("T")[0] === dateKey &&
+                                // Match teacherId if available, or both have no teacherId
+                                ((teacherId && s.teacherId && s.teacherId._id.toString() === teacherId) ||
+                                 (!teacherId && !s.teacherId))
                         )
                         .map((s) => ({
                             time: s.examTime,
@@ -686,10 +689,10 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                         } (type: ${typeof student.teacherId._id})`
                     );
 
-                    const attendanceRecords = await ExamAttendance.find({
+                    const attendanceRecords = student.teacherId?._id ? await ExamAttendance.find({
                         examDate: { $gte: startOfDay, $lte: endOfDay },
                         teacherId: student.teacherId._id,
-                    });
+                    }) : [];
 
                     // Get the most common exam info from attendance records or fallback to student data
                     const recordsWithTime = attendanceRecords.filter(
@@ -750,13 +753,13 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
 
                     const startDate = new Date(dateKey + "T00:00:00");
                     grouped[key] = {
-                        id: `${teacherId}_${dateKey}`,
-                        title: student.teacherId.userId.username,
+                        id: teacherId ? `${teacherId}_${dateKey}` : `no_teacher_${dateKey}`,
+                        title: student.teacherId?.userId?.username || "Okänd lärare",
                         start: dateKey,
-                        color: student.teacherId.colorCode || "#999999",
+                        color: student.teacherId?.colorCode || "#999999",
                         extendedProps: {
-                            teacher: student.teacherId.userId.username,
-                            teacherId: student.teacherId._id,
+                            teacher: student.teacherId?.userId?.username || "Okänd lärare",
+                            teacherId: student.teacherId?._id || null,
                             type: "exam",
                             examMunicipality: eventExamMunicipality,
                             examLocation: eventExamLocation,

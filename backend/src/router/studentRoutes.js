@@ -351,6 +351,22 @@ router.post("/student", async (req, res) => {
             }
         }
 
+        // Sync calendar event if student has finalExamDate
+        if (savedStudent.finalExamDate) {
+            try {
+                const { syncCalendarEventsForStudent } = await import(
+                    "../utils/calendarEventSync.js"
+                );
+                await syncCalendarEventsForStudent(savedStudent._id);
+            } catch (calendarError) {
+                console.error(
+                    "❌ Error syncing calendar event:",
+                    calendarError
+                );
+                // Don't fail the student creation if calendar sync fails
+            }
+        }
+
         res.status(201).json(savedStudent);
     } catch (error) {
         console.error("❌ Error adding student:", error.message);
