@@ -22,11 +22,12 @@
               v-model="editData.aplStatus"
               class="form-control"
             >
-              <option value="GRAY">Grå</option>
-              <option value="RED">Röd</option>
-              <option value="BLUE">Blå</option>
-              <option value="YELLOW">Gul</option>
-              <option value="GREEN">Grön</option>
+              <option value="GRAY">Grå - Ny Elev</option>
+              <option value="BLUE">Blå - Kontaktad</option>
+              <option value="YELLOW">Gul - APL på gång</option>
+              <option value="PURPLE">Lila - Behöver uppföljning</option>
+              <option value="RED">Röd - Snart slut</option>
+              <option value="GREEN">Grön - Klar praktik</option>
             </select>
             <span v-else>{{ student.aplStatus || 'Ej angivet' }}</span>
           </div>
