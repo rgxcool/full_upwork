@@ -95,13 +95,18 @@ export const getStudentDetails = async (req, res) => {
             enrollmentId: enrollment._id,
             courseInstanceId: enrollment.courseInstanceId?._id,
             courseInstance: enrollment.courseInstanceId,
+            teacherId: enrollment.teacherId, // Include teacherId for display
             addedAt: enrollment.createdAt,
             addedBy: enrollment.teacherId?.name || "System",
             isEnrollment: true, // Flag to identify this came from enrollment system
         }));
 
-        // Use only enrollment data as education entries
-        populatedStudent.education = enrollmentEducation;
+        // Merge enrollment data with existing CoursePackage entries
+        // CoursePackages are not enrollments but should still be shown
+        const coursePackages = existingEducation.filter(edu => edu.type === 'CoursePackage');
+        
+        // Combine CoursePackages with enrollment data
+        populatedStudent.education = [...coursePackages, ...enrollmentEducation];
 
         // Add enrollment statistics
         populatedStudent.enrollmentStats = {

@@ -1,7 +1,7 @@
 <template>
   <div class="card">
     <div class="card-header">
-      <h3>Utbildning</h3>
+      <h3>Studieplan</h3>
       <div v-if="student.enrollmentStats" class="enrollment-stats">
         <span class="stat-item">
           <strong>{{ student.enrollmentStats.totalEnrollments }}</strong>
@@ -28,11 +28,17 @@
               <div
                 :key="element._id || element.refId?._id"
                 class="education-item"
-                :class="{ 'enrollment-item': element.isEnrollment, 'reviderad-item': element.status === 'reviderad' }"
+                :class="{ 
+                  'enrollment-item': element.isEnrollment, 
+                  'reviderad-item': element.status === 'reviderad',
+                  'course-package-item': element.type === 'CoursePackage'
+                }"
               >
                 <div class="education-header">
                   <span class="drag-handle" title="Dra för att ändra ordning">☰</span>
-                  <span class="education-type">{{ element.type }}</span>
+                  <span class="education-type" :class="element.type === 'CoursePackage' ? 'type-package' : 'type-course'">
+                    {{ element.type === 'CoursePackage' ? 'Kurspaket' : 'Kurs' }}
+                  </span>
                   <span v-if="element.isEnrollment" class="enrollment-badge">Inskriven</span>
                   <span v-if="element.type === 'Course' && (element.courseInstanceId || element.refId?._id)" class="education-name">
                     <router-link 
@@ -49,24 +55,52 @@
                 </div>
 
                 <div class="education-details">
+                  <!-- Teacher Information -->
+                  <div v-if="getTeacherName(element)" class="education-teacher">
+                    <strong>Lärare:</strong> {{ getTeacherName(element) }}
+                  </div>
+
+                  <!-- Dates -->
                   <div v-if="element.startDate && element.endDate" class="education-dates">
-                    {{ formatDate(element.startDate) }} - {{ formatDate(element.endDate) }}
+                    <strong>Period:</strong> {{ formatDate(element.startDate) }} - {{ formatDate(element.endDate) }}
                   </div>
 
-                  <div v-if="element.status" class="education-status">
-                    Status:
-                    <span :class="'status-' + element.status">{{ element.status }}</span>
+                  <!-- Status Dropdown (only for enrollments) -->
+                  <div v-if="element.isEnrollment" class="education-status-section">
+                    <label><strong>Status:</strong></label>
+                    <select
+                      v-if="element.enrollmentId && canEditStatus"
+                      v-model="element.status"
+                      @change="updateStatus(element)"
+                      class="status-select"
+                      :class="'status-' + (element.status || 'enrolled')"
+                      :disabled="updatingStatus[element.enrollmentId]"
+                    >
+                      <option value="enrolled">Antagen</option>
+                      <option value="completed">Betygsatt</option>
+                      <option value="dropped">Avbrott</option>
+                      <option value="inactive">Ej påbörjad</option>
+                      <option value="reviderad">Reviderad</option>
+                    </select>
+                    <span v-else :class="'status-' + (element.status || 'enrolled')" class="status-display">
+                      {{ getStatusLabel(element.status || 'enrolled') }}
+                    </span>
+                    <span v-if="updatingStatus[element.enrollmentId]" class="updating-indicator">
+                      Uppdaterar...
+                    </span>
                   </div>
 
+                  <!-- Grade -->
                   <div v-if="element.grade" class="education-grade">
-                    Betyg: {{ element.grade }}
+                    <strong>Betyg:</strong> {{ element.grade }}
                   </div>
 
+                  <!-- Course Instance Info -->
                   <div
                     v-if="element.isEnrollment && element.courseInstance"
                     class="course-instance-info"
                   >
-                    Kursinstans: {{ element.courseInstance.courseName }} ({{
+                    <strong>Kursinstans:</strong> {{ element.courseInstance.courseName }} ({{
                       formatDate(element.courseInstance.startDate)
                     }}
                     - {{ formatDate(element.courseInstance.endDate) }})
@@ -83,7 +117,8 @@
 </template>
 
 <script>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
+import { useStore } from 'vuex';
 import { api } from '@/store/store.js';
 import draggable from 'vuedraggable';
 
@@ -99,8 +134,15 @@ export default {
     },
   },
   setup(props) {
+    const store = useStore();
     const sortedEducation = ref([]);
     const localStudent = ref(props.student);
+    const updatingStatus = ref({});
+
+    const canEditStatus = computed(() => {
+      const role = store.getters.userRole;
+      return ['admin', 'systemadmin', 'teacher'].includes(role);
+    });
 
     // Sort education: CoursePackages first, then courses chronologically
     const sortEducation = (education) => {
@@ -220,12 +262,100 @@ export default {
       return '#';
     };
 
+    const getTeacherName = (edu) => {
+      // Check if teacherId is populated in the enrollment
+      if (edu.teacherId) {
+        if (typeof edu.teacherId === 'object') {
+          return edu.teacherId.name || edu.teacherId.username || null;
+        }
+      }
+      // Check if addedBy has teacher name
+      if (edu.addedBy && edu.addedBy !== 'System') {
+        return edu.addedBy;
+      }
+      // Check courseInstance for teacher
+      if (edu.courseInstance?.teacherId) {
+        if (typeof edu.courseInstance.teacherId === 'object') {
+          return edu.courseInstance.teacherId.name || edu.courseInstance.teacherId.username || null;
+        }
+      }
+      return null;
+    };
+
+    const getStatusLabel = (status) => {
+      const statusMap = {
+        'enrolled': 'Antagen',
+        'completed': 'Betygsatt',
+        'dropped': 'Avbrott',
+        'inactive': 'Ej påbörjad',
+        'reviderad': 'Reviderad',
+        'active': 'Aktiv',
+        'suspended': 'Suspenderad',
+      };
+      return statusMap[status] || status;
+    };
+
+    const updateStatus = async (element) => {
+      if (!element.enrollmentId || !element.status) return;
+      
+      const originalStatus = localStudent.value.education?.find(
+        e => e.enrollmentId === element.enrollmentId
+      )?.status || element.status;
+      
+      updatingStatus.value[element.enrollmentId] = true;
+      try {
+        const response = await api.put(`/enrollments/${element.enrollmentId}/status`, {
+          status: element.status,
+        });
+        
+        console.log('Status update successful:', response.data);
+        
+        // Update local state
+        const index = sortedEducation.value.findIndex(e => e.enrollmentId === element.enrollmentId);
+        if (index !== -1) {
+          sortedEducation.value[index].status = element.status;
+          // Update teacher info if returned
+          if (response.data.enrollment?.teacherId) {
+            sortedEducation.value[index].teacherId = response.data.enrollment.teacherId;
+          }
+        }
+        
+        // Update localStudent as well
+        if (localStudent.value.education) {
+          const studentEduIndex = localStudent.value.education.findIndex(
+            e => e.enrollmentId === element.enrollmentId
+          );
+          if (studentEduIndex !== -1) {
+            localStudent.value.education[studentEduIndex].status = element.status;
+          }
+        }
+      } catch (err) {
+        console.error('Error updating enrollment status:', err);
+        console.error('Error response:', err.response?.data);
+        const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Kunde inte uppdatera status';
+        alert(`Kunde inte uppdatera status: ${errorMessage}`);
+        
+        // Revert the change
+        const index = sortedEducation.value.findIndex(e => e.enrollmentId === element.enrollmentId);
+        if (index !== -1) {
+          sortedEducation.value[index].status = originalStatus;
+        }
+      } finally {
+        updatingStatus.value[element.enrollmentId] = false;
+      }
+    };
+
     return {
       sortedEducation,
       handleEducationReorder,
       getEducationName,
       formatDate,
       getCourseLink,
+      getTeacherName,
+      getStatusLabel,
+      updateStatus,
+      canEditStatus,
+      updatingStatus,
     };
   },
 };
@@ -274,6 +404,14 @@ export default {
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 12px;
+}
+
+.type-package {
+  background: #6f42c1;
+}
+
+.type-course {
+  background: #007bff;
 }
 .education-name {
   font-weight: 500;
@@ -328,32 +466,97 @@ export default {
   margin-top: 10px;
   font-size: 14px;
   color: #6c757d;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+
+.education-teacher {
+  margin-bottom: 5px;
+}
+
 .education-dates {
   margin-bottom: 5px;
 }
-.education-status {
-  margin-bottom: 5px;
+
+.course-package-item {
+  border-left: 4px solid #6f42c1;
+  background-color: #f8f4ff;
 }
+.education-status-section {
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-select {
+  padding: 4px 8px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 14px;
+  min-width: 150px;
+}
+
+.status-select.status-enrolled {
+  border-color: #28a745;
+  color: #28a745;
+}
+
+.status-select.status-completed {
+  border-color: #6c757d;
+  color: #6c757d;
+}
+
+.status-select.status-dropped {
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.status-select.status-inactive {
+  border-color: #6c757d;
+  color: #6c757d;
+}
+
+.status-select.status-reviderad {
+  border-color: #ffc107;
+  color: #ffc107;
+}
+
+.status-display {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
 .status-enrolled {
   color: #28a745;
   font-weight: 500;
 }
+
 .status-active {
   color: #007bff;
   font-weight: 500;
 }
+
 .status-completed {
   color: #6c757d;
   font-weight: 500;
 }
+
 .status-dropped {
   color: #dc3545;
   font-weight: 500;
 }
+
+.status-inactive {
+  color: #6c757d;
+  font-weight: 500;
+}
+
 .status-reviderad {
-    color: #ffc107;
-    font-weight: 500;
+  color: #ffc107;
+  font-weight: 500;
 }
 .course-instance-info {
   margin-top: 5px;
@@ -387,5 +590,12 @@ export default {
 }
 .sortable-chosen {
   cursor: grabbing !important;
+}
+
+.updating-indicator {
+  font-size: 12px;
+  color: #6c757d;
+  font-style: italic;
+  margin-left: 10px;
 }
 </style>

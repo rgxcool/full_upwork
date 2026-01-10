@@ -1442,26 +1442,50 @@ export const updateEnrollmentStatus = async (req, res) => {
         const { status, reason, notes } = req.body;
         const userId = req.user?.userId;
 
+        console.log(`[updateEnrollmentStatus] Updating enrollment ${enrollmentId} to status: ${status}`);
+
         const enrollment = await StudentEnrollment.findById(enrollmentId);
         if (!enrollment) {
             return res.status(404).json({ error: "Enrollment not found" });
         }
 
+        // Validate status
+        const validStatuses = ["enrolled", "active", "completed", "dropped", "inactive", "suspended", "reviderad"];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ 
+                error: "Invalid status", 
+                validStatuses 
+            });
+        }
+
         await enrollment.changeStatus(status, reason, notes, userId);
 
-        // Update course instance statistics
-        await CourseMatchingService.updateCourseInstanceStats(
-            enrollment.courseInstanceId
-        );
+        // Update course instance statistics (wrap in try-catch to not fail if this errors)
+        try {
+            await CourseMatchingService.updateCourseInstanceStats(
+                enrollment.courseInstanceId
+            );
+        } catch (statsError) {
+            console.error("Error updating course instance stats (non-fatal):", statsError);
+        }
+
+        // Reload enrollment to get updated data
+        const updatedEnrollment = await StudentEnrollment.findById(enrollmentId)
+            .populate("teacherId", "name email")
+            .populate("mainCourseId", "courseName courseCode");
 
         res.json({
             success: true,
             message: "Enrollment status updated successfully",
-            enrollment,
+            enrollment: updatedEnrollment,
         });
     } catch (error) {
         console.error("Error updating enrollment status:", error);
-        res.status(500).json({ error: "Internal server error" });
+        console.error("Error stack:", error.stack);
+        res.status(500).json({ 
+            error: "Internal server error",
+            message: error.message 
+        });
     }
 };
 
