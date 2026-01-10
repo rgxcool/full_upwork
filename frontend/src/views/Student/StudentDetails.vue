@@ -48,7 +48,7 @@
 </template>
 
 <script>
-import { ref, onMounted, computed, shallowRef } from 'vue';
+import { ref, onMounted, onUnmounted, computed, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { api } from '@/store/store.js';
@@ -58,8 +58,7 @@ import StudyPlanTab from './tabs/StudyPlanTab.vue';
 import PermissionsTab from './tabs/PermissionsTab.vue';
 import DocumentsTab from './tabs/DocumentsTab.vue';
 import CourseArchiveTab from './tabs/CourseArchiveTab.vue';
-// APL tab is not yet implemented per plan
-// import AplTab from './tabs/AplTab.vue';
+import AplTab from './tabs/AplTab.vue';
 
 export default {
   name: 'StudentDetails',
@@ -69,6 +68,7 @@ export default {
     PermissionsTab,
     DocumentsTab,
     CourseArchiveTab,
+    AplTab,
   },
   setup() {
     const route = useRoute();
@@ -78,8 +78,32 @@ export default {
     const error = ref(null);
     const changeHistory = ref([]);
     const activeTab = shallowRef(GeneralTab);
+    const manualAplIds = ref(new Set());
 
     const isAdmin = computed(() => store.getters.isAdmin);
+
+    // Load manual APL IDs from localStorage (reactive)
+    const loadManualAplIds = () => {
+      try {
+        const raw = localStorage.getItem('manualAplIds');
+        if (raw) {
+          const arr = JSON.parse(raw);
+          manualAplIds.value = new Set(Array.isArray(arr) ? arr.map(String) : []);
+        } else {
+          manualAplIds.value = new Set();
+        }
+      } catch (e) {
+        console.error('Error reading manualAplIds from localStorage:', e);
+        manualAplIds.value = new Set();
+      }
+    };
+
+    // Listen for storage changes to update manualAplIds reactively
+    const handleStorageChange = (e) => {
+      if (e.key === 'manualAplIds') {
+        loadManualAplIds();
+      }
+    };
 
     const tabs = computed(() => {
       const allTabs = [
@@ -90,8 +114,138 @@ export default {
       ];
 
       // Conditionally add APL tab
-      if (student.value && student.value.education && student.value.education.some(e => e.coursePackageId)) {
-        // allTabs.push({ name: 'APL', component: AplTab });
+      // Show APL tab if student has CoursePackage in education OR is manually added to APL
+      // OR has an aplStatusHistory (indicating they've been in APL system)
+      if (student.value) {
+        const studentId = String(student.value._id);
+        
+        // Check if student has CoursePackage in education
+        // Check both direct type and nested structures
+        const hasCoursePackage = student.value.education && 
+          Array.isArray(student.value.education) &&
+          student.value.education.some(e => {
+            // Check direct type
+            if (e.type === 'CoursePackage') return true;
+            // Check if refId is a CoursePackage (populated)
+            if (e.refId && (e.refId.coursePackageName || e.refId.coursePackageCode)) return true;
+            // Check if there's a coursePackageId field
+            if (e.coursePackageId) return true;
+            return false;
+          });
+        
+        // Check if student is manually added to APL (using reactive ref)
+        // Normalize all IDs to strings for comparison
+        const normalizedManualIds = new Set(Array.from(manualAplIds.value).map(id => String(id)));
+        const isManuallyAdded = normalizedManualIds.has(studentId);
+        
+        // Also check localStorage directly as a fallback (in case reactive ref hasn't updated)
+        let isManuallyAddedDirect = false;
+        try {
+          const raw = localStorage.getItem('manualAplIds');
+          if (raw) {
+            const arr = JSON.parse(raw);
+            const ids = Array.isArray(arr) ? arr.map(String) : [];
+            isManuallyAddedDirect = ids.includes(studentId);
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+        
+        // Use either check
+        const isManuallyAddedFinal = isManuallyAdded || isManuallyAddedDirect;
+        
+        // Check if student has APL status history (indicates they've been in APL system)
+        const hasAplHistory = student.value.aplStatusHistory && 
+          Array.isArray(student.value.aplStatusHistory) && 
+          student.value.aplStatusHistory.length > 0;
+        
+        // Check if student has a non-default APL status (not just the default GRAY)
+        // If they have status history, they've been actively managed in APL
+        const hasActiveAplStatus = hasAplHistory || 
+          (student.value.aplStatus && student.value.aplStatus !== 'GRAY');
+        
+        // Debug logging with detailed education structure
+        const educationDetails = student.value.education?.map(e => ({
+          type: e.type,
+          hasRefId: !!e.refId,
+          refIdType: e.refId?.constructor?.name,
+          refIdKeys: e.refId ? Object.keys(e.refId) : [],
+          coursePackageId: e.coursePackageId,
+          allKeys: Object.keys(e || {}),
+        })) || [];
+        
+        console.log('[APL Tab Check]', {
+          studentName: student.value.name,
+          studentId: studentId,
+          studentIdType: typeof studentId,
+          hasCoursePackage,
+          isManuallyAdded,
+          isManuallyAddedDirect,
+          isManuallyAddedFinal,
+          hasAplHistory,
+          aplStatus: student.value.aplStatus,
+          manualAplIdsRaw: Array.from(manualAplIds.value),
+          manualAplIdsNormalized: Array.from(normalizedManualIds),
+          educationCount: student.value.education?.length || 0,
+          educationDetails,
+          fullEducation: JSON.stringify(student.value.education, null, 2),
+        });
+
+        // Show APL tab if any condition is met:
+        // 1. Has CoursePackage in education
+        // 2. Is manually added to APL (check both reactive ref and direct localStorage)
+        // 3. Has APL status history (been actively managed in APL)
+        // 4. Has an aplStatus set AND is not a dropout
+        //    Note: If student appears in APL board, they should have the tab.
+        //    Since all students have default GRAY status, we use this as a fallback
+        //    to ensure students visible in APL board have the tab.
+        const hasAplStatusSet = student.value.aplStatus && 
+          student.value.aplStatus !== null && 
+          student.value.aplStatus !== undefined &&
+          !student.value.dropout;
+        
+        const shouldShowAplTab = hasCoursePackage || 
+          isManuallyAddedFinal || 
+          hasAplHistory ||
+          hasAplStatusSet;
+        
+        if (shouldShowAplTab) {
+          const reason = hasCoursePackage ? 'has CoursePackage' : 
+                        isManuallyAddedFinal ? 'manually added' : 
+                        hasAplHistory ? 'has APL history' :
+                        'has APL status set';
+          console.log(`[APL Tab] ✅ Showing APL tab for ${student.value.name}`, { reason });
+          allTabs.push({ name: 'APL', component: AplTab });
+        } else {
+          // Expanded logging to help debug why tab isn't showing
+          console.log(`[APL Tab] ❌ NOT showing APL tab for ${student.value.name}`);
+          console.log(`[APL Tab Debug] Full check details:`, {
+            studentId,
+            hasCoursePackage,
+            isManuallyAdded,
+            isManuallyAddedDirect,
+            isManuallyAddedFinal,
+            hasAplHistory,
+            aplStatus: student.value.aplStatus,
+            dropout: student.value.dropout,
+            manualAplIdsCount: manualAplIds.value.size,
+            manualAplIdsList: Array.from(manualAplIds.value),
+            normalizedManualIdsList: Array.from(normalizedManualIds),
+            localStorageCheck: (() => {
+              try {
+                const raw = localStorage.getItem('manualAplIds');
+                if (raw) {
+                  const arr = JSON.parse(raw);
+                  return Array.isArray(arr) ? arr.map(String) : [];
+                }
+                return [];
+              } catch {
+                return [];
+              }
+            })(),
+            educationArray: JSON.stringify(student.value.education, null, 2),
+          });
+        }
       }
 
       if (isAdmin.value) {
@@ -148,8 +302,30 @@ export default {
       }
     };
 
+    // Watch for student changes and reload manualAplIds
+    watch(() => student.value?._id, () => {
+      loadManualAplIds();
+    });
+
+    // Watch for route changes to reload manualAplIds
+    watch(() => route.params.id, () => {
+      loadManualAplIds();
+    });
+
     onMounted(() => {
+      loadManualAplIds();
       loadStudent();
+      // Listen for storage changes (cross-tab)
+      window.addEventListener('storage', handleStorageChange);
+      
+      // Also listen for custom events (same-tab updates from APL board)
+      window.addEventListener('manualAplIdsUpdated', loadManualAplIds);
+    });
+    
+    // Cleanup
+    onUnmounted(() => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('manualAplIdsUpdated', loadManualAplIds);
     });
 
     return {

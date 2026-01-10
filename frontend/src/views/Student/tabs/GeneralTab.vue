@@ -29,7 +29,7 @@
               <option value="RED">Röd - Snart slut</option>
               <option value="GREEN">Grön - Klar praktik</option>
             </select>
-            <span v-else>{{ student.aplStatus || 'Ej angivet' }}</span>
+            <span v-else>{{ getAplStatusLabel(student.aplStatus) || 'Ej angivet' }}</span>
           </div>
           <div class="info-item">
             <label>Namn:</label>
@@ -535,6 +535,19 @@ export default {
       return roleMap[role] || role;
     };
 
+    const getAplStatusLabel = (status) => {
+      if (!status) return null;
+      const statusMap = {
+        'GRAY': 'Grå - Ny Elev',
+        'BLUE': 'Blå - Kontaktad',
+        'YELLOW': 'Gul - APL på gång',
+        'PURPLE': 'Lila - Behöver uppföljning',
+        'RED': 'Röd - Snart slut',
+        'GREEN': 'Grön - Klar praktik',
+      };
+      return statusMap[status] || status;
+    };
+
     const getFieldLabel = (field) => {
       const fieldLabels = {
         'name': 'Namn',
@@ -712,6 +725,7 @@ export default {
       addComment,
       editComment,
       saveEditedComment,
+      getAplStatusLabel,
       deleteComment,
       canEditComment,
       canDeleteComment,
