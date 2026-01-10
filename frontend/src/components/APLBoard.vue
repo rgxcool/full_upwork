@@ -305,6 +305,8 @@
   const saveManualAplIds = () => {
     try {
       localStorage.setItem('manualAplIds', JSON.stringify(Array.from(manualAplIds.value)))
+      // Dispatch custom event for same-tab updates
+      window.dispatchEvent(new CustomEvent('manualAplIdsUpdated'))
     } catch {}
   }
   const loadExcludedAplIds = () => {
