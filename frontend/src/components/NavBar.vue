@@ -412,7 +412,7 @@
       const showNotisPanel = ref(false)
       const notisPanel = ref(null)
       const notificationIcon = ref(null)
-      
+
       // Notification polling configuration
       const NOTIFICATION_POLL_INTERVAL = 60000 // 60 seconds (increased to avoid rate limiting)
       let notificationPollInterval = null
@@ -454,25 +454,25 @@
       const fetchNotifications = async () => {
         // Skip if polling is paused (tab hidden)
         if (isPollingPaused) {
-          return;
+          return
         }
-        
+
         try {
-          console.log('📬 Fetching notifications...');
-          const res = await axios.get('/api/notifications', { withCredentials: true });
-          console.log('📬 Notifications received:', res.data);
-          notifications.value = res.data;
+          console.log('📬 Fetching notifications...')
+          const res = await axios.get('/api/notifications', { withCredentials: true })
+          console.log('📬 Notifications received:', res.data)
+          notifications.value = res.data
         } catch (error) {
           // Handle rate limiting gracefully
           if (error.response?.status === 429) {
-            console.warn('⚠️ Rate limited - will retry later');
+            console.warn('⚠️ Rate limited - will retry later')
             // Don't clear notifications on rate limit, just skip this fetch
-            return;
+            return
           }
-          console.error('❌ Error fetching notifications:', error);
+          console.error('❌ Error fetching notifications:', error)
           // Only clear notifications on non-rate-limit errors
           if (error.response?.status !== 429) {
-            notifications.value = [];
+            notifications.value = []
           }
         }
       }
@@ -480,45 +480,47 @@
       // Start polling for notifications
       const startNotificationPolling = () => {
         // Clear any existing interval
-        stopNotificationPolling();
-        
+        stopNotificationPolling()
+
         // Only start if user is logged in and can see notifications
         if (isLoggedIn.value && canSeeNotifications.value) {
           // Fetch immediately
-          fetchNotifications();
-          
+          fetchNotifications()
+
           // Then poll at regular intervals
           notificationPollInterval = setInterval(() => {
             if (!isPollingPaused) {
-              fetchNotifications();
+              fetchNotifications()
             }
-          }, NOTIFICATION_POLL_INTERVAL);
-          
-          console.log(`🔄 Started notification polling (every ${NOTIFICATION_POLL_INTERVAL / 1000}s)`);
+          }, NOTIFICATION_POLL_INTERVAL)
+
+          console.log(
+            `🔄 Started notification polling (every ${NOTIFICATION_POLL_INTERVAL / 1000}s)`
+          )
         }
       }
 
       // Stop polling for notifications
       const stopNotificationPolling = () => {
         if (notificationPollInterval) {
-          clearInterval(notificationPollInterval);
-          notificationPollInterval = null;
-          console.log('⏹️ Stopped notification polling');
+          clearInterval(notificationPollInterval)
+          notificationPollInterval = null
+          console.log('⏹️ Stopped notification polling')
         }
       }
 
       // Handle page visibility changes (pause polling when tab is hidden)
       const handleVisibilityChange = () => {
         if (document.hidden) {
-          isPollingPaused = true;
-          console.log('⏸️ Paused notification polling (tab hidden)');
+          isPollingPaused = true
+          console.log('⏸️ Paused notification polling (tab hidden)')
         } else {
-          isPollingPaused = false;
+          isPollingPaused = false
           // Immediately fetch when tab becomes visible
           if (isLoggedIn.value && canSeeNotifications.value) {
-            fetchNotifications();
+            fetchNotifications()
           }
-          console.log('▶️ Resumed notification polling (tab visible)');
+          console.log('▶️ Resumed notification polling (tab visible)')
         }
       }
 
@@ -529,14 +531,13 @@
         await fetchNotifications() // uppdatera listan
       }
 
-
       const toggleNotificationPanel = (event) => {
-        const wasOpen = showNotisPanel.value;
-        showNotisPanel.value = !showNotisPanel.value;
-        
+        const wasOpen = showNotisPanel.value
+        showNotisPanel.value = !showNotisPanel.value
+
         // Fetch immediately when opening the panel
         if (!wasOpen && showNotisPanel.value && isLoggedIn.value && canSeeNotifications.value) {
-          fetchNotifications();
+          fetchNotifications()
         }
       }
 
@@ -720,7 +721,7 @@
         { name: 'Lägg till Lärare', link: '/lagg-till-larare', role: 'admin' },
         { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
         { name: 'Elever', link: '/students', role: ['admin', 'teacher'] },
-        { name: 'Kurser', link: '/larare/kurser', role: 'teacher' },
+        { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: 'teacher' },
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
@@ -736,7 +737,10 @@
           console.log(`  - ${item.name}: hasPermission(${JSON.stringify(item.role)}) = ${hasPerm}`)
           return hasPerm
         })
-        console.log('✅ Filtered menu items:', filtered.map(i => i.name))
+        console.log(
+          '✅ Filtered menu items:',
+          filtered.map((i) => i.name)
+        )
         return filtered
       })
       const secretMenuItems = computed(() => {
@@ -776,40 +780,44 @@
         }
       }
       // Watch for user login to start/stop polling
-      watch(isLoggedIn, (loggedIn) => {
-        if (loggedIn && canSeeNotifications.value) {
-          console.log('👤 User logged in, starting notification polling...');
-          startNotificationPolling();
-        } else {
-          stopNotificationPolling();
-          notifications.value = [];
-        }
-      }, { immediate: true });
+      watch(
+        isLoggedIn,
+        (loggedIn) => {
+          if (loggedIn && canSeeNotifications.value) {
+            console.log('👤 User logged in, starting notification polling...')
+            startNotificationPolling()
+          } else {
+            stopNotificationPolling()
+            notifications.value = []
+          }
+        },
+        { immediate: true }
+      )
 
       // Watch for role changes that affect notification visibility
       watch(canSeeNotifications, (canSee) => {
         if (canSee && isLoggedIn.value) {
-          startNotificationPolling();
+          startNotificationPolling()
         } else {
-          stopNotificationPolling();
+          stopNotificationPolling()
         }
-      });
+      })
 
       onMounted(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        
+        document.addEventListener('mousedown', handleClickOutside)
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+
         // Start polling if user is already logged in
         if (isLoggedIn.value && canSeeNotifications.value) {
-          startNotificationPolling();
+          startNotificationPolling()
         }
-      });
-      
+      })
+
       onBeforeUnmount(() => {
-        document.removeEventListener('mousedown', handleClickOutside);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        stopNotificationPolling();
-      });
+        document.removeEventListener('mousedown', handleClickOutside)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+        stopNotificationPolling()
+      })
 
       const showSecretMenu = ref(false)
       const versionRef = ref(null)
