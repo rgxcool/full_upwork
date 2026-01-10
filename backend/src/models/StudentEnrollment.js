@@ -159,6 +159,11 @@ const studentEnrollmentSchema = new mongoose.Schema(
 // Pre-save middleware to update status history
 studentEnrollmentSchema.pre("save", function () {
     if (this.isModified("status")) {
+        // Ensure statusHistory is initialized
+        if (!this.statusHistory) {
+            this.statusHistory = [];
+        }
+        
         this.statusHistory.push({
             status: this.status,
             changedAt: new Date(),
