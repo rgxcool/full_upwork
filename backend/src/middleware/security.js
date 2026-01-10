@@ -223,11 +223,32 @@ export const uploadRateLimiter = createRateLimiter(
     "Too many file uploads, please try again later."
 );
 
-export const apiRateLimiter = createRateLimiter(
-    process.env.NODE_ENV === "test" ? 60 * 1000 : 60 * 1000, // 1 minute
-    process.env.NODE_ENV === "test" ? 3 : 60, // lower threshold in tests
-    "Too many API requests, please try again later."
-);
+// Create apiRateLimiter with skip for login endpoint (login has its own rate limiter)
+const apiRateLimiterConfig = {
+    windowMs: process.env.NODE_ENV === "test" ? 60 * 1000 : 60 * 1000, // 1 minute
+    max: process.env.NODE_ENV === "test" ? 3 : 60, // lower threshold in tests
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+        // Skip rate limiting for admins
+        if (isAdminUser(req)) return true;
+        // Skip rate limiting for login endpoint (it has its own authRateLimiter)
+        if (req.path === "/api/auth/login" || req.path === "/auth/login") return true;
+        return false;
+    },
+    handler: (req, res) => {
+        logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
+        res.status(429).json({
+            success: false,
+            error: {
+                message: "Too many API requests, please try again later.",
+                retryAfter: Math.ceil((process.env.NODE_ENV === "test" ? 60 * 1000 : 60 * 1000) / 1000),
+            },
+        });
+    },
+};
+
+export const apiRateLimiter = rateLimit(apiRateLimiterConfig);
 
 // High-volume rate limiter for course and course package details
 export const courseDetailRateLimiter = createRateLimiter(

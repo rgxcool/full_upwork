@@ -140,7 +140,7 @@
   const router = useRouter()
 
   const goToActionPlan = (row) => {
-    router.push(`/detaljer/Elev/${row.studentId}?showActionPlan=true`)
+    router.push(`/student/${row.studentId}?showActionPlan=true`)
   }
 
   const flatRows = computed(() =>

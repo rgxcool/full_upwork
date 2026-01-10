@@ -74,6 +74,15 @@ export default {
     };
 
     onMounted(() => {
+      // Redirect Elev/Student type to student view
+      if (route.params.type === 'Elev' || route.params.type === 'Student') {
+        router.replace({
+          path: `/student/${route.params.id}`,
+          query: route.query
+        });
+        return;
+      }
+      
       fetchData().then(() => {
         if (route.query.showActionPlan === 'true') {
           activeTab.value = "Handlingsplan"
@@ -82,7 +91,17 @@ export default {
     });
 
     // Watch för att uppdatera datan när route ändras
-    watch(() => route.params, fetchData, { deep: true });
+    watch(() => route.params, (newParams) => {
+      // Redirect Elev/Student type to student view
+      if (newParams.type === 'Elev' || newParams.type === 'Student') {
+        router.replace({
+          path: `/student/${newParams.id}`,
+          query: route.query
+        });
+        return;
+      }
+      fetchData();
+    }, { deep: true });
 
 
 

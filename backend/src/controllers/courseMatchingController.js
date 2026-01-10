@@ -1310,17 +1310,25 @@ export const getCourseInstances = async (req, res) => {
 export const getMyCourseInstances = async (req, res) => {
     try {
         const userId = req.user?.userId;
+        const userRole = req.user?.role;
         const { startDate, endDate, isActive } = req.query;
 
-        // Find the teacher document corresponding to the logged-in user
-        const Teacher = mongoose.model("Teacher");
-        const teacher = await Teacher.findOne({ userId: userId });
+        // For admins/systemadmins, return all course instances (or filter by query params)
+        // For teachers, return only their assigned course instances
+        let query = {};
+        
+        if (userRole === "teacher") {
+            // Find the teacher document corresponding to the logged-in user
+            const Teacher = mongoose.model("Teacher");
+            const teacher = await Teacher.findOne({ userId: userId });
 
-        if (!teacher) {
-            return res.status(404).json({ error: "Teacher profile not found for the current user." });
+            if (!teacher) {
+                return res.status(404).json({ error: "Teacher profile not found for the current user." });
+            }
+
+            query.responsibleTeacher = teacher._id;
         }
-
-        const query = { responsibleTeacher: teacher._id };
+        // For admins/systemadmins, query is empty (will return all instances)
 
         if (isActive !== undefined) query.isActive = isActive === "true";
         if (startDate || endDate) {
