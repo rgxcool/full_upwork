@@ -538,20 +538,102 @@ export const setStudentDropout = async (req, res) => {
         // Remove from APL lists (by excluding from APL queries - handled automatically)
         // The APL board already filters by excluding dropout students
 
-        // Remove from ExamAttendance records (delete future exam attendance)
-        const now = new Date();
-        const deletedExamAttendance = await ExamAttendance.deleteMany({
-            studentId: id,
-            examDate: { $gte: now },
-        });
-        console.log(`🗑️ Deleted ${deletedExamAttendance.deletedCount} future exam attendance records for student ${student.name}`);
+        // Find all ExamAttendance records for this student (all dates, not just future)
+        // Convert id to ObjectId to ensure proper matching
+        const studentObjectId = mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id;
+        const allExamAttendance = await ExamAttendance.find({ studentId: studentObjectId });
+        console.log(`🔍 Found ${allExamAttendance.length} exam attendance records for student ${student.name} (ID: ${id})`);
+        
+        if (allExamAttendance.length > 0) {
+            console.log(`🔍 Exam attendance records details:`, allExamAttendance.map(a => ({
+                _id: a._id,
+                examDate: a.examDate,
+                teacherId: a.teacherId,
+                courseId: a.courseId,
+                studentId: a.studentId
+            })));
+        }
 
-        // Remove from Provning (exam registrations) - delete or mark as denied
-        const deletedProvning = await Provning.deleteMany({
-            studentId: id,
-            status: { $in: ["intresse", "scheduled"] },
+        // Group exams by examDate (normalized to start of day) + teacherId + courseId to identify which exams they belong to
+        const examGroups = new Map();
+        for (const attendance of allExamAttendance) {
+            // Normalize examDate to start of day for proper grouping
+            const examDateStart = new Date(attendance.examDate);
+            examDateStart.setHours(0, 0, 0, 0);
+            const examDateEnd = new Date(examDateStart);
+            examDateEnd.setHours(23, 59, 59, 999);
+            
+            const examKey = `${examDateStart.toISOString()}_${attendance.teacherId}_${attendance.courseId || 'null'}`;
+            if (!examGroups.has(examKey)) {
+                examGroups.set(examKey, {
+                    examDateStart,
+                    examDateEnd,
+                    teacherId: attendance.teacherId,
+                    courseId: attendance.courseId,
+                    attendanceRecords: []
+                });
+            }
+            examGroups.get(examKey).attendanceRecords.push(attendance._id);
+        }
+
+        // Delete all ExamAttendance records for this student
+        const deletedExamAttendance = await ExamAttendance.deleteMany({
+            studentId: studentObjectId,
         });
-        console.log(`🗑️ Deleted ${deletedProvning.deletedCount} exam registrations for student ${student.name}`);
+        console.log(`🗑️ Deleted ${deletedExamAttendance.deletedCount} exam attendance records for student ${student.name} (ID: ${id})`);
+        
+        // Verify deletion by checking if any records remain
+        const remainingRecords = await ExamAttendance.countDocuments({ studentId: studentObjectId });
+        if (remainingRecords > 0) {
+            console.warn(`⚠️ WARNING: ${remainingRecords} exam attendance records still exist for student ${student.name} after deletion attempt!`);
+        } else {
+            console.log(`✅ Verified: No exam attendance records remain for student ${student.name}`);
+        }
+
+        // Check each exam group - if no students remain, delete the entire exam
+        let deletedEmptyExams = 0;
+        for (const [examKey, examGroup] of examGroups.entries()) {
+            // Build query for this exam group (using date range to match all records on the same day)
+            const examQuery = {
+                $and: [
+                    {
+                        examDate: {
+                            $gte: examGroup.examDateStart,
+                            $lte: examGroup.examDateEnd
+                        }
+                    },
+                    { teacherId: examGroup.teacherId }
+                ]
+            };
+            
+            // Handle courseId - if it's null/undefined, match records where courseId is null or doesn't exist
+            if (examGroup.courseId) {
+                examQuery.$and.push({ courseId: examGroup.courseId });
+            } else {
+                examQuery.$and.push({
+                    $or: [
+                        { courseId: null },
+                        { courseId: { $exists: false } }
+                    ]
+                });
+            }
+
+            // Check if there are any remaining students in this exam
+            const remainingStudents = await ExamAttendance.countDocuments(examQuery);
+
+            if (remainingStudents === 0) {
+                // No students left in this exam, delete all records (should already be deleted, but double-check)
+                const deleted = await ExamAttendance.deleteMany(examQuery);
+                deletedEmptyExams++;
+                console.log(`🗑️ Deleted empty exam group: ${examKey} (${deleted.deletedCount} records)`);
+            }
+        }
+
+        // Remove from Provning (exam registrations) - delete ALL records regardless of status
+        const deletedProvning = await Provning.deleteMany({
+            studentId: studentObjectId,
+        });
+        console.log(`🗑️ Deleted ${deletedProvning.deletedCount} exam registrations (Provning) for student ${student.name}`);
 
         // Send notification to responsible teacher
         let teacherRecord = null;
@@ -692,6 +774,7 @@ export const setStudentDropout = async (req, res) => {
             student,
             deletedExamAttendance: deletedExamAttendance.deletedCount,
             deletedProvning: deletedProvning.deletedCount,
+            deletedEmptyExams: deletedEmptyExams,
         });
     } catch (error) {
         console.error("❌ Error setting student as dropout:", error);
