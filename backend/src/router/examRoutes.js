@@ -514,7 +514,7 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         );
 
         // Automatiska kurs-slutprov (från enrollments)
-        const enrollmentsWithSlutprov = await StudentEnrollment.find(
+        const allEnrollmentsWithSlutprov = await StudentEnrollment.find(
             enrollmentQuery
         )
             .populate("studentId")
@@ -524,9 +524,18 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                 path: "teacherId",
                 populate: { path: "userId", select: "username" },
             });
+        
+        // Filter out enrollments where the student is a dropout
+        const enrollmentsWithSlutprov = allEnrollmentsWithSlutprov.filter(
+            (enrollment) => !enrollment.studentId || !enrollment.studentId.dropout
+        );
+        
         console.log(
-            "📅 Enrollments with slutprovDate:",
-            enrollmentsWithSlutprov.length
+            "📅 Enrollments with slutprovDate (after filtering dropouts):",
+            enrollmentsWithSlutprov.length,
+            "(filtered from",
+            allEnrollmentsWithSlutprov.length,
+            "total)"
         );
         enrollmentsWithSlutprov.forEach((e) => {
             console.log(
@@ -689,10 +698,16 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                         } (type: ${typeof student.teacherId._id})`
                     );
 
-                    const attendanceRecords = student.teacherId?._id ? await ExamAttendance.find({
+                    // Find attendance records and filter out dropout students
+                    const allAttendanceRecords = student.teacherId?._id ? await ExamAttendance.find({
                         examDate: { $gte: startOfDay, $lte: endOfDay },
                         teacherId: student.teacherId._id,
-                    }) : [];
+                    }).populate("studentId", "dropout") : [];
+                    
+                    // Filter out records for dropout students
+                    const attendanceRecords = allAttendanceRecords.filter(
+                        (record) => !record.studentId || !record.studentId.dropout
+                    );
 
                     // Get the most common exam info from attendance records or fallback to student data
                     const recordsWithTime = attendanceRecords.filter(
@@ -1061,6 +1076,51 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         }
 
         console.log("📅 Final grouped events:", Object.keys(grouped).length);
+        
+        // Final safety filter: Remove any dropout students from events' students arrays
+        // This ensures that even if a student was added before being marked as dropout,
+        // they will be filtered out when the events are returned
+        const allStudentIds = new Set();
+        Object.values(grouped).forEach(event => {
+            if (event.extendedProps && event.extendedProps.students) {
+                event.extendedProps.students.forEach(student => {
+                    if (student._id) {
+                        allStudentIds.add(student._id.toString());
+                    }
+                });
+            }
+        });
+        
+        // Fetch dropout status for all students in one query
+        if (allStudentIds.size > 0) {
+            const studentIdsArray = Array.from(allStudentIds);
+            const dropoutStudents = await Student.find({
+                _id: { $in: studentIdsArray },
+                dropout: true
+            }).select('_id');
+            
+            const dropoutStudentIds = new Set(
+                dropoutStudents.map(s => s._id.toString())
+            );
+            
+            // Remove dropout students from all events
+            let totalRemoved = 0;
+            Object.values(grouped).forEach(event => {
+                if (event.extendedProps && event.extendedProps.students) {
+                    const beforeCount = event.extendedProps.students.length;
+                    event.extendedProps.students = event.extendedProps.students.filter(
+                        student => !dropoutStudentIds.has(student._id.toString())
+                    );
+                    const afterCount = event.extendedProps.students.length;
+                    totalRemoved += (beforeCount - afterCount);
+                }
+            });
+            
+            if (totalRemoved > 0) {
+                console.log(`🗑️ Filtered out ${totalRemoved} dropout student(s) from events`);
+            }
+        }
+        
         res.json(Object.values(grouped));
     } catch (err) {
         console.error("❌ Fel vid synk:", err.message, err.stack);
@@ -1106,11 +1166,17 @@ router.get("/calendar-events/attendance/:date/:teacherId", async (req, res) => {
             "../models/ExamAttendance.js"
         );
 
-        const attendanceRecords = await ExamAttendance.find({
+        // Find all attendance records for this date/teacher
+        const allAttendanceRecords = await ExamAttendance.find({
             examDate: { $gte: startOfDay, $lte: endOfDay },
             teacherId: teacherId,
-        }).select(
+        }).populate("studentId", "dropout").select(
             "studentId attended paidExamFee examTime examMunicipality examLocation"
+        );
+
+        // Filter out dropout students
+        const attendanceRecords = allAttendanceRecords.filter(
+            (record) => !record.studentId || !record.studentId.dropout
         );
 
         res.json(attendanceRecords);
