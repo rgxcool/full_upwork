@@ -46,13 +46,18 @@ router.post(
 );
 
 // Course instances routes
-router.get("/course-instances", isAuthenticated, getCourseInstances);
+// IMPORTANT: More specific routes must come before general ones
 router.get(
     "/course-instances/mine",
+    (req, res, next) => {
+        console.log("🔍 /course-instances/mine route hit");
+        next();
+    },
     isAuthenticated,
     hasRole(["teacher", "admin", "systemadmin"]),
     getMyCourseInstances
 );
+router.get("/course-instances", isAuthenticated, getCourseInstances);
 router.post(
     "/course-instances",
     isAuthenticated,

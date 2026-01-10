@@ -90,11 +90,33 @@ const routes = [
     component: ManualAddStudent,
     meta: { title: 'Manual Add Student', role: 'admin' },
   },
+  // Redirect /detaljer/Elev/:id to /student/:id
+  {
+    path: '/detaljer/Elev/:id',
+    redirect: (to) => {
+      // Preserve query parameters if any
+      return {
+        path: `/student/${to.params.id}`,
+        query: to.query
+      }
+    }
+  },
   {
     path: '/detaljer/:type/:id',
     component: SearchResultDetails,
     props: true,
     meta: { title: 'Search Result Details', role: ['teacher', 'syv', 'specped'] },
+    beforeEnter: (to, from, next) => {
+      // Redirect Elev type to student view
+      if (to.params.type === 'Elev' || to.params.type === 'Student') {
+        next({
+          path: `/student/${to.params.id}`,
+          query: to.query
+        })
+      } else {
+        next()
+      }
+    }
   },
   {
     path: '/education/:id',

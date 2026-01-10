@@ -13,29 +13,15 @@
         @update:search="searchStudents"
       ></v-autocomplete>
 
-      <!-- Course/Package Selection -->
-      <div v-if="mode === 'single'">
-        <v-select
-          v-model="selectedCourseInstance"
-          :items="courseInstances"
-          item-title="courseName"
-          item-value="_id"
-          label="Välj kursinstans"
-          :loading="loadingCourseInstances"
-        ></v-select>
-      </div>
-      <div v-if="mode === 'package'">
-        <v-select
-          v-model="selectedCoursePackage"
-          :items="coursePackages"
-          item-title="coursePackageName"
-          item-value="_id"
-          label="Välj kurspaket"
-          @update:modelValue="onCoursePackageChange"
-          :loading="loadingCoursePackages"
-        ></v-select>
-        <!-- Package revision UI will go here -->
-      </div>
+      <!-- Course Selection -->
+      <v-select
+        v-model="selectedCourseInstance"
+        :items="courseInstances"
+        item-title="courseName"
+        item-value="_id"
+        label="Välj kursinstans"
+        :loading="loadingCourseInstances"
+      ></v-select>
 
       <!-- Dates -->
       <v-text-field v-model="startDate" label="Startdatum" type="date"></v-text-field>
@@ -77,8 +63,9 @@ import debounce from 'lodash.debounce';
 const props = defineProps({
   mode: {
     type: String,
-    required: true,
-    validator: (value) => ['single', 'package'].includes(value),
+    required: false,
+    default: 'single',
+    validator: (value) => !value || value === 'single',
   },
 });
 
@@ -103,15 +90,10 @@ const searchStudents = debounce(async (query) => {
   }
 }, 300);
 
-// Course/Package data
+// Course data
 const courseInstances = ref([]);
 const loadingCourseInstances = ref(false);
-const coursePackages = ref([]);
-const loadingCoursePackages = ref(false);
-
 const selectedCourseInstance = ref(null);
-const selectedCoursePackage = ref(null);
-const revisedPackageCourses = ref([]); // For package revision
 
 // Dates
 const startDate = ref('');
@@ -146,31 +128,8 @@ const fetchCourseInstances = async () => {
   }
 };
 
-const fetchCoursePackages = async () => {
-    loadingCoursePackages.value = true;
-    try {
-        const { data } = await axios.get('/api/course-packages');
-        coursePackages.value = data;
-    } catch (error) {
-        console.error('Error fetching course packages:', error);
-    } finally {
-        loadingCoursePackages.value = false;
-    }
-};
-
-
-if (props.mode === 'single') {
-  fetchCourseInstances();
-} else {
-  fetchCoursePackages();
-}
-
-const onCoursePackageChange = (packageId) => {
-    const pkg = coursePackages.value.find(p => p._id === packageId);
-    if (pkg) {
-        revisedPackageCourses.value = [...pkg.coursePackageCourses];
-    }
-};
+// Fetch course instances on mount
+fetchCourseInstances();
 
 const calculateEndDate = () => {
     if (startDate.value && studyLength.value) {
@@ -191,30 +150,27 @@ const submitForm = async () => {
 
   submitting.value = true;
   
-  const educationEntries = [];
-
-  if (props.mode === 'single' && selectedCourseInstance.value) {
-      const instance = courseInstances.value.find(ci => ci._id === selectedCourseInstance.value);
-      educationEntries.push({
-          type: 'Course',
-          refId: instance.mainCourseId._id,
-          name: instance.courseName,
-          startDate: startDate.value,
-          endDate: endDate.value,
-          slutprovDate: finalExamDate.value,
-      });
-  } else if (props.mode === 'package' && selectedCoursePackage.value) {
-      const pkg = coursePackages.value.find(p => p._id === selectedCoursePackage.value);
-      educationEntries.push({
-          type: 'CoursePackage',
-          refId: pkg._id,
-          name: pkg.coursePackageName,
-          startDate: startDate.value,
-          endDate: endDate.value,
-          slutprovDate: finalExamDate.value,
-          // Need to handle revised courses
-      });
+  if (!selectedCourseInstance.value) {
+    console.error('No course instance selected');
+    submitting.value = false;
+    return;
   }
+
+  const instance = courseInstances.value.find(ci => ci._id === selectedCourseInstance.value);
+  if (!instance) {
+    console.error('Course instance not found');
+    submitting.value = false;
+    return;
+  }
+
+  const educationEntries = [{
+    type: 'Course',
+    refId: instance.mainCourseId._id,
+    name: instance.courseName,
+    startDate: startDate.value,
+    endDate: endDate.value,
+    slutprovDate: finalExamDate.value,
+  }];
 
   const payload = {
     studentId: selectedStudent.value._id,

@@ -573,7 +573,7 @@
 
       const viewStudentDetails = (studentId) => {
         if (studentId) {
-          window.open(`/detaljer/Elev/${studentId}`, '_blank')
+          window.open(`/student/${studentId}`, '_blank')
         }
       }
 
