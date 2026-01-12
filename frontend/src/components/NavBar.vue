@@ -715,6 +715,7 @@
           role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'],
         },
         { name: 'SYV Samtal', link: '/syv/appointments', role: 'syv' },
+        { name: 'Specped Samtal', link: '/specped/appointments', role: 'specped' },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },
