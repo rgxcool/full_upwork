@@ -1806,7 +1806,7 @@ describe("updateEnrollmentStatus", () => {
         await updateEnrollmentStatus(req, res);
 
         expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error", message: "boom" });
     });
 });
 
