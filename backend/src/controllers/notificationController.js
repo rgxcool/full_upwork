@@ -1,6 +1,8 @@
 import Notification from "../models/Notification.js";
 import Student from "../models/Student.js";
 import User from "../models/User.js";
+import Course from "../models/Course.js";
+
 
 /**
  * Notification Controller
@@ -231,5 +233,59 @@ export async function evaluateActionPlanStatusAndNotify() {
     });
     await notification.save();
     return notification;
+}
+
+/**
+ * Creates a notification for a study plan (StudentEnrollment) change.
+ * @async
+ * @param {object} doc - The StudentEnrollment document from the hook.
+ * @param {'created'|'updated'|'deleted'} changeType - The type of change.
+ * @param {object} [changes] - For 'updated' type, an object with changed fields.
+ */
+export async function sendStudyplanChangedNotification({ doc, changeType, changes = null }) {
+    try {
+        if (doc.skipNotification) {
+            console.log(`Skipping notification for StudentEnrollment ${doc._id}`);
+            return;
+        }
+
+        const student = await Student.findById(doc.studentId);
+        // The main course/program name is likely more useful than the instance name
+        const course = await Course.findById(doc.mainCourseId);
+
+        if (!student || !course) {
+            console.error(`Could not find Student or Course for StudentEnrollment ${doc._id}`);
+            return;
+        }
+
+        let message = '';
+        if (changeType === 'created') {
+            message = `Ny studieplan skapad för ${student.name} i kursen ${course.name}.`;
+        } else if (changeType === 'updated') {
+            const changedFields = Object.keys(changes.newValues).join(', ');
+            message = `Studieplan uppdaterad för ${student.name} i kursen ${course.name}. Fält ändrade: ${changedFields}.`;
+        } else if (changeType === 'deleted') {
+            message = `Studieplan borttagen för ${student.name} i kursen ${course.name}.`;
+        }
+
+        await Notification.create({
+            type: "studyplan_changed",
+            message,
+            teacher: doc.teacherId || null, // Directly use teacherId from enrollment
+            meta: {
+                studentId: doc.studentId,
+                studentName: student.name,
+                courseInstanceId: doc.courseInstanceId,
+                mainCourseId: doc.mainCourseId,
+                courseName: course.name,
+                changeType,
+                details: changes // For 'updated', this contains changedFields, previousValues, newValues
+            },
+            resolved: false,
+        });
+
+    } catch (error) {
+        console.error('Error creating study plan change notification:', error);
+    }
 }
   
