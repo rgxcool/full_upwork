@@ -23,3 +23,6 @@ llm
 *.sln
 *.sw?
 *~
+
+# Test coverage
+frontend/coverage/
