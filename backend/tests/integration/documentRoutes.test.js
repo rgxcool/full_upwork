@@ -146,6 +146,43 @@ describe("Document Routes", () => {
         expect(filenames).toEqual(["file-one.pdf", "file-two.pdf"]);
     });
 
+    it("supports filtering documents by type and enrollmentId", async () => {
+        const studentId = new mongoose.Types.ObjectId();
+        const enrollmentId = new mongoose.Types.ObjectId();
+
+        await Document.create([
+            {
+                student: studentId,
+                filename: "general.pdf",
+                originalName: "general.pdf",
+                type: "GENERAL",
+                enrollmentId,
+            },
+            {
+                student: studentId,
+                filename: "report.pdf",
+                originalName: "report.pdf",
+                type: "REPORT",
+                enrollmentId,
+            },
+            {
+                student: studentId,
+                filename: "report-other-enrollment.pdf",
+                originalName: "report-other-enrollment.pdf",
+                type: "REPORT",
+                enrollmentId: new mongoose.Types.ObjectId(),
+            },
+        ]);
+
+        const response = await request(app)
+            .get(`/api/documents/${studentId.toString()}`)
+            .query({ type: "REPORT", enrollmentId: enrollmentId.toString() })
+            .expect(200);
+
+        expect(response.body).toHaveLength(1);
+        expect(response.body[0].filename).toBe("report.pdf");
+    });
+
     it("deletes a document by id", async () => {
         const doc = await Document.create({
             student: new mongoose.Types.ObjectId(),

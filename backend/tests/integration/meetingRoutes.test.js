@@ -84,6 +84,80 @@ describe("Meeting Routes", () => {
             expect(response.body.data).toHaveLength(2);
         });
 
+        it("allows admins to filter meetings by bookedBy", async () => {
+            await Meeting.create([
+                {
+                    title: "Meeting A",
+                    start: new Date("2024-01-10T10:00:00.000Z"),
+                    location: "Room A",
+                    student: {
+                        id: new mongoose.Types.ObjectId(),
+                        name: "Student A",
+                        personalNumber: "200001010101",
+                    },
+                    bookedBy: "admin",
+                },
+                {
+                    title: "Meeting B",
+                    start: new Date("2024-01-11T10:00:00.000Z"),
+                    location: "Room B",
+                    student: {
+                        id: new mongoose.Types.ObjectId(),
+                        name: "Student B",
+                        personalNumber: "199901010101",
+                    },
+                    bookedBy: "syv",
+                },
+            ]);
+
+            const token = signToken({ role: "admin" });
+            const response = await request(app)
+                .get("/api/meetings")
+                .query({ bookedBy: "syv" })
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+
+            expect(response.body.data).toHaveLength(1);
+            expect(response.body.data[0]).toHaveProperty("title", "Meeting B");
+        });
+
+        it("filters meetings by student name when provided", async () => {
+            await Meeting.create([
+                {
+                    title: "Meeting A",
+                    start: new Date("2024-01-10T10:00:00.000Z"),
+                    location: "Room A",
+                    student: {
+                        id: new mongoose.Types.ObjectId(),
+                        name: "Student A",
+                        personalNumber: "200001010101",
+                    },
+                    bookedBy: "admin",
+                },
+                {
+                    title: "Meeting B",
+                    start: new Date("2024-01-11T10:00:00.000Z"),
+                    location: "Room B",
+                    student: {
+                        id: new mongoose.Types.ObjectId(),
+                        name: "Student B",
+                        personalNumber: "199901010101",
+                    },
+                    bookedBy: "syv",
+                },
+            ]);
+
+            const token = signToken({ role: "admin" });
+            const response = await request(app)
+                .get("/api/meetings")
+                .query({ studentName: "student b" })
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+
+            expect(response.body.data).toHaveLength(1);
+            expect(response.body.data[0]).toHaveProperty("title", "Meeting B");
+        });
+
         it("filters meetings for syv users", async () => {
             await Meeting.create([
                 {
@@ -247,6 +321,79 @@ describe("Meeting Routes", () => {
 
             expect(response.body).toEqual({
                 error: "Serverfel vid uppdatering av möte",
+            });
+        });
+    });
+
+    describe("DELETE /api/meetings/:id", () => {
+        it("allows admins to delete a meeting", async () => {
+            const meeting = await Meeting.create({
+                title: "Meeting A",
+                start: new Date("2024-01-10T10:00:00.000Z"),
+                location: "Room A",
+                student: {
+                    id: new mongoose.Types.ObjectId(),
+                    name: "Student A",
+                    personalNumber: "200001010101",
+                },
+                bookedBy: "admin",
+                createdBy: new mongoose.Types.ObjectId().toString(),
+            });
+
+            const token = signToken({ role: "admin" });
+            await request(app)
+                .delete(`/api/meetings/${meeting._id.toString()}`)
+                .set("Authorization", `Bearer ${token}`)
+                .expect(204);
+
+            const deleted = await Meeting.findById(meeting._id);
+            expect(deleted).toBeNull();
+        });
+
+        it("returns 403 when a non-admin is not the creator", async () => {
+            const meeting = await Meeting.create({
+                title: "Meeting A",
+                start: new Date("2024-01-10T10:00:00.000Z"),
+                location: "Room A",
+                student: {
+                    id: new mongoose.Types.ObjectId(),
+                    name: "Student A",
+                    personalNumber: "200001010101",
+                },
+                bookedBy: "syv",
+                createdBy: new mongoose.Types.ObjectId().toString(),
+            });
+
+            const token = signToken({ role: "syv" });
+            const response = await request(app)
+                .delete(`/api/meetings/${meeting._id.toString()}`)
+                .set("Authorization", `Bearer ${token}`)
+                .expect(403);
+
+            expect(response.body).toEqual({
+                error: "Behörighet saknas för att radera detta möte",
+            });
+        });
+
+        it("returns 404 when meeting does not exist", async () => {
+            const token = signToken({ role: "admin" });
+            const response = await request(app)
+                .delete(`/api/meetings/${new mongoose.Types.ObjectId()}`)
+                .set("Authorization", `Bearer ${token}`)
+                .expect(404);
+
+            expect(response.body).toEqual({ error: "Möte hittades inte" });
+        });
+
+        it("returns 500 for invalid ids", async () => {
+            const token = signToken({ role: "admin" });
+            const response = await request(app)
+                .delete("/api/meetings/not-a-valid-id")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(500);
+
+            expect(response.body).toEqual({
+                error: "Serverfel vid radering av möte",
             });
         });
     });
