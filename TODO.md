@@ -144,8 +144,6 @@ Funktioner:
 
 Administration:
 
--   Admin anger plats och rum
-
 ---
 
 ## Ekonomi och rapporter
