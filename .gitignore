@@ -26,3 +26,4 @@ llm
 
 # Test coverage
 frontend/coverage/
+backend/coverage/
