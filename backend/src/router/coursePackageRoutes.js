@@ -1,9 +1,10 @@
 import express from "express";
 import CoursePackage from "../models/CoursePackage.js";
-import {
-    courseDetailRateLimiter,
-    exemptAdminsFromRateLimit,
-} from "../middleware/security.js";
+// Rate limiting disabled
+// import {
+//     courseDetailRateLimiter,
+//     exemptAdminsFromRateLimit,
+// } from "../middleware/security.js";
 
 const router = express.Router();
 
@@ -29,8 +30,6 @@ router.get("/coursepackages", async (req, res) => {
  */
 router.get(
     "/coursepackages/:id",
-    exemptAdminsFromRateLimit,
-    courseDetailRateLimiter,
     async (req, res) => {
         try {
             const coursePackage = await CoursePackage.findById(req.params.id)

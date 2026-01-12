@@ -27,8 +27,9 @@ import {
     corsConfig,
     requestLogger,
     securityAudit,
-    rateLimiter,
-    apiRateLimiter,
+    // Rate limiting disabled
+    // rateLimiter,
+    // apiRateLimiter,
 } from "./src/middleware/security.js";
 
 import {
@@ -46,14 +47,14 @@ app.use(securityHeaders);
 import cors from "cors";
 app.use(cors(corsConfig));
 
-// Apply rate limiting (admins are automatically exempted via skip function)
-if (process.env.NODE_ENV !== "test") {
-    app.use(rateLimiter);
-    app.use("/api/", apiRateLimiter);
-} else {
-    // In tests, only rate limit the students endpoint to validate rate limiting behavior
-    app.use("/api/students", apiRateLimiter);
-}
+// Rate limiting disabled
+// if (process.env.NODE_ENV !== "test") {
+//     app.use(rateLimiter);
+//     app.use("/api/", apiRateLimiter);
+// } else {
+//     // In tests, only rate limit the students endpoint to validate rate limiting behavior
+//     app.use("/api/students", apiRateLimiter);
+// }
 
 // Apply performance monitoring
 app.use(performanceMonitor);

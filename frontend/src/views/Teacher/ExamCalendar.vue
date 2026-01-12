@@ -37,6 +37,8 @@
           v-if="showAddEventModal && eventType === 'meeting'"
           @close="closeModal"
           @event-added="addEventToCalendar"
+          :booked-by-role="userRole"
+          :title="'Boka nytt möte'"
         />
 
         <EventModal 
@@ -50,6 +52,7 @@
           v-if="selectedEvent && isMeetingEvent"
           :event="selectedEvent"
           @close="selectedEvent = null"
+          @deleted="handleExamUpdate"
         />
       </div>
     </div>
@@ -177,16 +180,15 @@ export default {
       const calendarApi = this.$refs.fullCalendar.getApi();
       const isMeeting = this.eventType === 'meeting';
 
-      const title = isMeeting
-        ? this.userRole === 'syv'
-          ? 'Möte SYV & elev'
-          : 'Möte Specped & elev'
-        : (event.title || (event.extendedProps?.teacher || 'Okänd lärare'));
+      // Use the title from the event (set by AddMeetingModal) instead of overriding it
+      const title = event.title || (isMeeting 
+        ? (event.extendedProps?.studentName ? `Möte, ${event.extendedProps.studentName}` : 'Möte')
+        : (event.extendedProps?.teacher || 'Okänd lärare'));
 
       calendarApi.addEvent({
         ...event,
         title,
-        allDay: true,
+        allDay: isMeeting ? false : true,
         color: event.extendedProps?.teacherId?.colorCode || event.color || '#999999',
         extendedProps: {
           ...event.extendedProps,
@@ -255,21 +257,59 @@ export default {
               }
             };
           }),
-          ...meetings.data.map(meeting => ({
-            id: meeting._id,
-            title: meeting.title,
-            start: meeting.start,
-            allDay: false,
-            editable: true,
-            color: '#999999',
-            extendedProps: {
-              isMeeting: true,
-              studentName: meeting.student?.name || 'Okänd',
-              personalNumber: meeting.student?.personalNumber || '',
-              location: meeting.location || '',
-              bookedBy: meeting.bookedBy || ''
+          ...(meetings.data?.data || []).map(meeting => {
+            const studentName = meeting.student?.name || 'Okänd';
+            let displayTitle = meeting.title; // Use the original title from database
+            
+            // Debug log
+            console.log('📅 Processing meeting:', {
+              title: meeting.title,
+              bookedBy: meeting.bookedBy,
+              createdBy: meeting.createdBy,
+              studentName
+            });
+            
+            // If title is in "Möte, Student name" format (admin/systemadmin), keep it
+            // Otherwise, format as "Role, Student name" for syv/specped
+            if (!displayTitle || displayTitle === 'Möte') {
+              // Fallback: format based on bookedBy
+              const roleLabel = meeting.bookedBy === 'syv' ? 'Syv' : 
+                              meeting.bookedBy === 'specped' ? 'Specped' : '';
+              displayTitle = roleLabel ? `${roleLabel}, ${studentName}` : `Möte, ${studentName}`;
+            } else if (displayTitle.startsWith('Möte,')) {
+              // Already in "Möte, Student name" format - keep it
+              displayTitle = displayTitle;
+            } else if (!displayTitle.includes(studentName)) {
+              // Title doesn't contain student name, format as "Role, Student name"
+              const roleLabel = meeting.bookedBy === 'syv' ? 'Syv' : 
+                              meeting.bookedBy === 'specped' ? 'Specped' : '';
+              displayTitle = roleLabel ? `${roleLabel}, ${studentName}` : `Möte, ${studentName}`;
             }
-          }))
+            
+            // Extract createdBy username
+            const createdByUsername = meeting.createdBy?.username || 
+                                    meeting.createdBy?.email || 
+                                    (typeof meeting.createdBy === 'string' ? null : null);
+            
+            return {
+              id: meeting._id,
+              title: displayTitle,
+              start: meeting.start,
+              allDay: false,
+              editable: true,
+              color: '#999999',
+              extendedProps: {
+                isMeeting: true,
+                studentName: studentName,
+                personalNumber: meeting.student?.personalNumber || '',
+                location: meeting.location || '',
+                bookedBy: meeting.bookedBy || '',
+                createdBy: meeting.createdBy?._id || meeting.createdBy,
+                createdByUsername: createdByUsername,
+                originalTitle: meeting.title // Keep original title to extract username
+              }
+            };
+          })
         ];
 
         // Use FullCalendar API to ensure DnD works immediately without page refresh

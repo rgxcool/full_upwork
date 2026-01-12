@@ -16,12 +16,12 @@
       </thead>
       <tbody>
         <tr v-for="meeting in meetings" :key="meeting._id">
-          <td>{{ meeting.student.name }}</td>
+          <td>
+            <router-link :to="`/student/${meeting.student.id}`">{{ meeting.student.name }}</router-link>
+          </td>
           <td>{{ new Date(meeting.start).toLocaleString() }}</td>
           <td>{{ meeting.info }}</td>
           <td>
-            <router-link :to="`/students/${meeting.student.id}`">Redigera elevkort</router-link>
-            <router-link :to="`/study-plans/${meeting.student.id}`">Revidera studieplaner</router-link>
             <button @click="deleteMeeting(meeting._id)">Radera</button>
           </td>
         </tr>
@@ -47,7 +47,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { api } from '@/store/store.js';
 import AddMeetingModal from '@/views/Modals/AddMeetingModal.vue';
 
 export default {
@@ -79,7 +79,8 @@ export default {
     async fetchMeetings() {
       try {
         const { page, limit } = this.pagination;
-        const response = await axios.get(`/api/meetings?bookedBy=${this.activeRole}&sort=start:desc&page=${page}&limit=${limit}`);
+        // Backend automatically filters by role for syv/specped, but we can also specify bookedBy
+        const response = await api.get(`/meetings?bookedBy=${this.activeRole}&sort=start:desc&page=${page}&limit=${limit}`, { withCredentials: true });
         this.meetings = response.data.data;
         this.pagination = response.data.pagination;
         this.isModalOpen = false; // Close modal on success
@@ -90,7 +91,7 @@ export default {
     async deleteMeeting(id) {
       if (confirm('Är du säker på att du vill radera detta möte?')) {
         try {
-          await axios.delete(`/api/meetings/${id}`);
+          await api.delete(`/meetings/${id}`, { withCredentials: true });
           this.fetchMeetings(); // Refresh list
         } catch (error) {
           console.error("Kunde inte radera mötet:", error);
