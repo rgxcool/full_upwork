@@ -19,7 +19,7 @@
     <v-autocomplete
       v-model="form.student"
       :items="students"
-      item-title="name"
+      item-title="displayName"
       item-value="_id"
       label="Välj elev"
       outlined
@@ -27,9 +27,16 @@
       return-object
       :no-data-text="'Inga elever tillgängliga'"
       :menu-props="{ maxHeight: '300px' }"
-      :item-props="true"
-      :item-title="item => `${item.name} (${item.personalNumber})`"
-    />
+      :custom-filter="filterStudents"
+      auto-select-first
+    >
+      <template #item="{ props, item }">
+        <v-list-item v-bind="props" :title="item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})`" />
+      </template>
+      <template #selection="{ item }">
+        {{ item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})` }}
+      </template>
+    </v-autocomplete>
 
       <label>Plats:</label>
       <input v-model="form.location" placeholder="T.ex. Samtalsrum A" />
@@ -50,7 +57,7 @@
 import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
 import { sv } from 'date-fns/locale'
-import axios from 'axios'
+import { api } from '@/store/store.js'
 
 export default {
   components: { DatePicker },
@@ -61,7 +68,8 @@ export default {
     },
     bookedByRole: {
       type: String,
-      required: true
+      required: false,
+      default: null
     }
   },
   data() {
@@ -70,7 +78,7 @@ export default {
       form: {
         date: new Date(),
         time: new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }), // Default to current time
-        student: '',
+        student: null,
         location: '',
         info: '' // 👈 Add info to form data
       },
@@ -81,20 +89,96 @@ export default {
     userRole() {
       return this.$store.getters.userRole || 'guest';
     },
+    username() {
+      return this.$store.state.user?.username || this.$store.state.user?.email || 'Okänd';
+    },
     eventTitle() {
-      return this.userRole === 'syv'
-        ? 'Möte SYV & elev'
-        : 'Möte Specped & elev';
+      // Format: "Username, Role"
+      if (this.userRole === 'syv') {
+        return `${this.username}, Syv`;
+      } else if (this.userRole === 'specped') {
+        return `${this.username}, Special Pedagog`;
+      } else if (this.userRole === 'admin' || this.userRole === 'systemadmin') {
+        // For admins, use the bookedByRole prop if available, otherwise use role
+        const roleLabel = this.bookedByRole === 'syv' ? 'Syv' : 
+                         this.bookedByRole === 'specped' ? 'Special Pedagog' : 
+                         this.userRole === 'systemadmin' ? 'Systemadmin' : 'Admin';
+        return `${this.username}, ${roleLabel}`;
+      }
+      // Fallback: use bookedByRole if provided
+      if (this.bookedByRole) {
+        const roleLabel = this.bookedByRole === 'syv' ? 'Syv' : 
+                         this.bookedByRole === 'specped' ? 'Special Pedagog' : 
+                         this.bookedByRole;
+        return `${this.username}, ${roleLabel}`;
+      }
+      return 'Möte';
+    },
+    bookedByValue() {
+      // Determine the bookedBy value - use bookedByRole prop if provided, otherwise use userRole
+      if (this.bookedByRole) {
+        return this.bookedByRole;
+      }
+      // For admins creating meetings, default to their role
+      if (this.userRole === 'admin' || this.userRole === 'systemadmin') {
+        return this.userRole;
+      }
+      // For syv/specped, use their role
+      if (this.userRole === 'syv' || this.userRole === 'specped') {
+        return this.userRole;
+      }
+      // Fallback
+      return this.userRole;
     }
   },
   mounted() {
     this.fetchStudents();
   },
   methods: {
+    filterStudents(value, query, item) {
+      if (!query || !query.trim()) return true;
+      
+      const searchQuery = query.toLowerCase().trim();
+      
+      // Debug: log what we're receiving
+      console.log('🔍 Filter called:', { value, query, item, itemRaw: item?.raw });
+      
+      // In Vuetify 3 with return-object, try different ways to access the student
+      let student = item?.raw || item?.value || item || value;
+      
+      // If value is an object with name property, it might be the student itself
+      if (value && typeof value === 'object' && value.name && !student?.name) {
+        student = value;
+      }
+      
+      if (!student || !student.name) {
+        console.log('❌ No student found in filter');
+        return false;
+      }
+      
+      // Use searchText if available
+      if (student.searchText) {
+        const matches = student.searchText.includes(searchQuery);
+        console.log('✅ Using searchText:', student.searchText, 'matches:', matches);
+        return matches;
+      }
+      
+      // Fallback: search in individual fields
+      const name = (student.name || '').toLowerCase();
+      const personalNumber = (student.personalNumber || '').toLowerCase();
+      const displayName = (student.displayName || '').toLowerCase();
+      
+      const matches = name.includes(searchQuery) || 
+             personalNumber.includes(searchQuery) || 
+             displayName.includes(searchQuery);
+      
+      console.log('✅ Search result:', { name, searchQuery, matches });
+      return matches;
+    },
     async fetchStudents() {
       try {
-        const response = await axios.get('/api/students');
-            console.log('📦 Elever hämtade:', response.data); // 👈 Lägg till detta
+        const response = await api.get('/students');
+        console.log('📦 Elever hämtade:', response.data); // 👈 Lägg till detta
 
         const data = response.data;
 
@@ -104,35 +188,50 @@ export default {
             _id: s._id,
             name: s.name,
             personalNumber: s.personalNumber || "",
+            // Include both name and personalNumber in displayName for better search
+            displayName: `${s.name} (${s.personalNumber || ''})`,
+            // Add searchable text that includes name parts for partial matching
+            searchText: `${s.name} ${s.personalNumber || ''}`.toLowerCase()
           }));
       } catch (error) {
         console.error("Kunde inte hämta elever:", error);
       }
     },
     async submit() {
-      if (!this.form.student) {
-        alert("Fyll i elevens namn eller personnummer.");
+      if (!this.form.student || !this.form.student._id) {
+        alert("Välj en elev.");
         return;
       }
 
       // Combine date and time
       const [hours, minutes] = this.form.time.split(':');
       const combinedDateTime = new Date(this.form.date);
-      combinedDateTime.setHours(hours, minutes);
+      combinedDateTime.setHours(parseInt(hours), parseInt(minutes));
+
+      // Determine title based on role and context
+      let meetingTitle = this.eventTitle;
+      
+      // For admin/systemadmin booking from calendar (no specific bookedByRole), use "Möte, Student name"
+      if ((this.userRole === 'admin' || this.userRole === 'systemadmin') && 
+          !this.bookedByRole) {
+        meetingTitle = `Möte, ${this.form.student.name}`;
+      }
 
       const payload = {
-        title: this.eventTitle,
-        start: combinedDateTime, // Use the combined value
-        location: this.form.location,
+        title: meetingTitle,
+        start: combinedDateTime.toISOString(), // Convert to ISO string for backend
+        location: this.form.location || '',
         studentId: this.form.student._id,
         studentName: this.form.student.name,
-        personalNumber: this.form.student.personalNumber,
-        bookedBy: this.bookedByRole,
-        info: this.form.info // 👈 Add info to payload
+        personalNumber: this.form.student.personalNumber || '',
+        bookedBy: this.bookedByValue,
+        info: this.form.info || '' // 👈 Add info to payload
       };
 
+      console.log('📤 Sending payload:', payload);
+
       try {
-        const response = await axios.post('/api/meetings', payload);
+        const response = await api.post('/meetings', payload, { withCredentials: true });
         console.log('✅ Möte sparat:', response.data);
 
         this.$emit('event-added', {
@@ -148,7 +247,8 @@ export default {
         this.$emit('close');
       } catch (err) {
         console.error('❌ Kunde inte spara mötet:', err);
-        alert("Kunde inte spara mötet. Försök igen.");
+        const errorMessage = err.response?.data?.error || err.message || 'Okänt fel';
+        alert(`Kunde inte spara mötet: ${errorMessage}`);
       }
     }
   }

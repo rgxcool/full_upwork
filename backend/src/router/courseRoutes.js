@@ -1,9 +1,10 @@
 import express from "express";
 import Course from "../models/Course.js";
-import {
-    courseDetailRateLimiter,
-    exemptAdminsFromRateLimit,
-} from "../middleware/security.js";
+// Rate limiting disabled
+// import {
+//     courseDetailRateLimiter,
+//     exemptAdminsFromRateLimit,
+// } from "../middleware/security.js";
 
 const router = express.Router();
 
@@ -21,8 +22,6 @@ router.get("/courses", async (req, res) => {
 // 🔹 Fetch a single course by ID
 router.get(
     "/courses/:courseId",
-    exemptAdminsFromRateLimit,
-    courseDetailRateLimiter,
     async (req, res) => {
         try {
             const course = await Course.findById(req.params.courseId);
@@ -55,8 +54,6 @@ router.get("/courses/id", async (req, res) => {
 
 router.get(
     "/course/:id",
-    exemptAdminsFromRateLimit,
-    courseDetailRateLimiter,
     async (req, res) => {
         try {
             const course = await Course.findById(req.params.id);

@@ -7,7 +7,8 @@ import {
     login,
     logout as controllerLogout,
 } from "../controllers/authController.js";
-import { authRateLimiter } from "../middleware/security.js";
+// Rate limiting disabled
+// import { authRateLimiter } from "../middleware/security.js";
 
 const router = express.Router();
 
@@ -43,8 +44,8 @@ router.post("/auth/register", async (req, res) => {
 });
 
 // ✅ Login User (delegate to controller for consistent behavior)
-// Apply authRateLimiter specifically for login (5 attempts per 15 minutes)
-router.post("/auth/login", authRateLimiter, login);
+// Rate limiting disabled
+router.post("/auth/login", login);
 
 // ✅ Logout (controller)
 router.post("/auth/logout", controllerLogout);

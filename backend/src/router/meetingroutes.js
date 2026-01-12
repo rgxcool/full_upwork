@@ -32,6 +32,11 @@ router.get('/meetings', authenticateUser, async (req, res) => {
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
         const meetings = await Meeting.find(query)
+            .populate({
+                path: 'createdBy',
+                select: 'username email',
+                model: 'User'
+            })
             .sort(sortOptions)
             .skip(skip)
             .limit(parseInt(limit))

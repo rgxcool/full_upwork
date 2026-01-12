@@ -1,7 +1,8 @@
 import express from "express";
 import multer from "multer";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
-import { exemptAdminsFromRateLimit } from "../middleware/security.js";
+// Rate limiting disabled
+// import { exemptAdminsFromRateLimit } from "../middleware/security.js";
 import {
     uploadStudentsForMatching,
     processStudentEducation,
@@ -28,7 +29,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.get(
     "/course-match",
     isAuthenticated,
-    exemptAdminsFromRateLimit,
     findCourseMatch
 );
 router.post(
