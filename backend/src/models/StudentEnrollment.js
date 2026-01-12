@@ -174,6 +174,59 @@ studentEnrollmentSchema.pre("save", function () {
     }
 });
 
+let originalDoc = null;
+studentEnrollmentSchema.pre('save', async function () {
+    if (!this.isNew) {
+        originalDoc = await this.constructor.findById(this._id).lean();
+    }
+});
+
+
+// Post-save hook for creation and updates
+studentEnrollmentSchema.post("save", async function (doc) {
+    const { sendStudyplanChangedNotification } = await import("../controllers/notificationController.js");
+    const changeType = this.isNew ? 'created' : 'updated';
+    let changes = null;
+
+    if (changeType === 'updated' && originalDoc) {
+        const changedFields = [];
+        const previousValues = {};
+        const newValues = {};
+
+        doc.schema.eachPath((path) => {
+            if (!doc.isModified(path) || ['_id', '__v', 'updatedAt', 'createdAt'].includes(path)) return;
+            
+            const originalValue = originalDoc[path];
+            const newValue = doc[path];
+
+            // Simple comparison for now. Mongoose's isModified can be complex.
+            if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
+                changedFields.push(path);
+                previousValues[path] = originalValue;
+                newValues[path] = newValue;
+            }
+        });
+
+        if (changedFields.length > 0) {
+            changes = { changedFields, previousValues, newValues };
+        } else {
+            // If no fields were meaningfully changed, don't send a notification.
+            return;
+        }
+    }
+    
+    await sendStudyplanChangedNotification({ doc, changeType, changes });
+});
+
+// Post-delete hook
+studentEnrollmentSchema.post("findOneAndDelete", async function (doc) {
+    if (doc) {
+        const { sendStudyplanChangedNotification } = await import("../controllers/notificationController.js");
+        await sendStudyplanChangedNotification({ doc, changeType: 'deleted' });
+    }
+});
+
+
 // Method to change status with reason
 studentEnrollmentSchema.methods.changeStatus = function (
     newStatus,
