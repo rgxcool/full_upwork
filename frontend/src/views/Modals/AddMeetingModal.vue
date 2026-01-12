@@ -6,10 +6,14 @@
       <label>Datum:</label>
       <DatePicker
         v-model="form.date"
-        :enable-time="true"
+        :enable-time="false"
         :locale="svLocale"
         :auto-apply="true"
+        format="yyyy-MM-dd"
       />
+
+      <label>Tid:</label>
+      <input type="time" v-model="form.time" class="time-input"/>
 
     <label>Elev:</label>
     <v-autocomplete
@@ -65,6 +69,7 @@ export default {
       svLocale: sv,
       form: {
         date: new Date(),
+        time: new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }), // Default to current time
         student: '',
         location: '',
         info: '' // 👈 Add info to form data
@@ -110,9 +115,14 @@ export default {
         return;
       }
 
+      // Combine date and time
+      const [hours, minutes] = this.form.time.split(':');
+      const combinedDateTime = new Date(this.form.date);
+      combinedDateTime.setHours(hours, minutes);
+
       const payload = {
         title: this.eventTitle,
-        start: this.form.date, // Date inklusive tid
+        start: combinedDateTime, // Use the combined value
         location: this.form.location,
         studentId: this.form.student._id,
         studentName: this.form.student.name,
@@ -164,6 +174,14 @@ export default {
 .modal-content label {
   display: block;
   margin-top: 1rem;
+}
+.modal-content input, .modal-content textarea, .modal-content .time-input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-top: 0.25rem;
+  box-sizing: border-box; /* Ensures padding doesn't affect width */
+  border: 1px solid #ccc; /* Example border */
+  border-radius: 4px; /* Example border radius */
 }
 .modal-content input, .modal-content textarea {
   width: 100%;
