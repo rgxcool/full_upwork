@@ -86,7 +86,7 @@ export default {
       svLocale: sv,
       calendarOptions: {
         plugins: [dayGridPlugin, interactionPlugin],
-        initialView: 'dayGridWeek',
+        initialView: 'dayGridMonth',
         editable: true,
         eventStartEditable: true,
         selectable: true,
