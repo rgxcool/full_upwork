@@ -146,13 +146,38 @@ router.get('/all/apl', async (req, res) => {
         }
       },
       {
+        $addFields: {
+          // Try to convert studentId to ObjectId, but handle errors gracefully
+          studentIdObj: {
+            $cond: {
+              if: { $eq: [{ $type: '$_id' }, 'string'] },
+              then: {
+                $cond: {
+                  if: { $eq: [{ $strLenCP: '$_id' }, 24] }, // ObjectId is 24 hex chars
+                  then: { $toObjectId: '$_id' },
+                  else: null
+                }
+              },
+              else: '$_id'
+            }
+          }
+        }
+      },
+      {
         $lookup: {
           from: 'students',
-          // Note: studentId in metadata is a string, _id in students is ObjectId
-          // We need to convert the _id to ObjectId for the lookup to work
-          let: { studentIdObj: { $toObjectId: '$_id' } },
+          let: { studentIdObj: '$studentIdObj' },
           pipeline: [
-            { $match: { $expr: { $eq: ['$_id', '$$studentIdObj'] } } },
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ['$_id', '$$studentIdObj'] },
+                    { $eq: [{ $toString: '$_id' }, '$_id'] } // Also try string comparison
+                  ]
+                }
+              }
+            },
             { $project: { name: 1, _id: 0 } }
           ],
           as: 'studentInfo'
@@ -175,10 +200,11 @@ router.get('/all/apl', async (req, res) => {
       { $sort: { studentName: 1 } }
     ]).toArray()
 
+    console.log(`✅ Found ${filesByStudent.length} students with APL files`)
     res.json(filesByStudent)
   } catch (err) {
     console.error('❌ Failed to list all APL files:', err)
-    res.status(500).json({ error: 'Failed to list all APL files' })
+    res.status(500).json({ error: 'Failed to list all APL files', detail: err.message })
   }
 })
 
