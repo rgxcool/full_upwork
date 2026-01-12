@@ -12,6 +12,7 @@ import mongoose from "mongoose";
 import Notification from "../../src/models/Notification.js";
 import Student from "../../src/models/Student.js";
 import User from "../../src/models/User.js";
+import Course from "../../src/models/Course.js";
 import {
     checkPendingGradesAndNotify,
     createNotification,
@@ -21,6 +22,7 @@ import {
     evaluateActionPlanStatusAndNotify,
     evaluateGradingStatusAndNotify,
     sendDropoutNotification,
+    sendStudyplanChangedNotification,
 } from "../../src/controllers/notificationController.js";
 import {
     connectTestDatabase,
@@ -40,6 +42,7 @@ describe("notificationController", () => {
         await Notification.deleteMany({});
         await Student.deleteMany({});
         await User.deleteMany({});
+        await Course.deleteMany({});
     });
 
     afterEach(async () => {
@@ -47,6 +50,7 @@ describe("notificationController", () => {
         await Notification.deleteMany({});
         await Student.deleteMany({});
         await User.deleteMany({});
+        await Course.deleteMany({});
     });
 
     describe("checkPendingGradesAndNotify", () => {
@@ -454,6 +458,105 @@ describe("notificationController", () => {
             expect(notification.meta.teacherId).toBeNull();
             expect(notification.meta.courseId).toBeNull();
             expect(notification.message).toContain("okänd utbildning");
+        });
+    });
+
+    describe("sendStudyplanChangedNotification", () => {
+        it("logs and returns when skipNotification is set", async () => {
+            const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+            const enrollmentId = new mongoose.Types.ObjectId();
+
+            await sendStudyplanChangedNotification({
+                doc: { _id: enrollmentId, skipNotification: true },
+                changeType: "created",
+            });
+
+            expect(logSpy).toHaveBeenCalledWith(
+                `Skipping notification for StudentEnrollment ${enrollmentId}`
+            );
+
+            const count = await Notification.countDocuments({
+                type: "studyplan_changed",
+            });
+            expect(count).toBe(0);
+        });
+
+        it("creates a notification when a studyplan is created", async () => {
+            const student = await Student.create({
+                name: "Student One",
+                personalNumber: "190001019999",
+                email: "student.one@example.com",
+            });
+
+            const course = await Course.create({
+                courseName: "Matematik",
+                courseCode: "MATH101",
+            });
+
+            const enrollmentDoc = {
+                _id: new mongoose.Types.ObjectId(),
+                studentId: student._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: course._id,
+                teacherId: new mongoose.Types.ObjectId(),
+            };
+
+            await sendStudyplanChangedNotification({
+                doc: enrollmentDoc,
+                changeType: "created",
+            });
+
+            const notification = await Notification.findOne({
+                type: "studyplan_changed",
+            }).lean();
+
+            expect(notification).not.toBeNull();
+            expect(notification?.message).toBe(
+                `Ny studieplan skapad för ${student.name} i kursen undefined.`
+            );
+            expect(notification?.resolved).toBe(false);
+            expect(notification?.teacher?.toString()).toBe(
+                enrollmentDoc.teacherId.toString()
+            );
+            expect(notification?.meta?.studentId?.toString()).toBe(
+                student._id.toString()
+            );
+        });
+
+        it("creates a notification when a studyplan is deleted", async () => {
+            const student = await Student.create({
+                name: "Student Two",
+                personalNumber: "190001029999",
+                email: "student.two@example.com",
+            });
+
+            const course = await Course.create({
+                courseName: "Svenska",
+                courseCode: "SVE101",
+            });
+
+            const enrollmentDoc = {
+                _id: new mongoose.Types.ObjectId(),
+                studentId: student._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: course._id,
+                teacherId: new mongoose.Types.ObjectId(),
+            };
+
+            await sendStudyplanChangedNotification({
+                doc: enrollmentDoc,
+                changeType: "deleted",
+            });
+
+            const notification = await Notification.findOne({
+                type: "studyplan_changed",
+            }).lean();
+
+            expect(notification).not.toBeNull();
+            expect(notification?.message).toBe(
+                `Studieplan borttagen för ${student.name} i kursen undefined.`
+            );
+            expect(notification?.resolved).toBe(false);
         });
     });
 });
