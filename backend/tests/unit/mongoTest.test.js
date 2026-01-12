@@ -8,17 +8,17 @@ import {
 
 describe("mongoTest helpers", () => {
     const defaultUri = "mongodb://127.0.0.1:27017/mindfullearning";
-    const originalMongoUri = process.env.MONGODB_URI;
+    const originalMongoUri = process.env.MONGO_URI;
 
     beforeEach(() => {
-        process.env.MONGODB_URI = defaultUri;
+        process.env.MONGO_URI = defaultUri;
     });
 
     afterEach(() => {
         if (typeof originalMongoUri === "undefined") {
-            delete process.env.MONGODB_URI;
+            delete process.env.MONGO_URI;
         } else {
-            process.env.MONGODB_URI = originalMongoUri;
+            process.env.MONGO_URI = originalMongoUri;
         }
         vi.restoreAllMocks();
         mongoose.connection.readyState = 0;

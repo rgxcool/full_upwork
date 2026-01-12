@@ -53,7 +53,9 @@ describe("Notification Routes", () => {
 
     describe("GET /api/notifications", () => {
         it("returns unique notifications for admin users", async () => {
+            const adminUserId = new mongoose.Types.ObjectId();
             const studentId = new mongoose.Types.ObjectId();
+            const otherAdminUserId = new mongoose.Types.ObjectId();
 
             await Notification.create([
                 {
@@ -80,12 +82,14 @@ describe("Notification Routes", () => {
                     type: "dropout",
                     message: "Dropout alert",
                     resolved: false,
+                    createdByAdmin: adminUserId,
                     meta: { studentId },
                 },
                 {
                     type: "dropout",
                     message: "Dropout alert duplicate",
                     resolved: false,
+                    createdByAdmin: otherAdminUserId,
                     meta: { studentId },
                 },
                 {
@@ -95,7 +99,7 @@ describe("Notification Routes", () => {
                 },
             ]);
 
-            const token = signToken();
+            const token = signToken({ userId: adminUserId.toString() });
             const response = await request(app)
                 .get("/api/notifications")
                 .set("Authorization", `Bearer ${token}`)
@@ -219,33 +223,39 @@ describe("Notification Routes", () => {
                 resolved: false,
             });
 
-            const userId = new mongoose.Types.ObjectId().toString();
+            const userId = new mongoose.Types.ObjectId();
+            const token = signToken({ userId: userId.toString() });
             const response = await request(app)
                 .put(`/api/notifications/${note._id}/resolve`)
-                .send({ userId })
+                .set("Authorization", `Bearer ${token}`)
                 .expect(200);
 
             expect(response.body).toHaveProperty(
                 "message",
                 "Notis markerad som hanterad"
             );
-            expect(response.body.note.resolved).toBe(true);
-            expect(response.body.note.resolvedBy.toString()).toBe(userId);
+            expect(response.body.note.resolvedByUsers).toEqual(
+                expect.arrayContaining([userId.toString()])
+            );
         });
 
         it("returns 404 when notification is missing", async () => {
+            const token = signToken();
             const response = await request(app)
                 .put(
                     `/api/notifications/${new mongoose.Types.ObjectId()}/resolve`
                 )
+                .set("Authorization", `Bearer ${token}`)
                 .expect(404);
 
             expect(response.text).toBe("Notis hittades inte");
         });
 
         it("returns 500 for invalid ids", async () => {
+            const token = signToken();
             const response = await request(app)
                 .put("/api/notifications/not-a-valid-id/resolve")
+                .set("Authorization", `Bearer ${token}`)
                 .expect(500);
 
             expect(response.body).toHaveProperty("message");
@@ -254,32 +264,39 @@ describe("Notification Routes", () => {
 
     describe("PUT /api/notifications/:id/reset", () => {
         it("resets a notification", async () => {
+            const userId = new mongoose.Types.ObjectId();
+            const token = signToken({ userId: userId.toString() });
             const note = await Notification.create({
                 type: "custom",
                 message: "Reset me",
-                resolved: true,
-                resolvedBy: new mongoose.Types.ObjectId(),
+                resolvedByUsers: [userId],
             });
 
             const response = await request(app)
                 .put(`/api/notifications/${note._id}/reset`)
+                .set("Authorization", `Bearer ${token}`)
                 .expect(200);
 
-            expect(response.body.note.resolved).toBe(false);
-            expect(response.body.note.resolvedBy).toBeNull();
+            expect(response.body.note.resolvedByUsers).not.toContain(
+                userId.toString()
+            );
         });
 
         it("returns 404 when notification is missing", async () => {
+            const token = signToken();
             const response = await request(app)
                 .put(`/api/notifications/${new mongoose.Types.ObjectId()}/reset`)
+                .set("Authorization", `Bearer ${token}`)
                 .expect(404);
 
             expect(response.text).toBe("Notis hittades inte");
         });
 
         it("returns 500 for invalid ids", async () => {
+            const token = signToken();
             const response = await request(app)
                 .put("/api/notifications/not-a-valid-id/reset")
+                .set("Authorization", `Bearer ${token}`)
                 .expect(500);
 
             expect(response.text).toBe("Serverfel");
