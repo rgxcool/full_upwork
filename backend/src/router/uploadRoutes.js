@@ -129,4 +129,57 @@ router.delete('/:fileId', async (req, res) => {
   }
 })
 
+// List all files for all students (for APL contract archive)
+router.get('/all/apl', async (req, res) => {
+  try {
+    const db = mongoose.connection.db
+
+    // This aggregation pipeline finds all files, groups them by studentId,
+    // and then looks up the student's name from the 'students' collection.
+    const filesByStudent = await db.collection('fs.files').aggregate([
+      { $match: { 'metadata.studentId': { $exists: true, $ne: null } } },
+      { $sort: { uploadDate: -1 } },
+      {
+        $group: {
+          _id: '$metadata.studentId',
+          files: { $push: '$$ROOT' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'students',
+          // Note: studentId in metadata is a string, _id in students is ObjectId
+          // We need to convert the _id to ObjectId for the lookup to work
+          let: { studentIdObj: { $toObjectId: '$_id' } },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$studentIdObj'] } } },
+            { $project: { name: 1, _id: 0 } }
+          ],
+          as: 'studentInfo'
+        }
+      },
+      {
+        $unwind: {
+          path: '$studentInfo',
+          preserveNullAndEmptyArrays: true // Keep students even if lookup fails
+        }
+      },
+      {
+        $project: {
+          studentId: '$_id',
+          studentName: { $ifNull: ['$studentInfo.name', 'Unknown Student'] },
+          files: 1,
+          _id: 0
+        }
+      },
+      { $sort: { studentName: 1 } }
+    ]).toArray()
+
+    res.json(filesByStudent)
+  } catch (err) {
+    console.error('❌ Failed to list all APL files:', err)
+    res.status(500).json({ error: 'Failed to list all APL files' })
+  }
+})
+
 export default router

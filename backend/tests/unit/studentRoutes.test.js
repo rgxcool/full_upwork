@@ -9,6 +9,12 @@ const CourseMatchingServiceMock = {
 
 vi.mock("../../src/utils/courseMatchingService.js", () => CourseMatchingServiceMock);
 
+const calendarEventSyncMock = {
+    syncCalendarEventsForStudent: vi.fn(),
+};
+
+vi.mock("../../src/utils/calendarEventSync.js", () => calendarEventSyncMock);
+
 vi.mock("../../src/models/Student.js", () => {
     const StudentMock = vi.fn(function (doc) {
         Object.assign(this, doc);
@@ -107,7 +113,8 @@ vi.mock("mongoose", () => {
             definition,
             options,
             Types: types,
-            pre: vi.fn(),
+                        pre: vi.fn(),
+            post: vi.fn(),
             methods: {},
             statics: {},
             index: vi.fn(),
@@ -198,6 +205,7 @@ beforeEach(() => {
     Student.deleteMany.mockReset();
     sendDropoutNotification.mockReset();
     CourseMatchingServiceMock.default.processStudentEducation.mockReset();
+    calendarEventSyncMock.syncCalendarEventsForStudent.mockReset();
     TeacherMock.findOne.mockReset();
     StudentEnrollmentQuery = {
         populate: vi.fn().mockReturnThis(),
@@ -527,6 +535,53 @@ describe("studentRoutes router", () => {
             ).toBe(true);
         });
 
+        it("filters out enrollments without recognized education references", async () => {
+            const handler = findRouteHandler("/students", "GET");
+            TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+            const studentDoc = { _id: "student-null", education: [] };
+            Student.find.mockReturnValue({
+                lean: vi.fn().mockResolvedValue([studentDoc]),
+            });
+
+            StudentEnrollmentQuery.lean.mockResolvedValue([
+                {
+                    _id: "enroll-course",
+                    studentId: studentDoc._id,
+                    mainCourseId: {
+                        _id: "course-1",
+                        courseName: "Demo Course",
+                    },
+                    startDate: new Date("2025-04-01"),
+                    endDate: new Date("2025-05-01"),
+                    status: "active",
+                    grade: "C",
+                    courseInstanceId: "ci-1",
+                    teacherId: "teacher-123",
+                    createdAt: new Date("2025-03-01"),
+                },
+                {
+                    _id: "enroll-unknown",
+                    studentId: studentDoc._id,
+                    startDate: new Date("2025-04-01"),
+                    endDate: new Date("2025-05-01"),
+                    status: "active",
+                    createdAt: new Date("2025-03-01"),
+                },
+            ]);
+
+            const res = createRes();
+            await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+
+            const responseStudents = res.json.mock.calls[0][0];
+            expect(responseStudents).toHaveLength(1);
+            expect(responseStudents[0].education.every(Boolean)).toBe(true);
+            expect(
+                responseStudents[0].education.some(
+                    (entry) => entry._id === "enroll-unknown"
+                )
+            ).toBe(false);
+        });
+
         it("handles Student.find errors gracefully", async () => {
             const handler = findRouteHandler("/students", "GET");
             TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
@@ -634,6 +689,34 @@ describe("POST /student", () => {
             expect.objectContaining({
                 name: "New Student",
             })
+        );
+    });
+
+    it("attempts calendar sync when finalExamDate is set and ignores sync failures", async () => {
+        const handler = findRouteHandler("/student", "POST");
+        const req = {
+            body: {
+                _id: "student-789",
+                name: "Calendar Student",
+                email: "calendar@example.com",
+                personalNumber: "20000101-0003",
+                finalExamDate: "2025-06-01",
+            },
+        };
+        const res = createRes();
+
+        calendarEventSyncMock.syncCalendarEventsForStudent.mockRejectedValueOnce(
+            new Error("sync failed")
+        );
+
+        await handler(req, res);
+
+        expect(calendarEventSyncMock.syncCalendarEventsForStudent).toHaveBeenCalledWith(
+            "student-789"
+        );
+        expect(res.status).toHaveBeenCalledWith(201);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ name: "Calendar Student" })
         );
     });
 

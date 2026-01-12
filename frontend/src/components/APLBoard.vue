@@ -47,15 +47,6 @@
     >
       Kopierat
     </div>
-    <!-- Debug info 
-    <div style="background: yellow; padding: 10px; margin: 10px; border: 2px solid red;">
-      <strong>🔍 DEBUG INFO:</strong><br>
-      StatusMap length: {{ statusMap.length }}<br>
-      StudentsByStatus keys: {{ Object.keys(studentsByStatus) }}<br>
-      FilteredStudents length: {{ filteredStudents.length }}<br>
-      StudentsByStatus: {{ JSON.stringify(studentsByStatus, null, 2) }}
-    </div>
-    -->
     <div
       v-for="status in statusMap"
       :key="status.key"
@@ -64,7 +55,7 @@
       @dragover.prevent
       @drop="handleDrop($event, status.key)"
     >
-      <h3>{{ status.label }} ({{ studentsByStatus[status.key]?.length || 0 }})</h3>
+      <h3>{{ status.label }} ({{ (studentsByStatus[status.key] || []).length }})</h3>
       <div
         v-for="student in studentsByStatus[status.key] || []"
         :key="student._id"
@@ -256,21 +247,28 @@
   import { ref, computed, onMounted, nextTick, watch } from 'vue'
   import axios from 'axios'
   import { useStore } from 'vuex'
-  import { useRoute } from 'vue-router'
   import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
 
-  const store = useStore()
-  const route = useRoute()
-  const currentUser = computed(() => store.state.user)
-  console.log('Current user:', currentUser.value)
+  const props = defineProps({
+    students: {
+      type: Array,
+      required: true,
+    },
+    filterType: {
+      type: String,
+      default: 'active', // 'active' or 'completed'
+    },
+  })
 
-  console.log('Role:', currentUser.value?.role)
+  const emit = defineEmits(['student-updated'])
+
+  const store = useStore()
+  const currentUser = computed(() => store.state.user)
   const currentUserId = computed(() => store.state.user?.userId?.toString() || '')
-  console.log('Current user ID:', currentUserId.value)
   const totalStudents = computed(() => filteredStudents.value.length)
 
   const commentAscOrder = ref(true)
-  const summaryExpanded = ref(false) // Start collapsed by default
+  const summaryExpanded = ref(false)
   const copied = ref(false)
   const blinkedField = ref('')
   const copiedPosition = ref({ x: 0, y: 0 })
@@ -279,11 +277,9 @@
   const newComment = ref('')
   const editingIndex = ref(null)
   const editedComment = ref('')
-  const students = ref([])
   const draggedStudent = ref(null)
   const commentContainerRef = ref(null)
 
-  // Manual APL inclusions persisted locally
   const addStudentDialog = ref(false)
   const searchQuery = ref('')
   const suggestions = ref([])
@@ -305,7 +301,6 @@
   const saveManualAplIds = () => {
     try {
       localStorage.setItem('manualAplIds', JSON.stringify(Array.from(manualAplIds.value)))
-      // Dispatch custom event for same-tab updates
       window.dispatchEvent(new CustomEvent('manualAplIdsUpdated'))
     } catch {}
   }
@@ -324,63 +319,49 @@
     } catch {}
   }
 
-  // Only include students with a CoursePackage or manually added, and exclude dropout students
-  const filteredStudents = computed(() => {
-    const hasCoursePackageOrManual = (student) => {
-      const studentId = String(student._id)
-      
-      // Exclude dropout students
-      if (student.dropout) {
-        console.debug(`[APL Filter] Student ${student.name} (${studentId}) excluded: dropout`)
-        return false
-      }
-      
-      // Check excluded list
-      if (excludedAplIds.value.has(studentId)) {
-        console.debug(`[APL Filter] Student ${student.name} (${studentId}) excluded: in excludedAplIds`)
-        return false
-      }
-      
-      // Manually added students always appear
-      if (manualAplIds.value.has(studentId)) {
-        console.log(`[APL Filter] ✅ Student ${student.name} (${studentId}) included: manually added`)
-        return true
-      }
-      
-      // Check for CoursePackage in education
-      if (!Array.isArray(student.education)) {
-        console.debug(`[APL Filter] Student ${student.name} (${studentId}) excluded: no education array`)
-        return false
-      }
-      
-      const hasCoursePackage = student.education.some((edu) => edu.type === 'CoursePackage')
-      if (hasCoursePackage) {
-        console.debug(`[APL Filter] ✅ Student ${student.name} (${studentId}) included: has CoursePackage`)
-      } else {
-        console.debug(`[APL Filter] Student ${student.name} (${studentId}) excluded: no CoursePackage`)
-      }
-      return hasCoursePackage
+  const statusMap = computed(() => {
+    const allStatuses = [
+      { key: 'GRAY', label: 'Ny Elev' },
+      { key: 'BLUE', label: 'Kontaktad' },
+      { key: 'YELLOW', label: 'APL på gång' },
+      { key: 'PURPLE', label: 'Behöver uppföljning' },
+      { key: 'RED', label: 'Snart slut' },
+      { key: 'GREEN', label: 'Klar praktik' },
+    ]
+    if (props.filterType === 'completed') {
+      return allStatuses.filter((s) => s.key === 'GREEN')
     }
-    
-    const filtered = (students.value || []).filter(hasCoursePackageOrManual)
-    console.log(`[APL Filter] Total filtered students: ${filtered.length} out of ${students.value?.length || 0}`)
-    return filtered
+    return allStatuses.filter((s) => s.key !== 'GREEN')
   })
 
-  // Update studentsByStatus and statusCounts to use filteredStudents
+  const filteredStudents = computed(() => {
+    const baseFiltered = (props.students || []).filter((student) => {
+      const studentId = String(student._id)
+      if (student.dropout) return false
+      if (excludedAplIds.value.has(studentId)) return false
+      if (manualAplIds.value.has(studentId)) return true
+      if (!Array.isArray(student.education)) return false
+      return student.education.some((edu) => edu.type === 'CoursePackage')
+    })
+
+    if (props.filterType === 'completed') {
+      return baseFiltered.filter((s) => s.aplStatus === 'GREEN')
+    }
+    return baseFiltered.filter((s) => s.aplStatus !== 'GREEN')
+  })
+
   const studentsByStatus = computed(() => {
     if (!Array.isArray(filteredStudents.value)) {
       return {}
     }
-
-    return statusMap.reduce((acc, status) => {
+    return statusMap.value.reduce((acc, status) => {
       acc[status.key] = filteredStudents.value.filter((s) => s.aplStatus === status.key)
       return acc
     }, {})
   })
 
   const statusCounts = computed(() => {
-    return statusMap.reduce((acc, status) => {
+    return statusMap.value.reduce((acc, status) => {
       acc[status.key] = filteredStudents.value.filter((s) => s.aplStatus === status.key).length
       return acc
     }, {})
@@ -397,15 +378,6 @@
     admin: 7,
     systemadmin: 8,
   }
-
-  const statusMap = [
-    { key: 'GRAY', label: 'Ny Elev' },
-    { key: 'BLUE', label: 'Kontaktad' },
-    { key: 'YELLOW', label: 'APL på gång' },
-    { key: 'PURPLE', label: 'Behöver uppföljning' },
-    { key: 'RED', label: 'Snart slut' },
-    { key: 'GREEN', label: 'Klar praktik' },
-  ]
 
   const commentStatus = (student) => {
     const history = student.commentHistory || []
@@ -433,47 +405,17 @@
     }
   }
 
-  const fetchStudents = async () => {
-    try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/students`, {
-        withCredentials: true,
-      })
-
-      students.value = res.data.map((student) => ({
-        ...student,
-        commentHistory: (student.commentHistory || []).map((comment) => ({
-          ...comment,
-          seenBy: (comment.seenBy || []).map((id) => id.toString()),
-        })),
-      }))
-      
-      console.log('📋 Fetched students count:', students.value.length)
-      console.log('📋 Manual APL IDs:', Array.from(manualAplIds.value))
-      console.log('📋 Students with manual IDs:', students.value.filter(s => manualAplIds.value.has(String(s._id))).map(s => ({ name: s.name, id: s._id })))
-    } catch (err) {
-      console.error('❌ Failed to fetch students:', err)
-    }
+  const fetchStudents = () => {
+    emit('student-updated')
   }
 
   onMounted(() => {
     loadManualAplIds()
     loadExcludedAplIds()
-    fetchStudents()
   })
 
   watch(manualAplIds, saveManualAplIds, { deep: false })
   watch(excludedAplIds, saveExcludedAplIds, { deep: false })
-
-  // Watch for route changes to refresh data
-  watch(
-    () => route.path,
-    () => {
-      if (route.path === '/apl') {
-        console.log('🔄 APL route detected, refreshing student data...')
-        fetchStudents()
-      }
-    }
-  )
 
   const handleDragStart = (e, student) => {
     draggedStudent.value = student
@@ -487,7 +429,7 @@
         { aplStatus: newStatus },
         { withCredentials: true }
       )
-      await fetchStudents()
+      fetchStudents()
       draggedStudent.value = null
     } catch (err) {
       console.error('❌ Failed to update student APL status', err)
@@ -507,27 +449,14 @@
         {},
         { withCredentials: true }
       )
-      const userId = currentUserId.value
-      const markSeen = (s) => {
-        s.commentHistory = (s.commentHistory || []).map((c) => ({
-          ...c,
-          seenBy: Array.isArray(c.seenBy)
-            ? [...new Set([...c.seenBy.map(String), userId])]
-            : [userId],
-        }))
-      }
-      markSeen(selectedStudent.value)
-      const index = students.value.findIndex((s) => s._id === student._id)
-      if (index !== -1) markSeen(students.value[index])
+      fetchStudents()
     } catch (err) {
       console.error('⚠️ Failed to mark comments as seen:', err)
     }
   }
 
-  // Debounce timer for search
   let searchDebounceTimer = null
 
-  // Autocomplete search and selection
   const onSearchInput = async () => {
     const q = searchQuery.value.trim()
     searchError.value = ''
@@ -535,7 +464,6 @@
     if (q.length < 3) {
       showSuggestions.value = false
       suggestions.value = []
-      // Clear any pending debounce
       if (searchDebounceTimer) {
         clearTimeout(searchDebounceTimer)
         searchDebounceTimer = null
@@ -543,38 +471,26 @@
       return
     }
     
-    // Clear previous debounce timer
     if (searchDebounceTimer) {
       clearTimeout(searchDebounceTimer)
     }
     
-    // Debounce the search - wait 500ms after user stops typing
     searchDebounceTimer = setTimeout(async () => {
-      console.log('🔍 Searching for:', q)
       showSuggestions.value = false
       suggestions.value = []
       isSearching.value = true
       
       try {
         const apiUrl = `${import.meta.env.VITE_API_URL}/api/search`
-        console.log('📡 Calling search API:', apiUrl, { q, type: 'Användare' })
-        
         const { data } = await axios.get(apiUrl, {
           params: { q, type: 'Användare' },
           withCredentials: true,
         })
         
-        console.log('✅ Search response:', data)
-        
-        // Only keep students (Elev)
         const studentResults = (data || []).filter((r) => r.type === 'Elev')
-        console.log('📚 Filtered student results:', studentResults)
-        
         suggestions.value = studentResults
         showSuggestions.value = true
       } catch (e) {
-        console.error('❌ Sökning misslyckades:', e)
-        console.error('❌ Error details:', e.response?.data || e.message)
         if (e.response?.status === 429) {
           searchError.value = 'För många förfrågningar. Vänta lite och försök igen.'
         } else {
@@ -586,80 +502,17 @@
         isSearching.value = false
         searchDebounceTimer = null
       }
-    }, 500) // Wait 500ms after user stops typing
+    }, 500)
   }
 
-  const selectSuggestion = async (s) => {
-    console.log('👆 Selected suggestion:', s)
-    if (!s?.id) {
-      console.error('❌ No ID in suggestion:', s)
-      return
-    }
-    // Ensure ID is stored as string for consistent comparison
+  const selectSuggestion = (s) => {
+    if (!s?.id) return
     const studentId = String(s.id)
-    console.log('➕ Adding student to APL:', s.name, 'ID:', studentId)
     manualAplIds.value.add(studentId)
     saveManualAplIds()
-    console.log('💾 Saved manualAplIds:', Array.from(manualAplIds.value))
     
-    // Check if student is already in the list
-    const existingStudent = students.value.find(st => String(st._id) === studentId)
-    if (!existingStudent) {
-      console.log('⚠️ Student not in current list, fetching student details...')
-      try {
-        // Fetch the specific student to add them to the list
-        // Use student-details endpoint which includes enrollments/education
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/student-details/${studentId}`, {
-          withCredentials: true,
-        })
-        if (res.data && res.data.student) {
-          const newStudent = {
-            ...res.data.student,
-            commentHistory: (res.data.student.commentHistory || []).map((comment) => ({
-              ...comment,
-              seenBy: (comment.seenBy || []).map((id) => id.toString()),
-            })),
-          }
-          // Add to students array if not already there
-          const exists = students.value.some(st => String(st._id) === studentId)
-          if (!exists) {
-            students.value.push(newStudent)
-            console.log('✅ Added student to list:', newStudent.name, 'Education:', newStudent.education)
-          }
-        }
-      } catch (err) {
-        console.error('❌ Failed to fetch student details:', err)
-        // Try alternative endpoint
-        try {
-          const res2 = await axios.get(`${import.meta.env.VITE_API_URL}/api/student/${studentId}`, {
-            withCredentials: true,
-          })
-          if (res2.data) {
-            const newStudent = {
-              ...res2.data,
-              commentHistory: (res2.data.commentHistory || []).map((comment) => ({
-                ...comment,
-                seenBy: (comment.seenBy || []).map((id) => id.toString()),
-              })),
-            }
-            const exists = students.value.some(st => String(st._id) === studentId)
-            if (!exists) {
-              students.value.push(newStudent)
-              console.log('✅ Added student to list (via /student endpoint):', newStudent.name)
-            }
-          }
-        } catch (err2) {
-          console.error('❌ Failed to fetch student via alternative endpoint:', err2)
-        }
-      }
-    } else {
-      console.log('✅ Student already in list:', existingStudent.name)
-    }
+    fetchStudents()
     
-    // Refresh students to ensure the newly added student appears
-    console.log('🔄 Refreshing student list...')
-    await fetchStudents()
-    console.log('✅ Student list refreshed')
     searchQuery.value = ''
     suggestions.value = []
     showSuggestions.value = false
@@ -668,7 +521,6 @@
   }
 
   const openAddStudentDialog = () => {
-    console.log('🔘 Add student button clicked')
     addStudentDialog.value = true
     searchQuery.value = ''
     suggestions.value = []
@@ -678,7 +530,6 @@
   }
 
   const closeAddDialog = () => {
-    console.log('❌ Closing add student dialog')
     addStudentDialog.value = false
     searchQuery.value = ''
     suggestions.value = []
@@ -690,21 +541,13 @@
   const removeFromApl = (student) => {
     if (!student?._id) return
     if (!confirm(`Ta bort ${student.name} från APL?`)) return
-    // Ensure ID is stored as string for consistent comparison
     const studentId = String(student._id)
-    // If they were manually added, remove from manual set
     if (manualAplIds.value.has(studentId)) {
       manualAplIds.value.delete(studentId)
       saveManualAplIds()
     }
-    // Add to excluded set
     excludedAplIds.value.add(studentId)
     saveExcludedAplIds()
-    // Optimistic local update
-    const idx = students.value.findIndex((s) => s._id === student._id)
-    if (idx !== -1) {
-      // No mutation to education to keep server state intact; local filter will hide them
-    }
     dialog.value = false
   }
 
@@ -776,7 +619,6 @@
   }
 
   const canComment = computed(() => roleRank[currentUser.value?.role] >= roleRank['coordinator'])
-  console.log('Role rank:', roleRank[currentUser.value?.role])
   const closeDialog = () => {
     dialog.value = false
     setTimeout(() => {
@@ -787,22 +629,13 @@
   const submitComment = async () => {
     if (!newComment.value) return
     try {
-      const { data } = await axios.post(
+      await axios.post(
         `${import.meta.env.VITE_API_URL}/api/students/${selectedStudent.value._id}/comment`,
         { comment: newComment.value },
         { withCredentials: true }
       )
-      const userId = currentUserId.value
-      const patchedHistory = (data.commentHistory || []).map((c) => ({
-        ...c,
-        seenBy: Array.isArray(c.seenBy)
-          ? [...new Set([...c.seenBy.map(String), userId])]
-          : [userId],
-      }))
-      selectedStudent.value.commentHistory = patchedHistory
-      const index = students.value.findIndex((s) => s._id === selectedStudent.value._id)
-      if (index !== -1) students.value[index].commentHistory = patchedHistory
       newComment.value = ''
+      fetchStudents()
     } catch (err) {
       console.error('❌ Failed to save comment:', err)
     }
@@ -814,11 +647,7 @@
         `${import.meta.env.VITE_API_URL}/api/students/${selectedStudent.value._id}/comment`,
         { data: { index }, withCredentials: true }
       )
-      const newHistory = [...selectedStudent.value.commentHistory]
-      newHistory.splice(index, 1)
-      selectedStudent.value.commentHistory = newHistory
-      const i = students.value.findIndex((s) => s._id === selectedStudent.value._id)
-      if (i !== -1) students.value[i].commentHistory = [...newHistory]
+      fetchStudents()
     } catch (err) {
       console.error('❌ Failed to delete comment', err)
     }
@@ -832,7 +661,6 @@
 
   const confirmDelete = (index) => {
     if (confirm('Är du säker på att du vill ta bort denna kommentar?')) {
-      console.log('🗑️ Comment deleted by:', currentUser.value?.name || currentUserId.value)
       deleteComment(index)
     }
   }
@@ -857,13 +685,9 @@
         { index, updatedEntry },
         { withCredentials: true }
       )
-      selectedStudent.value.commentHistory[index].comment = editedComment.value
-      const i = students.value.findIndex((s) => s._id === selectedStudent.value._id)
-      if (i !== -1) {
-        students.value[i].commentHistory[index].comment = editedComment.value
-      }
       editingIndex.value = null
       editedComment.value = ''
+      fetchStudents()
     } catch (err) {
       console.error('❌ Failed to update comment', err)
     }
