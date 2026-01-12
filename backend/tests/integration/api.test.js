@@ -11,6 +11,7 @@ import request from "supertest";
 import mongoose from "mongoose";
 import app from "../../index.js";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import User from "../../src/models/User.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
@@ -54,6 +55,18 @@ describe("API Integration Tests", () => {
             roles: ["admin"],
         });
         await testUser.save();
+
+        const token = jwt.sign(
+            {
+                userId: testUser._id.toString(),
+                role: "admin",
+                roles: ["admin"],
+                name: testUser.name,
+                email: testUser.email,
+            },
+            process.env.JWT_SECRET || "test-secret"
+        );
+        authToken = `token=${token}`;
 
         // Create test student
         testStudent = new Student({
@@ -225,18 +238,6 @@ describe("API Integration Tests", () => {
     });
 
     describe("Student Endpoints", () => {
-        beforeEach(async () => {
-            // Login and get auth token
-            const loginResponse = await request(app)
-                .post("/api/auth/login")
-                .send({
-                    email: "testadmin@example.com",
-                    password: "testPassword123!",
-                });
-
-            authToken = loginResponse.headers["set-cookie"];
-        });
-
         describe("GET /api/students", () => {
             it("should return all students when authenticated as admin", async () => {
                 const response = await request(app)
@@ -382,18 +383,6 @@ describe("API Integration Tests", () => {
     });
 
     describe("Course Endpoints", () => {
-        beforeEach(async () => {
-            // Login and get auth token
-            const loginResponse = await request(app)
-                .post("/api/auth/login")
-                .send({
-                    email: "testadmin@example.com",
-                    password: "testPassword123!",
-                });
-
-            authToken = loginResponse.headers["set-cookie"];
-        });
-
         describe("GET /api/courses", () => {
             it("should return all courses when authenticated", async () => {
                 const response = await request(app)
@@ -448,18 +437,6 @@ describe("API Integration Tests", () => {
     });
 
     describe("Search Endpoints", () => {
-        beforeEach(async () => {
-            // Login and get auth token
-            const loginResponse = await request(app)
-                .post("/api/auth/login")
-                .send({
-                    email: "testadmin@example.com",
-                    password: "testPassword123!",
-                });
-
-            authToken = loginResponse.headers["set-cookie"];
-        });
-
         describe("GET /api/search", () => {
             it("should search for students", async () => {
                 const response = await request(app)

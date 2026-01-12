@@ -242,7 +242,16 @@ beforeEach(() => {
   CalendarEvent.findByIdAndUpdate.mockResolvedValue(null);
   Notification.findOne.mockResolvedValue(null);
   Notification.create.mockResolvedValue({ _id: "note-1" });
-  Student.find.mockImplementation(() => createQueryChain(studentFindResult));
+  Student.find.mockImplementation((query) => {
+    if (query?.dropout === true) {
+      const dropoutStudents = studentFindResult
+        .filter((student) => student.dropout === true)
+        .map((student) => ({ _id: student._id }));
+      return createQueryChain(dropoutStudents);
+    }
+
+    return createQueryChain(studentFindResult);
+  });
   Student.populate.mockResolvedValue(studentFindResult);
   Student.findOne.mockResolvedValue(null);
   Student.findById.mockResolvedValue(null);
