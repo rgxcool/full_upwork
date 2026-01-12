@@ -39,6 +39,35 @@
 
         <!-- Tabell -->
         <h6 class="fw-semibold">Studenter kopplade till detta prov</h6>
+        
+        <!-- Add Student Section (only if canEdit) -->
+        <div v-if="canEdit" class="mb-3 p-3 border rounded bg-light">
+          <label class="fw-semibold mb-2">Lägg till elev:</label>
+          <v-autocomplete
+            v-model="studentSearch"
+            :items="availableStudents"
+            item-title="displayName"
+            item-value="_id"
+            label="Sök och välj elev"
+            outlined
+            clearable
+            return-object
+            :no-data-text="'Inga elever tillgängliga'"
+            :menu-props="{ maxHeight: '300px', zIndex: 10000 }"
+            attach
+            :custom-filter="filterStudents"
+            @update:model-value="addStudent"
+            dense
+          >
+            <template #item="{ props, item }">
+              <v-list-item v-bind="props" :title="item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})`" />
+            </template>
+            <template #selection="{ item }">
+              {{ item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})` }}
+            </template>
+          </v-autocomplete>
+        </div>
+
         <div class="table-responsive mb-4">
           <table class="table table-striped align-middle">
             <thead class="table-light">
@@ -49,6 +78,7 @@
                 <th>Info</th>
                 <th>Närvaro</th>
                 <th>Prövning</th>
+                <th v-if="canEdit">Åtgärder</th>
               </tr>
             </thead>
             <tbody>
@@ -57,8 +87,37 @@
                   <router-link :to="`/student/${student._id}`">{{ student.name }}</router-link>
                 </td>
                 <td>{{ student.personalNumber }}</td>
-                <td>{{ student.courseName || '-' }}</td>
-                <td>{{ student.additionalInfo || '-' }}</td>
+                <td>
+                  <v-select
+                    v-if="canEdit && student.availableCourses && student.availableCourses.length > 0"
+                    v-model="student.selectedCourse"
+                    :items="student.availableCourses"
+                    item-title="displayName"
+                    item-value="id"
+                    label="Välj kurs"
+                    outlined
+                    dense
+                    hide-details
+                    :menu-props="{ zIndex: 10000 }"
+                    attach
+                    @update:model-value="updateStudentCourse(student)"
+                  />
+                  <span v-else>{{ student.courseName || '-' }}</span>
+                </td>
+                <td>
+                  <v-textarea
+                    v-if="canEdit"
+                    v-model="student.additionalInfo"
+                    label="Information"
+                    outlined
+                    dense
+                    hide-details
+                    rows="2"
+                    auto-grow
+                    @blur="updateStudentInfo(student)"
+                  />
+                  <span v-else style="white-space: pre-wrap;">{{ student.additionalInfo || '-' }}</span>
+                </td>
                 <td>
                   <input
                     type="checkbox"
@@ -76,6 +135,9 @@
                     class="form-check-input"
                     @change="saveAttendance(student)"
                   />
+                </td>
+                <td v-if="canEdit">
+                  <button @click="removeStudent(index)" class="btn btn-sm btn-danger" title="Ta bort elev">✕</button>
                 </td>
               </tr>
             </tbody>
@@ -166,6 +228,8 @@
 
 <script>
   import axios from 'axios'
+  import { api } from '@/store/store.js'
+  
   export default {
     props: { event: { type: Object, required: true } },
     emits: ['close', 'update'],
@@ -174,6 +238,9 @@
         isSaving: false,
         studentsData: [],
         showSuccessMessage: false,
+        studentSearch: null,
+        allStudents: [],
+        loadingCourses: {},
         examMunicipalities: {
           Sollentuna: ['308', '310', 'lilla rummet', 'Aniara', 'Kung Agnes'],
           Akalla: ['Vision', 'Hässja', 'Arkarli', '316'],
@@ -185,6 +252,19 @@
         examTime: '',
         examMunicipality: '',
         examLocation: '',
+      }
+    },
+    computed: {
+      availableStudents() {
+        // Filter out students that are already selected
+        const selectedIds = new Set(this.studentsData.map(s => s._id?.toString()));
+        return this.allStudents
+          .filter(s => !selectedIds.has(s._id?.toString()))
+          .map(s => ({
+            ...s,
+            displayName: `${s.name} (${s.personalNumber || ''})`,
+            searchText: `${s.name} ${s.personalNumber || ''}`.toLowerCase()
+          }));
       }
     },
     computed: {
@@ -230,6 +310,7 @@
     },
     mounted() {
       this.refreshEventData()
+      this.fetchAllStudents()
     },
     methods: {
       async refreshEventData() {
@@ -278,6 +359,163 @@
           }
         }
       },
+      async fetchAllStudents() {
+        try {
+          const response = await api.get('/students', { withCredentials: true });
+          const data = response.data;
+          this.allStudents = (Array.isArray(data) ? data : [])
+            .filter(s => !s.dropout);
+        } catch (error) {
+          console.error("Kunde inte hämta elever:", error);
+        }
+      },
+      filterStudents(value, query, item) {
+        if (!query || !query.trim()) return true;
+        
+        const searchQuery = query.toLowerCase().trim();
+        const student = item?.raw || item?.value || item || value;
+        
+        if (!student || !student.name) return false;
+        
+        if (student.searchText) {
+          return student.searchText.includes(searchQuery);
+        }
+        
+        const name = (student.name || '').toLowerCase();
+        const personalNumber = (student.personalNumber || '').toLowerCase();
+        return name.includes(searchQuery) || personalNumber.includes(searchQuery);
+      },
+      async loadStudentCourses(student) {
+        if (this.loadingCourses[student._id]) return;
+        
+        this.loadingCourses[student._id] = true;
+        try {
+          const studentDetails = await api.get(`/student-details/${student._id}`, { withCredentials: true });
+          const education = studentDetails.data?.education || [];
+          
+          // Format courses for dropdown
+          const courses = education
+            .filter(edu => edu.type === 'Course' && edu.refId)
+            .map(edu => ({
+              id: edu.refId?._id || edu.refId,
+              courseName: edu.refId?.courseName || edu.name || 'Okänd kurs',
+              courseCode: edu.refId?.courseCode || '',
+              enrollmentId: edu.enrollmentId,
+              displayName: `${edu.refId?.courseName || edu.name || 'Okänd kurs'}${edu.refId?.courseCode ? ` (${edu.refId.courseCode})` : ''}`
+            }));
+
+          // Find current course in the list
+          const currentCourseId = student.courseId || 
+            (student.courseName ? courses.find(c => c.courseName === student.courseName)?.id : null);
+
+          student.availableCourses = courses;
+          student.selectedCourse = currentCourseId || (courses.length > 0 ? courses[0].id : null);
+          
+          // Update courseName if course is selected
+          if (student.selectedCourse) {
+            const selectedCourse = courses.find(c => c.id?.toString() === student.selectedCourse?.toString());
+            if (selectedCourse) {
+              student.courseName = selectedCourse.courseName;
+              student.courseId = selectedCourse.id;
+              student.enrollmentId = selectedCourse.enrollmentId;
+            }
+          }
+        } catch (error) {
+          console.error("Kunde inte hämta elevens kurser:", error);
+          student.availableCourses = [];
+          student.selectedCourse = null;
+        } finally {
+          this.loadingCourses[student._id] = false;
+        }
+      },
+      async addStudent(student) {
+        if (!student || !student._id) return;
+        
+        // Check if student is already added
+        if (this.studentsData.some(s => s._id?.toString() === student._id?.toString())) {
+          this.studentSearch = null;
+          return;
+        }
+
+        // Create student entry
+        const newStudent = {
+          _id: student._id,
+          name: student.name,
+          personalNumber: student.personalNumber,
+          additionalInfo: student.additionalInfo || "",
+          attended: false,
+          paidExamFee: false,
+          examTime: this.examTime || '',
+          examMunicipality: this.examMunicipality || '',
+          examLocation: this.examLocation || '',
+          finalExamDate: null,
+          availableCourses: [],
+          selectedCourse: null,
+          courseName: '',
+          courseId: null,
+          enrollmentId: null
+        };
+
+        // Load courses for this student
+        await this.loadStudentCourses(newStudent);
+        
+        // Add to list
+        this.studentsData.push(newStudent);
+        this.studentSearch = null;
+
+        // Save the updated event
+        await this.saveEventStudents();
+      },
+      removeStudent(index) {
+        this.studentsData.splice(index, 1);
+        this.saveEventStudents();
+      },
+      updateStudentCourse(student) {
+        const selectedCourse = student.availableCourses.find(c => c.id?.toString() === student.selectedCourse?.toString());
+        if (selectedCourse) {
+          student.courseName = selectedCourse.courseName;
+          student.courseId = selectedCourse.id;
+          student.enrollmentId = selectedCourse.enrollmentId;
+          this.saveEventStudents();
+        }
+      },
+      updateStudentInfo(student) {
+        // Save the updated info field
+        this.saveEventStudents();
+      },
+      async saveEventStudents() {
+        if (!this.event.id) return;
+        
+        try {
+          // Format students for saving
+          const formattedStudents = this.studentsData.map((s) => {
+            const selectedCourse = s.availableCourses?.find(c => c.id?.toString() === s.selectedCourse?.toString());
+            return {
+              _id: s._id,
+              name: s.name,
+              personalNumber: s.personalNumber,
+              additionalInfo: s.additionalInfo || "",
+              attended: s.attended ?? false,
+              courseName: selectedCourse?.courseName || s.courseName || '',
+              courseId: selectedCourse?.id || s.courseId || null,
+              enrollmentId: selectedCourse?.enrollmentId || s.enrollmentId || null
+            };
+          });
+
+          // Update the calendar event
+          await api.put(`/calendar-events/${this.event.id}`, {
+            extendedProps: {
+              ...this.event.extendedProps,
+              students: formattedStudents
+            }
+          }, { withCredentials: true });
+
+          // Update local event
+          this.event.extendedProps.students = formattedStudents;
+        } catch (error) {
+          console.error("Kunde inte spara studenter:", error);
+        }
+      },
       async setStudentsFromProps(exProps) {
         // First, get the base student data from extendedProps
         const baseStudents = (exProps.students || []).map((s) => ({
@@ -286,13 +524,22 @@
           personalNumber: s.personalNumber,
           additionalInfo: s.additionalInfo || '',
           courseName: s.courseName || '',
+          courseId: s.courseId || null,
+          enrollmentId: s.enrollmentId || null,
           attended: s.attended ?? false,
           paidExamFee: s.paidExamFee ?? false,
           examTime: s.examTime || '',
           examMunicipality: s.examMunicipality || '',
           examLocation: s.examLocation || '',
           finalExamDate: s.finalExamDate || null,
+          availableCourses: [],
+          selectedCourse: null
         }))
+
+        // Load courses for each student
+        for (const student of baseStudents) {
+          await this.loadStudentCourses(student);
+        }
 
         // Fetch the latest attendance data for this event
         try {
@@ -543,6 +790,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  
+  /* Ensure Vuetify menus appear above modal */
+  :deep(.v-overlay__content) {
+    z-index: 10000 !important;
+  }
+  
+  :deep(.v-menu__content) {
+    z-index: 10000 !important;
+  }
+  
+  :deep(.v-select__menu) {
+    z-index: 10000 !important;
   }
   .table td {
     vertical-align: middle;
