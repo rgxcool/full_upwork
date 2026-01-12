@@ -54,6 +54,10 @@ export default {
     title: {
       type: String,
       default: 'Boka möte'
+    },
+    bookedByRole: {
+      type: String,
+      required: true
     }
   },
   data() {
@@ -113,7 +117,7 @@ export default {
         studentId: this.form.student._id,
         studentName: this.form.student.name,
         personalNumber: this.form.student.personalNumber,
-        bookedBy: this.userRole,
+        bookedBy: this.bookedByRole,
         info: this.form.info // 👈 Add info to payload
       };
 

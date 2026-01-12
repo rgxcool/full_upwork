@@ -32,7 +32,7 @@ const TEST = () => import('@/views/Admin/TEST.vue')
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
 const BetygSattning = () => import('@/views/Teacher/BetygSattning.vue')
 const ProfilePage = () => import('@/views/Teacher/ProfilePage.vue')
-const SyvAppointments = () => import('@/views/Syv/SyvAppointments.vue') // New import
+const RoleBasedAppointments = () => import('@/views/Appointments/RoleBasedAppointments.vue')
 
 // Student Views
 import StudentDetails from '@/views/Student/StudentDetails.vue'
@@ -207,10 +207,15 @@ const routes = [
   {
     path: '/syv/appointments',
     name: 'SyvAppointments',
-    component: SyvAppointments,
-    meta: { title: 'SYV Samtal', role: 'syv' },
+    component: RoleBasedAppointments,
+    meta: { title: 'SYV Samtal', role: 'syv', requiredRoles: ['syv', 'admin', 'systemadmin'] },
   },
-
+  {
+    path: '/specped/appointments',
+    name: 'SpecpedAppointments',
+    component: RoleBasedAppointments,
+    meta: { title: 'Specped Samtal', role: 'specped', requiredRoles: ['specped', 'admin', 'systemadmin'] },
+  },
   { path: '/betyg', component: BetygSattning, meta: { title: 'Grade Setting', role: 'teacher' } },
   {
     path: '/profile',

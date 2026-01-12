@@ -57,6 +57,7 @@ router.get('/meetings', authenticateUser, async (req, res) => {
 // POST: Skapa nytt möte
 router.post('/meetings', authenticateUser, async (req, res) => {
     try {
+        const { userId } = req.user;
         const {
             title,
             start,
@@ -83,6 +84,7 @@ router.post('/meetings', authenticateUser, async (req, res) => {
             },
             bookedBy,
             info, // 👈 Save the new field
+            createdBy: userId,
             createdAt: new Date()
         }).save();
 
@@ -115,7 +117,7 @@ router.put('/meetings/:id', authenticateUser, async (req, res) => {
 // DELETE /meetings/:id: Add a new, secure endpoint for deleting meetings.
 router.delete('/meetings/:id', authenticateUser, async (req, res) => {
     try {
-        const { role } = req.user;
+        const { role, userId } = req.user;
         const { id } = req.params;
 
         const meeting = await Meeting.findById(id);
@@ -126,7 +128,7 @@ router.delete('/meetings/:id', authenticateUser, async (req, res) => {
 
         // AUTHORIZATION: User must be creator or admin.
         const isAdmin = role === 'admin' || role === 'systemadmin';
-        const isCreator = meeting.bookedBy === role;
+        const isCreator = meeting.createdBy && meeting.createdBy.toString() === userId.toString();
 
         if (!isAdmin && !isCreator) {
             return res.status(403).json({ error: "Behörighet saknas för att radera detta möte" });
