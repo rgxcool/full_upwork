@@ -19,7 +19,7 @@
           <template v-slot:item.slutprovDate="{ item }">
             {{ formatDate(item.slutprovDate) }}
           </template>
-          <template v-slot:item.responsibleTeacher="{ item }">
+          <template v-slot:item.responsibleTeacher.userId.username="{ item }">
             {{ item.responsibleTeacher?.userId?.username || 'Ej tilldelad' }}
           </template>
         </v-data-table>
@@ -42,7 +42,7 @@ export default {
         { title: 'Slutdatum', key: 'endDate', sortable: true, align: 'start' },
         { title: 'Slutprovsdatum', key: 'slutprovDate', sortable: true, align: 'start' },
         { title: 'Antal anmälda', key: 'enrollmentCount', sortable: true, align: 'start' },
-        { title: 'Ansvarig lärare', key: 'responsibleTeacher', sortable: false, align: 'start' },
+        { title: 'Ansvarig lärare', key: 'responsibleTeacher.userId.username', sortable: true, align: 'start' },
       ],
     };
   },
