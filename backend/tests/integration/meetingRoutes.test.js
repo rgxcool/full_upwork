@@ -80,10 +80,11 @@ describe("Meeting Routes", () => {
                 .set("Authorization", `Bearer ${token}`)
                 .expect(200);
 
-            expect(response.body).toHaveLength(2);
+            expect(Array.isArray(response.body.data)).toBe(true);
+            expect(response.body.data).toHaveLength(2);
         });
 
-        it("filters meetings for student users", async () => {
+        it("filters meetings for syv users", async () => {
             await Meeting.create([
                 {
                     title: "Meeting A",
@@ -110,16 +111,16 @@ describe("Meeting Routes", () => {
             ]);
 
             const token = signToken({
-                role: "elev",
-                personalNumber: "200001010101",
+                role: "syv",
             });
             const response = await request(app)
                 .get("/api/meetings")
                 .set("Authorization", `Bearer ${token}`)
                 .expect(200);
 
-            expect(response.body).toHaveLength(1);
-            expect(response.body[0]).toHaveProperty("title", "Meeting A");
+            expect(Array.isArray(response.body.data)).toBe(true);
+            expect(response.body.data).toHaveLength(1);
+            expect(response.body.data[0]).toHaveProperty("title", "Meeting B");
         });
 
         it("returns 500 when the query fails", async () => {

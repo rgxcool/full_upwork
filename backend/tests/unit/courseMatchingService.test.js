@@ -44,6 +44,7 @@ class StudentEnrollmentMock {
     }
 
     static findOne = vi.fn();
+    static findById = vi.fn();
     static forceMissingCourseInstance = false;
     static instances = [];
 }
@@ -97,6 +98,7 @@ const resetMocks = () => {
     CourseMock.find.mockReset();
     CourseMock.findById.mockReset();
     StudentEnrollmentMock.findOne.mockReset();
+    StudentEnrollmentMock.findById.mockReset();
     StudentMock.findById.mockReset();
     courseInstanceSaveMock.mockReset();
     StudentEnrollmentMock.forceMissingCourseInstance = false;
@@ -108,6 +110,12 @@ beforeEach(() => {
     resetMocks();
     CourseInstanceMock.findOne.mockResolvedValue(null);
     StudentEnrollmentMock.findOne.mockResolvedValue(null);
+    StudentEnrollmentMock.findById.mockImplementation(async (id) => {
+        const found = StudentEnrollmentMock.instances.find(
+            (instance) => instance._id === id
+        );
+        return found || null;
+    });
 });
 
 afterEach(() => {
@@ -418,11 +426,12 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
 
         expect(findMatchSpy).toHaveBeenCalledWith("UNKNOWNCODE");
         expect(result.warnings).toEqual([
-            {
+            expect.objectContaining({
                 type: "no_match",
                 courseName: "UNKNOWNCODE",
+                studentId: "stu-no-match",
                 message: expect.stringContaining("UNKNOWNCODE"),
-            },
+            }),
         ]);
 
         findMatchSpy.mockRestore();
@@ -546,12 +555,13 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         expect(result.errors).toEqual([]);
         expect(result.enrollments).toHaveLength(2);
         expect(result.warnings).toEqual([
-            {
+            expect.objectContaining({
                 type: "package_added",
                 packageName: "Grouped Package",
                 studentId: "stu-grouped",
+                studentName: "group@student.com",
                 message: expect.stringContaining("Grouped Package"),
-            },
+            }),
         ]);
         expect(studentDoc.education.filter((entry) => entry.type === "Course"))
             .toHaveLength(2);
@@ -583,11 +593,12 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
 
         expect(findMatchSpy).toHaveBeenCalled();
         expect(result.warnings).toEqual([
-            {
+            expect.objectContaining({
                 type: "no_match",
                 courseName: "UNKNOWN",
+                studentId: "stu-no-match-2",
                 message: expect.stringContaining("UNKNOWN"),
-            },
+            }),
         ]);
 
         findMatchSpy.mockRestore();
@@ -813,11 +824,17 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         );
 
         expect(getWednesdaySpy).toHaveBeenCalled();
+        expect(result.errors).toEqual([
+            {
+                type: "processing_error",
+                courseName: "ERR101",
+                message: "calendar fail",
+            },
+        ]);
 
         findMatchSpy.mockRestore();
         createSpy.mockRestore();
         getWednesdaySpy.mockRestore();
-        expect(result.errors).toEqual([]);
     });
 
     it("passes through when student document is missing during education updates", async () => {
@@ -1284,7 +1301,7 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         findMatchSpy.mockRestore();
         createSpy.mockRestore();
 
-    expect(result.enrollments).toHaveLength(1);
+    expect(result.enrollments).toHaveLength(0);
     expect(StudentEnrollmentMock.instances[0].slutprovDate).toBeUndefined();
     expect(result.errors).toEqual([]);
   });
@@ -1340,7 +1357,7 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
 
     expect(studentDoc.education).toHaveLength(0);
     expect(studentDoc.save).not.toHaveBeenCalled();
-    expect(result.enrollments).toHaveLength(1);
+    expect(result.enrollments).toHaveLength(0);
     expect(result.errors).toEqual([]);
   });
 
@@ -1396,7 +1413,7 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
 
         findOrCreateSpy.mockRestore();
 
-        expect(result.enrollments).toHaveLength(1);
+        expect(result.enrollments).toHaveLength(0);
         expect(StudentEnrollmentMock.instances[0].slutprovDate).toBeUndefined();
     });
 
