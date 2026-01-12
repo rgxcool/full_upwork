@@ -18,6 +18,7 @@ import Course from "../../src/models/Course.js";
 import CoursePackage from "../../src/models/CoursePackage.js";
 import Program from "../../src/models/Program.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
+import CourseInstance from "../../src/models/CourseInstance.js";
 import searchRoutes from "../../src/router/searchRoutes.js";
 import {
     connectTestDatabase,
@@ -66,6 +67,7 @@ describe("Search Routes", () => {
             CoursePackage.deleteMany({}),
             Program.deleteMany({}),
             StudentEnrollment.deleteMany({}),
+            CourseInstance.deleteMany({}),
         ]);
     });
 
@@ -526,6 +528,29 @@ describe("Search Routes", () => {
             });
         });
 
+        it("returns 404 when teacher user is missing", async () => {
+            const response = await request(searchApp)
+                .get(`/api/details/Lärare/${new mongoose.Types.ObjectId()}`)
+                .expect(404);
+
+            expect(response.body).toEqual({ message: "User not found" });
+        });
+
+        it("returns 404 when teacher profile is missing", async () => {
+            const user = await User.create({
+                username: "TeacherNoProfile",
+                email: "teacher-no-profile@example.com",
+                password: "password",
+                roles: ["teacher"],
+            });
+
+            const response = await request(searchApp)
+                .get(`/api/details/Lärare/${user._id}`)
+                .expect(404);
+
+            expect(response.body).toEqual({ message: "Teacher profile not found" });
+        });
+
         it("returns teacher user details", async () => {
             const user = await User.create({
                 username: "TeacherUser",
@@ -533,7 +558,29 @@ describe("Search Routes", () => {
                 password: "password",
                 roles: ["teacher"],
             });
-            await Teacher.create({ userId: user._id, subject: "Test Subject" });
+            const teacher = await Teacher.create({
+                userId: user._id,
+                subject: "Test Subject",
+            });
+
+            const course = await Course.create({
+                courseName: "Teacher Course",
+                courseCode: "TC101",
+                coursePoints: "5",
+            });
+            const student = await Student.create({
+                name: "Enrolled Student",
+                personalNumber: "010101-0101",
+                email: "enrolled-student@example.com",
+            });
+            await StudentEnrollment.create({
+                studentId: student._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: course._id,
+                teacherId: teacher._id,
+                startDate: new Date("2025-01-01"),
+                endDate: new Date("2025-02-01"),
+            });
 
             const response = await request(searchApp)
                 .get(`/api/details/Lärare/${user._id}`)
@@ -544,8 +591,18 @@ describe("Search Routes", () => {
                 username: "TeacherUser",
                 email: "teacher-user@example.com",
                 roles: ["teacher"],
-                students: [],
-                courses: [],
+                students: expect.arrayContaining([
+                    expect.objectContaining({
+                        _id: student._id.toString(),
+                        name: "Enrolled Student",
+                    }),
+                ]),
+                courses: expect.arrayContaining([
+                    expect.objectContaining({
+                        _id: course._id.toString(),
+                        courseName: "Teacher Course",
+                    }),
+                ]),
             });
         });
 
@@ -589,6 +646,59 @@ describe("Search Routes", () => {
             expect(response.body).toEqual({ message: "Course not found" });
         });
 
+        it("returns course details with students and teachers", async () => {
+            const course = await Course.create({
+                courseName: "Math 101",
+                courseCode: "M101",
+                coursePoints: "5",
+            });
+            const student = await Student.create({
+                name: "Course Student",
+                personalNumber: "020202-0202",
+                email: "course-student@example.com",
+            });
+            const teacherUser = await User.create({
+                username: "CourseTeacherUser",
+                email: "course-teacher@example.com",
+                password: "password",
+                roles: ["teacher"],
+            });
+            const teacherProfile = await Teacher.create({
+                userId: teacherUser._id,
+                subject: "math",
+            });
+            await StudentEnrollment.create({
+                studentId: student._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: course._id,
+                teacherId: teacherProfile._id,
+                startDate: new Date("2025-01-01"),
+                endDate: new Date("2025-02-01"),
+            });
+
+            const response = await request(searchApp)
+                .get(`/api/details/Kurs/${course._id}`)
+                .expect(200);
+
+            expect(response.body._id).toBe(course._id.toString());
+            expect(response.body.students).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        _id: student._id.toString(),
+                        name: "Course Student",
+                    }),
+                ])
+            );
+            expect(response.body.teachers).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        _id: teacherUser._id.toString(),
+                        username: "CourseTeacherUser",
+                    }),
+                ])
+            );
+        });
+
         it("returns 500 when course lookup fails", async () => {
             const courseId = new mongoose.Types.ObjectId();
 
@@ -602,6 +712,98 @@ describe("Search Routes", () => {
 
             expect(response.body).toEqual({
                 message: "Serverfel vid hämtning av kursdetaljer",
+            });
+        });
+
+        it("returns 404 when course instance is missing", async () => {
+            const response = await request(searchApp)
+                .get(`/api/details/CourseInstance/${new mongoose.Types.ObjectId()}`)
+                .expect(404);
+
+            expect(response.body).toEqual({ message: "Course instance not found" });
+        });
+
+        it("returns course instance details with students and teachers", async () => {
+            const course = await Course.create({
+                courseName: "Instance Course",
+                courseCode: "IC101",
+                coursePoints: "5",
+            });
+            const teacherUser = await User.create({
+                username: "InstanceTeacher",
+                email: "instance-teacher@example.com",
+                password: "password",
+                roles: ["teacher"],
+            });
+            const teacherProfile = await Teacher.create({
+                userId: teacherUser._id,
+                subject: "science",
+            });
+            const courseInstance = await (
+                await import("../../src/models/CourseInstance.js")
+            ).default.create({
+                mainCourseId: course._id,
+                startDate: new Date("2025-01-01"),
+                endDate: new Date("2025-02-01"),
+                courseName: "Instance Course",
+                courseCode: "IC101",
+                responsibleTeacher: teacherProfile._id,
+            });
+            const student = await Student.create({
+                name: "Instance Student",
+                personalNumber: "030303-0303",
+                email: "instance-student@example.com",
+            });
+            await StudentEnrollment.create({
+                studentId: student._id,
+                courseInstanceId: courseInstance._id,
+                mainCourseId: course._id,
+                teacherId: teacherProfile._id,
+                startDate: new Date("2025-01-01"),
+                endDate: new Date("2025-02-01"),
+            });
+
+            const response = await request(searchApp)
+                .get(`/api/details/CourseInstance/${courseInstance._id}`)
+                .expect(200);
+
+            expect(response.body.isCourseInstance).toBe(true);
+            expect(response.body.students).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        _id: student._id.toString(),
+                        name: "Instance Student",
+                    }),
+                ])
+            );
+            expect(response.body.teachers).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        _id: teacherUser._id.toString(),
+                        username: "InstanceTeacher",
+                    }),
+                ])
+            );
+        });
+
+        it("returns user details when type is a role", async () => {
+            const user = await User.create({
+                username: "RoleUser",
+                name: "Role User",
+                email: "role-user@example.com",
+                password: "password",
+                roles: ["admin"],
+            });
+
+            const response = await request(searchApp)
+                .get(`/api/details/admin/${user._id}`)
+                .expect(200);
+
+            expect(response.body).toMatchObject({
+                _id: user._id.toString(),
+                username: "RoleUser",
+                email: "role-user@example.com",
+                roles: ["admin"],
             });
         });
 

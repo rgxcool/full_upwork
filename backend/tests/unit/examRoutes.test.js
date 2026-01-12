@@ -278,6 +278,73 @@ describe("examRoutes", () => {
     expect(createGlobalNotification).toHaveBeenCalled();
   });
 
+  it("returns 400 with validation errors when exam registration fails validation", async () => {
+    const validationError = new Error("validation failed");
+    validationError.name = "ValidationError";
+    validationError.errors = {
+      name: { message: "Name is required" },
+      course: { message: "Course is required" },
+    };
+    Exam.mockImplementationOnce(function (data) {
+      return {
+      ...data,
+      save: vi.fn().mockRejectedValue(validationError),
+      };
+    });
+
+    const res = await request(app).post("/api/exams").send({ name: "", course: "" });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Validation failed",
+      details: ["Name is required", "Course is required"],
+    });
+  });
+
+  it("returns 403 when teacher profile is missing for exam listing", async () => {
+    Teacher.findOne.mockReturnValueOnce(createSessionQuery(null));
+
+    const res = await request(app)
+      .get("/api/exams")
+      .set("x-user-role", "teacher");
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "Teacher profile not found" });
+  });
+
+  it("skips notification creation for exams that do not meet criteria", async () => {
+    const examDoc = {
+      _id: "exam-continue",
+      name: "No Notification Exam",
+      course: "Physics",
+      teacherId: teacherDoc,
+      requestedMonth: "Juni",
+      status: "scheduled",
+      personalNumber: "123",
+    };
+    Exam.find.mockReturnValue(createQueryChain([examDoc]));
+
+    const res = await request(app)
+      .get("/api/exams")
+      .set("x-user-role", "admin");
+
+    expect(res.status).toBe(200);
+    expect(Notification.create).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when exam listing fails", async () => {
+    Exam.find.mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+
+    const res = await request(app)
+      .get("/api/exams")
+      .set("x-user-role", "admin");
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Failed to fetch exams." });
+  });
+
   it("returns teacher exams and triggers notification logic", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-06-05T00:00:00.000Z"));
@@ -785,16 +852,99 @@ describe("examRoutes", () => {
     expect(failRes.status).toBe(403);
   });
 
+  it("returns 500 when fetching calendar events fails", async () => {
+    CalendarEvent.find.mockRejectedValueOnce(new Error("boom"));
+
+    const res = await request(app)
+      .get("/api/calendar-events")
+      .set("x-user-role", "admin");
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Kunde inte hämta sparade event" });
+  });
+
   it("fetches a calendar event by id and surfaces errors", async () => {
     CalendarEvent.findById.mockResolvedValueOnce({ _id: "event-view" });
     const res = await request(app).get("/api/calendar-events/event-view");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ _id: "event-view" });
 
+    CalendarEvent.findById.mockResolvedValueOnce(null);
+    const notFound = await request(app).get("/api/calendar-events/event-missing");
+    expect(notFound.status).toBe(404);
+    expect(notFound.body).toEqual({ error: "Event hittades inte" });
+
     CalendarEvent.findById.mockRejectedValueOnce(new Error("boom id"));
     const err = await request(app).get("/api/calendar-events/event-crash");
     expect(err.status).toBe(500);
     expect(err.body.error).toBe("Kunde inte hämta event.");
+  });
+
+  it("falls back when transactions are enabled but unsupported", async () => {
+    const previousEnableTransactions = process.env.ENABLE_MONGODB_TRANSACTIONS;
+    process.env.ENABLE_MONGODB_TRANSACTIONS = "true";
+
+    const mongooseModule = await import("mongoose");
+    const session = {
+      startTransaction: vi.fn(() => {
+        throw new Error("transactions unsupported");
+      }),
+      endSession: vi.fn(() => {
+        throw new Error("end session failed");
+      }),
+    };
+    mongooseModule.default.startSession.mockImplementationOnce(() => session);
+
+    StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+
+    const res = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "admin")
+      .send({
+        teacherId: "teacher-1",
+        fromDate: "2025-04-01",
+        toDate: "2025-04-10",
+      });
+
+    process.env.ENABLE_MONGODB_TRANSACTIONS = previousEnableTransactions;
+
+    expect(res.status).toBe(200);
+  });
+
+  it("commits transactions and uses query sessions when enabled", async () => {
+    const previousEnableTransactions = process.env.ENABLE_MONGODB_TRANSACTIONS;
+    process.env.ENABLE_MONGODB_TRANSACTIONS = "true";
+
+    const mongooseModule = await import("mongoose");
+    const endSession = vi.fn(() => {
+      throw new Error("end session failed");
+    });
+    const session = {
+      startTransaction: vi.fn(),
+      commitTransaction: vi.fn(),
+      abortTransaction: vi.fn(),
+      endSession,
+    };
+    mongooseModule.default.startSession.mockImplementationOnce(() => session);
+
+    StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+
+    const res = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "teacher")
+      .set("x-user-id", "teacher-user-id")
+      .send({
+        teacherId: "teacher-1",
+        fromDate: "2025-04-01",
+        toDate: "2025-04-10",
+      });
+
+    process.env.ENABLE_MONGODB_TRANSACTIONS = previousEnableTransactions;
+
+    expect(res.status).toBe(200);
+    expect(session.commitTransaction).toHaveBeenCalled();
   });
 
   it("moves calendar event groups with proper authorization", async () => {
@@ -844,6 +994,44 @@ describe("examRoutes", () => {
         fromDate: "2025-04-01",
         toDate: "2025-04-10",
       });
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe(
+      "Failed to move group. The operation was rolled back."
+    );
+  });
+
+  it("aborts and ends sessions safely when transactional move-group fails", async () => {
+    const previousEnableTransactions = process.env.ENABLE_MONGODB_TRANSACTIONS;
+    process.env.ENABLE_MONGODB_TRANSACTIONS = "true";
+
+    const mongooseModule = await import("mongoose");
+    const session = {
+      startTransaction: vi.fn(),
+      commitTransaction: vi.fn(),
+      abortTransaction: vi.fn(() => {
+        throw new Error("abort failed");
+      }),
+      endSession: vi.fn(() => {
+        throw new Error("end session failed");
+      }),
+    };
+    mongooseModule.default.startSession.mockImplementationOnce(() => session);
+
+    StudentEnrollment.updateMany.mockRejectedValueOnce(new Error("boom update"));
+    Teacher.findOne.mockReturnValueOnce(createSessionQuery(teacherDoc));
+
+    const res = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "teacher")
+      .set("x-user-id", "teacher-user-id")
+      .send({
+        teacherId: "teacher-1",
+        fromDate: "2025-04-01",
+        toDate: "2025-04-10",
+      });
+
+    process.env.ENABLE_MONGODB_TRANSACTIONS = previousEnableTransactions;
+
     expect(res.status).toBe(500);
     expect(res.body.error).toBe(
       "Failed to move group. The operation was rolled back."
@@ -991,6 +1179,12 @@ describe("examRoutes", () => {
       .put("/api/calendar-events/event-404")
       .send({ title: "Updated" });
     expect(missingRes.status).toBe(404);
+
+    CalendarEvent.findByIdAndUpdate.mockRejectedValueOnce(new Error("boom"));
+    const errorRes = await request(app)
+      .put("/api/calendar-events/event-crash")
+      .send({ title: "Updated" });
+    expect(errorRes.status).toBe(500);
   });
 
   it("rejects syncable events when teacher profile is missing", async () => {
@@ -1026,6 +1220,32 @@ describe("examRoutes", () => {
       });
     expect(okRes.status).toBe(200);
     expect(student.save).toHaveBeenCalled();
+  });
+
+  it("returns syncable events even when students have no teacher and filters dropout students", async () => {
+    const withoutTeacher = {
+      ...createStudent(),
+      _id: "student-no-teacher",
+      teacherId: null,
+      dropout: false,
+    };
+    const dropoutStudent = {
+      ...createStudent(),
+      _id: "student-dropout",
+      dropout: true,
+    };
+    studentFindResult = [withoutTeacher, dropoutStudent];
+    Student.populate.mockResolvedValueOnce(studentFindResult);
+
+    const res = await request(app)
+      .get("/api/calendar-events/syncable")
+      .set("x-user-role", "admin");
+
+    expect(res.status).toBe(200);
+    const allStudentIds = (res.body || []).flatMap(
+      (event) => event.extendedProps?.students?.map((student) => student._id) || []
+    );
+    expect(allStudentIds).not.toContain("student-dropout");
   });
 
   it("returns 500 when updating an exam throws", async () => {

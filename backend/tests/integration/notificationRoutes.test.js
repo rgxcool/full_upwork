@@ -134,6 +134,36 @@ describe("Notification Routes", () => {
             });
         });
 
+        it("executes teacher dropout debug loop when dropout notifications exist", async () => {
+            const userId = new mongoose.Types.ObjectId();
+            const teacher = await Teacher.create({
+                userId,
+                subject: "math",
+            });
+
+            await Notification.create({
+                type: "dropout",
+                message: "Dropout alert",
+                resolved: false,
+                teacher: teacher._id,
+                meta: { studentId: new mongoose.Types.ObjectId() },
+            });
+
+            const token = signToken({
+                role: "teacher",
+                userId: userId.toString(),
+            });
+
+            const response = await request(app)
+                .get("/api/notifications")
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+
+            expect(Array.isArray(response.body)).toBe(true);
+            expect(response.body).toHaveLength(1);
+            expect(response.body[0].type).toBe("dropout");
+        });
+
         it("returns notifications for a teacher with a profile", async () => {
             const userId = new mongoose.Types.ObjectId();
             const teacher = await Teacher.create({
@@ -236,6 +266,31 @@ describe("Notification Routes", () => {
             );
             expect(response.body.note.resolvedByUsers).toEqual(
                 expect.arrayContaining([userId.toString()])
+            );
+        });
+
+        it("does not add duplicate resolvedByUsers entries and evaluates action plan status when meta is present", async () => {
+            const userId = new mongoose.Types.ObjectId();
+            const studentId = new mongoose.Types.ObjectId();
+            const courseId = new mongoose.Types.ObjectId();
+
+            const note = await Notification.create({
+                type: "custom",
+                message: "Already resolved",
+                resolved: false,
+                resolvedByUsers: [userId],
+                meta: { studentId, courseId },
+            });
+
+            const token = signToken({ userId: userId.toString() });
+            const response = await request(app)
+                .put(`/api/notifications/${note._id}/resolve`)
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+
+            expect(response.body.note.resolvedByUsers).toHaveLength(1);
+            expect(response.body.note.resolvedByUsers[0].toString()).toBe(
+                userId.toString()
             );
         });
 

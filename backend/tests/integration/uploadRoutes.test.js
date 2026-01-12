@@ -77,6 +77,10 @@ const clearGridFs = async () => {
     await db.collection("fs.chunks").deleteMany({});
 };
 
+const clearStudents = async () => {
+    await mongoose.connection.db.collection("students").deleteMany({});
+};
+
 const getUploadHandler = () => {
     const layer = uploadRoutes.stack.find(
         (entry) => entry.route?.path === "/:studentId" && entry.route?.methods?.post
@@ -122,6 +126,7 @@ describe("Upload Routes", () => {
 
     beforeEach(async () => {
         await clearGridFs();
+        await clearStudents();
     });
 
     afterEach(() => {
@@ -481,5 +486,83 @@ describe("Upload Routes", () => {
             .expect(500);
 
         expect(response.body).toEqual({ error: "Failed to delete file" });
+    });
+
+    it("lists all APL files grouped by student with student name lookup", async () => {
+        const knownStudentId = new mongoose.Types.ObjectId();
+        const unknownStudentId = new mongoose.Types.ObjectId();
+
+        await mongoose.connection.db.collection("students").insertOne({
+            _id: knownStudentId,
+            name: "Known Student",
+        });
+
+        const now = new Date();
+        await mongoose.connection.db.collection("fs.files").insertMany([
+            {
+                _id: new mongoose.Types.ObjectId(),
+                filename: "apl-known.pdf",
+                contentType: "application/pdf",
+                uploadDate: new Date(now.getTime() - 1000),
+                metadata: { studentId: knownStudentId.toString() },
+            },
+            {
+                _id: new mongoose.Types.ObjectId(),
+                filename: "apl-unknown.pdf",
+                contentType: "application/pdf",
+                uploadDate: now,
+                metadata: { studentId: unknownStudentId.toString() },
+            },
+        ]);
+
+        const response = await request(app)
+            .get("/api/uploads/all/apl")
+            .expect(200);
+
+        expect(Array.isArray(response.body)).toBe(true);
+        expect(response.body).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    studentId: knownStudentId.toString(),
+                    studentName: "Known Student",
+                    files: expect.arrayContaining([
+                        expect.objectContaining({ filename: "apl-known.pdf" }),
+                    ]),
+                }),
+                expect.objectContaining({
+                    studentId: unknownStudentId.toString(),
+                    studentName: "Unknown Student",
+                    files: expect.arrayContaining([
+                        expect.objectContaining({
+                            filename: "apl-unknown.pdf",
+                        }),
+                    ]),
+                }),
+            ])
+        );
+    });
+
+    it("returns 500 when listing APL archive fails", async () => {
+        const db = mongoose.connection.db;
+        const originalCollection = db.collection.bind(db);
+        const collectionSpy = vi
+            .spyOn(db, "collection")
+            .mockImplementation((name, options) => {
+                if (name === "fs.files") {
+                    return {
+                        aggregate() {
+                            throw new Error("aggregate boom");
+                        },
+                    };
+                }
+                return originalCollection(name, options);
+            });
+
+        const response = await request(app)
+            .get("/api/uploads/all/apl")
+            .expect(500);
+
+        expect(response.body).toEqual({ error: "Failed to list all APL files" });
+        collectionSpy.mockRestore();
     });
 });
