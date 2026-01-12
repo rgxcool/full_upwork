@@ -329,9 +329,11 @@
       { key: 'GREEN', label: 'Klar praktik' },
     ]
     if (props.filterType === 'completed') {
+      // In "Avslutad" tab, only show GREEN
       return allStatuses.filter((s) => s.key === 'GREEN')
     }
-    return allStatuses.filter((s) => s.key !== 'GREEN')
+    // In "Pågående" tab, show all statuses including GREEN (as redundancy)
+    return allStatuses
   })
 
   const filteredStudents = computed(() => {
@@ -345,9 +347,11 @@
     })
 
     if (props.filterType === 'completed') {
+      // In "Avslutad" tab, only show GREEN students
       return baseFiltered.filter((s) => s.aplStatus === 'GREEN')
     }
-    return baseFiltered.filter((s) => s.aplStatus !== 'GREEN')
+    // In "Pågående" tab, show all students including GREEN (as redundancy)
+    return baseFiltered
   })
 
   const studentsByStatus = computed(() => {
