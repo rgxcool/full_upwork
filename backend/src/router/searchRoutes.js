@@ -281,8 +281,28 @@ router.get("/details/:type/:id", async (req, res) => {
                     return res.status(404).json({ message: "Teacher profile not found" });
                 }
 
-                const enrollments = await StudentEnrollment.find({
+                // Get students who have this teacher as responsible teacher
+                const studentsWithTeacher = await Student.find({
                     teacherId: teacherProfile._id,
+                })
+                    .select("_id name email")
+                    .lean();
+
+                // Fetch course instances where this teacher is responsible
+                const courseInstances = await CourseInstance.find({
+                    responsibleTeacher: teacherProfile._id,
+                })
+                    .populate("mainCourseId", "courseName courseCode")
+                    .sort({ startDate: -1 })
+                    .lean();
+
+                // Get all enrollments for course instances where teacher is responsible
+                const instanceIds = courseInstances.map(ci => ci._id);
+                const enrollments = await StudentEnrollment.find({
+                    $or: [
+                        { teacherId: teacherProfile._id },
+                        { courseInstanceId: { $in: instanceIds } }
+                    ]
                 })
                     .populate("studentId", "name email")
                     .populate("mainCourseId", "courseName courseCode")
@@ -291,11 +311,25 @@ router.get("/details/:type/:id", async (req, res) => {
                 const studentsMap = new Map();
                 const coursesMap = new Map();
 
+                // Add students with teacher as responsible
+                for (const student of studentsWithTeacher) {
+                    studentsMap.set(student._id.toString(), {
+                        _id: student._id,
+                        name: student.name,
+                        email: student.email
+                    });
+                }
+
+                // Add students from enrollments
                 for (const enrollment of enrollments) {
                     if (enrollment.studentId) {
                         studentsMap.set(
                             enrollment.studentId._id.toString(),
-                            enrollment.studentId
+                            {
+                                _id: enrollment.studentId._id,
+                                name: enrollment.studentId.name,
+                                email: enrollment.studentId.email
+                            }
                         );
                     }
                     if (enrollment.mainCourseId) {
@@ -305,14 +339,6 @@ router.get("/details/:type/:id", async (req, res) => {
                         );
                     }
                 }
-
-                // Fetch course instances where this teacher is responsible
-                const courseInstances = await CourseInstance.find({
-                    responsibleTeacher: teacherProfile._id,
-                })
-                    .populate("mainCourseId", "courseName courseCode")
-                    .sort({ startDate: -1 })
-                    .lean();
 
                 // Format course instances for frontend
                 const formattedCourseInstances = courseInstances.map((instance) => ({

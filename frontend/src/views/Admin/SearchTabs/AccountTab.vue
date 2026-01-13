@@ -451,7 +451,7 @@
       </div>
 
       <!-- Courses section (for teachers) -->
-      <div v-if="(userType === 'Lärare' || userType === 'teacher') && (userData?.courseInstances?.length > 0 || userData?.courses?.length > 0)" class="card">
+      <div v-if="(userType === 'Lärare' || userType === 'teacher') && userData?.courseInstances?.length > 0" class="card">
         <div class="card-header">
           <h3>Ansvariga kurser</h3>
         </div>
@@ -477,24 +477,6 @@
             </ul>
           </div>
 
-          <!-- Main Courses (from enrollments) -->
-          <div v-if="userData?.courses?.length > 0" class="courses-section">
-            <h4 v-if="userData?.courseInstances?.length > 0">Kurser (från inskrivningar)</h4>
-            <h4 v-else>Kurser</h4>
-            <ul class="courses-list">
-              <li v-for="course in userData.courses" :key="course._id" class="course-item">
-                <router-link 
-                  :to="`/education/${course._id}`" 
-                  class="course-link"
-                >
-                  <div class="course-name">{{ course.courseName }}</div>
-                  <div class="course-details">
-                    <span class="course-code">{{ course.courseCode }}</span>
-                  </div>
-                </router-link>
-              </li>
-            </ul>
-          </div>
 
           <div v-if="(!userData?.courseInstances || userData.courseInstances.length === 0) && (!userData?.courses || userData.courses.length === 0)" class="no-courses">
             Inga kurser tilldelade
