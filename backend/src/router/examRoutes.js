@@ -207,9 +207,12 @@ router.post("/calendar-events", async (req, res) => {
 router.get("/calendar-events", authenticateUser, async (req, res) => {
     try {
         let query = {
-            // Exclude "slutprov" type events - these should come from /calendar-events/syncable instead
+            // Exclude "slutprov" and "exam" type events - these should come from /calendar-events/syncable instead
             // to avoid duplicates and ensure they're always up-to-date from enrollments
-            "extendedProps.type": { $ne: "slutprov" }
+            $and: [
+                { "extendedProps.type": { $ne: "slutprov" } },
+                { "extendedProps.type": { $ne: "exam" } }
+            ]
         };
 
         // If user is a teacher, filter events by their teacherId
@@ -226,12 +229,24 @@ router.get("/calendar-events", authenticateUser, async (req, res) => {
             // Filter events by this teacher's ID
             query.teacherId = teacher._id;
             console.log(
-                `🔍 Teacher ${teacher._id} fetching their calendar events (excluding slutprov type)`
+                `🔍 Teacher ${teacher._id} fetching their calendar events (excluding slutprov/exam type)`
             );
         }
 
         const events = await CalendarEvent.find(query);
-        res.json(events);
+        
+        // Fix titles for any remaining events (shouldn't be any exam/slutprov, but just in case)
+        const fixedEvents = events.map(event => {
+            if (event.extendedProps?.type === "slutprov" || event.extendedProps?.type === "exam") {
+                // Shouldn't happen, but fix title if it does
+                if (event.extendedProps?.teacher) {
+                    event.title = event.extendedProps.teacher;
+                }
+            }
+            return event;
+        });
+        
+        res.json(fixedEvents);
     } catch (err) {
         console.error("❌ Fel vid hämtning:", err);
         res.status(500).json({ error: "Kunde inte hämta sparade event" });
@@ -686,14 +701,141 @@ router.put("/calendar-events/:id", async (req, res) => {
         const { id } = req.params;
         const updateFields = req.body;
 
-        const updatedEvent = await CalendarEvent.findByIdAndUpdate(
-            id,
-            updateFields,
-            { new: true }
-        );
+        let updatedEvent = null;
 
-        if (!updatedEvent) {
-            return res.status(404).json({ error: "Event hittades inte" });
+        // Check if id is a composite key (contains underscore and date) or a MongoDB ObjectId
+        if (id.includes('_') && id.match(/^[0-9a-fA-F]{24}_\d{4}-\d{2}-\d{2}$/)) {
+            // Composite ID format: teacherId_dateKey (e.g., "69658fe7d298356eaedaf34b_2025-12-29")
+            // Split only on first underscore to separate teacherId from dateKey
+            const underscoreIndex = id.indexOf('_');
+            const teacherIdStr = id.substring(0, underscoreIndex);
+            const dateKey = id.substring(underscoreIndex + 1); // Everything after first underscore is the date
+            
+            // Parse the date from dateKey (format: YYYY-MM-DD)
+            const [year, month, day] = dateKey.split('-').map(Number);
+            
+            // Create date ranges in both local and UTC to handle timezone differences
+            const startOfDayLocal = new Date(year, month - 1, day, 0, 0, 0, 0);
+            const endOfDayLocal = new Date(year, month - 1, day, 23, 59, 59, 999);
+            
+            // Also create UTC versions (events might be stored in UTC)
+            const startOfDayUTC = new Date(dateKey + "T00:00:00.000Z");
+            const endOfDayUTC = new Date(dateKey + "T23:59:59.999Z");
+
+            // Find the CalendarEvent by teacherId and date (try both local and UTC)
+            const query = {
+                $or: [
+                    {
+                        start: {
+                            $gte: startOfDayLocal,
+                            $lte: endOfDayLocal,
+                        }
+                    },
+                    {
+                        start: {
+                            $gte: startOfDayUTC,
+                            $lte: endOfDayUTC,
+                        }
+                    }
+                ],
+                "extendedProps.type": "slutprov",
+            };
+
+            // Convert teacherId string to ObjectId if it's a valid ObjectId
+            if (teacherIdStr.match(/^[0-9a-fA-F]{24}$/)) {
+                const mongoose = (await import("mongoose")).default;
+                query["extendedProps.teacherId"] = new mongoose.Types.ObjectId(teacherIdStr);
+            } else {
+                query["extendedProps.teacherId"] = { $exists: false };
+            }
+
+            // Find the event
+            console.log(`🔍 Looking for calendar event with query:`, JSON.stringify(query, null, 2));
+            let existingEvent = await CalendarEvent.findOne(query);
+            
+            if (!existingEvent) {
+                // Try a broader date range query (might be timezone issue)
+                const broaderQuery = {
+                    start: {
+                        $gte: new Date(startOfDayUTC.getTime() - 24 * 60 * 60 * 1000), // One day before
+                        $lte: new Date(endOfDayUTC.getTime() + 24 * 60 * 60 * 1000), // One day after
+                    },
+                    "extendedProps.type": "slutprov",
+                };
+                if (teacherIdStr.match(/^[0-9a-fA-F]{24}$/)) {
+                    const mongoose = (await import("mongoose")).default;
+                    broaderQuery["extendedProps.teacherId"] = new mongoose.Types.ObjectId(teacherIdStr);
+                } else {
+                    broaderQuery["extendedProps.teacherId"] = { $exists: false };
+                }
+                console.log(`🔍 Trying broader date range query:`, JSON.stringify(broaderQuery, null, 2));
+                existingEvent = await CalendarEvent.findOne(broaderQuery);
+            }
+            
+            if (existingEvent) {
+                // Update the found event - merge extendedProps if provided
+                if (updateFields.extendedProps) {
+                    // Deep merge extendedProps to preserve existing fields
+                    existingEvent.extendedProps = {
+                        ...existingEvent.extendedProps,
+                        ...updateFields.extendedProps,
+                        // Preserve students array from update (this is the authoritative list after manual edits)
+                        students: updateFields.extendedProps.students || existingEvent.extendedProps.students
+                    };
+                }
+                // Update title - use teacher name if provided in extendedProps, otherwise use updateFields.title
+                // But don't use titles with course names (containing "Slutprov" or " - ")
+                if (updateFields.extendedProps?.teacher) {
+                    existingEvent.title = updateFields.extendedProps.teacher;
+                } else if (updateFields.title && !updateFields.title.includes("Slutprov") && !updateFields.title.includes(" - ")) {
+                    existingEvent.title = updateFields.title;
+                } else if (existingEvent.extendedProps?.teacher) {
+                    existingEvent.title = existingEvent.extendedProps.teacher;
+                }
+                if (updateFields.start) existingEvent.start = updateFields.start;
+                if (updateFields.color) existingEvent.color = updateFields.color;
+                
+                updatedEvent = await existingEvent.save();
+                console.log(`✅ Updated calendar event ${existingEvent._id} (composite key: ${id}) with ${updatedEvent.extendedProps?.students?.length || 0} students`);
+            } else {
+                // Event doesn't exist - create it from the updateFields
+                console.log(`⚠️ Calendar event not found, creating new one for composite key: ${id}`);
+                
+                // Determine title - prefer teacher name, fallback to generic title
+                let eventTitle = "Okänd lärare";
+                if (updateFields.extendedProps?.teacher) {
+                    eventTitle = updateFields.extendedProps.teacher;
+                } else if (updateFields.title && !updateFields.title.includes("Slutprov") && !updateFields.title.includes(" - ")) {
+                    eventTitle = updateFields.title;
+                }
+                
+                // Create new event with the provided data
+                const mongoose = (await import("mongoose")).default;
+                const newEvent = new CalendarEvent({
+                    title: eventTitle,
+                    start: startOfDayUTC, // Use UTC date to match how events are stored
+                    color: updateFields.color || "#ff6b6b",
+                    extendedProps: {
+                        type: updateFields.extendedProps?.type || "slutprov", // Use type from updateFields or default to "slutprov"
+                        teacherId: teacherIdStr.match(/^[0-9a-fA-F]{24}$/) ? new mongoose.Types.ObjectId(teacherIdStr) : undefined,
+                        ...(updateFields.extendedProps || {})
+                    }
+                });
+                
+                updatedEvent = await newEvent.save();
+                console.log(`✅ Created new calendar event ${updatedEvent._id} (composite key: ${id}) with ${updatedEvent.extendedProps?.students?.length || 0} students`);
+            }
+        } else {
+            // Regular MongoDB ObjectId - use findByIdAndUpdate
+            updatedEvent = await CalendarEvent.findByIdAndUpdate(
+                id,
+                updateFields,
+                { new: true }
+            );
+
+            if (!updatedEvent) {
+                return res.status(404).json({ error: "Event hittades inte" });
+            }
         }
 
         res.json({ message: "✅ Event uppdaterat", event: updatedEvent });
@@ -1365,6 +1507,230 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
 
         console.log("📅 Final grouped events:", Object.keys(grouped).length);
         
+        // Ensure all events use teacher name as title (not course name)
+        for (const [key, event] of Object.entries(grouped)) {
+            // Always use teacher name as title
+            if (event.extendedProps?.teacher) {
+                event.title = event.extendedProps.teacher;
+            }
+        }
+        
+        // Check for existing CalendarEvent documents and merge their student lists
+        // This ensures that manually removed students don't get added back
+        for (const [key, event] of Object.entries(grouped)) {
+            try {
+                // Extract teacherId and dateKey from the composite key
+                const parts = key.split('_');
+                if (parts.length >= 2) {
+                    const teacherIdStr = parts[0];
+                    const dateKey = parts.slice(1).join('_'); // Handle dates with underscores
+                    
+                    // Build query to find existing CalendarEvent
+                    const [year, month, day] = dateKey.split('-').map(Number);
+                    const startOfDayUTC = new Date(dateKey + "T00:00:00.000Z");
+                    const endOfDayUTC = new Date(dateKey + "T23:59:59.999Z");
+                    
+                    // Check for both "slutprov" and "exam" types (events might be saved with either)
+                    const eventQuery = {
+                        start: {
+                            $gte: startOfDayUTC,
+                            $lte: endOfDayUTC,
+                        },
+                        $or: [
+                            { "extendedProps.type": "slutprov" },
+                            { "extendedProps.type": "exam" },
+                            { "extendedProps.type": event.extendedProps?.type || "slutprov" }
+                        ],
+                    };
+                    
+                    // Add teacherId filter if it's a valid ObjectId
+                    if (teacherIdStr !== 'no_teacher' && teacherIdStr.match(/^[0-9a-fA-F]{24}$/)) {
+                        const mongoose = (await import("mongoose")).default;
+                        eventQuery["extendedProps.teacherId"] = new mongoose.Types.ObjectId(teacherIdStr);
+                    } else {
+                        eventQuery["extendedProps.teacherId"] = { $exists: false };
+                    }
+                    
+                    // Find existing CalendarEvent(s) - there might be duplicates that need merging
+                    const existingCalendarEvents = await CalendarEvent.find(eventQuery).sort({ createdAt: -1 });
+                    
+                    if (existingCalendarEvents.length > 0) {
+                        // If multiple events exist for the same teacher/date, merge them and delete duplicates
+                        if (existingCalendarEvents.length > 1) {
+                            console.log(`⚠️ Found ${existingCalendarEvents.length} duplicate CalendarEvents for ${key}, merging them`);
+                            
+                            // Use the most recent event as the base, but merge all student lists
+                            const baseEvent = existingCalendarEvents[0];
+                            const allSavedStudents = new Map();
+                            
+                            // Collect all students from all duplicate events
+                            existingCalendarEvents.forEach(dupEvent => {
+                                if (dupEvent.extendedProps?.students) {
+                                    dupEvent.extendedProps.students.forEach(student => {
+                                        const studentId = student._id?.toString();
+                                        if (studentId && !allSavedStudents.has(studentId)) {
+                                            allSavedStudents.set(studentId, student);
+                                        }
+                                    });
+                                }
+                            });
+                            
+                            // Delete duplicate events (keep only the first one)
+                            for (let i = 1; i < existingCalendarEvents.length; i++) {
+                                await CalendarEvent.findByIdAndDelete(existingCalendarEvents[i]._id);
+                                console.log(`🗑️ Deleted duplicate CalendarEvent ${existingCalendarEvents[i]._id}`);
+                            }
+                            
+                            // Update the base event with merged students and fix title to use teacher name
+                            baseEvent.extendedProps.students = Array.from(allSavedStudents.values());
+                            // Always use teacher name as title, not course name
+                            if (baseEvent.extendedProps?.teacher) {
+                                baseEvent.title = baseEvent.extendedProps.teacher;
+                            } else if (event.extendedProps?.teacher) {
+                                baseEvent.title = event.extendedProps.teacher;
+                            }
+                            await baseEvent.save();
+                            
+                            // Use the base event for merging
+                            const existingCalendarEvent = baseEvent;
+                            
+                            // Use the saved student list as the authoritative source
+                            const savedStudents = Array.from(allSavedStudents.values());
+                            const savedStudentIds = new Set(savedStudents.map(s => s._id?.toString()).filter(Boolean));
+                            
+                            // Create a map of dynamically generated students by ID for merging
+                            const dynamicStudentsMap = new Map();
+                            if (event.extendedProps.students) {
+                                event.extendedProps.students.forEach(student => {
+                                    const studentId = student._id?.toString();
+                                    if (studentId) {
+                                        dynamicStudentsMap.set(studentId, student);
+                                    }
+                                });
+                            }
+                            
+                            // Merge: Use saved students as base, but update with latest data from dynamic students
+                            const mergedStudents = savedStudents.map(savedStudent => {
+                                const studentId = savedStudent._id?.toString();
+                                const dynamicStudent = dynamicStudentsMap.get(studentId);
+                                
+                                // If we have dynamic data for this student, merge it (preserve saved data but update with latest)
+                                if (dynamicStudent) {
+                                    return {
+                                        ...savedStudent, // Keep saved data (attendance, etc.)
+                                        ...dynamicStudent, // Update with latest enrollment data
+                                        // Preserve manually set fields from saved event
+                                        attended: savedStudent.attended !== undefined ? savedStudent.attended : dynamicStudent.attended,
+                                        additionalInfo: savedStudent.additionalInfo || dynamicStudent.additionalInfo || "",
+                                    };
+                                }
+                                // If student is in saved event but not in dynamic (manually added?), keep them
+                                return savedStudent;
+                            });
+                            
+                            // Replace the students array with the merged version
+                            event.extendedProps.students = mergedStudents;
+                            
+                            // Always use teacher name as title (not course name) - ensure consistency
+                            // Only use saved title if it's a teacher name, not a course name
+                            const savedTitle = existingCalendarEvent.title || "";
+                            if (savedTitle && !savedTitle.includes("Slutprov") && !savedTitle.includes(" - ")) {
+                                // Saved title looks like a teacher name, use it
+                                event.title = savedTitle;
+                            } else {
+                                // Saved title has course name, use teacher name from event instead
+                                event.title = event.extendedProps?.teacher || event.title;
+                            }
+                            
+                            // Also preserve other extendedProps from the saved event (like exam info)
+                            if (existingCalendarEvent.extendedProps.examTime) {
+                                event.extendedProps.examTime = existingCalendarEvent.extendedProps.examTime;
+                            }
+                            if (existingCalendarEvent.extendedProps.examMunicipality) {
+                                event.extendedProps.examMunicipality = existingCalendarEvent.extendedProps.examMunicipality;
+                            }
+                            if (existingCalendarEvent.extendedProps.examLocation) {
+                                event.extendedProps.examLocation = existingCalendarEvent.extendedProps.examLocation;
+                            }
+                            
+                            console.log(`✅ Merged ${existingCalendarEvents.length} duplicate CalendarEvents for ${key} - using ${mergedStudents.length} students`);
+                        } else {
+                            // Single existing event - merge normally
+                            const existingCalendarEvent = existingCalendarEvents[0];
+                            
+                            if (existingCalendarEvent.extendedProps?.students) {
+                                // Use the saved student list as the authoritative source
+                                const savedStudents = existingCalendarEvent.extendedProps.students || [];
+                                const savedStudentIds = new Set(
+                                    savedStudents.map(s => s._id?.toString()).filter(Boolean)
+                                );
+                                
+                                // Create a map of dynamically generated students by ID for merging
+                                const dynamicStudentsMap = new Map();
+                                if (event.extendedProps.students) {
+                                    event.extendedProps.students.forEach(student => {
+                                        const studentId = student._id?.toString();
+                                        if (studentId) {
+                                            dynamicStudentsMap.set(studentId, student);
+                                        }
+                                    });
+                                }
+                                
+                                // Merge: Use saved students as base, but update with latest data from dynamic students
+                                const mergedStudents = savedStudents.map(savedStudent => {
+                                    const studentId = savedStudent._id?.toString();
+                                    const dynamicStudent = dynamicStudentsMap.get(studentId);
+                                    
+                                    // If we have dynamic data for this student, merge it (preserve saved data but update with latest)
+                                    if (dynamicStudent) {
+                                        return {
+                                            ...savedStudent, // Keep saved data (attendance, etc.)
+                                            ...dynamicStudent, // Update with latest enrollment data
+                                            // Preserve manually set fields from saved event
+                                            attended: savedStudent.attended !== undefined ? savedStudent.attended : dynamicStudent.attended,
+                                            additionalInfo: savedStudent.additionalInfo || dynamicStudent.additionalInfo || "",
+                                        };
+                                    }
+                                    // If student is in saved event but not in dynamic (manually added?), keep them
+                                    return savedStudent;
+                                });
+                                
+                                // Replace the students array with the merged version
+                                event.extendedProps.students = mergedStudents;
+                                
+                                // Always use teacher name as title (not course name) - ensure consistency
+                                // Only use saved title if it's a teacher name, not a course name
+                                const savedTitle = existingCalendarEvent.title || "";
+                                if (savedTitle && !savedTitle.includes("Slutprov") && !savedTitle.includes(" - ")) {
+                                    // Saved title looks like a teacher name, use it
+                                    event.title = savedTitle;
+                                } else {
+                                    // Saved title has course name, use teacher name from event instead
+                                    event.title = event.extendedProps?.teacher || event.title;
+                                }
+                                
+                                // Also preserve other extendedProps from the saved event (like exam info)
+                                if (existingCalendarEvent.extendedProps.examTime) {
+                                    event.extendedProps.examTime = existingCalendarEvent.extendedProps.examTime;
+                                }
+                                if (existingCalendarEvent.extendedProps.examMunicipality) {
+                                    event.extendedProps.examMunicipality = existingCalendarEvent.extendedProps.examMunicipality;
+                                }
+                                if (existingCalendarEvent.extendedProps.examLocation) {
+                                    event.extendedProps.examLocation = existingCalendarEvent.extendedProps.examLocation;
+                                }
+                                
+                                console.log(`✅ Merged saved CalendarEvent for ${key} - using ${mergedStudents.length} students (${savedStudents.length} saved, ${dynamicStudentsMap.size} dynamic)`);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(`❌ Error checking existing CalendarEvent for key ${key}:`, err);
+                // Continue with dynamically generated event if check fails
+            }
+        }
+        
         // Final safety filter: Remove any dropout students from events' students arrays
         // This ensures that even if a student was added before being marked as dropout,
         // they will be filtered out when the events are returned
@@ -1409,10 +1775,172 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
             }
         }
         
-        res.json(Object.values(grouped));
+        // Final pass: Ensure all events use teacher name as title (not course name) and deduplicate
+        const finalEventsMap = new Map(); // teacherId_dateKey -> event
+        
+        Object.values(grouped).forEach(event => {
+            // Always use teacher name as title, never course name
+            if (event.extendedProps?.teacher) {
+                event.title = event.extendedProps.teacher;
+            } else if (event.title && (event.title.includes("Slutprov") || event.title.includes(" - "))) {
+                // Title has course name, but no teacher - use generic
+                event.title = "Okänd lärare";
+            }
+            
+            // Deduplicate by teacherId and date
+            const teacherId = event.extendedProps?.teacherId?._id?.toString() || 
+                            event.extendedProps?.teacherId?.toString() || 
+                            "no_teacher";
+            const dateKey = event.start;
+            const dedupKey = `${teacherId}_${dateKey}`;
+            
+            if (finalEventsMap.has(dedupKey)) {
+                // Merge students from duplicate events
+                const existingEvent = finalEventsMap.get(dedupKey);
+                if (!existingEvent.extendedProps.students) {
+                    existingEvent.extendedProps.students = [];
+                }
+                const existingStudentIds = new Set(
+                    existingEvent.extendedProps.students.map(s => s._id?.toString())
+                );
+                
+                // Add students from current event that aren't already in existing event
+                (event.extendedProps?.students || []).forEach(student => {
+                    const studentId = student._id?.toString();
+                    if (studentId && !existingStudentIds.has(studentId)) {
+                        existingEvent.extendedProps.students.push(student);
+                        existingStudentIds.add(studentId);
+                    }
+                });
+                
+                console.log(`🔀 Deduplicated event ${dedupKey} - merged ${event.extendedProps?.students?.length || 0} students into existing event`);
+            } else {
+                // Ensure students array exists
+                if (!event.extendedProps.students) {
+                    event.extendedProps.students = [];
+                }
+                finalEventsMap.set(dedupKey, event);
+            }
+        });
+        
+        const finalEvents = Array.from(finalEventsMap.values());
+        console.log(`📅 Returning ${finalEvents.length} deduplicated events (from ${Object.keys(grouped).length} grouped events)`);
+        
+        res.json(finalEvents);
     } catch (err) {
         console.error("❌ Fel vid synk:", err.message, err.stack);
         res.status(500).json({ error: "Kunde inte hämta synkade events." });
+    }
+});
+
+// POST: Cleanup and fix calendar event titles (use teacher names instead of course names)
+router.post("/calendar-events/fix-titles", authenticateUser, async (req, res) => {
+    try {
+        if (req.user.role !== "admin" && req.user.role !== "systemadmin") {
+            return res.status(403).json({ error: "Only admins can fix event titles" });
+        }
+
+        const { default: CalendarEvent } = await import("../models/CalendarEvent.js");
+        const { default: Teacher } = await import("../models/Teacher.js");
+
+        // Find all calendar events with "slutprov" or "exam" type
+        const events = await CalendarEvent.find({
+            $or: [
+                { "extendedProps.type": "slutprov" },
+                { "extendedProps.type": "exam" }
+            ]
+        });
+
+        let fixed = 0;
+        let deleted = 0;
+        const eventsByKey = new Map(); // teacherId_dateKey -> events
+
+        // Group events by teacherId and date
+        for (const event of events) {
+            const teacherId = event.extendedProps?.teacherId;
+            const startDate = new Date(event.start);
+            const dateKey = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+            
+            if (teacherId) {
+                const key = `${teacherId}_${dateKey}`;
+                if (!eventsByKey.has(key)) {
+                    eventsByKey.set(key, []);
+                }
+                eventsByKey.get(key).push(event);
+            }
+        }
+
+        // For each group, merge duplicates and fix titles
+        for (const [key, duplicateEvents] of eventsByKey.entries()) {
+            if (duplicateEvents.length > 1) {
+                // Keep the first one, merge students, delete others
+                const baseEvent = duplicateEvents[0];
+                const allStudents = new Map();
+                
+                duplicateEvents.forEach(dupEvent => {
+                    if (dupEvent.extendedProps?.students) {
+                        dupEvent.extendedProps.students.forEach(student => {
+                            const studentId = student._id?.toString();
+                            if (studentId && !allStudents.has(studentId)) {
+                                allStudents.set(studentId, student);
+                            }
+                        });
+                    }
+                });
+
+                baseEvent.extendedProps.students = Array.from(allStudents.values());
+                
+                // Fix title to use teacher name
+                if (baseEvent.extendedProps?.teacher) {
+                    baseEvent.title = baseEvent.extendedProps.teacher;
+                } else {
+                    // Try to get teacher name from Teacher model
+                    const teacher = await Teacher.findById(baseEvent.extendedProps?.teacherId).populate("userId", "username");
+                    if (teacher && teacher.userId) {
+                        baseEvent.title = teacher.userId.username;
+                        baseEvent.extendedProps.teacher = teacher.userId.username;
+                    }
+                }
+                
+                await baseEvent.save();
+                fixed++;
+
+                // Delete duplicates
+                for (let i = 1; i < duplicateEvents.length; i++) {
+                    await CalendarEvent.findByIdAndDelete(duplicateEvents[i]._id);
+                    deleted++;
+                }
+            } else if (duplicateEvents.length === 1) {
+                // Fix title for single event
+                const event = duplicateEvents[0];
+                const oldTitle = event.title;
+                
+                if (event.extendedProps?.teacher) {
+                    event.title = event.extendedProps.teacher;
+                } else {
+                    // Try to get teacher name from Teacher model
+                    const teacher = await Teacher.findById(event.extendedProps?.teacherId).populate("userId", "username");
+                    if (teacher && teacher.userId) {
+                        event.title = teacher.userId.username;
+                        event.extendedProps.teacher = teacher.userId.username;
+                    }
+                }
+                
+                if (event.title !== oldTitle) {
+                    await event.save();
+                    fixed++;
+                }
+            }
+        }
+
+        res.json({ 
+            message: `Fixed ${fixed} event(s) and deleted ${deleted} duplicate(s)`,
+            fixed,
+            deleted
+        });
+    } catch (err) {
+        console.error("❌ Error fixing event titles:", err);
+        res.status(500).json({ error: "Kunde inte fixa event-titlar" });
     }
 });
 

@@ -192,9 +192,9 @@ export default {
         ]);
 
         const allEvents = [
-          // Filter out old "slutprov" type events - these should come from syncable instead
+          // Filter out "slutprov" and "exam" type events - these should come from syncable instead
           ...savedEvents.data
-            .filter(event => event.extendedProps?.type !== 'slutprov')
+            .filter(event => event.extendedProps?.type !== 'slutprov' && event.extendedProps?.type !== 'exam')
             .map(event => ({
               id: event._id,
               title: event.title,

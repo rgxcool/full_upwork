@@ -179,8 +179,12 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
       student: enrollment.studentId,
       courseInstance: enrollment.courseInstanceId,
       endDate: enrollment.endDate,
-      grade: enrollment.grade,
-      enrollmentId: enrollment._id,
+      grade: enrollment.grade || null,
+      reason: enrollment.motivation || '', // Map motivation to reason for frontend
+      comments: enrollment.comments || '',
+      locked: enrollment.isGradeLocked || false,
+      enrollmentId: enrollment._id.toString(),
+      source: 'enrollment',
     }));
 
     // Also include students from Student.education entries (older data path)
