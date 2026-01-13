@@ -1,5 +1,6 @@
 import { Router } from "express";
 const router = Router();
+import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import { authenticateUser } from "../controllers/authController.js";
 import Notification from "../models/Notification.js";
@@ -8,6 +9,8 @@ import Program from "../models/Program.js";
 import CoursePackage from "../models/CoursePackage.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
+import Teacher from "../models/Teacher.js";
+import ExamAttendance from "../models/ExamAttendance.js";
 
 import {
   createNotification,
@@ -161,21 +164,129 @@ router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
 router.get('/students-to-grade', authenticateUser, async (req, res) => {
   try {
     const now = new Date();
+    const user = req.user;
+    const isAdmin = user.role === 'admin' || user.role === 'systemadmin';
+    
+    let teacherId = null;
+    let teacherFilter = null;
+
+    // If user is a teacher, get their Teacher record and set up filtering
+    if (!isAdmin && user.role === 'teacher') {
+      const teacher = await Teacher.findOne({ userId: user.userId });
+      if (!teacher) {
+        return res.status(403).json({ error: 'Teacher profile not found' });
+      }
+      teacherId = teacher._id;
+      teacherFilter = teacherId;
+    }
 
     // Find enrollments that have passed end date and are not graded
-    const enrollments = await StudentEnrollment.find({
+    let enrollmentQuery = {
       endDate: { $lt: now },
       $or: [{ grade: null }, { grade: "" }],
       status: { $in: ["enrolled", "active", "completed"] }
-    })
-      .populate("studentId")
+    };
+
+    // If teacher, we'll filter after populating to check relationships
+    const enrollments = await StudentEnrollment.find(enrollmentQuery)
+      .populate({
+        path: "studentId",
+        populate: {
+          path: "teacherId",
+          populate: { path: "userId", select: "username email" },
+          select: "userId subject"
+        }
+      })
       .populate({
         path: "courseInstanceId",
-        populate: { path: "mainCourseId", select: "courseName courseCode" }
-      });
+        populate: [
+          { path: "mainCourseId", select: "courseName courseCode" },
+          {
+            path: "responsibleTeacher",
+            populate: { path: "userId", select: "username email" },
+            select: "userId subject"
+          }
+        ]
+      })
+      .lean();
+
+    // Filter enrollments based on teacher access if not admin
+    let filteredEnrollments = enrollments;
+    if (!isAdmin && teacherFilter) {
+      filteredEnrollments = [];
+      
+      // Get all student IDs and course IDs for batch exam checking
+      const studentIds = new Set();
+      const courseIds = new Set();
+      const enrollmentChecks = [];
+      
+      for (const enrollment of enrollments) {
+        const student = enrollment.studentId;
+        const courseInstance = enrollment.courseInstanceId;
+        
+        // Check if teacher is responsible for student
+        const studentTeacherId = student?.teacherId?._id?.toString() || student?.teacherId?.toString();
+        const isResponsibleTeacher = studentTeacherId === teacherFilter.toString();
+        
+        // Check if teacher is responsible for course instance
+        const courseInstanceTeacherId = courseInstance?.responsibleTeacher?._id?.toString() || 
+                                       courseInstance?.responsibleTeacher?.toString();
+        const isCourseInstanceTeacher = courseInstanceTeacherId === teacherFilter.toString();
+        
+        if (isResponsibleTeacher) {
+          // Teacher is responsible - include this student
+          filteredEnrollments.push(enrollment);
+        } else if (isCourseInstanceTeacher) {
+          // Need to check if student has done exams
+          const courseId = courseInstance?.mainCourseId?._id || courseInstance?.mainCourseId;
+          if (courseId && student?._id) {
+            studentIds.add(student._id.toString());
+            courseIds.add(courseId.toString());
+            enrollmentChecks.push({ enrollment, studentId: student._id.toString(), courseId: courseId.toString() });
+          }
+        }
+      }
+      
+      // Batch check for exams if needed
+      if (enrollmentChecks.length > 0) {
+        const examAttendances = await ExamAttendance.find({
+          studentId: { $in: Array.from(studentIds).map(id => new mongoose.Types.ObjectId(id)) },
+          courseId: { $in: Array.from(courseIds).map(id => new mongoose.Types.ObjectId(id)) },
+          teacherId: teacherFilter
+        }).lean();
+        
+        // Create a set of student-course combinations that have exams
+        const examSet = new Set();
+        examAttendances.forEach(exam => {
+          examSet.add(`${exam.studentId.toString()}-${exam.courseId?.toString()}`);
+        });
+        
+        // Also check student examHistory in batch
+        const studentsWithHistory = await Student.find({
+          _id: { $in: Array.from(studentIds).map(id => new mongoose.Types.ObjectId(id)) }
+        }).select('_id examHistory').lean();
+        
+        studentsWithHistory.forEach(student => {
+          if (student.examHistory) {
+            student.examHistory.forEach(exam => {
+              if (exam.teacherId?.toString() === teacherFilter.toString() && exam.courseId) {
+                examSet.add(`${student._id.toString()}-${exam.courseId.toString()}`);
+              }
+            });
+          }
+        });
+        
+        // Filter enrollments based on exam checks
+        enrollmentChecks.forEach(({ enrollment, studentId, courseId }) => {
+          if (examSet.has(`${studentId}-${courseId}`)) {
+            filteredEnrollments.push(enrollment);
+          }
+        });
+      }
+    }
 
     // Format for frontend (from StudentEnrollment)
-    const studentsFromEnrollments = enrollments.map(enrollment => ({
+    const studentsFromEnrollments = filteredEnrollments.map(enrollment => ({
       student: enrollment.studentId,
       courseInstance: enrollment.courseInstanceId,
       endDate: enrollment.endDate,
@@ -188,7 +299,7 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
     }));
 
     // Also include students from Student.education entries (older data path)
-    const studentsWithPastEducation = await Student.find({
+    let studentEducationQuery = {
       education: {
         $elemMatch: {
           removedAt: null,
@@ -196,14 +307,103 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
           $or: [{ grade: null }, { grade: "" }],
         },
       },
-    }).lean();
+    };
+
+    // For teachers, we need to check both responsible students AND students in their courses with exams
+    // So we'll fetch all matching students and filter after
+    const studentsWithPastEducation = await Student.find(studentEducationQuery).lean();
 
     const studentsFromEducation = [];
+    
+    // Batch check for course instances and exams if teacher
+    let courseInstanceMap = new Map();
+    let examCheckMap = new Map();
+    
+    if (!isAdmin && teacherFilter) {
+      // Get all unique course IDs from education entries
+      const courseIds = new Set();
+      const studentCoursePairs = [];
+      
+      for (const s of studentsWithPastEducation) {
+        for (const edu of (s.education || [])) {
+          if (!edu || edu.removedAt) continue;
+          if (!edu.endDate || edu.endDate >= now) continue;
+          if (edu.grade && edu.grade !== "") continue;
+          if (edu.refId) {
+            courseIds.add(edu.refId.toString());
+            studentCoursePairs.push({ studentId: s._id.toString(), courseId: edu.refId.toString() });
+          }
+        }
+      }
+      
+      // Batch fetch course instances
+      if (courseIds.size > 0) {
+        const courseInstances = await CourseInstance.find({
+          mainCourseId: { $in: Array.from(courseIds).map(id => new mongoose.Types.ObjectId(id)) },
+          responsibleTeacher: teacherFilter
+        }).lean();
+        
+        courseInstances.forEach(ci => {
+          const key = ci.mainCourseId.toString();
+          if (!courseInstanceMap.has(key)) {
+            courseInstanceMap.set(key, []);
+          }
+          courseInstanceMap.get(key).push(ci);
+        });
+      }
+      
+      // Batch fetch exam attendances
+      const studentIds = Array.from(new Set(studentsWithPastEducation.map(s => s._id.toString())));
+      if (studentIds.length > 0 && courseIds.size > 0) {
+        const examAttendances = await ExamAttendance.find({
+          studentId: { $in: studentIds.map(id => new mongoose.Types.ObjectId(id)) },
+          courseId: { $in: Array.from(courseIds).map(id => new mongoose.Types.ObjectId(id)) },
+          teacherId: teacherFilter
+        }).lean();
+        
+        examAttendances.forEach(exam => {
+          const key = `${exam.studentId.toString()}-${exam.courseId?.toString()}`;
+          examCheckMap.set(key, true);
+        });
+      }
+    }
+    
     for (const s of studentsWithPastEducation) {
+      const studentTeacherMatches = !isAdmin && teacherFilter 
+        ? s.teacherId?.toString() === teacherFilter.toString() 
+        : true; // Admins see all
+      
       for (const edu of (s.education || [])) {
         if (!edu || edu.removedAt) continue;
         if (!edu.endDate || edu.endDate >= now) continue;
         if (edu.grade && edu.grade !== "") continue;
+
+        // For teacher filtering
+        if (!isAdmin && teacherFilter) {
+          if (!studentTeacherMatches && edu.refId) {
+            // Check if there's a course instance with this teacher
+            const courseInstances = courseInstanceMap.get(edu.refId.toString());
+            if (!courseInstances || courseInstances.length === 0) {
+              // No course instance with this teacher, skip
+              continue;
+            }
+            
+            // Check if student has done exams for this course with this teacher
+            const examKey = `${s._id.toString()}-${edu.refId.toString()}`;
+            const hasExam = examCheckMap.has(examKey);
+            
+            // Also check student's examHistory
+            const hasExamInHistory = s.examHistory?.some(exam => 
+              exam.teacherId?.toString() === teacherFilter.toString() &&
+              exam.courseId?.toString() === edu.refId.toString()
+            );
+            
+            if (!hasExam && !hasExamInHistory) {
+              // Student hasn't done exams, skip this education entry
+              continue;
+            }
+          }
+        }
 
         studentsFromEducation.push({
           student: { _id: s._id, name: s.name, email: s.email },

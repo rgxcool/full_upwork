@@ -83,6 +83,15 @@ export default {
         return;
       }
       
+      // Redirect Kursinstans/CourseInstance type to education view
+      if (route.params.type === 'Kursinstans' || route.params.type === 'CourseInstance') {
+        router.replace({
+          path: `/education/${route.params.id}`,
+          query: { ...route.query, type: 'instance' }
+        });
+        return;
+      }
+      
       fetchData().then(() => {
         if (route.query.showActionPlan === 'true') {
           activeTab.value = "Handlingsplan"
@@ -100,6 +109,16 @@ export default {
         });
         return;
       }
+      
+      // Redirect Kursinstans/CourseInstance type to education view
+      if (newParams.type === 'Kursinstans' || newParams.type === 'CourseInstance') {
+        router.replace({
+          path: `/education/${newParams.id}`,
+          query: { ...route.query, type: 'instance' }
+        });
+        return;
+      }
+      
       fetchData();
     }, { deep: true });
 
