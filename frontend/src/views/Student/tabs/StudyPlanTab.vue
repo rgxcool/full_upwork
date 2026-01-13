@@ -39,18 +39,21 @@
                   <span class="education-type" :class="element.type === 'CoursePackage' ? 'type-package' : 'type-course'">
                     {{ element.type === 'CoursePackage' ? 'Kurspaket' : 'Kurs' }}
                   </span>
-                  <span v-if="element.isEnrollment" class="enrollment-badge">Inskriven</span>
+                  <span v-if="element.isEnrollment" class="enrollment-badge">{{ getStatusLabel(element.status || 'enrolled') }}</span>
                   <span v-if="element.type === 'Course' && (element.courseInstanceId || element.refId?._id)" class="education-name">
                     <router-link 
                       :to="getCourseLink(element)" 
                       class="course-link"
                       @click.stop
                     >
-                      {{ getEducationName(element) }}
+                      {{ getEducationName(element) }}<span v-if="getCourseInstanceCode(element)"> - {{ getCourseInstanceCode(element) }}</span>
                     </router-link>
                   </span>
                   <span v-else class="education-name">
                     {{ getEducationName(element) }}
+                  </span>
+                  <span v-if="element.startDate && element.endDate" class="education-period">
+                    Period: {{ formatDateISO(element.startDate) }} - {{ formatDateISO(element.endDate) }}
                   </span>
                 </div>
 
@@ -58,11 +61,6 @@
                   <!-- Teacher Information -->
                   <div v-if="getTeacherName(element)" class="education-teacher">
                     <strong>Lärare:</strong> {{ getTeacherName(element) }}
-                  </div>
-
-                  <!-- Dates -->
-                  <div v-if="element.startDate && element.endDate" class="education-dates">
-                    <strong>Period:</strong> {{ formatDate(element.startDate) }} - {{ formatDate(element.endDate) }}
                   </div>
 
                   <!-- Status Dropdown (only for enrollments) -->
@@ -247,16 +245,40 @@ export default {
       return new Date(date).toLocaleDateString('sv-SE');
     };
 
-    const getCourseLink = (edu) => {
-      // Always prefer linking to the main course to show all enrolled students
-      // This ensures consistency - clicking a course name shows all students in that course
-      // regardless of which course instance they're enrolled in
-      if (edu.refId?._id) {
-        return `/education/${edu.refId._id}`;
+    const formatDateISO = (date) => {
+      if (!date) return '';
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const getCourseInstanceCode = (edu) => {
+      // Get course instance code if available
+      if (edu.courseInstance?.courseCode) {
+        return edu.courseInstance.courseCode;
       }
-      // Fallback: if no main course ID, try course instance (shouldn't happen normally)
+      if (edu.courseInstanceId && typeof edu.courseInstanceId === 'object' && edu.courseInstanceId.courseCode) {
+        return edu.courseInstanceId.courseCode;
+      }
+      return null;
+    };
+
+    const getCourseLink = (edu) => {
+      // Students are enrolled in CourseInstances, not Courses
+      // Courses are only templates - always link to the CourseInstance
       if (edu.courseInstanceId) {
-        return `/education/${edu.courseInstanceId}?type=instance`;
+        const instanceId = typeof edu.courseInstanceId === 'object' 
+          ? edu.courseInstanceId._id || edu.courseInstanceId 
+          : edu.courseInstanceId;
+        return `/education/${instanceId}?type=instance`;
+      }
+      // Fallback: if no course instance ID, try refId (shouldn't happen for enrollments)
+      if (edu.refId?._id) {
+        // This is a legacy case - should not happen for new enrollments
+        console.warn('Linking to Course instead of CourseInstance - this should not happen for enrollments');
+        return `/education/${edu.refId._id}`;
       }
       // Fallback to empty string if no ID available
       return '#';
@@ -350,6 +372,8 @@ export default {
       handleEducationReorder,
       getEducationName,
       formatDate,
+      formatDateISO,
+      getCourseInstanceCode,
       getCourseLink,
       getTeacherName,
       getStatusLabel,
@@ -397,6 +421,7 @@ export default {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
 }
 .education-type {
   background: #007bff;
@@ -404,6 +429,11 @@ export default {
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 12px;
+}
+.education-period {
+  margin-left: auto;
+  color: #6c757d;
+  font-size: 14px;
 }
 
 .type-package {

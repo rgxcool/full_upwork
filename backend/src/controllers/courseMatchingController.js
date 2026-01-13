@@ -1939,11 +1939,29 @@ export const updateCourseInstance = async (req, res) => {
             throw error;
         }
         
-        res.json({
-            success: true,
-            message: "Course instance updated successfully",
-            instance: updatedInstance,
-        });
+        // If slutprovDate was updated, sync calendar events for all enrollments
+        if (slutprovDateExplicitlySet && finalSlutprovDate) {
+            try {
+                const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
+                const { syncCalendarEventFromEnrollment } = await import("../utils/calendarEventSync.js");
+                
+                // Find all enrollments for this course instance
+                const enrollments = await StudentEnrollment.find({
+                    courseInstanceId: instanceId
+                });
+                
+                // Update enrollments with the new slutprovDate
+                for (const enrollment of enrollments) {
+                    enrollment.slutprovDate = finalSlutprovDate;
+                    await enrollment.save(); // This will trigger calendar sync via post-save hook
+                }
+                
+                console.log(`📅 Synced calendar events for ${enrollments.length} enrollments after course instance update`);
+            } catch (calendarError) {
+                console.error(`❌ Error syncing calendar events after course instance update:`, calendarError);
+                // Don't fail the request if calendar sync fails
+            }
+        }
 
         res.json({
             success: true,
