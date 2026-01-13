@@ -32,10 +32,11 @@ import AccountTab from "@/views/Admin/SearchTabs/AccountTab.vue";
 import StudyPlan from "@/views/Admin/SearchTabs/StudyPlan.vue";
 import DocumentSection from "@/views/Admin/SearchTabs/DocumentSection.vue";
 import ActionPlanTab from "@/views/Admin/SearchTabs/ActionPlanTab.vue";
+import StudentsTab from "@/views/Admin/SearchTabs/StudentsTab.vue";
 
 
 export default {
-  components: { AccountTab, StudyPlan, DocumentSection },
+  components: { AccountTab, StudyPlan, DocumentSection, StudentsTab },
   setup() {
     const route = useRoute();
     const router = useRouter();
@@ -50,6 +51,11 @@ export default {
 
       if (hasLockedF) {
         baseTabs.push("Handlingsplan");
+      }
+
+      // Add "Elever" tab for teachers
+      if (route.params.type === 'Lärare' || route.params.type === 'teacher') {
+        baseTabs.push("Elever");
       }
 
       return baseTabs;
@@ -129,6 +135,7 @@ export default {
         case "Studieplan": return StudyPlan;
         case "Dokument": return DocumentSection;
         case "Handlingsplan": return ActionPlanTab;
+        case "Elever": return StudentsTab;
         default: return AccountTab;
       }
     });
