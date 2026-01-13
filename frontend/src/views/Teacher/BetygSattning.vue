@@ -16,11 +16,24 @@
         disable-sort
       >
         <template #item.name="{ item }">
-          {{ item.student.name }}
+          <router-link :to="`/student/${item.student._id}`" class="student-link">
+            {{ item.student.name }}
+          </router-link>
         </template>
 
         <template #item.courseCode="{ item }">
-          {{ item.course.courseCode || '-' }}
+          <router-link 
+            v-if="item.course.courseInstanceId" 
+            :to="`/education/${item.course.courseInstanceId}?type=instance`" 
+            class="course-link"
+          >
+            {{ item.course.courseCode || '-' }}
+          </router-link>
+          <span v-else>{{ item.course.courseCode || '-' }}</span>
+        </template>
+
+        <template #item.teacher="{ item }">
+          {{ getTeacherName(item.course, item.student) }}
         </template>
 
         <template #item.grade="{ item }">
@@ -80,8 +93,10 @@
   import { ref, onMounted, computed } from 'vue'
   import axios from 'axios'
   import { useStore } from 'vuex'
+  import { useRouter } from 'vue-router'
 
   const store = useStore()
+  const router = useRouter()
   const isAdmin = computed(() => store.getters.isAdmin)
   const studentsToGrade = ref([])
   const grades = ['A', 'B', 'C', 'D', 'E', 'F']
@@ -89,6 +104,7 @@
   const headers = [
     { title: 'Elev', key: 'name', sortable: false },
     { title: 'Kurs', key: 'courseCode', sortable: false },
+    { title: 'Lärare', key: 'teacher', sortable: false },
     { title: 'Betyg', key: 'grade', sortable: false },
     { title: 'Motivering', key: 'reason', sortable: false },
     { title: 'Kommentar', key: 'comments', sortable: false },
@@ -102,6 +118,8 @@
         student,
         course,
         id: `${student._id}-${course.refId}`,
+        // Include student's teacherId for fallback teacher name
+        studentTeacherId: student.teacherId
       }))
     )
   )
@@ -133,6 +151,7 @@
             _id: studentId,
             name: item.student?.name || 'Okänd elev',
             email: item.student?.email || '',
+            teacherId: item.student?.teacherId || null, // Include teacherId for fallback
             coursesToGrade: []
           })
         }
@@ -155,10 +174,24 @@
             courseId = courseInstance.mainCourseId?.toString() || courseInstance.mainCourseId
           }
           
+          // Extract teacher information
+          const responsibleTeacher = courseInstance.responsibleTeacher
+          let teacherName = 'Ej tilldelad'
+          if (responsibleTeacher) {
+            if (responsibleTeacher.userId?.username) {
+              teacherName = responsibleTeacher.userId.username
+            } else if (responsibleTeacher.userId && typeof responsibleTeacher.userId === 'object' && responsibleTeacher.userId.username) {
+              teacherName = responsibleTeacher.userId.username
+            }
+          }
+          
           courseData = {
             refId: courseId,
             courseCode: courseInstance.courseCode || mainCourse?.courseCode || '-',
             courseName: courseInstance.courseName || mainCourse?.courseName || 'Okänd kurs',
+            courseInstanceId: courseInstance._id?.toString() || courseInstance._id,
+            responsibleTeacher: responsibleTeacher,
+            teacherName: teacherName,
             grade: item.grade || '',
             reason: item.reason || '',
             comments: item.comments || '',
@@ -211,6 +244,35 @@
 
   const shouldShowCourse = (course, student) => {
     return true
+  }
+
+  const getTeacherName = (course, student) => {
+    // For enrollment-based courses, use the teacherName we extracted
+    if (course.teacherName) {
+      return course.teacherName
+    }
+    
+    // Fallback: try to extract from responsibleTeacher if available
+    if (course.responsibleTeacher) {
+      const teacher = course.responsibleTeacher
+      if (teacher.userId?.username) {
+        return teacher.userId.username
+      } else if (teacher.userId && typeof teacher.userId === 'object' && teacher.userId.username) {
+        return teacher.userId.username
+      }
+    }
+    
+    // For legacy entries, try to get from student's teacherId
+    if (student?.teacherId) {
+      const teacher = student.teacherId
+      if (teacher.userId?.username) {
+        return teacher.userId.username
+      } else if (teacher.userId && typeof teacher.userId === 'object' && teacher.userId.username) {
+        return teacher.userId.username
+      }
+    }
+    
+    return 'Ej tilldelad'
   }
 
   const saveGrade = async (studentId, course) => {
@@ -442,5 +504,19 @@
     visibility: visible !important;
     opacity: 1 !important;
     background-color: #f5f5f5 !important;
+  }
+
+  .student-link,
+  .course-link {
+    color: #1976d2;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .student-link:hover,
+  .course-link:hover {
+    color: #1565c0;
+    text-decoration: underline;
   }
 </style>

@@ -102,6 +102,16 @@ const routes = [
       }
     }
   },
+  // Redirect /detaljer/Kursinstans/:id to /education/:id?type=instance
+  {
+    path: '/detaljer/Kursinstans/:id',
+    redirect: (to) => {
+      return {
+        path: `/education/${to.params.id}`,
+        query: { ...to.query, type: 'instance' }
+      }
+    }
+  },
   {
     path: '/detaljer/:type/:id',
     component: SearchResultDetails,
@@ -113,6 +123,12 @@ const routes = [
         next({
           path: `/student/${to.params.id}`,
           query: to.query
+        })
+      } else if (to.params.type === 'Kursinstans' || to.params.type === 'CourseInstance') {
+        // Redirect Kursinstans to education view
+        next({
+          path: `/education/${to.params.id}`,
+          query: { ...to.query, type: 'instance' }
         })
       } else {
         next()
