@@ -11,7 +11,7 @@
       <v-data-table
         :headers="headers"
         :items="formattedRows"
-        class="elevation-1"
+        class="elevation-1 grade-table"
         item-value="id"
         disable-sort
       >
@@ -87,13 +87,13 @@
   const grades = ['A', 'B', 'C', 'D', 'E', 'F']
 
   const headers = [
-    { text: 'Elev', value: 'name' },
-    { text: 'Kurs', value: 'courseCode' },
-    { text: 'Betyg', value: 'grade' },
-    { text: 'Motivering', value: 'reason' },
-    { text: 'Kommentar', value: 'comments' },
-    { text: 'Spara', value: 'save', sortable: false },
-    { text: 'Lås', value: 'lock', sortable: false },
+    { title: 'Elev', key: 'name', sortable: false },
+    { title: 'Kurs', key: 'courseCode', sortable: false },
+    { title: 'Betyg', key: 'grade', sortable: false },
+    { title: 'Motivering', key: 'reason', sortable: false },
+    { title: 'Kommentar', key: 'comments', sortable: false },
+    { title: 'Spara', key: 'save', sortable: false },
+    { title: 'Lås', key: 'lock', sortable: false },
   ]
 
   const formattedRows = computed(() =>
@@ -374,5 +374,56 @@
   tr.locked-row {
     background-color: #f0f0f0;
     opacity: 0.7;
+  }
+
+  /* Ensure table headers are visible and black - Vuetify 3 */
+  :deep(.grade-table) {
+    border-collapse: separate;
+  }
+
+  :deep(.grade-table .v-data-table__thead) {
+    background-color: #f5f5f5 !important;
+    display: table-header-group !important;
+    visibility: visible !important;
+  }
+
+  :deep(.grade-table .v-data-table__thead tr) {
+    display: table-row !important;
+  }
+
+  :deep(.grade-table .v-data-table__thead th) {
+    color: #000000 !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    background-color: #f5f5f5 !important;
+    border-bottom: 2px solid #dee2e6 !important;
+    padding: 12px 16px !important;
+    display: table-cell !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  :deep(.grade-table .v-data-table-header__content) {
+    color: #000000 !important;
+    font-weight: 600 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  :deep(.grade-table .v-data-table-header__title) {
+    color: #000000 !important;
+    font-weight: 600 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Fallback for any th elements */
+  :deep(.grade-table th) {
+    color: #000000 !important;
+    font-weight: 600 !important;
+    display: table-cell !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: #f5f5f5 !important;
   }
 </style>

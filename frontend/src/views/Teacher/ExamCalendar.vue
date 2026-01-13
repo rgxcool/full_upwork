@@ -3,23 +3,12 @@
     <div class="calendar-container">
       <div class="main-calendar">
         <div v-if="canBookEvent" class="admin-controls mb-3">
-          <button v-if="isAdminOrTeacher" @click="openAddEventModal('exam')">
-            📘 Lägg till slutprov
-          </button>
           <button v-if="isSYVOrSpecped || isAdmin" @click="openAddEventModal('meeting')">
             🗓️ Lägg till möte
           </button>
         </div>
 
         <FullCalendar ref="fullCalendar" :options="calendarOptions" />
-
-        <AddEventModal
-          v-if="showAddEventModal && eventType === 'exam'"
-          :teachers="teachers"
-          @close="closeModal"
-          @event-added="addEventToCalendar"
-          @update="handleExamUpdate"
-        />
 
         <AddMeetingModal
           v-if="showAddEventModal && eventType === 'meeting'"
@@ -52,12 +41,11 @@ import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import EventModal from '../Modals/EventModal.vue'; 
-import AddEventModal from '../Modals/AddEventModal.vue';
 import AddMeetingModal from '../Modals/AddMeetingModal.vue';
 import MeetingModal from '../Modals/MeetingModal.vue';
 
 export default {
-  components: { FullCalendar, EventModal, AddEventModal, AddMeetingModal, MeetingModal },
+  components: { FullCalendar, EventModal, AddMeetingModal, MeetingModal },
 
   data() {
     return {
@@ -65,8 +53,6 @@ export default {
       selectedEvent: null,
       showAddEventModal: false,
       eventType: null,
-      teachers: [],
-      currentTeacherId: null,
       calendarOptions: {
         plugins: [dayGridPlugin, interactionPlugin],
         initialView: 'dayGridMonth',
@@ -131,69 +117,66 @@ export default {
       this.selectedEvent = null
       this.eventType = type;
       this.showAddEventModal = true;
-
-      if (type === 'exam') {
-        this.fetchTeachers();
-      }
     },
     closeModal() {
       this.showAddEventModal = false;
       this.eventType = null;
     },
-    async fetchTeachers() {
-      try {
-        const { api } = await import('@/store/store.js')
-        const res = await api.get('/teachers', { withCredentials: true });
-        this.teachers = res.data
-          .filter(t => t.userId && t.userId.username)
-          .map(t => ({
-            id: t._id,
-            name: t.userId?.username || "Okänd",
-            color: t.colorCode,
-            subject: t.subject
-          }));
-
-        // If user is a teacher, find their teacher ID
-        if (this.userRole === "teacher") {
-          const currentUserId = this.$store.state.user?.userId;
-          const teacher = res.data.find(t => t.userId?._id?.toString() === currentUserId?.toString() || 
-                                            t.userId?.toString() === currentUserId?.toString());
-          if (teacher) {
-            this.currentTeacherId = teacher._id.toString();
-          }
-        }
-      } catch (err) {
-        console.error("❌ Kunde inte hämta lärare:", err);
-      }
-    },
-    addEventToCalendar(event) {
+    addEventToCalendar(meeting) {
       const calendarApi = this.$refs.fullCalendar.getApi();
-      const isMeeting = this.eventType === 'meeting';
 
-      // Use the title from the event (set by AddMeetingModal) instead of overriding it
-      const title = event.title || (isMeeting 
-        ? (event.extendedProps?.studentName ? `Möte, ${event.extendedProps.studentName}` : 'Möte')
-        : (event.extendedProps?.teacher || 'Okänd lärare'));
+      // Format the meeting data similar to how it's done in fetchEvents
+      const studentName = meeting.student?.name || 'Okänd';
+      let displayTitle = meeting.title || 'Möte';
+      
+      // Format title based on bookedBy and student name (matching fetchEvents logic)
+      if (!displayTitle || displayTitle === 'Möte') {
+        const roleLabel = meeting.bookedBy === 'syv' ? 'Syv' : 
+                        meeting.bookedBy === 'specped' ? 'Specped' : '';
+        displayTitle = roleLabel ? `${roleLabel}, ${studentName}` : `Möte, ${studentName}`;
+      } else if (displayTitle.startsWith('Möte,')) {
+        // Already in "Möte, Student name" format - keep it
+        displayTitle = displayTitle;
+      } else if (!displayTitle.includes(studentName)) {
+        // Title doesn't contain student name, format as "Role, Student name"
+        const roleLabel = meeting.bookedBy === 'syv' ? 'Syv' : 
+                        meeting.bookedBy === 'specped' ? 'Specped' : '';
+        displayTitle = roleLabel ? `${roleLabel}, ${studentName}` : `Möte, ${studentName}`;
+      }
+      
+      // Extract createdBy username
+      const createdByUsername = meeting.createdBy?.username || 
+                                meeting.createdBy?.email || 
+                                (typeof meeting.createdBy === 'string' ? null : null);
 
-      calendarApi.addEvent({
-        ...event,
-        title,
-        allDay: isMeeting ? false : true,
-        color: event.extendedProps?.teacherId?.colorCode || event.color || '#999999',
+      // Create properly formatted event matching fetchEvents format
+      const formattedEvent = {
+        id: meeting._id,
+        title: displayTitle,
+        start: meeting.start,
+        allDay: false,
+        editable: true,
+        color: '#999999',
         extendedProps: {
-          ...event.extendedProps, // This already includes studentId from AddMeetingModal
-          students: event.extendedProps?.students || [],
-          isMeeting: this.eventType === 'meeting',
-          isExam: this.eventType === 'exam',
-          role: this.userRole,
-          examTime: event.extendedProps?.examTime,
-          examMunicipality: event.extendedProps?.examMunicipality,
-          examLocation: event.extendedProps?.examLocation,
-          type: this.eventType === 'exam' ? 'exam' : 'general',
+          isMeeting: true,
+          studentName: studentName,
+          studentId: meeting.student?.id || meeting.student?._id || null,
+          personalNumber: meeting.student?.personalNumber || '',
+          location: meeting.location || '',
+          bookedBy: meeting.bookedBy || '',
+          createdBy: meeting.createdBy?._id || meeting.createdBy,
+          createdByUsername: createdByUsername,
+          originalTitle: meeting.title,
+          _id: meeting._id // Ensure _id is available for deletion
         }
-      });
+      };
 
+      calendarApi.addEvent(formattedEvent);
       this.closeModal();
+      
+      // Refresh events to ensure proper formatting and all data is synced
+      // This ensures the event has all populated fields (like createdBy) and is immediately deletable
+      await this.fetchEvents();
     },
     changeView(view) {
       const calendarApi = this.$refs.fullCalendar.getApi();
@@ -434,7 +417,21 @@ export default {
     }, 
   },
   async mounted() {
-    await this.fetchTeachers();
+    // Get current teacher ID if user is a teacher (for filtering editable events)
+    if (this.userRole === "teacher") {
+      try {
+        const { api } = await import('@/store/store.js')
+        const res = await api.get('/teachers', { withCredentials: true });
+        const currentUserId = this.$store.state.user?.userId;
+        const teacher = res.data.find(t => t.userId?._id?.toString() === currentUserId?.toString() || 
+                                          t.userId?.toString() === currentUserId?.toString());
+        if (teacher) {
+          this.currentTeacherId = teacher._id.toString();
+        }
+      } catch (err) {
+        console.error("❌ Kunde inte hämta lärare:", err);
+      }
+    }
     await this.fetchEvents();
   }
 };
