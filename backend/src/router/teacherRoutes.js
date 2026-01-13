@@ -102,6 +102,29 @@ router.get(
 );
 
 
+// Get current user's teacher profile (for teachers to get their own ID)
+router.get(
+    "/me/teacher",
+    isAuthenticated,
+    async (req, res) => {
+        try {
+            if (req.user.role !== "teacher") {
+                return res.status(403).json({ error: "Only teachers can access this endpoint" });
+            }
+            const teacher = await Teacher.findOne({ userId: req.user.userId })
+                .populate("userId", "username email")
+                .select("_id userId subject colorCode");
+            if (!teacher) {
+                return res.status(404).json({ error: "Teacher profile not found" });
+            }
+            res.status(200).json(teacher);
+        } catch (error) {
+            console.error("Error fetching teacher profile:", error.message);
+            res.status(500).json({ error: "Failed to fetch teacher profile." });
+        }
+    }
+);
+
 // Get all teachers
 router.get(
     "/teachers",

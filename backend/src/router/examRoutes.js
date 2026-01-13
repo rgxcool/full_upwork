@@ -870,6 +870,7 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         };
 
         // Lärare: filtrera på deras elever
+        let teacherFilter = null;
         if (req.user.role === "teacher") {
             const teacher = await Teacher.findOne({ userId: req.user.userId });
             if (!teacher) {
@@ -877,8 +878,10 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                     .status(403)
                     .json({ error: "Teacher profile not found" });
             }
+            teacherFilter = teacher._id;
             studentQuery.teacherId = teacher._id;
-            enrollmentQuery.teacherId = teacher._id;
+            // For enrollments, we'll filter after populating to check both teacherId and courseInstance.responsibleTeacher
+            // Remove the teacherId filter from enrollmentQuery so we can check both
             console.log(
                 `🔍 Teacher ${teacher._id} fetching their syncable calendar events`
             );
@@ -902,6 +905,7 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         );
 
         // Automatiska kurs-slutprov (från enrollments)
+        // Fetch all enrollments first, then filter after populating to check both teacherId and courseInstance.responsibleTeacher
         const allEnrollmentsWithSlutprov = await StudentEnrollment.find(
             enrollmentQuery
         )
@@ -925,8 +929,28 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                 populate: { path: "userId", select: "username" },
             });
         
+        // Filter enrollments for teachers: include if teacherId matches OR courseInstance.responsibleTeacher matches
+        let enrollmentsToProcess = allEnrollmentsWithSlutprov;
+        if (teacherFilter) {
+            enrollmentsToProcess = allEnrollmentsWithSlutprov.filter((enrollment) => {
+                // Check if enrollment.teacherId matches
+                const enrollmentTeacherId = enrollment.teacherId?._id?.toString() || enrollment.teacherId?.toString();
+                const matchesEnrollmentTeacher = enrollmentTeacherId === teacherFilter.toString();
+                
+                // Check if courseInstance.responsibleTeacher matches
+                const courseInstanceTeacherId = enrollment.courseInstanceId?.responsibleTeacher?._id?.toString() || 
+                                               enrollment.courseInstanceId?.responsibleTeacher?.toString();
+                const matchesCourseInstanceTeacher = courseInstanceTeacherId === teacherFilter.toString();
+                
+                return matchesEnrollmentTeacher || matchesCourseInstanceTeacher;
+            });
+            console.log(
+                `🔍 Filtered enrollments for teacher ${teacherFilter}: ${enrollmentsToProcess.length} out of ${allEnrollmentsWithSlutprov.length}`
+            );
+        }
+        
         // Filter out enrollments where the student is a dropout
-        const enrollmentsWithSlutprov = allEnrollmentsWithSlutprov.filter(
+        const enrollmentsWithSlutprov = enrollmentsToProcess.filter(
             (enrollment) => !enrollment.studentId || !enrollment.studentId.dropout
         );
         
