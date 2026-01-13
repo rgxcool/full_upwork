@@ -38,6 +38,10 @@
         </div>
 
         <!-- Tabell -->
+        <div v-if="courseName || courseInstanceCode" class="mb-3">
+          <h6 v-if="courseName" class="fw-semibold mb-1">Kurs: {{ courseName }}</h6>
+          <h6 v-if="courseInstanceCode" class="fw-semibold mb-2">Kursinstans: {{ courseInstanceCode }}</h6>
+        </div>
         <h6 class="fw-semibold">Studenter kopplade till detta prov</h6>
         
         <div class="table-responsive mb-4">
@@ -46,7 +50,6 @@
               <tr>
                 <th>Namn</th>
                 <th>Personnummer</th>
-                <th>Kurs</th>
                 <th>Info</th>
                 <th>Närvaro</th>
               </tr>
@@ -57,27 +60,6 @@
                   <router-link :to="`/student/${student._id}`">{{ student.name }}</router-link>
                 </td>
                 <td>{{ student.personalNumber }}</td>
-                <td>
-                  <v-autocomplete
-                    v-if="canEdit && student.availableCourseInstances && student.availableCourseInstances.length > 0"
-                    v-model="student.selectedCourseInstance"
-                    :items="student.availableCourseInstances"
-                    item-title="displayName"
-                    item-value="id"
-                    label="Välj kursinstans"
-                    outlined
-                    dense
-                    hide-details
-                    :menu-props="{ maxHeight: '300px', zIndex: 10000 }"
-                    attach
-                    @update:model-value="updateStudentCourseInstance(student)"
-                  >
-                    <template #item="{ props, item }">
-                      <v-list-item v-bind="props" :title="item.raw.displayName" />
-                    </template>
-                  </v-autocomplete>
-                  <span v-else>{{ student.courseInstanceCode || student.courseName || '-' }}</span>
-                </td>
                 <td>
                   <v-textarea
                     v-if="canEdit"
@@ -201,6 +183,7 @@
         studentsData: [],
         showSuccessMessage: false,
         loadingCourses: {},
+        currentTeacherId: null, // Store the current teacher's Teacher model _id
         examMunicipalities: {
           Sollentuna: ['308', '310', 'lilla rummet', 'Aniara', 'Kung Agnes'],
           Akalla: ['Vision', 'Hässja', 'Arkarli', '316'],
@@ -219,9 +202,33 @@
         const currentUser = this.$store?.state?.user
         if (!currentUser) return false
         const isAdmin = ['admin', 'systemadmin'].includes(currentUser.role)
-        const isEventTeacher =
-          currentUser._id === (this.event.extendedProps?.teacherId || this.event.teacherId)
+        
+        // Get the event's teacherId (this is the Teacher model _id, not User _id)
+        const eventTeacherId = this.event.extendedProps?.teacherId?._id?.toString() || 
+                               this.event.extendedProps?.teacherId?.toString() || 
+                               this.event.teacherId?.toString()
+        
+        // For teachers, check if their Teacher record ID matches the event's teacherId
+        let isEventTeacher = false
+        if (currentUser.role === 'teacher' && eventTeacherId && this.currentTeacherId) {
+          isEventTeacher = this.currentTeacherId.toString() === eventTeacherId
+        }
+        
         return isAdmin || isEventTeacher
+      },
+      courseInstanceCode() {
+        // Get course instance code from the first student (all students should have the same one)
+        if (this.studentsData && this.studentsData.length > 0) {
+          return this.studentsData[0].courseInstanceCode || this.studentsData[0].courseCode || null
+        }
+        return null
+      },
+      courseName() {
+        // Get course name from the first student (all students should have the same one)
+        if (this.studentsData && this.studentsData.length > 0) {
+          return this.studentsData[0].courseName || null
+        }
+        return null
       },
     },
     watch: {
@@ -255,7 +262,21 @@
         },
       },
     },
-    mounted() {
+    async mounted() {
+      // Get current teacher ID if user is a teacher (for permission checks)
+      const currentUser = this.$store?.state?.user
+      if (currentUser && currentUser.role === 'teacher') {
+        try {
+          const res = await api.get('/me/teacher', { withCredentials: true })
+          if (res.data && res.data._id) {
+            this.currentTeacherId = res.data._id.toString()
+          }
+        } catch (err) {
+          console.error('❌ Kunde inte hämta lärare:', err)
+          // If the endpoint doesn't exist yet, try to get it from the event data
+          // The event should have the teacherId in extendedProps
+        }
+      }
       this.refreshEventData()
     },
     methods: {

@@ -440,15 +440,9 @@
       if (this.userRole === 'teacher') {
         try {
           const { api } = await import('@/store/store.js')
-          const res = await api.get('/teachers', { withCredentials: true })
-          const currentUserId = this.$store.state.user?.userId
-          const teacher = res.data.find(
-            (t) =>
-              t.userId?._id?.toString() === currentUserId?.toString() ||
-              t.userId?.toString() === currentUserId?.toString()
-          )
-          if (teacher) {
-            this.currentTeacherId = teacher._id.toString()
+          const res = await api.get('/me/teacher', { withCredentials: true })
+          if (res.data && res.data._id) {
+            this.currentTeacherId = res.data._id.toString()
           }
         } catch (err) {
           console.error('❌ Kunde inte hämta lärare:', err)
