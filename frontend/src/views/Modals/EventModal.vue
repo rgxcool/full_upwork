@@ -40,34 +40,6 @@
         <!-- Tabell -->
         <h6 class="fw-semibold">Studenter kopplade till detta prov</h6>
         
-        <!-- Add Student Section (only if canEdit) -->
-        <div v-if="canEdit" class="mb-3 p-3 border rounded bg-light">
-          <label class="fw-semibold mb-2">Lägg till elev:</label>
-          <v-autocomplete
-            v-model="studentSearch"
-            :items="availableStudents"
-            item-title="displayName"
-            item-value="_id"
-            label="Sök och välj elev"
-            outlined
-            clearable
-            return-object
-            :no-data-text="'Inga elever tillgängliga'"
-            :menu-props="{ maxHeight: '300px', zIndex: 10000 }"
-            attach
-            :custom-filter="filterStudents"
-            @update:model-value="addStudent"
-            dense
-          >
-            <template #item="{ props, item }">
-              <v-list-item v-bind="props" :title="item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})`" />
-            </template>
-            <template #selection="{ item }">
-              {{ item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})` }}
-            </template>
-          </v-autocomplete>
-        </div>
-
         <div class="table-responsive mb-4">
           <table class="table table-striped align-middle">
             <thead class="table-light">
@@ -77,8 +49,6 @@
                 <th>Kurs</th>
                 <th>Info</th>
                 <th>Närvaro</th>
-                <th>Prövning</th>
-                <th v-if="canEdit">Åtgärder</th>
               </tr>
             </thead>
             <tbody>
@@ -88,21 +58,25 @@
                 </td>
                 <td>{{ student.personalNumber }}</td>
                 <td>
-                  <v-select
-                    v-if="canEdit && student.availableCourses && student.availableCourses.length > 0"
-                    v-model="student.selectedCourse"
-                    :items="student.availableCourses"
+                  <v-autocomplete
+                    v-if="canEdit && student.availableCourseInstances && student.availableCourseInstances.length > 0"
+                    v-model="student.selectedCourseInstance"
+                    :items="student.availableCourseInstances"
                     item-title="displayName"
                     item-value="id"
-                    label="Välj kurs"
+                    label="Välj kursinstans"
                     outlined
                     dense
                     hide-details
-                    :menu-props="{ zIndex: 10000 }"
+                    :menu-props="{ maxHeight: '300px', zIndex: 10000 }"
                     attach
-                    @update:model-value="updateStudentCourse(student)"
-                  />
-                  <span v-else>{{ student.courseName || '-' }}</span>
+                    @update:model-value="updateStudentCourseInstance(student)"
+                  >
+                    <template #item="{ props, item }">
+                      <v-list-item v-bind="props" :title="item.raw.displayName" />
+                    </template>
+                  </v-autocomplete>
+                  <span v-else>{{ student.courseInstanceCode || student.courseName || '-' }}</span>
                 </td>
                 <td>
                   <v-textarea
@@ -126,18 +100,6 @@
                     class="form-check-input"
                     @change="saveAttendance(student)"
                   />
-                </td>
-                <td>
-                  <input
-                    type="checkbox"
-                    v-model="student.paidExamFee"
-                    :disabled="!canEdit"
-                    class="form-check-input"
-                    @change="saveAttendance(student)"
-                  />
-                </td>
-                <td v-if="canEdit">
-                  <button @click="removeStudent(index)" class="btn btn-sm btn-danger" title="Ta bort elev">✕</button>
                 </td>
               </tr>
             </tbody>
@@ -238,8 +200,6 @@
         isSaving: false,
         studentsData: [],
         showSuccessMessage: false,
-        studentSearch: null,
-        allStudents: [],
         loadingCourses: {},
         examMunicipalities: {
           Sollentuna: ['308', '310', 'lilla rummet', 'Aniara', 'Kung Agnes'],
@@ -252,19 +212,6 @@
         examTime: '',
         examMunicipality: '',
         examLocation: '',
-      }
-    },
-    computed: {
-      availableStudents() {
-        // Filter out students that are already selected
-        const selectedIds = new Set(this.studentsData.map(s => s._id?.toString()));
-        return this.allStudents
-          .filter(s => !selectedIds.has(s._id?.toString()))
-          .map(s => ({
-            ...s,
-            displayName: `${s.name} (${s.personalNumber || ''})`,
-            searchText: `${s.name} ${s.personalNumber || ''}`.toLowerCase()
-          }));
       }
     },
     computed: {
@@ -310,7 +257,6 @@
     },
     mounted() {
       this.refreshEventData()
-      this.fetchAllStudents()
     },
     methods: {
       async refreshEventData() {
@@ -359,32 +305,6 @@
           }
         }
       },
-      async fetchAllStudents() {
-        try {
-          const response = await api.get('/students', { withCredentials: true });
-          const data = response.data;
-          this.allStudents = (Array.isArray(data) ? data : [])
-            .filter(s => !s.dropout);
-        } catch (error) {
-          console.error("Kunde inte hämta elever:", error);
-        }
-      },
-      filterStudents(value, query, item) {
-        if (!query || !query.trim()) return true;
-        
-        const searchQuery = query.toLowerCase().trim();
-        const student = item?.raw || item?.value || item || value;
-        
-        if (!student || !student.name) return false;
-        
-        if (student.searchText) {
-          return student.searchText.includes(searchQuery);
-        }
-        
-        const name = (student.name || '').toLowerCase();
-        const personalNumber = (student.personalNumber || '').toLowerCase();
-        return name.includes(searchQuery) || personalNumber.includes(searchQuery);
-      },
       async loadStudentCourses(student) {
         if (this.loadingCourses[student._id]) return;
         
@@ -393,89 +313,68 @@
           const studentDetails = await api.get(`/student-details/${student._id}`, { withCredentials: true });
           const education = studentDetails.data?.education || [];
           
-          // Format courses for dropdown
-          const courses = education
-            .filter(edu => edu.type === 'Course' && edu.refId)
-            .map(edu => ({
-              id: edu.refId?._id || edu.refId,
-              courseName: edu.refId?.courseName || edu.name || 'Okänd kurs',
-              courseCode: edu.refId?.courseCode || '',
-              enrollmentId: edu.enrollmentId,
-              displayName: `${edu.refId?.courseName || edu.name || 'Okänd kurs'}${edu.refId?.courseCode ? ` (${edu.refId.courseCode})` : ''}`
-            }));
+          // Format course instances for dropdown - use courseInstance from enrollment data
+          const courseInstances = education
+            .filter(edu => {
+              // Include enrollments that have courseInstanceId or courseInstance
+              return edu.courseInstanceId || edu.courseInstance || (edu.type === 'Course' && edu.enrollmentId);
+            })
+            .map(edu => {
+              // Get course instance from enrollment
+              const instance = edu.courseInstance || (edu.courseInstanceId ? { _id: edu.courseInstanceId } : null);
+              const mainCourse = edu.refId; // mainCourseId from enrollment
+              
+              // Get course instance code - prefer from courseInstance, fallback to courseCode
+              const courseInstanceCode = instance?.courseCode || 
+                                        edu.courseInstanceCode || 
+                                        mainCourse?.courseCode || 
+                                        '';
+              
+              // Get course name from main course
+              const courseName = mainCourse?.courseName || edu.name || 'Okänd kurs';
+              
+              return {
+                id: instance?._id || edu.courseInstanceId || edu.enrollmentId,
+                courseInstanceCode: courseInstanceCode,
+                courseName: courseName,
+                enrollmentId: edu.enrollmentId || edu._id,
+                displayName: `${courseInstanceCode} - ${courseName}`.trim()
+              };
+            });
 
-          // Find current course in the list
-          const currentCourseId = student.courseId || 
-            (student.courseName ? courses.find(c => c.courseName === student.courseName)?.id : null);
+          // Find current course instance in the list
+          const currentInstanceId = student.courseInstanceId || 
+            student.enrollmentId ||
+            (student.courseInstanceCode ? courseInstances.find(c => c.courseInstanceCode === student.courseInstanceCode)?.id : null);
 
-          student.availableCourses = courses;
-          student.selectedCourse = currentCourseId || (courses.length > 0 ? courses[0].id : null);
+          student.availableCourseInstances = courseInstances;
+          student.selectedCourseInstance = currentInstanceId || (courseInstances.length > 0 ? courseInstances[0].id : null);
           
-          // Update courseName if course is selected
-          if (student.selectedCourse) {
-            const selectedCourse = courses.find(c => c.id?.toString() === student.selectedCourse?.toString());
-            if (selectedCourse) {
-              student.courseName = selectedCourse.courseName;
-              student.courseId = selectedCourse.id;
-              student.enrollmentId = selectedCourse.enrollmentId;
+          // Update courseInstanceCode if course instance is selected
+          if (student.selectedCourseInstance) {
+            const selectedInstance = courseInstances.find(c => c.id?.toString() === student.selectedCourseInstance?.toString());
+            if (selectedInstance) {
+              student.courseInstanceCode = selectedInstance.courseInstanceCode;
+              student.courseName = selectedInstance.courseName;
+              student.courseInstanceId = selectedInstance.id;
+              student.enrollmentId = selectedInstance.enrollmentId;
             }
           }
         } catch (error) {
-          console.error("Kunde inte hämta elevens kurser:", error);
-          student.availableCourses = [];
-          student.selectedCourse = null;
+          console.error("Kunde inte hämta elevens kursinstanser:", error);
+          student.availableCourseInstances = [];
+          student.selectedCourseInstance = null;
         } finally {
           this.loadingCourses[student._id] = false;
         }
       },
-      async addStudent(student) {
-        if (!student || !student._id) return;
-        
-        // Check if student is already added
-        if (this.studentsData.some(s => s._id?.toString() === student._id?.toString())) {
-          this.studentSearch = null;
-          return;
-        }
-
-        // Create student entry
-        const newStudent = {
-          _id: student._id,
-          name: student.name,
-          personalNumber: student.personalNumber,
-          additionalInfo: student.additionalInfo || "",
-          attended: false,
-          paidExamFee: false,
-          examTime: this.examTime || '',
-          examMunicipality: this.examMunicipality || '',
-          examLocation: this.examLocation || '',
-          finalExamDate: null,
-          availableCourses: [],
-          selectedCourse: null,
-          courseName: '',
-          courseId: null,
-          enrollmentId: null
-        };
-
-        // Load courses for this student
-        await this.loadStudentCourses(newStudent);
-        
-        // Add to list
-        this.studentsData.push(newStudent);
-        this.studentSearch = null;
-
-        // Save the updated event
-        await this.saveEventStudents();
-      },
-      removeStudent(index) {
-        this.studentsData.splice(index, 1);
-        this.saveEventStudents();
-      },
-      updateStudentCourse(student) {
-        const selectedCourse = student.availableCourses.find(c => c.id?.toString() === student.selectedCourse?.toString());
-        if (selectedCourse) {
-          student.courseName = selectedCourse.courseName;
-          student.courseId = selectedCourse.id;
-          student.enrollmentId = selectedCourse.enrollmentId;
+      updateStudentCourseInstance(student) {
+        const selectedInstance = student.availableCourseInstances.find(c => c.id?.toString() === student.selectedCourseInstance?.toString());
+        if (selectedInstance) {
+          student.courseInstanceCode = selectedInstance.courseInstanceCode;
+          student.courseName = selectedInstance.courseName;
+          student.courseInstanceId = selectedInstance.id;
+          student.enrollmentId = selectedInstance.enrollmentId;
           this.saveEventStudents();
         }
       },
@@ -489,16 +388,17 @@
         try {
           // Format students for saving
           const formattedStudents = this.studentsData.map((s) => {
-            const selectedCourse = s.availableCourses?.find(c => c.id?.toString() === s.selectedCourse?.toString());
+            const selectedInstance = s.availableCourseInstances?.find(c => c.id?.toString() === s.selectedCourseInstance?.toString());
             return {
               _id: s._id,
               name: s.name,
               personalNumber: s.personalNumber,
               additionalInfo: s.additionalInfo || "",
               attended: s.attended ?? false,
-              courseName: selectedCourse?.courseName || s.courseName || '',
-              courseId: selectedCourse?.id || s.courseId || null,
-              enrollmentId: selectedCourse?.enrollmentId || s.enrollmentId || null
+              courseInstanceCode: selectedInstance?.courseInstanceCode || s.courseInstanceCode || '',
+              courseName: selectedInstance?.courseName || s.courseName || '',
+              courseInstanceId: selectedInstance?.id || s.courseInstanceId || null,
+              enrollmentId: selectedInstance?.enrollmentId || s.enrollmentId || null
             };
           });
 
@@ -523,17 +423,17 @@
           name: s.name,
           personalNumber: s.personalNumber,
           additionalInfo: s.additionalInfo || '',
+          courseInstanceCode: s.courseInstanceCode || s.courseCode || '',
           courseName: s.courseName || '',
-          courseId: s.courseId || null,
+          courseInstanceId: s.courseInstanceId || s.courseId || null,
           enrollmentId: s.enrollmentId || null,
           attended: s.attended ?? false,
-          paidExamFee: s.paidExamFee ?? false,
           examTime: s.examTime || '',
           examMunicipality: s.examMunicipality || '',
           examLocation: s.examLocation || '',
           finalExamDate: s.finalExamDate || null,
-          availableCourses: [],
-          selectedCourse: null
+          availableCourseInstances: [],
+          selectedCourseInstance: null
         }))
 
         // Load courses for each student
@@ -562,7 +462,6 @@
                 return {
                   ...student,
                   attended: attendance.attended ?? student.attended,
-                  paidExamFee: attendance.paidExamFee ?? student.paidExamFee,
                   examTime: attendance.examTime || student.examTime,
                   examMunicipality: attendance.examMunicipality || student.examMunicipality,
                   examLocation: attendance.examLocation || student.examLocation,
@@ -610,7 +509,6 @@
             name: s.name,
             finalExamDate: s.finalExamDate,
             attended: s.attended,
-            paidExamFee: s.paidExamFee,
           }))
         )
 
@@ -673,7 +571,6 @@
                 {
                   _id: student._id,
                   attended: !!student.attended,
-                  paidExamFee: !!student.paidExamFee,
                   personalNumber: student.personalNumber,
                   examTime: student.examTime || this.examTime || '',
                   examMunicipality: student.examMunicipality || this.examMunicipality || '',
@@ -739,7 +636,6 @@
               students: students.map((s) => ({
                 _id: s._id,
                 attended: !!s.attended,
-                paidExamFee: !!s.paidExamFee,
                 personalNumber: s.personalNumber,
                 examTime: this.examTime,
                 examMunicipality: this.examMunicipality,
