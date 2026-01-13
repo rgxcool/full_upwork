@@ -270,7 +270,7 @@ const routes = [
     path: '/apl',
     name: 'APLView',
     component: APLView,
-    meta: { title: 'APL List', role: ['admin', 'teacher'] },
+    meta: { title: 'APL List', role: ['admin', 'teacher', 'coordinator'] },
   },
   // Remove duplicate /betyg route
   // { path: '/betyg', name: 'Betyg', component: GradeStudent, meta: { title: 'Grade Student', role: 'teacher' } },
