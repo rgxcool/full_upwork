@@ -450,39 +450,6 @@
         </div>
       </div>
 
-      <!-- Courses section (for teachers) -->
-      <div v-if="(userType === 'Lärare' || userType === 'teacher') && userData?.courseInstances?.length > 0" class="card">
-        <div class="card-header">
-          <h3>Ansvariga kurser</h3>
-        </div>
-        <div class="card-body">
-          <!-- Course Instances (where teacher is responsible) -->
-          <div v-if="userData?.courseInstances?.length > 0" class="courses-section">
-            <h4>Kursinstanser</h4>
-            <ul class="courses-list">
-              <li v-for="instance in userData.courseInstances" :key="instance._id" class="course-item">
-                <router-link 
-                  :to="`/education/${instance._id}?type=instance`" 
-                  class="course-link"
-                >
-                  <div class="course-name">{{ instance.courseName }}</div>
-                  <div class="course-details">
-                    <span class="course-code">{{ instance.courseCode }}</span>
-                    <span v-if="instance.startDate && instance.endDate" class="course-dates">
-                      {{ formatDate(instance.startDate) }} - {{ formatDate(instance.endDate) }}
-                    </span>
-                  </div>
-                </router-link>
-              </li>
-            </ul>
-          </div>
-
-
-          <div v-if="(!userData?.courseInstances || userData.courseInstances.length === 0) && (!userData?.courses || userData.courses.length === 0)" class="no-courses">
-            Inga kurser tilldelade
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- Comment Modal -->

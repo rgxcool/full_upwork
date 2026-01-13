@@ -4,7 +4,17 @@ const DocumentSchema = new mongoose.Schema({
   student: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Student', 
-    required: true 
+    required: false 
+  },
+  teacher: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User', // Reference to User (teacher's userId)
+    required: false
+  },
+  uploadedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
   },
   filename: { 
     type: String, 
@@ -17,7 +27,7 @@ const DocumentSchema = new mongoose.Schema({
   type: {
     type: String,
     default: 'GENERAL',
-    enum: ['GENERAL', 'ACTION_PLAN', 'REPORT', 'COURSE_ARCHIVE']
+    enum: ['GENERAL', 'ACTION_PLAN', 'REPORT', 'COURSE_ARCHIVE', 'TEACHER_DOCUMENT']
   },
   enrollmentId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -29,5 +39,8 @@ const DocumentSchema = new mongoose.Schema({
     default: Date.now 
   }
 })
+
+// Note: Validation for student/teacher is done in the route handler
+// to avoid issues with Document.create() and pre-hooks
 
 export default mongoose.model('Document', DocumentSchema, "documents");

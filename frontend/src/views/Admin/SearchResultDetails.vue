@@ -33,10 +33,11 @@ import StudyPlan from "@/views/Admin/SearchTabs/StudyPlan.vue";
 import DocumentSection from "@/views/Admin/SearchTabs/DocumentSection.vue";
 import ActionPlanTab from "@/views/Admin/SearchTabs/ActionPlanTab.vue";
 import StudentsTab from "@/views/Admin/SearchTabs/StudentsTab.vue";
+import CoursesTab from "@/views/Admin/SearchTabs/CoursesTab.vue";
 
 
 export default {
-  components: { AccountTab, StudyPlan, DocumentSection, StudentsTab },
+  components: { AccountTab, StudyPlan, DocumentSection, StudentsTab, CoursesTab },
   setup() {
     const route = useRoute();
     const router = useRouter();
@@ -44,6 +45,15 @@ export default {
     const activeTab = ref("Användare");
 
     const tabs = computed(() => {
+      const isTeacher = route.params.type === 'Lärare' || route.params.type === 'teacher';
+      
+      // For teachers: Användare, Kurser, Dokument, Elever
+      if (isTeacher) {
+        const teacherTabs = ["Användare", "Kurser", "Dokument", "Elever"];
+        return teacherTabs;
+      }
+      
+      // For students: Användare, Studieplan, Dokument, Handlingsplan (if needed)
       const baseTabs = ["Användare", "Studieplan", "Dokument"];
       const hasLockedF = data.value?.education?.some(
         edu => edu.grade === 'F' && edu.locked === true
@@ -51,11 +61,6 @@ export default {
 
       if (hasLockedF) {
         baseTabs.push("Handlingsplan");
-      }
-
-      // Add "Elever" tab for teachers
-      if (route.params.type === 'Lärare' || route.params.type === 'teacher') {
-        baseTabs.push("Elever");
       }
 
       return baseTabs;
@@ -136,6 +141,7 @@ export default {
         case "Dokument": return DocumentSection;
         case "Handlingsplan": return ActionPlanTab;
         case "Elever": return StudentsTab;
+        case "Kurser": return CoursesTab;
         default: return AccountTab;
       }
     });
