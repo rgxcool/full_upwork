@@ -13,7 +13,17 @@
         </button>
       </div>
       <div class="scrollable-view">
-        <p><strong>Elev:</strong> {{ event.extendedProps.studentName }}</p>
+        <p>
+          <strong>Elev:</strong> 
+          <router-link 
+            v-if="event.extendedProps.studentId" 
+            :to="`/student/${event.extendedProps.studentId}`"
+            class="student-link"
+          >
+            {{ event.extendedProps.studentName }}
+          </router-link>
+          <span v-else>{{ event.extendedProps.studentName }}</span>
+        </p>
         <p><strong>Datum:</strong> {{ formatDate(event.start) }}</p>
         <p><strong>Tid:</strong> {{ formatTime(event.start) }}</p>
         <p><strong>Plats:</strong> {{ event.extendedProps.location }}</p>
@@ -209,6 +219,17 @@ export default {
 
 .scrollable-view p {
   margin: 0.5rem 0;
+}
+
+.student-link {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.student-link:hover {
+  text-decoration: underline;
+  color: #0056b3;
 }
 
 .buttons {

@@ -115,11 +115,13 @@ export default {
       return 'Möte';
     },
     bookedByValue() {
-      // Determine the bookedBy value - use bookedByRole prop if provided, otherwise use userRole
+      // ALWAYS prioritize bookedByRole prop if provided (for route-based booking context)
+      // This ensures that when booking from specped/appointments, it's treated as specped
+      // and when booking from syv/appointments, it's treated as syv, regardless of who books it
       if (this.bookedByRole) {
         return this.bookedByRole;
       }
-      // For admins creating meetings, default to their role
+      // For admins creating meetings without context, default to their role
       if (this.userRole === 'admin' || this.userRole === 'systemadmin') {
         return this.userRole;
       }
@@ -217,6 +219,14 @@ export default {
         meetingTitle = `Möte, ${this.form.student.name}`;
       }
 
+      const bookedBy = this.bookedByValue;
+      console.log('🔍 Booking context:', {
+        userRole: this.userRole,
+        bookedByRole: this.bookedByRole,
+        bookedByValue: bookedBy,
+        context: this.bookedByRole ? `Booking from ${this.bookedByRole} view` : 'Booking from calendar'
+      });
+
       const payload = {
         title: meetingTitle,
         start: combinedDateTime.toISOString(), // Convert to ISO string for backend
@@ -224,7 +234,7 @@ export default {
         studentId: this.form.student._id,
         studentName: this.form.student.name,
         personalNumber: this.form.student.personalNumber || '',
-        bookedBy: this.bookedByValue,
+        bookedBy: bookedBy, // Use the computed value which prioritizes bookedByRole
         info: this.form.info || '' // 👈 Add info to payload
       };
 

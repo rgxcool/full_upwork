@@ -14,12 +14,31 @@ router.get('/meetings', authenticateUser, async (req, res) => {
         let query = {};
 
         // SECURITY: Non-admins can only query their own role's meetings.
+        // But respect the bookedBy parameter if provided (for route-based filtering)
         if (role === 'syv' || role === 'specped') {
-            query.bookedBy = role;
-        } else if ((role === 'admin' || role === 'systemadmin') && bookedBy) {
-            // Admins can optionally filter by role.
-            query.bookedBy = bookedBy;
+            // If bookedBy is provided in query, use it (for route-based filtering)
+            // Otherwise, default to user's role for security
+            if (bookedBy && (bookedBy === 'syv' || bookedBy === 'specped')) {
+                query.bookedBy = bookedBy;
+            } else {
+                query.bookedBy = role;
+            }
+        } else if (role === 'admin' || role === 'systemadmin') {
+            // Admins MUST specify bookedBy when viewing role-specific appointment pages
+            // This ensures separate lists for syv/appointments and specped/appointments
+            if (bookedBy) {
+                query.bookedBy = bookedBy;
+            } else {
+                // If no bookedBy specified, admins see all meetings (for calendar view)
+                // This is intentional for the /kalender view
+            }
         }
+
+        console.log('🔍 GET /meetings - Query filter:', {
+            userRole: role,
+            bookedByParam: bookedBy,
+            finalQuery: query
+        });
 
         // Add filtering by student name if provided
         if (studentName) {
@@ -78,6 +97,21 @@ router.post('/meetings', authenticateUser, async (req, res) => {
             return res.status(400).json({ error: 'Obligatoriska fält saknas' });
         }
 
+        // Validate bookedBy value
+        const validBookedByValues = ['syv', 'specped', 'admin', 'systemadmin'];
+        if (!validBookedByValues.includes(bookedBy)) {
+            return res.status(400).json({ error: `Invalid bookedBy value: ${bookedBy}. Must be one of: ${validBookedByValues.join(', ')}` });
+        }
+
+        console.log('📝 POST /meetings - Creating meeting:', {
+            title,
+            studentId,
+            studentName,
+            bookedBy,
+            createdBy: userId,
+            userRole: req.user.role
+        });
+
         const saved = await new Meeting({
             title,
             start,
@@ -87,11 +121,17 @@ router.post('/meetings', authenticateUser, async (req, res) => {
                 name: studentName,
                 personalNumber
             },
-            bookedBy,
+            bookedBy, // This should be 'specped' or 'syv' based on the route context
             info, // 👈 Save the new field
             createdBy: userId,
             createdAt: new Date()
         }).save();
+
+        console.log('✅ Meeting created:', {
+            _id: saved._id,
+            bookedBy: saved.bookedBy,
+            studentName: saved.student.name
+        });
 
         res.status(201).json(saved);
     } catch (err) {
