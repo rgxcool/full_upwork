@@ -16,6 +16,32 @@
       <!-- Filters -->
       <div class="filters-section">
         <div class="filter-group">
+          <label for="courseInstanceFilter">Kursinstans:</label>
+          <v-autocomplete
+            id="courseInstanceFilter"
+            v-model="filters.courseInstanceId"
+            :items="filteredCourseInstances"
+            item-title="displayName"
+            item-value="_id"
+            label="Sök kursinstans"
+            :loading="isLoadingInstances"
+            clearable
+            density="compact"
+            variant="outlined"
+            :search="instanceSearchQuery"
+            @update:search="instanceSearchQuery = $event"
+            @update:model-value="handleInstanceFilterChange"
+            :menu-props="{ maxHeight: '300px' }"
+            class="instance-autocomplete"
+            no-filter
+          >
+            <template #item="{ props, item }">
+              <v-list-item v-bind="props" :title="item.raw.displayName" />
+            </template>
+          </v-autocomplete>
+        </div>
+
+        <div class="filter-group">
           <label for="courseFilter">Kurs:</label>
           <select id="courseFilter" v-model="filters.courseId" @change="loadInstances">
             <option value="">Alla kurser</option>
@@ -600,10 +626,35 @@
       const isSaving = ref(false)
 
       const filters = ref({
+        courseInstanceId: null,
         courseId: '',
         startDate: '',
         endDate: '',
         isActive: '',
+      })
+
+      const allCourseInstancesForFilter = ref([])
+      const isLoadingInstances = ref(false)
+      const instanceSearchQuery = ref('')
+
+      // Computed property to filter course instances based on search query
+      const filteredCourseInstances = computed(() => {
+        if (!instanceSearchQuery.value || instanceSearchQuery.value.trim() === '') {
+          return allCourseInstancesForFilter.value
+        }
+
+        const query = instanceSearchQuery.value.toLowerCase().trim()
+        return allCourseInstancesForFilter.value.filter((instance) => {
+          const displayName = instance.displayName?.toLowerCase() || ''
+          const courseName = instance.courseName?.toLowerCase() || ''
+          const courseCode = instance.courseCode?.toLowerCase() || ''
+          
+          return (
+            displayName.includes(query) ||
+            courseName.includes(query) ||
+            courseCode.includes(query)
+          )
+        })
       })
 
       const instanceForm = ref({
@@ -664,9 +715,22 @@
         }
       }
 
+      const filteredInstances = computed(() => {
+        let filtered = instances.value
+
+        // Filter by selected course instance
+        if (filters.value.courseInstanceId) {
+          filtered = filtered.filter(
+            (i) => i._id === filters.value.courseInstanceId
+          )
+        }
+
+        return filtered
+      })
+
       const sortedInstances = computed(() => {
-        if (!sortKey.value) return instances.value
-        return [...instances.value].sort((a, b) => {
+        if (!sortKey.value) return filteredInstances.value
+        return [...filteredInstances.value].sort((a, b) => {
           let aVal = a[sortKey.value]
           let bVal = b[sortKey.value]
           // Handle nested fields
@@ -717,9 +781,27 @@
 
           const response = await api.get(`/course-instances?${params.toString()}`)
           instances.value = response.data.instances
+          
+          // Update autocomplete options with all instances
+          updateInstanceFilterOptions(instances.value)
         } catch (error) {
           console.error('Error loading instances:', error)
         }
+      }
+
+      const updateInstanceFilterOptions = (instancesList) => {
+        allCourseInstancesForFilter.value = instancesList.map((instance) => ({
+          _id: instance._id,
+          displayName: `${instance.courseName}${instance.courseCode ? ` (${instance.courseCode})` : ''}${instance.startDate ? ` - ${formatDate(instance.startDate)}` : ''}`,
+          courseName: instance.courseName,
+          courseCode: instance.courseCode,
+          startDate: instance.startDate,
+        }))
+      }
+
+      const handleInstanceFilterChange = () => {
+        // Client-side filtering is handled by filteredInstances computed property
+        // No need to reload from API
       }
 
       const saveInstance = async () => {
@@ -1141,6 +1223,11 @@
         loadTeachers()
       })
 
+      // Watch instances to update filter options
+      watch(instances, (newInstances) => {
+        updateInstanceFilterOptions(newInstances)
+      }, { immediate: true })
+
       // Watch for showCreateModal changes to show/hide the modal
       watch(showCreateModal, (newValue) => {
         if (newValue) {
@@ -1202,6 +1289,11 @@
         sortOrder,
         setSort,
         sortedInstances,
+        allCourseInstancesForFilter,
+        isLoadingInstances,
+        handleInstanceFilterChange,
+        instanceSearchQuery,
+        filteredCourseInstances,
       }
     },
   }
@@ -1519,5 +1611,13 @@
   .btn-add-student:hover {
     background: #0056b3;
     border-color: #0056b3;
+  }
+
+  .instance-autocomplete {
+    min-width: 300px;
+  }
+
+  .filter-group .v-autocomplete {
+    width: 100%;
   }
 </style>
