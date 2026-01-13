@@ -8,7 +8,7 @@
           :items="courses"
           :loading="loading"
           class="elevation-1 course-table"
-          item-value="courseName"
+          item-value="_id"
         >
           <template v-slot:item.startDate="{ item }">
             {{ formatDate(item.startDate) }}
@@ -19,8 +19,8 @@
           <template v-slot:item.slutprovDate="{ item }">
             {{ formatDate(item.slutprovDate) }}
           </template>
-          <template v-slot:item.responsibleTeacher.userId.username="{ item }">
-            {{ item.responsibleTeacher?.userId?.username || 'Ej tilldelad' }}
+          <template v-slot:item.responsibleTeacher="{ item }">
+            {{ getResponsibleTeacher(item) }}
           </template>
         </v-data-table>
       </v-card-text>
@@ -42,7 +42,7 @@ export default {
         { title: 'Slutdatum', key: 'endDate', sortable: true, align: 'start' },
         { title: 'Slutprovsdatum', key: 'slutprovDate', sortable: true, align: 'start' },
         { title: 'Antal anmälda', key: 'enrollmentCount', sortable: true, align: 'start' },
-        { title: 'Ansvarig lärare', key: 'responsibleTeacher.userId.username', sortable: true, align: 'start' },
+        { title: 'Ansvarig lärare', key: 'responsibleTeacher', sortable: true, align: 'start' },
       ],
     };
   },
@@ -56,7 +56,25 @@ export default {
         // Use the api instance from store which has proper baseURL and credentials
         const { api } = await import('@/store/store.js');
         const response = await api.get('/course-instances/mine', { withCredentials: true });
-        this.courses = response.data.instances || [];
+        const instances = response.data.instances || [];
+        
+        // Debug: Log first instance to see data structure
+        if (instances.length > 0) {
+          console.log('Sample course instance:', instances[0]);
+          console.log('Responsible teacher data:', instances[0].responsibleTeacher);
+        }
+        
+        // Deduplicate by _id to prevent duplicate entries
+        const seen = new Map();
+        this.courses = instances.filter(instance => {
+          const id = instance._id?.toString() || instance.id?.toString();
+          if (!id) return false;
+          if (seen.has(id)) {
+            return false;
+          }
+          seen.set(id, true);
+          return true;
+        });
       } catch (error) {
         console.error('Error fetching my courses:', error);
         // Handle error, e.g., show a notification
@@ -69,6 +87,39 @@ export default {
       if (!dateString) return 'N/A';
       const options = { year: 'numeric', month: 'short', day: 'numeric' };
       return new Date(dateString).toLocaleDateString('sv-SE', options);
+    },
+    getResponsibleTeacher(item) {
+      // Handle different possible data structures
+      const teacher = item.responsibleTeacher;
+      
+      if (!teacher) {
+        return 'Ej tilldelad';
+      }
+      
+      // If userId is populated with username
+      if (teacher.userId?.username) {
+        return teacher.userId.username;
+      }
+      
+      // If userId is an object but not populated, try to get it from the object
+      if (teacher.userId && typeof teacher.userId === 'object' && teacher.userId.username) {
+        return teacher.userId.username;
+      }
+      
+      // If there's a username directly on the teacher object (fallback)
+      if (teacher.username) {
+        return teacher.username;
+      }
+      
+      // Debug: Log what we actually have
+      console.log('Teacher data structure:', {
+        teacher,
+        hasUserId: !!teacher.userId,
+        userIdType: typeof teacher.userId,
+        userIdValue: teacher.userId
+      });
+      
+      return 'Ej tilldelad';
     },
   },
 };
