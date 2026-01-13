@@ -66,26 +66,72 @@ export default {
   },
   computed: {
     activeRole() {
-      return this.$route.meta.role;
+      // Get role from route meta, fallback to route name if needed
+      const role = this.$route.meta.role;
+      if (role) return role;
+      
+      // Fallback: extract from route name
+      if (this.$route.name === 'SyvAppointments') return 'syv';
+      if (this.$route.name === 'SpecpedAppointments') return 'specped';
+      
+      return null;
     },
     pageTitle() {
-      return this.$route.meta.title;
+      return this.$route.meta.title || 'Samtal';
     }
   },
   created() {
     this.fetchMeetings();
   },
+  watch: {
+    // Refetch when route changes (e.g., navigating between syv and specped)
+    '$route'(to, from) {
+      if (to.path !== from.path) {
+        this.fetchMeetings();
+      }
+    },
+    // Also watch activeRole in case route meta changes
+    activeRole() {
+      this.fetchMeetings();
+    }
+  },
   methods: {
     async fetchMeetings() {
       try {
+        if (!this.activeRole) {
+          console.error('❌ No active role found for appointments view');
+          return;
+        }
+        
         const { page, limit } = this.pagination;
-        // Backend automatically filters by role for syv/specped, but we can also specify bookedBy
-        const response = await api.get(`/meetings?bookedBy=${this.activeRole}&sort=start:desc&page=${page}&limit=${limit}`, { withCredentials: true });
-        this.meetings = response.data.data;
-        this.pagination = response.data.pagination;
+        const url = `/meetings?bookedBy=${this.activeRole}&sort=start:desc&page=${page}&limit=${limit}`;
+        
+        console.log(`🔍 Fetching ${this.activeRole} appointments from:`, url);
+        console.log(`📍 Current route:`, this.$route.path, '| Active role:', this.activeRole);
+        
+        // Explicitly filter by bookedBy to ensure separate lists for syv and specped
+        const response = await api.get(url, { withCredentials: true });
+        
+        const meetings = response.data.data || [];
+        console.log(`📋 Fetched ${meetings.length} ${this.activeRole} appointments`);
+        console.log(`📋 Meeting bookedBy values:`, meetings.map(m => ({ 
+          id: m._id, 
+          student: m.student?.name, 
+          bookedBy: m.bookedBy 
+        })));
+        
+        // Double-check: filter out any meetings that don't match the active role (safety check)
+        const filteredMeetings = meetings.filter(m => m.bookedBy === this.activeRole);
+        if (filteredMeetings.length !== meetings.length) {
+          console.warn(`⚠️ Backend returned ${meetings.length} meetings but only ${filteredMeetings.length} match bookedBy=${this.activeRole}`);
+        }
+        
+        this.meetings = filteredMeetings;
+        this.pagination = response.data.pagination || this.pagination;
         this.isModalOpen = false; // Close modal on success
       } catch (error) {
-        console.error(`Kunde inte hämta ${this.activeRole}-samtal:`, error);
+        console.error(`❌ Kunde inte hämta ${this.activeRole}-samtal:`, error);
+        this.meetings = [];
       }
     },
     async deleteMeeting(id) {

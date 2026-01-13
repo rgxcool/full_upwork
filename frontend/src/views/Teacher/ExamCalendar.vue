@@ -191,7 +191,7 @@ export default {
         allDay: isMeeting ? false : true,
         color: event.extendedProps?.teacherId?.colorCode || event.color || '#999999',
         extendedProps: {
-          ...event.extendedProps,
+          ...event.extendedProps, // This already includes studentId from AddMeetingModal
           students: event.extendedProps?.students || [],
           isMeeting: this.eventType === 'meeting',
           isExam: this.eventType === 'exam',
@@ -301,6 +301,7 @@ export default {
               extendedProps: {
                 isMeeting: true,
                 studentName: studentName,
+                studentId: meeting.student?.id || meeting.student?._id || null,
                 personalNumber: meeting.student?.personalNumber || '',
                 location: meeting.location || '',
                 bookedBy: meeting.bookedBy || '',
