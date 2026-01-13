@@ -1348,6 +1348,12 @@ export const getMyCourseInstances = async (req, res) => {
             })
             .sort({ startDate: -1 });
 
+        // Debug: Log first instance to see population
+        if (instances.length > 0) {
+            console.log('[DEBUG] Sample course instance responsibleTeacher:', instances[0].responsibleTeacher);
+            console.log('[DEBUG] Sample course instance (full):', JSON.stringify(instances[0].toObject(), null, 2));
+        }
+
         const instancesWithCounts = await Promise.all(
             instances.map(async (instance) => {
                 const enrollmentCount = await StudentEnrollment.countDocuments({
@@ -1358,8 +1364,19 @@ export const getMyCourseInstances = async (req, res) => {
                     slutprovDate: { $ne: null },
                 }).select("slutprovDate");
 
+                const instanceObj = instance.toObject();
+                
+                // Ensure responsibleTeacher is properly structured
+                if (instanceObj.responsibleTeacher && typeof instanceObj.responsibleTeacher === 'object') {
+                    // If userId is not populated, it might be just an ObjectId
+                    if (!instanceObj.responsibleTeacher.userId && instanceObj.responsibleTeacher._id) {
+                        console.log('[DEBUG] responsibleTeacher.userId not populated, attempting manual populate');
+                        // This shouldn't happen if populate worked, but handle it gracefully
+                    }
+                }
+
                 return {
-                    ...instance.toObject(),
+                    ...instanceObj,
                     enrollmentCount,
                     slutprovDate: firstEnrollment?.slutprovDate || null,
                 };

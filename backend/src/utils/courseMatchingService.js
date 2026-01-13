@@ -107,10 +107,24 @@ class CourseMatchingService {
         if (existingInstance) {
             let needsSave = false;
 
-            // Update responsibleTeacher if provided
-            if (responsibleTeacherId && existingInstance.responsibleTeacher?.toString() !== responsibleTeacherId.toString()) {
-                existingInstance.responsibleTeacher = responsibleTeacherId;
-                needsSave = true;
+            // Update responsibleTeacher if provided AND instance doesn't have one, or if explicitly provided
+            if (responsibleTeacherId) {
+                // If instance doesn't have a responsibleTeacher, set it
+                if (!existingInstance.responsibleTeacher) {
+                    existingInstance.responsibleTeacher = responsibleTeacherId;
+                    needsSave = true;
+                    console.log(
+                        `[DEBUG] Setting responsibleTeacher for existing course instance: ${existingInstance.courseName} -> ${responsibleTeacherId}`
+                    );
+                }
+                // If instance has a different responsibleTeacher and we're explicitly providing one, update it
+                else if (existingInstance.responsibleTeacher?.toString() !== responsibleTeacherId.toString()) {
+                    existingInstance.responsibleTeacher = responsibleTeacherId;
+                    needsSave = true;
+                    console.log(
+                        `[DEBUG] Updating responsibleTeacher for existing course instance: ${existingInstance.courseName} -> ${responsibleTeacherId}`
+                    );
+                }
             }
 
             // Only set slutprovDate if explicitly provided AND there's no teacher
@@ -154,12 +168,18 @@ class CourseMatchingService {
         // If there's a teacher, let the pre-save hook calculate it based on teacher rules
         const shouldSetSlutprovDate = slutprovDate && !responsibleTeacherId;
 
+        // Generate unique courseCode: baseCourseCode + YY (year) + MM (month)
+        const startDateObj = new Date(startDate);
+        const year = String(startDateObj.getFullYear()).slice(-2); // Last 2 digits of year (e.g., "26" for 2026)
+        const month = String(startDateObj.getMonth() + 1).padStart(2, '0'); // Month (01-12)
+        const uniqueCourseCode = `${mainCourse.courseCode}${year}${month}`;
+
         const newInstance = new CourseInstance({
             mainCourseId,
             startDate,
             endDate,
             courseName: mainCourse.courseName,
-            courseCode: mainCourse.courseCode,
+            courseCode: uniqueCourseCode,
             coursePoints: mainCourse.coursePoints,
             courseExtent: mainCourse.courseExtent,
             createdBy: userId,
@@ -258,23 +278,41 @@ class CourseMatchingService {
                         continue;
                     }
 
+                    // Get student first to find teacherId for course instance
+                    let studentDocA;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import(
+                            "../models/Student.js"
+                        );
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDocA = await global._StudentModel.findById(
+                        studentId
+                    );
+
+                    // Use student's teacherId as responsibleTeacher for course instance
+                    const responsibleTeacherId = studentDocA?.teacherId || entry.teacherId || null;
+
                     // Determine slutprovDate (will be calculated later after enrollment is created)
                     // For now, pass entry.slutprovDate if available, otherwise null
                     const initialSlutprovDate = entry.slutprovDate ? new Date(entry.slutprovDate) : null;
 
-                    // Find or create course instance, pass responsibleTeacherId
+                    // Find or create course instance, pass responsibleTeacherId from student
                     const { instance, wasCreated } =
                         await this.findOrCreateCourseInstance(
                             match.course._id,
                             new Date(entry.startDate),
                             new Date(entry.endDate),
                             userId,
-                            entry.teacherId || null,
+                            responsibleTeacherId,
                             initialSlutprovDate
                         );
                     console.log(
                         `[DEBUG] CourseInstance created/used for course ${entry.name}:`,
                         instance && instance.slutprovDate
+                    );
+                    console.log(
+                        `[DEBUG] CourseInstance responsibleTeacher: ${instance?.responsibleTeacher || 'none'} (from student teacherId: ${responsibleTeacherId || 'none'})`
                     );
 
                     if (wasCreated) {
@@ -301,18 +339,6 @@ class CourseMatchingService {
                         );
                         continue;
                     }
-
-                    // Get student to find teacherId
-                    let studentDocA;
-                    if (!global._StudentModel) {
-                        const studentDocImport = await import(
-                            "../models/Student.js"
-                        );
-                        global._StudentModel = studentDocImport.default;
-                    }
-                    studentDocA = await global._StudentModel.findById(
-                        studentId
-                    );
 
                     console.log(
                         `[DEBUG] 🔍 Loading student document for ${studentId}:`
@@ -505,6 +531,21 @@ class CourseMatchingService {
                         continue;
                     }
 
+                    // Get student first to find teacherId for course instances
+                    let studentDocPackage;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import(
+                            "../models/Student.js"
+                        );
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDocPackage = await global._StudentModel.findById(
+                        studentId
+                    );
+                    
+                    // Use student's teacherId as responsibleTeacher for course instances
+                    const packageResponsibleTeacherId = studentDocPackage?.teacherId || entry.teacherId || null;
+
                     // Start scheduling
                     let courseStart = this.getNextMonday(
                         entry.startDate || new Date()
@@ -560,15 +601,18 @@ class CourseMatchingService {
                             courseEnd = this.addWeeks(courseStart, extentWeeks);
                         }
 
-                        // Process current course
+                        // Process current course - use student's teacher as responsibleTeacher
                         const { instance: courseInstance, wasCreated } =
                             await this.findOrCreateCourseInstance(
                                 course._id,
                                 courseStart,
                                 courseEnd,
                                 userId,
-                                entry.teacherId || null
+                                packageResponsibleTeacherId
                             );
+                        console.log(
+                            `[DEBUG] CoursePackage course instance responsibleTeacher: ${courseInstance?.responsibleTeacher || 'none'} (from student teacherId: ${packageResponsibleTeacherId || 'none'})`
+                        );
                         console.log(
                             `[DEBUG] Processing course: '${course.courseName}' | Found/created CourseInstance:`,
                             courseInstance ? courseInstance._id : null
@@ -743,6 +787,7 @@ class CourseMatchingService {
                             );
 
                             // Create CourseInstance for next course (same dates as current course)
+                            // Use student's teacher as responsibleTeacher
                             const {
                                 instance: nextCourseInstance,
                                 wasCreated: nextWasCreated,
@@ -751,7 +796,7 @@ class CourseMatchingService {
                                 courseStart,
                                 courseEnd,
                                 userId,
-                                entry.teacherId || null
+                                packageResponsibleTeacherId
                             );
 
                             if (nextCourseInstance && nextCourseInstance._id) {
@@ -985,15 +1030,33 @@ class CourseMatchingService {
                     const extentWeeks = parseInt(course.courseExtent) || 5; // Default to 5 weeks if not set
                     const courseEnd = this.addWeeks(courseStart, extentWeeks);
 
-                    // Find or create CourseInstance
+                    // Get student to find teacherId for course instance
+                    let studentDocIndividual;
+                    if (!global._StudentModel) {
+                        const studentDocImport = await import(
+                            "../models/Student.js"
+                        );
+                        global._StudentModel = studentDocImport.default;
+                    }
+                    studentDocIndividual = await global._StudentModel.findById(
+                        studentId
+                    );
+                    
+                    // Use student's teacherId as responsibleTeacher for course instance
+                    const individualResponsibleTeacherId = studentDocIndividual?.teacherId || entry.teacherId || null;
+
+                    // Find or create CourseInstance - use student's teacher as responsibleTeacher
                     const { instance: courseInstance, wasCreated } =
                         await this.findOrCreateCourseInstance(
                             course._id,
                             courseStart,
                             courseEnd,
                             userId,
-                            entry.teacherId || null
+                            individualResponsibleTeacherId
                         );
+                    console.log(
+                        `[DEBUG] Individual course instance responsibleTeacher: ${courseInstance?.responsibleTeacher || 'none'} (from student teacherId: ${individualResponsibleTeacherId || 'none'})`
+                    );
 
                     console.log(
                         `[DEBUG] Processing individual course: '${course.courseName}' | Found/created CourseInstance:`,
