@@ -3,6 +3,13 @@
     <div class="student-details-container">
       <div class="header-section">
         <h1 class="page-title">{{ student ? student.name : 'Elevdetaljer' }}</h1>
+        <button
+          v-if="isSystemAdmin"
+          class="btn btn-danger delete-student-btn"
+          @click="handleDeleteStudent"
+        >
+          DELETE STUDENT
+        </button>
       </div>
 
       <div v-if="loading" class="loading">
@@ -81,6 +88,9 @@ export default {
     const manualAplIds = ref(new Set());
 
     const isAdmin = computed(() => store.getters.isAdmin);
+    const isSystemAdmin = computed(
+      () => store.getters.isSystemAdmin || store.getters.isAdmin
+    );
 
     // Load manual APL IDs from localStorage (reactive)
     const loadManualAplIds = () => {
@@ -312,6 +322,24 @@ export default {
       loadManualAplIds();
     });
 
+    const handleDeleteStudent = async () => {
+      if (!student.value?._id) return;
+      const confirmed = window.confirm(
+        'Är du säker på att du vill radera eleven? Detta går inte att ångra.'
+      );
+      if (!confirmed) return;
+
+      try {
+        await api.delete(`/student/${student.value._id}`, {
+          withCredentials: true,
+        });
+        window.history.back();
+      } catch (err) {
+        console.error('Error deleting student:', err);
+        alert('Kunde inte radera elev.');
+      }
+    };
+
     onMounted(() => {
       loadManualAplIds();
       loadStudent();
@@ -336,6 +364,8 @@ export default {
       tabs,
       changeHistory,
       handleStudentUpdate,
+      isSystemAdmin,
+      handleDeleteStudent,
     };
   },
 };
@@ -349,10 +379,18 @@ export default {
 }
 .header-section {
   margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .page-title {
   margin: 0;
   color: #2c3e50;
+}
+.delete-student-btn {
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 .loading, .error-message {
   text-align: center;

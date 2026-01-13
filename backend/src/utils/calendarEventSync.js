@@ -1,6 +1,12 @@
 import CalendarEvent from "../models/Event.js";
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
+// Ensure Course schema is registered for populate lookups
+import "../models/Course.js";
+// Ensure CourseInstance schema is registered for populate lookups
+import "../models/CourseInstance.js";
+// Ensure User schema is registered for populate lookups (teacher.userId)
+import "../models/User.js";
 
 /**
  * Syncs calendar events for students with finalExamDate
@@ -141,20 +147,27 @@ export async function syncCalendarEventsForStudent(studentId) {
 }
 
 /**
- * Syncs calendar events for all students with finalExamDate
- * Useful for bulk operations or fixing missing events
+ * Syncs calendar events for all enrollments that have a slutprovDate.
+ * Uses enrollment-based sync to avoid date drift and to leverage course/teacher context.
  */
 export async function syncAllCalendarEvents() {
     try {
-        const students = await Student.find({
-            finalExamDate: { $ne: null },
-            dropout: { $ne: true },
-        }).select("_id");
+        const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
 
-        console.log(`🔄 Syncing calendar events for ${students.length} students...`);
+        const enrollments = await StudentEnrollment.find({
+            slutprovDate: { $ne: null },
+        })
+            .populate("studentId", "dropout")
+            .select("_id studentId slutprovDate");
 
-        for (const student of students) {
-            await syncCalendarEventsForStudent(student._id);
+        console.log(`🔄 Syncing calendar events for ${enrollments.length} enrollments with slutprov...`);
+
+        for (const enrollment of enrollments) {
+            // Skip if the student is a dropout
+            if (enrollment.studentId?.dropout) {
+                continue;
+            }
+            await syncCalendarEventFromEnrollment(enrollment._id);
         }
 
         console.log(`✅ Finished syncing calendar events`);
@@ -202,12 +215,16 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
             return;
         }
 
-        // Create date at local midnight to avoid timezone shifts
+        // Create date at a fixed UTC noon to avoid timezone shifts in calendar
         const examDate = new Date(enrollment.slutprovDate);
-        const year = examDate.getFullYear();
-        const month = examDate.getMonth();
-        const day = examDate.getDate();
+        const year = examDate.getUTCFullYear();
+        const month = examDate.getUTCMonth();
+        const day = examDate.getUTCDate();
         const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; // YYYY-MM-DD
+
+        // Use noon UTC for start to prevent +1/-1 day shifts when rendered as all-day
+        const eventStartDate = new Date(Date.UTC(year, month, day, 12, 0, 0, 0));
+        const eventEndDate = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
         // Get course name from mainCourseId or courseInstanceId
         let courseName = null;

@@ -424,6 +424,9 @@ class CourseMatchingService {
                         continue;
                     }
 
+                    // Normalize to noon UTC to avoid timezone shifts in all-day calendar events
+                    slutprovDate.setUTCHours(12, 0, 0, 0);
+
                     // Set slutprov date on enrollment
                     enrollment.slutprovDate = slutprovDate;
                     await enrollment.save();
