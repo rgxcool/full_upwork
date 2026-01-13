@@ -740,7 +740,8 @@ export const uploadStudentsForMatching = async (req, res) => {
                                             endDate: entry.endDate,
                                             slutprovDate: entry.slutprovDate, // <-- PATCH: preserve explicit exam date
                                         },
-                                    ]
+                                    ],
+                                    req.user?.userId || null
                                 );
                             console.log(
                                 `[DEBUG] Enrollment result for student ${
@@ -824,7 +825,8 @@ export const uploadStudentsForMatching = async (req, res) => {
                                         endDate: entry.endDate,
                                         slutprovDate: entry.slutprovDate, // <-- PATCH: preserve explicit exam date
                                     },
-                                ]
+                                ],
+                                req.user?.userId || null
                             );
                         console.log(
                             `[DEBUG] Course enrollment result for student ${

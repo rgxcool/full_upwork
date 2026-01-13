@@ -89,7 +89,7 @@
             <div class="teacher-info">
               <h5 class="teacher-name">{{ teacher.userId?.username || 'Namnlös' }}</h5>
               <p class="teacher-email">{{ teacher.userId?.email || 'Ingen e-post' }}</p>
-              <span class="teacher-subject">{{ teacher.subject || 'Övrigt' }}</span>
+              <span class="teacher-subject">{{ getFormattedPermissions(teacher.subject) }}</span>
             </div>
             <div class="teacher-actions">
               <button
@@ -614,6 +614,15 @@
       formatDate(dateString) {
         if (!dateString) return 'Okänd'
         return new Date(dateString).toLocaleDateString('sv-SE')
+      },
+
+      getFormattedPermissions(subject) {
+        if (!subject || typeof subject !== 'string' || subject.trim() === '' || subject.trim() === 'Övrigt') {
+          return 'Inga behörigheter'
+        }
+        // Subject field stores permissions as comma-separated string
+        // Return it as-is, or format it nicely
+        return subject.trim()
       },
 
       editTeacher(teacher) {
