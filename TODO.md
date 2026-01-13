@@ -81,6 +81,8 @@ Funktioner:
 ## Kurser
 
 -   Automatisk datahämtning från Alvis
+-   Nya kursinstanser vid revidering i studieplan
+-   Vid inläggning av dublett-elev (återkommande från avbrott) ge val om att skriva över
 
 ## Förändringar i studier
 
@@ -91,6 +93,9 @@ Funktioner:
 -   Möjlighet att återaktivera eller lägga till nya kurser
 
 ## Betyg
+
+- Administratörerna ser alla satta betyg (bara administratörerna kan låsa)
+- När administratörerna låser betyget försvinner eleven ur betygsvyn
 
 ### Låsning och signering
 
