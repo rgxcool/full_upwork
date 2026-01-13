@@ -242,17 +242,11 @@ export default {
 
       try {
         const response = await api.post('/meetings', payload, { withCredentials: true });
-        console.log('✅ Möte sparat:', response.data);
+        const savedMeeting = response.data;
+        console.log('✅ Möte sparat:', savedMeeting);
 
-        this.$emit('event-added', {
-          title: payload.title,
-          start: payload.start,
-          allDay: false,
-          color: '#999999',
-          extendedProps: {
-            ...payload
-          }
-        });
+        // Use the saved meeting data from backend to ensure proper formatting
+        this.$emit('event-added', savedMeeting);
 
         this.$emit('close');
       } catch (err) {

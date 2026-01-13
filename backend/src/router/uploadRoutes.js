@@ -6,6 +6,7 @@ import { GridFSBucket } from 'mongodb'
 import { Readable } from 'stream'
 import mime from 'mime-types'
 import { uploadXlsx } from '../controllers/studentController.js'
+import { authenticateUser } from '../controllers/authController.js'
 
 dotenv.config()
 const router = Router()
@@ -205,6 +206,79 @@ router.get('/all/apl', async (req, res) => {
   } catch (err) {
     console.error('❌ Failed to list all APL files:', err)
     res.status(500).json({ error: 'Failed to list all APL files', detail: err.message })
+  }
+})
+
+// Cleanup orphaned files (files where the student no longer exists)
+// Admin only endpoint
+router.delete('/cleanup/orphaned', authenticateUser, async (req, res) => {
+  try {
+    const user = req.user || { role: 'unknown' }
+    
+    // Check if user is admin
+    if (!['admin', 'systemadmin'].includes(user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions. Admin access required.' })
+    }
+
+    const db = mongoose.connection.db
+    const bucket = new GridFSBucket(db, { bucketName: 'fs' })
+    const Student = (await import('../models/Student.js')).default
+
+    // Find all files with studentId metadata
+    const allFiles = await db.collection('fs.files')
+      .find({ 'metadata.studentId': { $exists: true, $ne: null } })
+      .toArray()
+
+    let orphanedCount = 0
+    let deletedCount = 0
+    const errors = []
+
+    // Check each file to see if the student still exists
+    for (const file of allFiles) {
+      const studentId = file.metadata.studentId
+      
+      try {
+        // Try to find the student (handle both ObjectId and string IDs)
+        let student = null
+        if (mongoose.Types.ObjectId.isValid(studentId)) {
+          student = await Student.findById(studentId)
+        }
+        
+        // If student not found by ObjectId, try string match
+        if (!student) {
+          student = await Student.findOne({ _id: studentId.toString() })
+        }
+
+        // If student doesn't exist, delete the file
+        if (!student) {
+          try {
+            await bucket.delete(file._id)
+            deletedCount++
+            console.log(`🗑️ Deleted orphaned file ${file._id} (${file.filename}) for non-existent student ${studentId}`)
+          } catch (deleteErr) {
+            errors.push(`Failed to delete file ${file._id}: ${deleteErr.message}`)
+            console.error(`❌ Failed to delete orphaned file ${file._id}:`, deleteErr)
+          }
+          orphanedCount++
+        }
+      } catch (checkErr) {
+        errors.push(`Error checking file ${file._id}: ${checkErr.message}`)
+        console.error(`❌ Error checking file ${file._id}:`, checkErr)
+      }
+    }
+
+    console.log(`✅ Cleanup complete: Found ${orphanedCount} orphaned files, deleted ${deletedCount}`)
+    
+    res.json({
+      message: 'Cleanup completed',
+      totalFilesChecked: allFiles.length,
+      orphanedFilesFound: orphanedCount,
+      filesDeleted: deletedCount,
+      errors: errors.length > 0 ? errors : undefined
+    })
+  } catch (err) {
+    console.error('❌ Failed to cleanup orphaned files:', err)
+    res.status(500).json({ error: 'Failed to cleanup orphaned files', detail: err.message })
   }
 })
 

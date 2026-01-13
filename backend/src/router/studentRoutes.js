@@ -7,6 +7,7 @@
 
 import { Router } from "express";
 import mongoose from "mongoose";
+import { GridFSBucket } from "mongodb";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Program from "../models/Program.js";
@@ -544,18 +545,68 @@ router.get("/student/:id/basic", async (req, res) => {
 });
 
 /**
+ * Helper function to delete all files associated with a student from GridFS
+ * @param {string} studentId - The student ID (can be string or ObjectId)
+ * @returns {Promise<number>} - Number of files deleted
+ */
+async function deleteStudentFiles(studentId) {
+    try {
+        const db = mongoose.connection.db;
+        const bucket = new GridFSBucket(db, { bucketName: 'fs' });
+        
+        // Find all files for this student
+        const files = await db.collection('fs.files')
+            .find({ 'metadata.studentId': studentId.toString() })
+            .toArray();
+        
+        let deletedCount = 0;
+        
+        // Delete each file
+        for (const file of files) {
+            try {
+                await bucket.delete(file._id);
+                deletedCount++;
+                console.log(`🗑️ Deleted file ${file._id} (${file.filename}) for student ${studentId}`);
+            } catch (err) {
+                console.error(`❌ Failed to delete file ${file._id}:`, err);
+            }
+        }
+        
+        if (deletedCount > 0) {
+            console.log(`✅ Deleted ${deletedCount} file(s) for student ${studentId}`);
+        }
+        
+        return deletedCount;
+    } catch (error) {
+        console.error(`❌ Error deleting files for student ${studentId}:`, error);
+        // Don't throw - we still want to delete the student even if file deletion fails
+        return 0;
+    }
+}
+
+/**
  * @route   DELETE /student/:id
- * @desc    Deletes a specific student.
+ * @desc    Deletes a specific student and all associated files.
  * @access  Public
  */
 router.delete("/student/:id", async (req, res) => {
     try {
-        const deletedStudent = await Student.findByIdAndDelete(req.params.id);
+        const studentId = req.params.id;
+        
+        // First, delete all files associated with this student
+        const deletedFilesCount = await deleteStudentFiles(studentId);
+        
+        // Then delete the student
+        const deletedStudent = await Student.findByIdAndDelete(studentId);
         if (!deletedStudent) {
             return res.status(404).json({ error: "Student not found" });
         }
 
-        res.json({ message: "Student deleted successfully" });
+        console.log(`✅ Deleted student ${deletedStudent.name} (${studentId}) and ${deletedFilesCount} associated file(s)`);
+        res.json({ 
+            message: "Student deleted successfully",
+            deletedFilesCount 
+        });
     } catch (error) {
         console.error("❌ Error deleting student:", error);
         res.status(500).json({ error: "Failed to delete student" });
@@ -564,13 +615,30 @@ router.delete("/student/:id", async (req, res) => {
 
 /**
  * @route   DELETE /students
- * @desc    Deletes all student records.
+ * @desc    Deletes all student records and their associated files.
  * @access  Public
  */
 router.delete("/students", async (req, res) => {
     try {
+        // Get all student IDs before deletion
+        const allStudents = await Student.find({}, { _id: 1 }).lean();
+        const studentIds = allStudents.map(s => s._id.toString());
+        
+        // Delete all files for all students
+        let totalDeletedFiles = 0;
+        for (const studentId of studentIds) {
+            const deletedCount = await deleteStudentFiles(studentId);
+            totalDeletedFiles += deletedCount;
+        }
+        
+        // Then delete all students
         await Student.deleteMany({});
-        res.json({ message: "All students deleted successfully" });
+        
+        console.log(`✅ Deleted all students and ${totalDeletedFiles} associated file(s)`);
+        res.json({ 
+            message: "All students deleted successfully",
+            deletedFilesCount: totalDeletedFiles
+        });
     } catch (error) {
         console.error("❌ Error deleting all students:", error);
         res.status(500).json({ error: "Failed to delete all students" });
