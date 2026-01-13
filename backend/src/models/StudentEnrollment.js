@@ -104,6 +104,10 @@ const studentEnrollmentSchema = new mongoose.Schema(
         grade: { type: String, default: null },
         gradeDate: { type: Date, default: null },
         gradeBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        motivation: { type: String, default: '' }, // Grade motivation/reason
+        comments: { type: String, default: '' }, // Grade comments
+        nationalTestPoints: { type: Number, default: null }, // National test points
+        isGradeLocked: { type: Boolean, default: false }, // Lock grade from editing
         
         // Slutprov (final exam) date
         slutprovDate: { type: Date, default: null },

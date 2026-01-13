@@ -214,33 +214,50 @@
   }
 
   const saveGrade = async (studentId, course) => {
-    const courseId = course.refId
-    /*
-  if (!course.type || !course.name) {
-    alert("Kursen saknar information om typ eller namn.");
-    return;
-  }
-*/
     try {
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/teacher/save-grade/`,
-        {
-          studentId,
-          courseId,
-          grade: course.grade,
-          reason: course.reason,
-          comments: course.comments,
-          npScore: course.npScore,
-          type: course.type,
-        },
-        { withCredentials: true }
-      )
+      // Check if this is a new enrollment-based course (has enrollmentId)
+      if (course.enrollmentId && course.source === 'enrollment') {
+        // Use the new StudentEnrollment endpoint
+        console.log('💾 Saving grade for enrollment:', course.enrollmentId, course)
+        
+        await axios.put(
+          `${import.meta.env.VITE_API_URL}/api/update-grade/${course.enrollmentId}`,
+          {
+            grade: course.grade,
+            motivation: course.reason || '',
+            comments: course.comments || '',
+            nationalTestPoints: course.npScore || null,
+          },
+          { withCredentials: true }
+        )
 
-      alert('✅ Betyg sparat!')
-      await loadStudents()
+        alert('✅ Betyg sparat!')
+        await loadStudents()
+      } else {
+        // Legacy: Use old Student.education endpoint
+        const courseId = course.refId
+        console.log('💾 Saving grade for legacy education entry:', courseId, course)
+        
+        await axios.post(
+          `${import.meta.env.VITE_API_URL}/api/teacher/save-grade/`,
+          {
+            studentId,
+            courseId,
+            grade: course.grade,
+            reason: course.reason,
+            comments: course.comments,
+            npScore: course.npScore,
+            type: course.type,
+          },
+          { withCredentials: true }
+        )
+
+        alert('✅ Betyg sparat!')
+        await loadStudents()
+      }
     } catch (err) {
       console.error('❌ Spara betyg misslyckades:', err.response?.data || err.message)
-      alert('⚠️ Kunde inte spara betyg.')
+      alert('⚠️ Kunde inte spara betyg: ' + (err.response?.data?.error || err.message))
     }
   }
 

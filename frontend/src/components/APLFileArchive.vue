@@ -3,6 +3,18 @@
     <v-card-title>
       APL Kontrakt Arkiv
       <v-spacer></v-spacer>
+      <v-btn 
+        v-if="isAdmin" 
+        color="error" 
+        small 
+        @click="cleanupOrphanedFiles" 
+        :loading="cleaningUp"
+        title="Ta bort filer för borttagna elever (Admin endast)"
+        class="mr-2"
+      >
+        <v-icon left>mdi-delete-sweep</v-icon>
+        Rensa borttagna
+      </v-btn>
       <v-btn icon @click="fetchAllFiles" title="Uppdatera lista">
         <v-icon>mdi-refresh</v-icon>
       </v-btn>
@@ -46,11 +58,19 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { useStore } from 'vuex';
 import axios from 'axios';
 
+const store = useStore();
 const studentsWithFiles = ref([]);
 const loading = ref(true);
+const cleaningUp = ref(false);
 const search = ref('');
+
+const isAdmin = computed(() => {
+  const role = store.getters.userRole || store.state.user?.role;
+  return role === 'admin' || role === 'systemadmin';
+});
 
 const handleSearchInput = () => {
   // Force reactivity update
@@ -128,6 +148,34 @@ const downloadFile = async (fileId, filename) => {
 const formatDate = (dateStr) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+};
+
+const cleanupOrphanedFiles = async () => {
+  if (!confirm('Är du säker på att du vill ta bort alla filer för borttagna elever? Detta går inte att ångra.')) {
+    return;
+  }
+  
+  cleaningUp.value = true;
+  try {
+    const { data } = await axios.delete(`${API_BASE}/cleanup/orphaned`, { withCredentials: true });
+    console.log('✅ Cleanup result:', data);
+    
+    const message = `Rensning klar!\n` +
+      `Totalt kontrollerade filer: ${data.totalFilesChecked}\n` +
+      `Hittade föräldralösa filer: ${data.orphanedFilesFound}\n` +
+      `Raderade filer: ${data.filesDeleted}`;
+    
+    alert(message);
+    
+    // Refresh the file list
+    await fetchAllFiles();
+  } catch (err) {
+    console.error('❌ Failed to cleanup orphaned files:', err);
+    const errorMsg = err.response?.data?.error || err.message || 'Okänt fel';
+    alert(`Kunde inte rensa filer: ${errorMsg}`);
+  } finally {
+    cleaningUp.value = false;
+  }
 };
 
 onMounted(fetchAllFiles);

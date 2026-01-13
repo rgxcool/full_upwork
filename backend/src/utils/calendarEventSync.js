@@ -107,16 +107,17 @@ export async function syncCalendarEventsForStudent(studentId) {
             if (!studentExists) {
                 students.push(studentData);
                 existingEvent.extendedProps.students = students;
-                existingEvent.title = `Slutprov${courseName ? ` - ${courseName}` : ""} (${students.length})`;
+                // Use teacher name as title, not course name - all events for same teacher/date should have same title
+                existingEvent.title = teacherName || "Okänd lärare";
                 await existingEvent.save();
                 console.log(`✅ Added student ${student.name} to existing calendar event for ${dateKey}`);
             } else {
                 console.log(`ℹ️ Student ${student.name} already in calendar event for ${dateKey}`);
             }
         } else {
-            // Create new event
+            // Create new event - use teacher name as title, not course name
             const newEvent = new CalendarEvent({
-                title: `Slutprov${courseName ? ` - ${courseName}` : ""} (1)`,
+                title: teacherName || "Okänd lärare",
                 start: new Date(dateKey + "T00:00:00.000Z"),
                 color: "#ff6b6b", // Red color for exams
                 extendedProps: {
@@ -279,7 +280,8 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
             if (!studentExists) {
                 students.push(studentData);
                 existingEvent.extendedProps.students = students;
-                existingEvent.title = `Slutprov${courseName ? ` - ${courseName}` : ""} (${students.length})`;
+                // Use teacher name as title, not course name - all events for same teacher/date should have same title
+                existingEvent.title = teacherName || "Okänd lärare";
                 
                 // Also update courseInstanceIds if missing
                 if (courseInstanceId) {
@@ -312,8 +314,9 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
                 extendedProps.courseInstanceIds = [courseInstanceId];
             }
             
+            // Use teacher name as title, not course name - all events for same teacher/date should have same title
             const newEvent = new CalendarEvent({
-                title: `Slutprov${courseName ? ` - ${courseName}` : ""} (1)`,
+                title: teacherName || "Okänd lärare",
                 start: eventStartDate, // Use local midnight, not UTC
                 color: "#ff6b6b", // Red color for exams
                 extendedProps: extendedProps,
