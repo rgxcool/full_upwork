@@ -349,14 +349,25 @@ router.get("/details/:type/:id", async (req, res) => {
                 break;
 
             case "Kurs":
+                // Courses are only templates - students are enrolled in CourseInstances, not Courses
+                // This endpoint should only be used from /programsandcourses for managing course templates
+                // For viewing enrolled students, use CourseInstance instead
                 try {
                     const course = await Course.findById(id).lean();
                     if (!course) {
                         return res.status(404).json({ message: "Course not found" });
                     }
 
+                    // Note: We don't show students here because students are enrolled in CourseInstances, not Courses
+                    // To see students, query the CourseInstances that reference this Course
+                    const courseInstances = await CourseInstance.find({ mainCourseId: id })
+                        .populate("responsibleTeacher", "userId")
+                        .lean();
+
+                    // Get unique students from all course instances of this course
+                    const instanceIds = courseInstances.map(ci => ci._id);
                     const courseEnrollments = await StudentEnrollment.find({
-                        mainCourseId: id,
+                        courseInstanceId: { $in: instanceIds },
                     })
                         .populate("studentId", "name email")
                         .populate("teacherId")
@@ -375,9 +386,8 @@ router.get("/details/:type/:id", async (req, res) => {
                                 .select("username email")
                                 .lean();
                             if (teacherUser) {
-                                // Use User ID, not Teacher ID, for the route
                                 teachersMap.set(teacherUser._id.toString(), {
-                                    _id: teacherUser._id, // User ID for the route
+                                    _id: teacherUser._id,
                                     username: teacherUser.username,
                                     email: teacherUser.email || "",
                                 });
@@ -393,6 +403,14 @@ router.get("/details/:type/:id", async (req, res) => {
                         ...course,
                         students: uniqueStudents,
                         teachers: Array.from(teachersMap.values()),
+                        courseInstances: courseInstances.map(ci => ({
+                            _id: ci._id,
+                            courseName: ci.courseName,
+                            courseCode: ci.courseCode,
+                            startDate: ci.startDate,
+                            endDate: ci.endDate,
+                        })),
+                        isCourseTemplate: true, // Flag to indicate this is a template, not an instance
                     };
                 } catch (courseError) {
                     console.error("❌ Error in Kurs case:", courseError);

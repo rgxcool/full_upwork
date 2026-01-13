@@ -805,6 +805,7 @@
             await api.post('/course-instances', formData)
           }
 
+          // Reload instances to get the latest data (including updated slutprovDate)
           await loadInstances()
           closeModal()
 
@@ -832,7 +833,11 @@
           const date = new Date(instance.slutprovDate)
           // Check if it's a valid date and not the epoch (1970-01-01)
           if (!isNaN(date.getTime()) && date.getFullYear() > 1970) {
-            slutprovDateValue = instance.slutprovDate.split('T')[0]
+            // Use local date components to avoid timezone shifts
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            slutprovDateValue = `${year}-${month}-${day}`
           }
         }
 

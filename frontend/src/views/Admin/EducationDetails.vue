@@ -1,7 +1,7 @@
 <template>
   <div class="scrollable-view">
     <div class="course-details">
-      <h1>{{ course.courseName }}</h1>
+      <h1>{{ course.courseName }}<span v-if="course.isCourseInstance && course.courseCode"> - {{ course.courseCode }}</span></h1>
       
       <div v-if="course.isCourseInstance" class="course-instance-info">
         <div class="info-item">
@@ -9,6 +9,9 @@
         </div>
         <div v-if="course.startDate && course.endDate" class="info-item">
           <strong>Period:</strong> {{ formatDate(course.startDate) }} - {{ formatDate(course.endDate) }}
+        </div>
+        <div v-if="course.slutprovDate" class="info-item">
+          <strong>Slutprovsdatum:</strong> {{ formatDate(course.slutprovDate) }}
         </div>
         <div v-if="course.mainCourseId" class="info-item">
           <strong>Huvudkurs:</strong> {{ course.mainCourseId?.courseName || 'Okänd' }}
@@ -69,7 +72,9 @@ export default {
 
     const fetchCourse = async () => {
       try {
-        const courseType = route.query.type === 'instance' ? 'Kursinstans' : 'Kurs'
+        // Students are enrolled in CourseInstances, not Courses
+        // Default to CourseInstance unless explicitly told otherwise
+        const courseType = route.query.type === 'course' ? 'Kurs' : 'Kursinstans'
         console.log("🔍 Fetching course with ID:", route.params.id, "Type:", courseType)
         const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/api/details/${courseType}/${route.params.id}`)
         console.log("✅ Course data received:", data)
@@ -77,6 +82,10 @@ export default {
       } catch (err) {
         console.error("❌ Kunde inte hämta kurs:", err)
         console.error("❌ Error details:", err.response?.data)
+        // If CourseInstance fails and we're not explicitly looking for a Course, try CourseInstance again
+        if (route.query.type !== 'course' && err.response?.status === 404) {
+          console.log("⚠️ CourseInstance not found, this might be a Course template (only viewable in /programsandcourses)")
+        }
       }
     }
 

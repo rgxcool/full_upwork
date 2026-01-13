@@ -1,18 +1,6 @@
 <template>
   <div class="scrollable-view">
     <div class="calendar-container">
-      <aside class="sidebar">
-        <DatePicker 
-          v-model="selectedDate" 
-          @update:modelValue="onDateChange"
-          :auto-apply="true" 
-          inline 
-          :enable-time="false"
-          :locale="svLocale"
-          :firstDayOfWeek="1"
-        />
-      </aside>
-
       <div class="main-calendar">
         <div v-if="canBookEvent" class="admin-controls mb-3">
           <button v-if="isAdminOrTeacher" @click="openAddEventModal('exam')">
@@ -63,27 +51,22 @@
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { VueDatePicker as DatePicker } from "@vuepic/vue-datepicker";
-import "@vuepic/vue-datepicker/dist/main.css";
-import { sv } from 'date-fns/locale';
 import EventModal from '../Modals/EventModal.vue'; 
 import AddEventModal from '../Modals/AddEventModal.vue';
 import AddMeetingModal from '../Modals/AddMeetingModal.vue';
 import MeetingModal from '../Modals/MeetingModal.vue';
 
 export default {
-  components: { FullCalendar, EventModal, DatePicker, AddEventModal, AddMeetingModal, MeetingModal },
+  components: { FullCalendar, EventModal, AddEventModal, AddMeetingModal, MeetingModal },
 
   data() {
     return {
       loadingUser: true,
-      selectedDate: new Date(),
       selectedEvent: null,
       showAddEventModal: false,
       eventType: null,
       teachers: [],
       currentTeacherId: null,
-      svLocale: sv,
       calendarOptions: {
         plugins: [dayGridPlugin, interactionPlugin],
         initialView: 'dayGridMonth',
@@ -95,6 +78,9 @@ export default {
         eventDrop: this.handleEventDrop,
         locale: "sv",
         firstDay: 1,
+        height: 'auto',
+        contentHeight: 'auto',
+        aspectRatio: 1.35,
         buttonText: {
           today: "Idag",
           month: "Månad",
@@ -212,11 +198,6 @@ export default {
     changeView(view) {
       const calendarApi = this.$refs.fullCalendar.getApi();
       calendarApi.changeView(view);
-    },
-    onDateChange(newDate) {
-      this.selectedDate = new Date(newDate);
-      const calendarApi = this.$refs.fullCalendar.getApi();
-      calendarApi.gotoDate(this.selectedDate);
     },
     async fetchEvents() {
       const { api } = await import('@/store/store.js');
@@ -462,30 +443,213 @@ export default {
 <style>
 .calendar-container {
   display: flex;
-}
-.sidebar {
-  width: 300px;
-  padding: 10px;
-  border-right: 1px solid #ccc;
-  background: #f8f9fa;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width: 100%;
+  height: 100%;
 }
 .main-calendar {
-  flex: 1;
-  padding: 10px;
+  width: 100%;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px);
+  overflow: hidden;
 }
+.main-calendar :deep(.fc) {
+  height: 100% !important;
+  flex: 1;
+  overflow: hidden;
+}
+.main-calendar :deep(.fc-view-harness) {
+  height: 100% !important;
+}
+.main-calendar :deep(.fc-daygrid) {
+  height: 100% !important;
+}
+.main-calendar :deep(.fc-scroller) {
+  overflow: visible !important;
+  height: 100% !important;
+}
+.main-calendar :deep(.fc-scroller-liquid-absolute) {
+  position: relative !important;
+  height: 100% !important;
+}
+
+/* Force calendar to fit viewport - override FullCalendar defaults */
+.main-calendar :deep(.fc-daygrid-body) {
+  height: auto !important;
+}
+
+.main-calendar :deep(.fc-daygrid-table) {
+  height: auto !important;
+}
+
+/* Make sure empty cells have zero height */
+.main-calendar :deep(.fc-daygrid-day:not(:has(.fc-daygrid-event)) .fc-daygrid-day-frame) {
+  height: auto !important;
+  min-height: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Remove any default min-height from FullCalendar */
+.main-calendar :deep(.fc-daygrid-day) {
+  min-height: 0 !important;
+}
+
+/* Override any aspect ratio or height calculations */
+.main-calendar :deep(.fc-daygrid-body > table) {
+  table-layout: auto !important;
+}
+
+/* Make calendar more compact */
+.main-calendar :deep(.fc-header-toolbar) {
+  margin-bottom: 0.5em;
+  padding: 0.3em 0;
+}
+
+.main-calendar :deep(.fc-toolbar-title) {
+  font-size: 1.1em;
+}
+
+.main-calendar :deep(.fc-button) {
+  padding: 0.25em 0.5em;
+  font-size: 0.8em;
+}
+
+/* Remove ALL padding from day cells - be very aggressive */
+.main-calendar :deep(.fc-daygrid-day) {
+  padding: 0 !important;
+  border: 1px solid #ddd;
+  height: auto !important;
+}
+
+.main-calendar :deep(.fc-daygrid-day-frame) {
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.main-calendar :deep(.fc-daygrid-day-number) {
+  padding: 1px 2px !important;
+  font-size: 0.8em;
+  line-height: 1;
+  margin: 0 !important;
+}
+
+/* Make empty days single line - only show day number */
+.main-calendar :deep(.fc-daygrid-day-top) {
+  padding: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  height: auto !important;
+  line-height: 1.2;
+}
+
+/* Remove extra spacing in day cells */
+.main-calendar :deep(.fc-daygrid-day-events) {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+}
+
+/* Ensure day body has no padding when empty */
+.main-calendar :deep(.fc-daygrid-day-bg) {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.main-calendar :deep(.fc-daygrid-day > *) {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Force table cells to have no height when empty */
+.main-calendar :deep(.fc-daygrid-body tr) {
+  height: auto !important;
+}
+
+.main-calendar :deep(.fc-daygrid-body td) {
+  padding: 0 !important;
+  height: auto !important;
+  vertical-align: top;
+  line-height: 1;
+}
+
+/* Remove any default cell height */
+.main-calendar :deep(.fc-daygrid-day:empty),
+.main-calendar :deep(.fc-daygrid-day:not(:has(.fc-daygrid-event))) {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/* Make events very compact */
+.main-calendar :deep(.fc-daygrid-event) {
+  margin: 0 1px !important;
+  padding: 0 2px !important;
+  font-size: 0.7em;
+  line-height: 1.1;
+  min-height: 0;
+}
+
+.main-calendar :deep(.fc-event-title) {
+  padding: 0 1px !important;
+  font-size: 0.7em;
+  line-height: 1.1;
+}
+
+/* Remove row spacing completely */
+.main-calendar :deep(.fc-daygrid-body) {
+  border-spacing: 0 !important;
+  border-collapse: collapse;
+}
+
+.main-calendar :deep(.fc-daygrid-body tr) {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.main-calendar :deep(.fc-daygrid-body td) {
+  padding: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  vertical-align: top;
+  line-height: 1;
+}
+
+.main-calendar :deep(.fc-daygrid-event) {
+  margin: 1px 2px;
+  padding: 1px 3px;
+  font-size: 0.75em;
+  line-height: 1.2;
+}
+
+.main-calendar :deep(.fc-event-title) {
+  padding: 0 2px;
+  font-size: 0.75em;
+}
+
+.main-calendar :deep(.fc-col-header-cell) {
+  padding: 2px 0 !important;
+}
+
+.main-calendar :deep(.fc-col-header-cell-cushion) {
+  font-size: 0.8em;
+  font-weight: 600;
+  padding: 0 2px;
+}
+
 .admin-controls {
-  margin: 20px 0;
+  margin: 10px 0;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
 }
 .admin-controls button {
-  padding: 10px 16px;
-  font-size: 14px;
+  padding: 8px 14px;
+  font-size: 13px;
   font-weight: 500;
   border: none;
   background-color: #007bff;
@@ -496,9 +660,6 @@ export default {
 .admin-controls button:hover {
   background-color: #0056b3;
 }
-.dp__btn.dp__button.dp__button_bottom {
-  display: none !important;
-}
 @media (max-width: 768px) {
   .admin-controls {
     flex-direction: column;
@@ -507,10 +668,15 @@ export default {
   .admin-controls button {
     width: 100%;
   }
-}
-@media (max-width: 915px) {
-  .sidebar {
-    display: none;
+  .main-calendar :deep(.fc) {
+    height: calc(100vh - 150px);
+    min-height: 500px;
+  }
+  .main-calendar :deep(.fc-daygrid-day-frame) {
+    min-height: 0;
+  }
+  .main-calendar :deep(.fc-daygrid-event) {
+    font-size: 0.7em;
   }
 }
 </style>
