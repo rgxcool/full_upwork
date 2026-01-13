@@ -234,10 +234,15 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
         const isCourseInstanceTeacher = courseInstanceTeacherId === teacherFilter.toString();
         
         if (isResponsibleTeacher) {
-          // Teacher is responsible - include this student
+          // Teacher is responsible for the student - include this enrollment
           filteredEnrollments.push(enrollment);
         } else if (isCourseInstanceTeacher) {
-          // Need to check if student has done exams
+          // Teacher is responsible for the course instance - include ALL students in this course instance
+          // No need to check for exams - if teacher is responsible for course instance, they should see all students
+          filteredEnrollments.push(enrollment);
+        } else {
+          // Teacher is not directly responsible, but might have given exams to this student
+          // Check if student has done exams with this teacher
           const courseId = courseInstance?.mainCourseId?._id || courseInstance?.mainCourseId;
           if (courseId && student?._id) {
             studentIds.add(student._id.toString());
