@@ -10,18 +10,26 @@
         label="Välj befintlig elev"
         return-object
         :loading="loadingStudents"
+        :search="studentSearchQuery"
         @update:search="searchStudents"
+        :no-data-text="studentSearchQuery.length < 2 ? 'Skriv minst 2 tecken för att söka' : 'Inga elever hittades'"
+        clearable
       ></v-autocomplete>
 
       <!-- Course Selection -->
-      <v-select
+      <v-autocomplete
         v-model="selectedCourseInstance"
-        :items="courseInstances"
-        item-title="courseName"
+        :items="filteredCourseInstances"
+        item-title="displayName"
         item-value="_id"
         label="Välj kursinstans"
         :loading="loadingCourseInstances"
-      ></v-select>
+        :search="courseInstanceSearchQuery"
+        @update:search="courseInstanceSearchQuery = $event"
+        return-object
+        clearable
+        :no-data-text="'Inga kursinstanser hittades'"
+      ></v-autocomplete>
 
       <!-- Dates -->
       <v-text-field v-model="startDate" label="Startdatum" type="date"></v-text-field>
@@ -56,8 +64,8 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
-import axios from 'axios';
+import { ref, watch, onMounted } from 'vue';
+import { api } from '@/store/store.js';
 import debounce from 'lodash.debounce';
 
 const props = defineProps({
@@ -75,25 +83,49 @@ const emit = defineEmits(['submit']);
 const selectedStudent = ref(null);
 const students = ref([]);
 const loadingStudents = ref(false);
+const studentSearchQuery = ref('');
+
+// Cache all students for filtering
+const allStudents = ref([]);
 
 const searchStudents = debounce(async (query) => {
-  if (query && query.length > 2) {
+  studentSearchQuery.value = query || '';
+  
+  // If we don't have students cached yet, fetch them
+  if (allStudents.value.length === 0 && (!query || query.length >= 2)) {
     loadingStudents.value = true;
     try {
-      const { data } = await axios.get(`/api/admin/users/search?role=student&q=${query}`);
-      students.value = data;
+      const { data } = await api.get('/students', { 
+        withCredentials: true
+      });
+      allStudents.value = Array.isArray(data) ? data : [];
     } catch (error) {
-      console.error('Error searching students:', error);
+      console.error('Error fetching students:', error);
+      allStudents.value = [];
     } finally {
       loadingStudents.value = false;
     }
   }
+  
+  // Filter students by search query
+  if (!query || query.length < 2) {
+    students.value = [];
+    return;
+  }
+  
+  const lowerQuery = query.toLowerCase();
+  students.value = allStudents.value.filter(s => 
+    s.name?.toLowerCase().includes(lowerQuery) ||
+    s.email?.toLowerCase().includes(lowerQuery) ||
+    s.personalNumber?.includes(query)
+  );
 }, 300);
 
 // Course data
 const courseInstances = ref([]);
 const loadingCourseInstances = ref(false);
 const selectedCourseInstance = ref(null);
+const courseInstanceSearchQuery = ref('');
 
 // Dates
 const startDate = ref('');
@@ -115,21 +147,55 @@ const aplStatusOptions = [
 
 const submitting = ref(false);
 
+// Computed property for filtered course instances
+const filteredCourseInstances = ref([]);
+
 // Fetch initial data
 const fetchCourseInstances = async () => {
   loadingCourseInstances.value = true;
   try {
-    const { data } = await axios.get('/api/course-instances');
-    courseInstances.value = data.instances;
+    const { data } = await api.get('/course-instances', { withCredentials: true });
+    if (data.success && Array.isArray(data.instances)) {
+      courseInstances.value = data.instances.map(instance => ({
+        ...instance,
+        displayName: `${instance.courseName || instance.courseCode || 'Okänd kurs'} (${instance.courseCode || 'Ingen kod'})`,
+      }));
+      filteredCourseInstances.value = courseInstances.value;
+    } else if (Array.isArray(data)) {
+      // Fallback if response is direct array
+      courseInstances.value = data.map(instance => ({
+        ...instance,
+        displayName: `${instance.courseName || instance.courseCode || 'Okänd kurs'} (${instance.courseCode || 'Ingen kod'})`,
+      }));
+      filteredCourseInstances.value = courseInstances.value;
+    }
   } catch (error) {
     console.error('Error fetching course instances:', error);
+    courseInstances.value = [];
+    filteredCourseInstances.value = [];
   } finally {
     loadingCourseInstances.value = false;
   }
 };
 
+// Filter course instances based on search query
+watch(courseInstanceSearchQuery, (query) => {
+  if (!query || query.trim() === '') {
+    filteredCourseInstances.value = courseInstances.value;
+  } else {
+    const lowerQuery = query.toLowerCase();
+    filteredCourseInstances.value = courseInstances.value.filter(instance => 
+      instance.courseName?.toLowerCase().includes(lowerQuery) ||
+      instance.courseCode?.toLowerCase().includes(lowerQuery) ||
+      instance.displayName?.toLowerCase().includes(lowerQuery)
+    );
+  }
+});
+
 // Fetch course instances on mount
-fetchCourseInstances();
+onMounted(() => {
+  fetchCourseInstances();
+});
 
 const calculateEndDate = () => {
     if (startDate.value && studyLength.value) {
@@ -156,17 +222,29 @@ const submitForm = async () => {
     return;
   }
 
-  const instance = courseInstances.value.find(ci => ci._id === selectedCourseInstance.value);
+  // Handle both object and ID selection
+  let instance;
+  if (typeof selectedCourseInstance.value === 'object' && selectedCourseInstance.value !== null) {
+    instance = selectedCourseInstance.value;
+  } else {
+    instance = courseInstances.value.find(ci => ci._id === selectedCourseInstance.value);
+  }
+  
   if (!instance) {
     console.error('Course instance not found');
     submitting.value = false;
     return;
   }
 
+  // Ensure mainCourseId is available (could be populated object or just ID)
+  const mainCourseId = typeof instance.mainCourseId === 'object' 
+    ? instance.mainCourseId._id 
+    : instance.mainCourseId;
+
   const educationEntries = [{
     type: 'Course',
-    refId: instance.mainCourseId._id,
-    name: instance.courseName,
+    refId: mainCourseId,
+    name: instance.courseName || instance.courseCode || 'Okänd kurs',
     startDate: startDate.value,
     endDate: endDate.value,
     slutprovDate: finalExamDate.value,
@@ -184,16 +262,29 @@ const submitForm = async () => {
   };
 
   try {
-      await axios.post('/api/course-matching/process-education', payload);
+      await api.post('/course-matching/process-education', payload, { withCredentials: true });
       // Handle success
+      alert('Eleven har anmälts till kursen framgångsrikt!');
+      
+      // Reset form
+      selectedStudent.value = null;
+      selectedCourseInstance.value = null;
+      startDate.value = '';
+      endDate.value = '';
+      finalExamDate.value = '';
+      needsSupport.value = false;
+      examMode.value = 'on-site';
+      aplStatus.value = 'GRAY';
+      studentSearchQuery.value = '';
+      courseInstanceSearchQuery.value = '';
       
       if (aplStatus.value !== 'GRAY') {
-        await axios.patch(`/api/students/${selectedStudent.value._id}`, { aplStatus: aplStatus.value });
+        await api.patch(`/students/${selectedStudent.value._id}`, { aplStatus: aplStatus.value }, { withCredentials: true });
       }
 
   } catch (error) {
       console.error('Error submitting enrollment:', error);
-      // Handle error
+      alert('Kunde inte anmäla eleven till kursen. ' + (error.response?.data?.error || error.message));
   } finally {
       submitting.value = false;
   }

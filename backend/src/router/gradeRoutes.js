@@ -169,7 +169,10 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
       status: { $in: ["enrolled", "active", "completed"] }
     })
       .populate("studentId")
-      .populate("courseInstanceId");
+      .populate({
+        path: "courseInstanceId",
+        populate: { path: "mainCourseId", select: "courseName courseCode" }
+      });
 
     // Format for frontend (from StudentEnrollment)
     const studentsFromEnrollments = enrollments.map(enrollment => ({
@@ -204,6 +207,9 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
           endDate: edu.endDate,
           grade: edu.grade || null,
           enrollmentId: edu._id, // refers to education entry id
+          courseRefId: edu.refId, // The actual course ID for saving grades
+          courseName: edu.name || null, // Course name if available
+          courseCode: null, // Will need to be populated from Course model if needed
           source: "student_education",
         });
       }
@@ -339,6 +345,81 @@ router.delete('/enrollments/:id', async (req, res) => {
 });
 
 // ===== ADDITIONAL GRADING ROUTES =====
+
+// Debug endpoint to check what students-to-grade endpoint returns
+router.get('/debug/students-to-grade', authenticateUser, async (req, res) => {
+  try {
+    const now = new Date();
+
+    // Find enrollments that have passed end date and are not graded
+    const enrollments = await StudentEnrollment.find({
+      endDate: { $lt: now },
+      $or: [{ grade: null }, { grade: "" }],
+      status: { $in: ["enrolled", "active", "completed"] }
+    })
+      .populate("studentId", "name email")
+      .populate({
+        path: "courseInstanceId",
+        populate: { path: "mainCourseId", select: "courseName courseCode" }
+      })
+      .lean();
+
+    // Also check Student.education entries
+    const studentsWithPastEducation = await Student.find({
+      education: {
+        $elemMatch: {
+          removedAt: null,
+          endDate: { $lt: now },
+          $or: [{ grade: null }, { grade: "" }],
+        },
+      },
+    })
+      .select("name email education")
+      .lean();
+
+    res.json({
+      success: true,
+      debug: {
+        now: now.toISOString(),
+        enrollments: {
+          count: enrollments.length,
+          data: enrollments.map(e => ({
+            student: e.studentId?.name || "Unknown",
+            studentId: e.studentId?._id,
+            courseInstance: e.courseInstanceId?.courseCode || "N/A",
+            courseName: e.courseInstanceId?.courseName || e.courseInstanceId?.mainCourseId?.courseName || "Unknown",
+            endDate: e.endDate ? new Date(e.endDate).toISOString().split('T')[0] : null,
+            grade: e.grade,
+            status: e.status,
+            enrollmentId: e._id
+          }))
+        },
+        studentEducation: {
+          count: studentsWithPastEducation.length,
+          data: studentsWithPastEducation.map(s => ({
+            student: s.name,
+            studentId: s._id,
+            educationEntries: s.education?.filter(e => 
+              !e.removedAt && 
+              e.endDate && 
+              new Date(e.endDate) < now && 
+              (!e.grade || e.grade === "")
+            ).map(e => ({
+              endDate: e.endDate ? new Date(e.endDate).toISOString().split('T')[0] : null,
+              grade: e.grade,
+              refId: e.refId,
+              name: e.name,
+              type: e.type
+            }))
+          }))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error in debug endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Debug endpoint to check what students exist
 router.get('/debug/students-past-end-date', authenticateUser, async (req, res) => {

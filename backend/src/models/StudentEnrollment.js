@@ -221,6 +221,17 @@ studentEnrollmentSchema.post("save", async function (doc) {
     }
     
     await sendStudyplanChangedNotification({ doc, changeType, changes });
+
+    // Sync calendar event if enrollment has a slutprovDate (and it was newly set or modified)
+    if (doc.slutprovDate && (!originalDoc || originalDoc.slutprovDate?.toString() !== doc.slutprovDate?.toString())) {
+        try {
+            const { syncCalendarEventFromEnrollment } = await import("../utils/calendarEventSync.js");
+            await syncCalendarEventFromEnrollment(doc._id);
+        } catch (calendarError) {
+            console.error(`❌ Error syncing calendar event for enrollment ${doc._id}:`, calendarError);
+            // Don't fail the enrollment save if calendar sync fails
+        }
+    }
 });
 
 // Post-delete hook

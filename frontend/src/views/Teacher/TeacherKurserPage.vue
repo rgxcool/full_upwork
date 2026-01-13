@@ -7,16 +7,16 @@
       <v-card-text>
         <v-tabs v-model="tab" background-color="primary" dark>
           <v-tab value="overview">Kursöversikt</v-tab>
-          <v-tab value="single">Kurs (enskild)</v-tab>
+          <!-- <v-tab value="single">Kurs (enskild)</v-tab> -->
         </v-tabs>
 
         <v-window v-model="tab">
           <v-window-item value="overview">
             <CourseOverview />
           </v-window-item>
-          <v-window-item value="single">
+          <!-- <v-window-item value="single">
             <EnrollSingleCourse />
-          </v-window-item>
+          </v-window-item> -->
         </v-window>
       </v-card-text>
     </v-card>

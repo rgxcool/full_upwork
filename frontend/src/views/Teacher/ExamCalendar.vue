@@ -112,7 +112,18 @@ export default {
       }
     };
   },
-  computed: {
+      computed: {
+    isExamEvent() {
+      // Check if the selected event is an exam event (slutprov type)
+      return this.selectedEvent && (
+        this.selectedEvent.extendedProps?.type === 'slutprov' ||
+        this.selectedEvent.extendedProps?.type === 'exam' ||
+        (this.selectedEvent.extendedProps?.type === undefined && !this.selectedEvent.extendedProps?.isMeeting)
+      );
+    },
+    isMeetingEvent() {
+      return this.selectedEvent && this.selectedEvent.extendedProps?.isMeeting === true;
+    },
     userRole() {
       return this.$store.getters.userRole || 'guest';
     },
@@ -127,13 +138,6 @@ export default {
     },
     canBookEvent() {
       return this.isAdminOrTeacher || this.isSYVOrSpecped;
-    },
-    isMeetingEvent() {
-      return this.selectedEvent?.extendedProps?.isMeeting;
-    },
-    isExamEvent() {
-      return this.selectedEvent?.extendedProps?.isExam || 
-            this.selectedEvent?.extendedProps?.type === 'exam';
     }
   },
   methods: {
@@ -224,14 +228,18 @@ export default {
         ]);
 
         const allEvents = [
-          ...savedEvents.data.map(event => ({
-            id: event._id,
-            title: event.title,
-            start: event.start,
-            allDay: true,
-            color: event.color || "#999999",
-            extendedProps: { ...(event.extendedProps || {}), saved: true }
-          })),
+          // Filter out old "slutprov" type events - these should come from syncable instead
+          ...savedEvents.data
+            .filter(event => event.extendedProps?.type !== 'slutprov')
+            .map(event => ({
+              id: event._id,
+              title: event.title,
+              start: event.start,
+              allDay: true,
+              color: event.color || "#999999",
+              editable: true, // Saved events should be editable
+              extendedProps: { ...(event.extendedProps || {}), saved: true }
+            })),
           ...syncedEvents.data.map(event => {
             // Make synced events editable for admins and the responsible teacher
             const isAdmin = ["admin", "systemadmin"].includes(this.userRole);
@@ -368,8 +376,19 @@ export default {
         // Get the original date from oldEvent or calculate from delta
         const oldStart = info.oldEvent?.start || info.event.start;
         const newStart = info.event.start;
-        const fromDate = oldStart ? new Date(oldStart).toISOString().split('T')[0] : null;
-        const toDate = newStart ? new Date(newStart).toISOString().split('T')[0] : null;
+        
+        // Format dates using local date components to avoid timezone shifts
+        const formatDateLocal = (date) => {
+          if (!date) return null;
+          const d = new Date(date);
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+        
+        const fromDate = formatDateLocal(oldStart);
+        const toDate = formatDateLocal(newStart);
         const courseInstanceIds = info.event.extendedProps?.courseInstanceIds || [];
 
         if (!teacherId || !fromDate || !toDate) {

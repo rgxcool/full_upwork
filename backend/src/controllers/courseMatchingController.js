@@ -1285,16 +1285,24 @@ export const getCourseInstances = async (req, res) => {
                     courseInstanceId: instance._id,
                 });
 
-                // Get the slutprov date from the first enrollment (they should all have the same date for a course instance)
-                const firstEnrollment = await StudentEnrollment.findOne({
-                    courseInstanceId: instance._id,
-                    slutprovDate: { $ne: null },
-                }).select("slutprovDate");
+                // Use the slutprovDate from the course instance itself (not from enrollments)
+                // If the instance doesn't have one, fall back to the first enrollment's date
+                const instanceObj = instance.toObject();
+                let slutprovDate = instanceObj.slutprovDate || null;
+                
+                // Fallback to enrollment date only if instance doesn't have one
+                if (!slutprovDate) {
+                    const firstEnrollment = await StudentEnrollment.findOne({
+                        courseInstanceId: instance._id,
+                        slutprovDate: { $ne: null },
+                    }).select("slutprovDate");
+                    slutprovDate = firstEnrollment?.slutprovDate || null;
+                }
 
                 return {
-                    ...instance.toObject(),
+                    ...instanceObj,
                     enrollmentCount,
-                    slutprovDate: firstEnrollment?.slutprovDate || null,
+                    slutprovDate: slutprovDate,
                 };
             })
         );
@@ -1578,6 +1586,8 @@ export const createCourseInstance = async (req, res) => {
             coursePoints,
             courseExtent,
             notes,
+            slutprovDate,
+            responsibleTeacher,
         } = req.body;
         const userId = req.user?.userId;
 
@@ -1587,37 +1597,75 @@ export const createCourseInstance = async (req, res) => {
             });
         }
 
-        const { instance, wasCreated } =
-            await CourseMatchingService.findOrCreateCourseInstance(
-                mainCourseId,
-                new Date(startDate),
-                new Date(endDate),
-                userId
-            );
-
-        // If we found an existing instance, update it with any new data
-        if (
-            !wasCreated &&
-            (courseName || courseCode || coursePoints || courseExtent || notes)
-        ) {
-            const updateData = {};
-            if (courseName) updateData.courseName = courseName;
-            if (courseCode) updateData.courseCode = courseCode;
-            if (coursePoints) updateData.coursePoints = coursePoints;
-            if (courseExtent) updateData.courseExtent = courseExtent;
-            if (notes) updateData.notes = notes;
-
-            await CourseInstance.findByIdAndUpdate(instance._id, updateData);
-            await instance.save();
+        // Get the main course to inherit values if not provided
+        const mainCourse = await Course.findById(mainCourseId);
+        if (!mainCourse) {
+            return res.status(404).json({ error: "Main course not found" });
         }
+
+        // Generate course code if not provided
+        let finalCourseCode = courseCode;
+        if (!finalCourseCode) {
+            const startDateObj = new Date(startDate);
+            const year = String(startDateObj.getFullYear()).slice(-2);
+            const month = String(startDateObj.getMonth() + 1).padStart(2, '0');
+            finalCourseCode = `${mainCourse.courseCode}${year}${month}`;
+        }
+
+        // Check for uniqueness and add version suffix if needed
+        let uniqueCourseCode = finalCourseCode;
+        let version = 1;
+        while (await CourseInstance.findOne({ courseCode: uniqueCourseCode })) {
+            uniqueCourseCode = `${finalCourseCode}v${version}`;
+            version++;
+        }
+
+        // Use inherited values if not provided
+        const finalCourseName = courseName || mainCourse.courseName;
+        const finalCoursePoints = coursePoints || mainCourse.coursePoints;
+        const finalCourseExtent = courseExtent || mainCourse.courseExtent;
+
+        // Parse dates correctly - handle date strings in YYYY-MM-DD format
+        const parseDate = (dateString) => {
+            if (!dateString || dateString.trim() === '') return undefined;
+            // If it's already a Date object, return it
+            if (dateString instanceof Date) return dateString;
+            // Parse YYYY-MM-DD format and create date at local midnight
+            const parts = dateString.split('-');
+            if (parts.length === 3) {
+                const year = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+                const day = parseInt(parts[2], 10);
+                return new Date(year, month, day);
+            }
+            // Fallback to standard Date parsing
+            const parsed = new Date(dateString);
+            return isNaN(parsed.getTime()) ? undefined : parsed;
+        };
+
+        // Create the course instance
+        const newInstance = new CourseInstance({
+            mainCourseId,
+            startDate: parseDate(startDate),
+            endDate: parseDate(endDate),
+            courseName: finalCourseName,
+            courseCode: uniqueCourseCode,
+            coursePoints: finalCoursePoints,
+            courseExtent: finalCourseExtent,
+            createdBy: userId,
+            responsibleTeacher: responsibleTeacher || undefined,
+            slutprovDate: parseDate(slutprovDate),
+            notes: notes || '',
+            isActive: true,
+        });
+
+        await newInstance.save();
 
         res.json({
             success: true,
-            message: wasCreated
-                ? "Course instance created successfully"
-                : "Course instance updated successfully",
-            instance,
-            wasCreated,
+            message: "Course instance created successfully",
+            instance: newInstance,
+            wasCreated: true,
         });
     } catch (error) {
         console.error("Error creating course instance:", error);
@@ -1629,7 +1677,7 @@ export const createCourseInstance = async (req, res) => {
 export const updateCourseInstance = async (req, res) => {
     try {
         const { instanceId } = req.params;
-        const updateData = req.body;
+        const updateData = { ...req.body };
 
         // Find the instance first
         const instance = await CourseInstance.findById(instanceId);
@@ -1637,16 +1685,170 @@ export const updateCourseInstance = async (req, res) => {
             return res.status(404).json({ error: "Course instance not found" });
         }
 
+        // Get main course to inherit values if fields are empty
+        const mainCourse = await Course.findById(instance.mainCourseId);
+        if (mainCourse) {
+            // Inherit coursePoints if not provided or empty
+            if (!updateData.coursePoints || updateData.coursePoints.trim() === '') {
+                updateData.coursePoints = mainCourse.coursePoints;
+            }
+            // Inherit courseExtent if not provided or empty
+            if (!updateData.courseExtent || updateData.courseExtent.trim() === '') {
+                updateData.courseExtent = mainCourse.courseExtent;
+            }
+            // Inherit courseName if not provided or empty
+            if (!updateData.courseName || updateData.courseName.trim() === '') {
+                updateData.courseName = mainCourse.courseName;
+            }
+        }
+
+        // Handle courseCode uniqueness if it's being updated
+        if (updateData.courseCode && updateData.courseCode !== instance.courseCode) {
+            let uniqueCourseCode = updateData.courseCode;
+            let version = 1;
+            while (await CourseInstance.findOne({ 
+                courseCode: uniqueCourseCode,
+                _id: { $ne: instanceId } // Exclude current instance
+            })) {
+                uniqueCourseCode = `${updateData.courseCode}v${version}`;
+                version++;
+            }
+            updateData.courseCode = uniqueCourseCode;
+        }
+
+        // Parse dates correctly - handle date strings in YYYY-MM-DD or MM/DD/YYYY format
+        const parseDate = (dateString) => {
+            if (!dateString || dateString.trim() === '' || dateString === null || dateString === undefined) {
+                return null;
+            }
+            // If it's already a Date object, return it
+            if (dateString instanceof Date) {
+                return isNaN(dateString.getTime()) ? null : dateString;
+            }
+            // Convert to string and trim
+            const dateStr = String(dateString).trim();
+            if (dateStr === '' || dateStr === 'null' || dateStr === 'undefined') {
+                return null;
+            }
+            
+            console.log(`[DEBUG] parseDate input:`, dateStr);
+            
+            // Try YYYY-MM-DD format first (ISO format)
+            let parts = dateStr.split('-');
+            if (parts.length === 3 && parts[0].length === 4) {
+                const year = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+                const day = parseInt(parts[2], 10);
+                // Validate the parsed values
+                if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+                    // Validate reasonable date range
+                    if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+                        const date = new Date(year, month, day);
+                        // Double-check the date is valid
+                        if (!isNaN(date.getTime())) {
+                            console.log(`[DEBUG] Parsed as YYYY-MM-DD: ${year}-${month + 1}-${day}`);
+                            return date;
+                        }
+                    }
+                }
+            }
+            
+            // Try MM/DD/YYYY format
+            parts = dateStr.split('/');
+            if (parts.length === 3) {
+                // Check if first part is month (1-12) or year (4 digits)
+                const firstPart = parseInt(parts[0], 10);
+                const secondPart = parseInt(parts[1], 10);
+                const thirdPart = parseInt(parts[2], 10);
+                
+                let year, month, day;
+                if (firstPart > 12 && thirdPart <= 12) {
+                    // Format: YYYY/MM/DD (unlikely but possible)
+                    year = firstPart;
+                    month = thirdPart - 1;
+                    day = secondPart;
+                } else if (thirdPart > 12 || thirdPart.toString().length === 4) {
+                    // Format: MM/DD/YYYY
+                    month = firstPart - 1;
+                    day = secondPart;
+                    year = thirdPart;
+                } else {
+                    // Format: DD/MM/YYYY (European)
+                    day = firstPart;
+                    month = secondPart - 1;
+                    year = thirdPart;
+                }
+                
+                if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+                    // Validate reasonable date range
+                    if (year >= 1900 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+                        const date = new Date(year, month, day);
+                        if (!isNaN(date.getTime())) {
+                            console.log(`[DEBUG] Parsed as MM/DD/YYYY: ${month + 1}/${day}/${year}`);
+                            return date;
+                        }
+                    }
+                }
+            }
+            
+            // Fallback to standard Date parsing
+            const parsed = new Date(dateStr);
+            if (!isNaN(parsed.getTime())) {
+                console.log(`[DEBUG] Parsed using standard Date constructor:`, parsed);
+                return parsed;
+            }
+            
+            console.log(`[WARNING] Failed to parse date: ${dateStr}`);
+            return null;
+        };
+
+        // Convert date strings to Date objects
+        if (updateData.startDate) updateData.startDate = parseDate(updateData.startDate);
+        if (updateData.endDate) updateData.endDate = parseDate(updateData.endDate);
+        
+        // Handle slutprovDate - check if it's being explicitly set (even if null/empty)
+        const slutprovDateInRequest = 'slutprovDate' in req.body;
+        let slutprovDateExplicitlySet = false;
+        
+        if (slutprovDateInRequest) {
+            console.log(`[DEBUG] slutprovDate in request:`, req.body.slutprovDate, `(type: ${typeof req.body.slutprovDate})`);
+            const parsedDate = parseDate(req.body.slutprovDate);
+            console.log(`[DEBUG] Parsed slutprovDate:`, parsedDate);
+            if (parsedDate) {
+                console.log(`[DEBUG] Parsed date details:`, {
+                    getTime: parsedDate.getTime(),
+                    toISOString: parsedDate.toISOString(),
+                    toDateString: parsedDate.toDateString(),
+                    isValid: !isNaN(parsedDate.getTime()),
+                    year: parsedDate.getFullYear()
+                });
+            }
+            
+            // Only set it if it's a valid date, or explicitly set to null/empty
+            if (parsedDate !== null && !isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1970) {
+                updateData.slutprovDate = parsedDate;
+                slutprovDateExplicitlySet = true;
+                console.log(`[DEBUG] Setting slutprovDate to:`, parsedDate, `(${parsedDate.toISOString()})`);
+            } else if (req.body.slutprovDate === '' || req.body.slutprovDate === null) {
+                updateData.slutprovDate = null; // Explicitly clear it
+                slutprovDateExplicitlySet = true; // User explicitly cleared it
+                console.log(`[DEBUG] Clearing slutprovDate (explicitly set to empty)`);
+            } else {
+                console.log(`[WARNING] Failed to parse slutprovDate:`, req.body.slutprovDate, `parsed result:`, parsedDate);
+            }
+        } else {
+            console.log(`[DEBUG] slutprovDate NOT in request body`);
+        }
+
         // Check if we need to recalculate slutprovDate
         const teacherChanged = updateData.responsibleTeacher !== undefined;
         const endDateChanged = updateData.endDate !== undefined;
-        const slutprovDateExplicitlySet = updateData.slutprovDate !== undefined;
 
         // If teacher or endDate is changing, and slutprovDate is not explicitly set in this update,
         // we should recalculate it based on the new teacher/endDate
         if ((teacherChanged || endDateChanged) && !slutprovDateExplicitlySet) {
             const newTeacher = updateData.responsibleTeacher || instance.responsibleTeacher;
-            const newEndDate = updateData.endDate ? new Date(updateData.endDate) : instance.endDate;
+            const newEndDate = updateData.endDate || instance.endDate;
 
             // Auto-calculate if teacher is set
             if (newTeacher && newEndDate) {
@@ -1661,13 +1863,87 @@ export const updateCourseInstance = async (req, res) => {
             }
         }
 
-        // Update the instance with the provided data
-        // Use findOneAndUpdate and then save() to trigger pre-save hooks, or manually set
-        const updatedInstance = await CourseInstance.findByIdAndUpdate(
-            instanceId,
-            updateData,
-            { new: true, runValidators: true }
-        );
+        // Update the instance - use direct update to bypass pre-save hook issues
+        const instanceToUpdate = await CourseInstance.findById(instanceId);
+        if (!instanceToUpdate) {
+            return res.status(404).json({ error: "Course instance not found" });
+        }
+        
+        // Store the original slutprovDate before applying updates
+        const originalSlutprovDate = instanceToUpdate.slutprovDate;
+        console.log(`[DEBUG] Original slutprovDate:`, originalSlutprovDate);
+        
+        // If we explicitly set slutprovDate, handle it separately to ensure it's preserved
+        let finalSlutprovDate = updateData.slutprovDate;
+        if (slutprovDateExplicitlySet) {
+            finalSlutprovDate = updateData.slutprovDate; // This is already the parsed Date object
+            console.log(`[DEBUG] Will set slutprovDate to:`, finalSlutprovDate);
+            // Remove from updateData so we can set it separately
+            delete updateData.slutprovDate;
+        }
+        
+        // Apply all other updates first
+        Object.keys(updateData).forEach(key => {
+            if (updateData[key] !== undefined) {
+                console.log(`[DEBUG] Setting ${key} to:`, updateData[key]);
+                instanceToUpdate[key] = updateData[key];
+            }
+        });
+        
+        // Now set slutprovDate explicitly after other updates, and mark it as modified
+        if (slutprovDateExplicitlySet) {
+            instanceToUpdate.slutprovDate = finalSlutprovDate;
+            instanceToUpdate.markModified('slutprovDate');
+            // Set a flag to prevent pre-save hook from overriding
+            instanceToUpdate._slutprovDateExplicitlySet = true;
+            console.log(`[DEBUG] Set slutprovDate directly, value:`, instanceToUpdate.slutprovDate);
+            console.log(`[DEBUG] Date object details:`, {
+                value: instanceToUpdate.slutprovDate,
+                getTime: instanceToUpdate.slutprovDate?.getTime(),
+                toISOString: instanceToUpdate.slutprovDate?.toISOString(),
+                isValid: instanceToUpdate.slutprovDate && !isNaN(instanceToUpdate.slutprovDate.getTime()),
+                year: instanceToUpdate.slutprovDate?.getFullYear()
+            });
+        }
+        
+        // Save the instance (this will trigger pre-save hooks, but our hook should respect the explicit date)
+        let updatedInstance;
+        try {
+            updatedInstance = await instanceToUpdate.save();
+            console.log(`[DEBUG] Saved instance, final slutprovDate:`, updatedInstance.slutprovDate);
+            if (updatedInstance.slutprovDate) {
+                console.log(`[DEBUG] Final date details:`, {
+                    value: updatedInstance.slutprovDate,
+                    getTime: updatedInstance.slutprovDate.getTime(),
+                    toISOString: updatedInstance.slutprovDate.toISOString(),
+                    isValid: !isNaN(updatedInstance.slutprovDate.getTime()),
+                    year: updatedInstance.slutprovDate.getFullYear()
+                });
+                
+                // If the date was changed to 1970-01-01, force update it directly via MongoDB
+                if (updatedInstance.slutprovDate.getFullYear() === 1970 && slutprovDateExplicitlySet && finalSlutprovDate) {
+                    console.log(`[WARNING] Date was changed to 1970-01-01, forcing direct MongoDB update`);
+                    await CourseInstance.updateOne(
+                        { _id: instanceId },
+                        { $set: { slutprovDate: finalSlutprovDate } }
+                    );
+                    // Reload the instance
+                    updatedInstance = await CourseInstance.findById(instanceId);
+                    console.log(`[DEBUG] After force update, slutprovDate:`, updatedInstance.slutprovDate);
+                }
+            } else {
+                console.log(`[DEBUG] Final slutprovDate is null/undefined`);
+            }
+        } catch (error) {
+            console.error(`[ERROR] Error saving instance:`, error);
+            throw error;
+        }
+        
+        res.json({
+            success: true,
+            message: "Course instance updated successfully",
+            instance: updatedInstance,
+        });
 
         res.json({
             success: true,
@@ -1676,6 +1952,98 @@ export const updateCourseInstance = async (req, res) => {
         });
     } catch (error) {
         console.error("Error updating course instance:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+// Add students to a course instance
+export const addStudentsToInstance = async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+        const { studentIds } = req.body;
+        const userId = req.user?.userId;
+
+        if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+            return res.status(400).json({ error: "Student IDs array is required" });
+        }
+
+        // Find the course instance
+        const instance = await CourseInstance.findById(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Course instance not found" });
+        }
+
+        // Get the main course to get course details
+        const mainCourse = await Course.findById(instance.mainCourseId);
+        if (!mainCourse) {
+            return res.status(404).json({ error: "Main course not found" });
+        }
+
+        const enrollments = [];
+        const errors = [];
+
+        for (const studentId of studentIds) {
+            try {
+                // Check if enrollment already exists
+                const existingEnrollment = await StudentEnrollment.findOne({
+                    studentId,
+                    courseInstanceId: instanceId,
+                });
+
+                if (existingEnrollment) {
+                    console.log(`[SKIP] Enrollment already exists for student ${studentId} in instance ${instanceId}`);
+                    continue;
+                }
+
+                // Get student to find teacherId
+                const student = await Student.findById(studentId);
+                if (!student) {
+                    errors.push(`Student ${studentId} not found`);
+                    continue;
+                }
+
+                // Create enrollment
+                const enrollment = new StudentEnrollment({
+                    studentId,
+                    courseInstanceId: instanceId,
+                    mainCourseId: instance.mainCourseId,
+                    startDate: instance.startDate,
+                    endDate: instance.endDate,
+                    status: "enrolled",
+                    teacherId: student.teacherId || instance.responsibleTeacher || null,
+                    // Copy slutprovDate from course instance if it exists
+                    slutprovDate: instance.slutprovDate || null,
+                });
+
+                await enrollment.save();
+                enrollments.push(enrollment);
+
+                console.log(`✅ Created enrollment for student ${student.name} in course instance ${instance.courseName}`);
+
+                // Sync calendar event if enrollment has a slutprovDate
+                if (enrollment.slutprovDate) {
+                    try {
+                        const { syncCalendarEventFromEnrollment } = await import("../utils/calendarEventSync.js");
+                        await syncCalendarEventFromEnrollment(enrollment._id);
+                    } catch (calendarError) {
+                        console.error(`❌ Error syncing calendar event for enrollment ${enrollment._id}:`, calendarError);
+                        // Don't fail the enrollment creation if calendar sync fails
+                    }
+                }
+            } catch (error) {
+                console.error(`❌ Error creating enrollment for student ${studentId}:`, error);
+                errors.push(`Failed to enroll student ${studentId}: ${error.message}`);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Added ${enrollments.length} student(s) to course instance`,
+            enrollmentsCreated: enrollments.length,
+            errors: errors.length > 0 ? errors : undefined,
+        });
+    } catch (error) {
+        console.error("Error adding students to course instance:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };

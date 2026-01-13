@@ -10,6 +10,15 @@
           class="elevation-1 course-table"
           item-value="_id"
         >
+          <template v-slot:item.courseCode="{ item }">
+            <a 
+              href="#" 
+              @click.prevent="handleCourseCodeClick(item)"
+              class="course-code-link"
+            >
+              {{ item.courseCode }}
+            </a>
+          </template>
           <template v-slot:item.startDate="{ item }">
             {{ formatDate(item.startDate) }}
           </template>
@@ -23,6 +32,78 @@
             {{ getResponsibleTeacher(item) }}
           </template>
         </v-data-table>
+
+        <!-- Course Details Modal -->
+        <v-dialog v-model="showModal" max-width="800px" persistent>
+          <v-card>
+            <v-card-title class="d-flex align-center">
+              <span class="text-h5">{{ courseDetails.courseName || 'Kursdetaljer' }}</span>
+              <v-spacer></v-spacer>
+              <v-btn icon variant="text" @click="closeModal">
+                <v-icon>mdi-close</v-icon>
+              </v-btn>
+            </v-card-title>
+            <v-card-text v-if="loadingDetails">
+              <div class="text-center py-4">
+                <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                <p class="mt-4">Laddar kursdetaljer...</p>
+              </div>
+            </v-card-text>
+            <v-card-text v-else>
+              <div v-if="courseDetails.isCourseInstance" class="course-instance-info mb-4">
+                <div class="info-item">
+                  <strong>Kurskod:</strong> {{ courseDetails.courseCode }}
+                </div>
+                <div v-if="courseDetails.startDate && courseDetails.endDate" class="info-item">
+                  <strong>Period:</strong> {{ formatDate(courseDetails.startDate) }} - {{ formatDate(courseDetails.endDate) }}
+                </div>
+                <div v-if="courseDetails.mainCourseId" class="info-item">
+                  <strong>Huvudkurs:</strong> {{ courseDetails.mainCourseId?.courseName || 'Okänd' }}
+                </div>
+              </div>
+
+              <div class="teacher-info mb-4">
+                <div v-if="courseDetails.teacher && courseDetails.teacher._id">
+                  <strong>Ansvarig lärare:</strong>
+                  <a href="#" @click.prevent="viewTeacher(courseDetails.teacher._id)" class="teacher-link">
+                    {{ courseDetails.teacher.username }}
+                  </a>
+                </div>
+                <div v-else-if="courseDetails.teachers && courseDetails.teachers.length > 0">
+                  <strong>Lärare:</strong>
+                  <span v-for="(teacher, index) in courseDetails.teachers" :key="teacher._id">
+                    <a href="#" @click.prevent="viewTeacher(teacher._id)" class="teacher-link">
+                      {{ teacher.username }}
+                    </a>
+                    <span v-if="index < courseDetails.teachers.length - 1">, </span>
+                  </span>
+                </div>
+                <div v-else>
+                  <strong>Lärare:</strong> Ingen ansvarig lärare tilldelad
+                </div>
+              </div>
+
+              <h3 class="mb-3">Elever ({{ courseDetails.students?.length || 0 }})</h3>
+              <div v-if="courseDetails.students && courseDetails.students.length > 0" class="students-list">
+                <ul class="students-ul">
+                  <li v-for="student in courseDetails.students" :key="student._id" class="student-item">
+                    <a href="#" @click.prevent="viewStudent(student._id)" class="student-link">
+                      {{ student.name }}
+                    </a>
+                    <span v-if="student.email" class="student-email"> ({{ student.email }})</span>
+                  </li>
+                </ul>
+              </div>
+              <div v-else class="no-students">
+                Inga elever inskrivna i denna kurs
+              </div>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer></v-spacer>
+              <v-btn color="primary" @click="closeModal">Stäng</v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
       </v-card-text>
     </v-card>
   </v-container>
@@ -35,6 +116,9 @@ export default {
     return {
       loading: true,
       courses: [],
+      showModal: false,
+      loadingDetails: false,
+      courseDetails: {},
       headers: [
         { title: 'Kursnamn', key: 'courseName', sortable: true, align: 'start' },
         { title: 'Kurskod', key: 'courseCode', sortable: true, align: 'start' },
@@ -121,6 +205,38 @@ export default {
       
       return 'Ej tilldelad';
     },
+    handleCourseCodeClick(item) {
+      if (item && item._id) {
+        this.showCourseDetails(item._id);
+      }
+    },
+    async showCourseDetails(instanceId) {
+      this.showModal = true;
+      this.loadingDetails = true;
+      this.courseDetails = {};
+      
+      try {
+        const { api } = await import('@/store/store.js');
+        const response = await api.get(`/details/Kursinstans/${instanceId}`, { withCredentials: true });
+        this.courseDetails = response.data;
+      } catch (error) {
+        console.error('Error fetching course details:', error);
+        alert('Kunde inte ladda kursdetaljer');
+        this.closeModal();
+      } finally {
+        this.loadingDetails = false;
+      }
+    },
+    closeModal() {
+      this.showModal = false;
+      this.courseDetails = {};
+    },
+    viewStudent(studentId) {
+      this.$router.push(`/student/${studentId}`);
+    },
+    viewTeacher(teacherId) {
+      this.$router.push(`/detaljer/Lärare/${teacherId}`);
+    },
   },
 };
 </script>
@@ -180,5 +296,94 @@ export default {
   visibility: visible !important;
   opacity: 1 !important;
   background-color: #f5f5f5 !important;
+}
+
+.course-code-link {
+  color: #1976d2;
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.course-code-link:hover {
+  text-decoration: underline;
+}
+
+.course-instance-info {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.info-item {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
+}
+
+.teacher-info {
+  margin: 20px 0 30px;
+  font-size: 16px;
+}
+
+.teacher-link {
+  color: #1976d2;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.teacher-link:hover {
+  text-decoration: underline;
+}
+
+.students-list {
+  margin-top: 15px;
+}
+
+.students-ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.student-item {
+  padding: 10px;
+  border-bottom: 1px solid #e9ecef;
+  transition: background-color 0.2s;
+}
+
+.student-item:hover {
+  background-color: #f8f9fa;
+}
+
+.student-item:last-child {
+  border-bottom: none;
+}
+
+.student-link {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.student-link:hover {
+  text-decoration: underline;
+}
+
+.student-email {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.no-students {
+  color: #6c757d;
+  font-style: italic;
+  padding: 20px;
+  text-align: center;
 }
 </style>

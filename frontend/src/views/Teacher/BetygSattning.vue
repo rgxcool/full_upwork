@@ -112,21 +112,97 @@
         withCredentials: true,
       })
 
-      console.log('📦 Mottagna elever:', data)
+      console.log('📦 Mottagna elever från backend:', data)
 
-      // Säkerställ att alla kurser har betygsdata (för Vue reaktivitet)
-      data.forEach((student) => {
-        student.education?.forEach((course) => {
-          if (course.type === 'Course') {
-            course.grade = course.grade || ''
-            course.reason = course.reason || ''
-            course.comments = course.comments || ''
-            course.locked = course.locked || false
+      // Transform backend response to frontend expected format
+      // Backend returns: [{ student, courseInstance, endDate, grade, enrollmentId, source }]
+      // Frontend expects: [{ _id, name, coursesToGrade: [{ refId, courseCode, grade, ... }] }]
+      
+      const studentMap = new Map()
+      
+      data.forEach((item) => {
+        const studentId = item.student?._id?.toString() || item.student?._id
+        if (!studentId) {
+          console.warn('⚠️ Item missing student ID:', item)
+          return
+        }
+        
+        // Get or create student entry
+        if (!studentMap.has(studentId)) {
+          studentMap.set(studentId, {
+            _id: studentId,
+            name: item.student?.name || 'Okänd elev',
+            email: item.student?.email || '',
+            coursesToGrade: []
+          })
+        }
+        
+        const student = studentMap.get(studentId)
+        
+        // Extract course information
+        let courseData = null
+        
+        if (item.courseInstance) {
+          // New enrollment-based data (from StudentEnrollment)
+          const courseInstance = item.courseInstance
+          const mainCourse = courseInstance.mainCourseId
+          
+          // Get course ID - handle both populated object and ObjectId
+          let courseId
+          if (mainCourse) {
+            courseId = mainCourse._id?.toString() || mainCourse._id || courseInstance.mainCourseId?.toString() || courseInstance.mainCourseId
+          } else {
+            courseId = courseInstance.mainCourseId?.toString() || courseInstance.mainCourseId
           }
-        })
+          
+          courseData = {
+            refId: courseId,
+            courseCode: courseInstance.courseCode || mainCourse?.courseCode || '-',
+            courseName: courseInstance.courseName || mainCourse?.courseName || 'Okänd kurs',
+            grade: item.grade || '',
+            reason: item.reason || '',
+            comments: item.comments || '',
+            locked: item.locked || false,
+            type: 'Course',
+            name: courseInstance.courseName || mainCourse?.courseName || 'Okänd kurs',
+            endDate: item.endDate,
+            enrollmentId: item.enrollmentId,
+            source: 'enrollment'
+          }
+        } else if (item.source === 'student_education') {
+          // Old education-based data (from Student.education)
+          // The enrollmentId is the education entry _id, but courseRefId is the actual course ID
+          courseData = {
+            refId: item.courseRefId || item.enrollmentId, // Use courseRefId if available, fallback to enrollmentId
+            courseCode: item.courseCode || '-',
+            courseName: item.courseName || 'Kurs (från utbildning)',
+            grade: item.grade || '',
+            reason: '',
+            comments: '',
+            locked: false,
+            type: 'Course',
+            name: item.courseName || 'Kurs (från utbildning)',
+            endDate: item.endDate,
+            enrollmentId: item.enrollmentId,
+            source: 'student_education'
+          }
+        }
+        
+        if (courseData) {
+          // Initialize grade fields if missing
+          courseData.grade = courseData.grade || ''
+          courseData.reason = courseData.reason || ''
+          courseData.comments = courseData.comments || ''
+          courseData.locked = courseData.locked || false
+          
+          student.coursesToGrade.push(courseData)
+        }
       })
-
-      studentsToGrade.value = data
+      
+      // Convert map to array and filter out students with no courses
+      studentsToGrade.value = Array.from(studentMap.values()).filter(s => s.coursesToGrade.length > 0)
+      
+      console.log('✅ Transformerade elever:', studentsToGrade.value)
     } catch (err) {
       console.error('❌ Kunde inte hämta elever:', err)
       alert('Kunde inte ladda elever.')
