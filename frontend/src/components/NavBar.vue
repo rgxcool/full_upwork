@@ -708,7 +708,7 @@
         'Stats',
       ]
       const menuItems = [
-        { name: 'APL', link: '/apl', role: ['admin', 'teacher'] },
+        { name: 'APL', link: '/apl', role: ['admin', 'teacher', 'coordinator'] },
         {
           name: 'Kalender',
           link: '/kalender',

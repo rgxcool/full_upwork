@@ -105,8 +105,14 @@ router.get("/students", authenticateUser, async (req, res) => {
     try {
         let query = {};
 
-        // If user is a teacher, filter students by their teacherId
-        if (req.user.role === "teacher") {
+        // Check if user has coordinator role (even if not primary)
+        const userRoles = req.user.roles || (req.user.role ? [req.user.role] : []);
+        const hasCoordinatorRole = userRoles.includes("coordinator");
+        const isTeacher = req.user.role === "teacher" || userRoles.includes("teacher");
+
+        // If user is a teacher BUT NOT a coordinator, filter students by their teacherId
+        // Coordinators should see all students regardless of teacher role
+        if (isTeacher && !hasCoordinatorRole) {
             // Find the teacher record for this user
             const Teacher = mongoose.model("Teacher");
             const teacher = await Teacher.findOne({ userId: req.user.userId });
@@ -120,6 +126,8 @@ router.get("/students", authenticateUser, async (req, res) => {
             // Filter students by this teacher's ID
             query.teacherId = teacher._id;
             console.log(`🔍 Teacher ${teacher._id} fetching their students`);
+        } else if (hasCoordinatorRole) {
+            console.log(`🔍 Coordinator ${req.user.email} fetching all students`);
         }
 
         const students = await Student.find(query).lean();
