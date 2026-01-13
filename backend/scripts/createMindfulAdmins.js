@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load .env from the correct path
-dotenv.config({ path: path.resolve(__dirname, "../.env.production") }); // Adjust path to match your backend folder
+dotenv.config({ path: path.resolve(__dirname, "../.env.development") }); // Adjust path to match your backend folder
 
 // Function to generate a strong random password
 function generateStrongPassword(length = 16) {
@@ -59,10 +59,7 @@ async function createMindfulAdmins() {
         const mongoUri = process.env.MONGODB_URI;
 
         // Connect to MongoDB
-        await mongoose.connect(mongoUri, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
+        await mongoose.connect(mongoUri);
         console.log("✅ Connected to MongoDB");
 
         // Define the admin emails
