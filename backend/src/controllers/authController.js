@@ -59,13 +59,28 @@ export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
+        console.log(`[LOGIN] Attempting login for email: ${email}`);
+        
         const user = await User.findOne({ email });
         if (!user) {
+            console.log(`[LOGIN] ❌ User not found for email: ${email}`);
+            return res.status(401).json({ error: "Fel email eller lösenord" });
+        }
+
+        console.log(`[LOGIN] ✅ User found: ${user.username || user.email} (ID: ${user._id})`);
+        console.log(`[LOGIN] User has password: ${!!user.password}`);
+        console.log(`[LOGIN] User roles: ${JSON.stringify(user.roles || [])}`);
+
+        if (!user.password) {
+            console.log(`[LOGIN] ❌ User has no password set`);
             return res.status(401).json({ error: "Fel email eller lösenord" });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
+        console.log(`[LOGIN] Password match: ${isMatch}`);
+        
         if (!isMatch) {
+            console.log(`[LOGIN] ❌ Password mismatch for user: ${user.username || user.email}`);
             return res.status(401).json({ error: "Fel email eller lösenord" });
         }
 

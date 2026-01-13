@@ -83,13 +83,38 @@ courseInstanceSchema.pre("validate", function () {
 
 // Auto-calculate slutprovDate based on teacher and course end date
 courseInstanceSchema.pre("save", async function () {
-    // Only auto-calculate if:
-    // 1. responsibleTeacher is set
-    // 2. endDate is set
-    // 3. slutprovDate is not already set (allow manual override)
-    // IMPORTANT: This preserves manually set dates from drag-and-drop operations
-    // If slutprovDate exists (even if it was set via updateMany), we don't recalculate
-    if (this.responsibleTeacher && this.endDate && !this.slutprovDate) {
+    // Check if this was explicitly set via the update endpoint (bypass auto-calculation)
+    if (this._slutprovDateExplicitlySet) {
+        console.log(`[DEBUG] Pre-save hook: _slutprovDateExplicitlySet flag is true, preserving:`, this.slutprovDate);
+        delete this._slutprovDateExplicitlySet; // Clean up the flag
+        return; // Don't auto-calculate
+    }
+    
+    // Check if slutprovDate was explicitly set/modified
+    const isSlutprovDateExplicitlySet = this.isModified('slutprovDate');
+    const hasValidSlutprovDate = this.slutprovDate !== null && 
+                                  this.slutprovDate !== undefined && 
+                                  !isNaN(new Date(this.slutprovDate).getTime()) &&
+                                  new Date(this.slutprovDate).getFullYear() > 1970; // Not epoch date
+    
+    console.log(`[DEBUG] Pre-save hook - slutprovDate:`, {
+        value: this.slutprovDate,
+        isModified: isSlutprovDateExplicitlySet,
+        hasValidDate: hasValidSlutprovDate,
+        responsibleTeacher: this.responsibleTeacher,
+        endDate: this.endDate,
+        dateType: typeof this.slutprovDate,
+        dateInstance: this.slutprovDate instanceof Date
+    });
+    
+    // If slutprovDate was explicitly modified and has a valid date, preserve it
+    if (isSlutprovDateExplicitlySet && hasValidSlutprovDate) {
+        console.log(`[DEBUG] Pre-save hook: Preserving explicitly set slutprovDate:`, this.slutprovDate);
+        return; // Don't auto-calculate
+    }
+    
+    // Only auto-calculate if slutprovDate is not set or is invalid
+    if (this.responsibleTeacher && this.endDate && !hasValidSlutprovDate) {
         try {
             const { calculateSlutprovDate } = await import("../utils/slutprovDateCalculator.js");
             const calculatedDate = await calculateSlutprovDate(this.responsibleTeacher, this.endDate);

@@ -10,7 +10,7 @@
           </svg>
           Radera alla kursinstanser
         </button>
-        --> 
+        -->
       </div>
 
       <!-- Filters -->
@@ -74,15 +74,46 @@
         <table class="table">
           <thead>
             <tr>
-              <th @click="setSort('courseName')">Kursnamn <span v-if="sortKey === 'courseName'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
-              <th @click="setSort('courseCode')">Kurskod <span v-if="sortKey === 'courseCode'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
-              <th @click="setSort('startDate')">Startdatum <span v-if="sortKey === 'startDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
-              <th @click="setSort('endDate')">Slutdatum <span v-if="sortKey === 'endDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
-              <th @click="setSort('slutprovDate')">Slutprov datum <span v-if="sortKey === 'slutprovDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
-              <th @click="setSort('enrollmentCount')">Inskrivningar <span v-if="sortKey === 'enrollmentCount'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
-              <th @click="setSort('isActive')">Status <span v-if="sortKey === 'isActive'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
-              <th @click="setSort('createdBy')">Skapad av <span v-if="sortKey === 'createdBy'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
-              <th @click="setSort('responsibleTeacher')">Ansvarig lärare <span v-if="sortKey === 'responsibleTeacher'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></th>
+              <th @click="setSort('courseName')">
+                Kursnamn
+                <span v-if="sortKey === 'courseName'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th @click="setSort('courseCode')">
+                Kurskod
+                <span v-if="sortKey === 'courseCode'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th @click="setSort('startDate')">
+                Startdatum
+                <span v-if="sortKey === 'startDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th @click="setSort('endDate')" class="end-date-header">
+                Slutdatum
+                <span v-if="sortKey === 'endDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th @click="setSort('slutprovDate')" class="end-date-header">
+                Slutprov
+                <span v-if="sortKey === 'slutprovDate'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th @click="setSort('enrollmentCount')">
+                Inskrivningar
+                <span v-if="sortKey === 'enrollmentCount'">
+                  {{ sortOrder === 'asc' ? '▲' : '▼' }}
+                </span>
+              </th>
+              <th @click="setSort('isActive')">
+                Status
+                <span v-if="sortKey === 'isActive'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th @click="setSort('createdBy')">
+                Skapad av
+                <span v-if="sortKey === 'createdBy'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th @click="setSort('responsibleTeacher')">
+                Ansvarig lärare
+                <span v-if="sortKey === 'responsibleTeacher'">
+                  {{ sortOrder === 'asc' ? '▲' : '▼' }}
+                </span>
+              </th>
               <th>Åtgärder</th>
             </tr>
           </thead>
@@ -100,7 +131,12 @@
                   @click="viewEnrollments(instance._id)"
                   title="Visa inskrivningar"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       fill="currentColor"
                       d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
@@ -115,31 +151,57 @@
               </td>
               <td>{{ instance.createdBy?.username || 'System' }}</td>
               <td>{{ instance.responsibleTeacher?.userId?.username || '-' }}</td>
-              <td>
-                <button
-                  class="btn btn-sm btn-outline-secondary me-1"
-                  @click="editInstance(instance)"
-                  title="Redigera"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  class="btn btn-sm btn-outline-danger"
-                  @click="deleteInstance(instance._id)"
-                  title="Ta bort"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
-                    />
-                  </svg>
-                </button>
+              <td class="actions-cell">
+                <div class="actions-buttons">
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    @click="editInstance(instance)"
+                    title="Redigera"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-add-student"
+                    @click="openAddStudentModal(instance)"
+                    title="Lägg till student"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                    >
+                      <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                    </svg>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-danger"
+                    @click="deleteInstance(instance._id)"
+                    title="Ta bort"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -151,7 +213,9 @@
         <div class="modal-dialog modal-lg">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title">{{ editingInstance ? 'Redigera' : 'Skapa ny' }} kursinstans</h5>
+              <h5 class="modal-title">
+                {{ editingInstance ? 'Redigera' : 'Skapa ny' }} kursinstans
+              </h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -166,24 +230,13 @@
                         class="form-control"
                         required
                         :disabled="editingInstance"
+                        @change="autoGenerateCourseCode"
                       >
                         <option value="">Välj kurs</option>
                         <option v-for="course in courses" :key="course._id" :value="course._id">
                           {{ course.courseName }} ({{ course.courseCode }})
                         </option>
                       </select>
-                    </div>
-                  </div>
-                  <div class="col-md-6">
-                    <div class="form-group">
-                      <label for="version">Version</label>
-                      <input
-                        type="text"
-                        id="version"
-                        v-model="instanceForm.version"
-                        class="form-control"
-                        placeholder="1.0"
-                      />
                     </div>
                   </div>
                 </div>
@@ -198,6 +251,7 @@
                         v-model="instanceForm.startDate"
                         class="form-control"
                         required
+                        @change="autoGenerateCourseCode"
                       />
                     </div>
                   </div>
@@ -211,6 +265,35 @@
                         class="form-control"
                         required
                       />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="slutprovDate">Slutprov</label>
+                      <input
+                        type="date"
+                        id="slutprovDate"
+                        v-model="instanceForm.slutprovDate"
+                        class="form-control"
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="responsibleTeacher">Ansvarig lärare</label>
+                      <select
+                        id="responsibleTeacher"
+                        v-model="instanceForm.responsibleTeacher"
+                        class="form-control"
+                      >
+                        <option value="">Ingen ansvarig lärare</option>
+                        <option v-for="teacher in teachers" :key="teacher._id" :value="teacher._id">
+                          {{ teacher.userId?.username || teacher.userId?.email || 'Okänd lärare' }}
+                        </option>
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -236,7 +319,7 @@
                         id="courseCode"
                         v-model="instanceForm.courseCode"
                         class="form-control"
-                        placeholder="Lämna tomt för att använda huvudkursens kod"
+                        placeholder="Lämna tomt för att auto-generera (baserat på startdatum)"
                       />
                     </div>
                   </div>
@@ -245,23 +328,29 @@
                 <div class="row">
                   <div class="col-md-6">
                     <div class="form-group">
-                      <label for="coursePoints">Poäng</label>
+                      <label for="coursePoints">
+                        Poäng (valfritt - ärvs från huvudkurs om tomt)
+                      </label>
                       <input
                         type="text"
                         id="coursePoints"
                         v-model="instanceForm.coursePoints"
                         class="form-control"
+                        placeholder="Lämna tomt för att ärva från huvudkurs"
                       />
                     </div>
                   </div>
                   <div class="col-md-6">
                     <div class="form-group">
-                      <label for="courseExtent">Omfattning</label>
+                      <label for="courseExtent">
+                        Omfattning (valfritt - ärvs från huvudkurs om tomt)
+                      </label>
                       <input
                         type="text"
                         id="courseExtent"
                         v-model="instanceForm.courseExtent"
                         class="form-control"
+                        placeholder="Lämna tomt för att ärva från huvudkurs"
                       />
                     </div>
                   </div>
@@ -289,7 +378,9 @@
               </form>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                Avbryt
+              </button>
               <button
                 type="button"
                 class="btn btn-primary"
@@ -297,6 +388,96 @@
                 :disabled="isSaving"
               >
                 {{ isSaving ? 'Sparar...' : editingInstance ? 'Uppdatera' : 'Skapa' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Student Modal -->
+      <div class="modal fade" id="addStudentModal" tabindex="-1" ref="addStudentModal">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">
+                Lägg till studenter till {{ selectedInstanceForAddStudent?.courseName }}
+              </h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                @click="closeAddStudentModal"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label for="studentSearch">Sök student</label>
+                <v-autocomplete
+                  v-model="selectedStudentForAdd"
+                  :items="studentSearchResults"
+                  item-title="displayName"
+                  item-value="_id"
+                  label="Sök och välj elev"
+                  :loading="isSearchingStudents"
+                  :search="studentSearchQuery"
+                  @update:search="searchStudents"
+                  @update:model-value="handleStudentSelect"
+                  return-object
+                  clearable
+                  :no-data-text="
+                    studentSearchQuery.length < 2
+                      ? 'Skriv minst 2 tecken för att söka'
+                      : 'Inga elever hittades'
+                  "
+                  :menu-props="{ maxHeight: '300px', zIndex: 10000 }"
+                  density="compact"
+                >
+                  <template #item="{ props, item }">
+                    <v-list-item
+                      v-bind="props"
+                      :title="
+                        item.raw.displayName ||
+                        `${item.raw.name} (${item.raw.email || item.raw.personalNumber || ''})`
+                      "
+                    />
+                  </template>
+                  <template #selection="{ item }">
+                    {{
+                      item.raw.displayName ||
+                      `${item.raw.name} (${item.raw.email || item.raw.personalNumber || ''})`
+                    }}
+                  </template>
+                </v-autocomplete>
+              </div>
+
+              <div v-if="selectedStudentsToAdd.length > 0" class="selected-students">
+                <h6>Valda studenter:</h6>
+                <div
+                  v-for="(student, index) in selectedStudentsToAdd"
+                  :key="student._id"
+                  class="selected-student-item"
+                >
+                  <span>{{ student.name }}</span>
+                  <button
+                    class="btn btn-sm btn-outline-danger"
+                    @click="removeStudentFromList(index)"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" @click="closeAddStudentModal">
+                Avbryt
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                @click="saveStudentsToInstance"
+                :disabled="selectedStudentsToAdd.length === 0 || isAddingStudents"
+              >
+                {{ isAddingStudents ? 'Sparar...' : 'Spara' }}
               </button>
             </div>
           </div>
@@ -329,9 +510,15 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="enrollment in enrollments" :key="enrollment._id" :class="{ 'dropout-row': enrollment.studentId?.dropout }">
+                    <tr
+                      v-for="enrollment in enrollments"
+                      :key="enrollment._id"
+                      :class="{ 'dropout-row': enrollment.studentId?.dropout }"
+                    >
                       <td>
-                        <div v-if="enrollment.studentId?.dropout" class="inactive-label">INAKTIV</div>
+                        <div v-if="enrollment.studentId?.dropout" class="inactive-label">
+                          INAKTIV
+                        </div>
                         {{ enrollment.studentId?.name || 'Okänd student' }}
                       </td>
                       <td>
@@ -362,8 +549,16 @@
                           @click="deleteEnrollment(enrollment._id)"
                           title="Ta bort inskrivning"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              fill="currentColor"
+                              d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                            />
                           </svg>
                         </button>
                       </td>
@@ -372,7 +567,7 @@
                 </table>
               </div>
               <button
-                v-if="enrollments.some(e => !e.studentId || !e.studentId._id)"
+                v-if="enrollments.some((e) => !e.studentId || !e.studentId._id)"
                 class="btn btn-danger mt-3"
                 @click="deleteUnknownEnrollments"
               >
@@ -415,14 +610,27 @@
         mainCourseId: '',
         startDate: '',
         endDate: '',
+        slutprovDate: '',
+        responsibleTeacher: '',
         courseName: '',
         courseCode: '',
         coursePoints: '',
         courseExtent: '',
-        version: '1.0',
         notes: '',
         isActive: true,
       })
+
+      const teachers = ref([])
+
+      // Add Student Modal state
+      const selectedInstanceForAddStudent = ref(null)
+      const studentSearchQuery = ref('')
+      const studentSearchResults = ref([])
+      const selectedStudentsToAdd = ref([])
+      const isAddingStudents = ref(false)
+      const isSearchingStudents = ref(false)
+      const selectedStudentForAdd = ref(null)
+      const allStudentsCache = ref([])
 
       const statistics = computed(() => {
         if (instances.value.length === 0) return null
@@ -476,7 +684,11 @@
             bVal = b.isActive ? 1 : 0
           }
           // Date fields
-          if (sortKey.value === 'startDate' || sortKey.value === 'endDate' || sortKey.value === 'slutprovDate') {
+          if (
+            sortKey.value === 'startDate' ||
+            sortKey.value === 'endDate' ||
+            sortKey.value === 'slutprovDate'
+          ) {
             aVal = aVal ? new Date(aVal) : new Date(0)
             bVal = bVal ? new Date(bVal) : new Date(0)
           }
@@ -513,14 +725,97 @@
       const saveInstance = async () => {
         isSaving.value = true
         try {
+          // Prepare form data
+          const formData = { ...instanceForm.value }
+
+          // Remove empty optional fields so backend can inherit from base course
+          if (!formData.coursePoints || formData.coursePoints.trim() === '') {
+            delete formData.coursePoints
+          }
+          if (!formData.courseExtent || formData.courseExtent.trim() === '') {
+            delete formData.courseExtent
+          }
+          // Always send slutprovDate when editing, even if empty (to allow clearing)
+          // When creating, only send if it has a value
           if (editingInstance.value) {
-            await api.put(`/course-instances/${editingInstance.value._id}`, instanceForm.value)
+            // When editing, always send slutprovDate (even if empty string) so backend knows to update it
+            // Ensure it's a string in YYYY-MM-DD format
+            if (!formData.slutprovDate || formData.slutprovDate.trim() === '') {
+              formData.slutprovDate = '' // Send empty string to clear it
+            } else {
+              // Convert to YYYY-MM-DD format regardless of input format
+              let dateStr = String(formData.slutprovDate).trim()
+
+              // Check if it's already in YYYY-MM-DD format
+              if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                formData.slutprovDate = dateStr
+              } else {
+                // Try to parse it - could be MM/DD/YYYY, DD/MM/YYYY, or Date object
+                let date
+
+                // Check if it's MM/DD/YYYY format
+                if (dateStr.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+                  const parts = dateStr.split('/')
+                  const month = parseInt(parts[0], 10) - 1 // Month is 0-indexed
+                  const day = parseInt(parts[1], 10)
+                  const year = parseInt(parts[2], 10)
+                  date = new Date(year, month, day)
+                } else {
+                  // Try standard Date parsing
+                  date = new Date(dateStr)
+                }
+
+                if (!isNaN(date.getTime())) {
+                  const year = date.getFullYear()
+                  const month = String(date.getMonth() + 1).padStart(2, '0')
+                  const day = String(date.getDate()).padStart(2, '0')
+                  formData.slutprovDate = `${year}-${month}-${day}`
+                } else {
+                  console.warn('[WARNING] Could not parse slutprovDate:', dateStr)
+                  formData.slutprovDate = dateStr // Send as-is and let backend handle it
+                }
+              }
+            }
+            console.log(
+              '[DEBUG] Sending slutprovDate to backend:',
+              formData.slutprovDate,
+              '(original:',
+              instanceForm.value.slutprovDate,
+              ')'
+            )
           } else {
-            await api.post('/course-instances', instanceForm.value)
+            // When creating, only send if it has a value
+            if (!formData.slutprovDate || formData.slutprovDate.trim() === '') {
+              delete formData.slutprovDate
+            }
+          }
+          if (!formData.responsibleTeacher || formData.responsibleTeacher.trim() === '') {
+            delete formData.responsibleTeacher
+          }
+          if (!formData.courseName || formData.courseName.trim() === '') {
+            delete formData.courseName
+          }
+          if (!formData.courseCode || formData.courseCode.trim() === '') {
+            delete formData.courseCode
+          }
+
+          if (editingInstance.value) {
+            await api.put(`/course-instances/${editingInstance.value._id}`, formData)
+          } else {
+            await api.post('/course-instances', formData)
           }
 
           await loadInstances()
           closeModal()
+
+          // Hide Bootstrap modal
+          const modalElement = document.getElementById('instanceModal')
+          if (modalElement) {
+            const modal = bootstrap.Modal.getInstance(modalElement)
+            if (modal) {
+              modal.hide()
+            }
+          }
         } catch (error) {
           console.error('Error saving instance:', error)
           alert('Ett fel uppstod när instansen skulle sparas.')
@@ -531,19 +826,87 @@
 
       const editInstance = (instance) => {
         editingInstance.value = instance
+        // Check if slutprovDate is a valid date (not 1970-01-01 which indicates invalid date)
+        let slutprovDateValue = ''
+        if (instance.slutprovDate) {
+          const date = new Date(instance.slutprovDate)
+          // Check if it's a valid date and not the epoch (1970-01-01)
+          if (!isNaN(date.getTime()) && date.getFullYear() > 1970) {
+            slutprovDateValue = instance.slutprovDate.split('T')[0]
+          }
+        }
+
         instanceForm.value = {
           mainCourseId: instance.mainCourseId._id,
           startDate: instance.startDate.split('T')[0],
           endDate: instance.endDate.split('T')[0],
+          slutprovDate: slutprovDateValue,
+          responsibleTeacher: instance.responsibleTeacher?._id || instance.responsibleTeacher || '',
           courseName: instance.courseName,
           courseCode: instance.courseCode,
           coursePoints: instance.coursePoints,
           courseExtent: instance.courseExtent,
-          version: instance.version,
           notes: instance.notes,
           isActive: instance.isActive,
         }
         showCreateModal.value = true
+      }
+
+      const loadTeachers = async () => {
+        try {
+          const response = await api.get('/teachers')
+          // Backend returns array directly or wrapped in data
+          teachers.value = Array.isArray(response.data)
+            ? response.data
+            : response.data?.teachers || []
+        } catch (error) {
+          console.error('Error loading teachers:', error)
+          teachers.value = []
+        }
+      }
+
+      const autoGenerateCourseCode = () => {
+        if (
+          !instanceForm.value.mainCourseId ||
+          !instanceForm.value.startDate ||
+          editingInstance.value
+        ) {
+          return // Don't auto-generate if editing or missing required fields
+        }
+
+        const selectedCourse = courses.value.find((c) => c._id === instanceForm.value.mainCourseId)
+        if (!selectedCourse || instanceForm.value.courseCode) {
+          return // Don't override if user has typed something
+        }
+
+        // Generate course code like in course-matching: baseCode + YY + MM
+        const startDate = new Date(instanceForm.value.startDate)
+        const year = String(startDate.getFullYear()).slice(-2)
+        const month = String(startDate.getMonth() + 1).padStart(2, '0')
+        instanceForm.value.courseCode = `${selectedCourse.courseCode}${year}${month}`
+
+        // Also auto-generate course name if empty
+        if (!instanceForm.value.courseName) {
+          instanceForm.value.courseName = selectedCourse.courseName
+        }
+      }
+
+      const closeModal = () => {
+        editingInstance.value = null
+        instanceForm.value = {
+          mainCourseId: '',
+          startDate: '',
+          endDate: '',
+          slutprovDate: '',
+          responsibleTeacher: '',
+          courseName: '',
+          courseCode: '',
+          coursePoints: '',
+          courseExtent: '',
+          notes: '',
+          isActive: true,
+        }
+        showCreateModal.value = false
       }
 
       const deleteInstance = async (instanceId) => {
@@ -577,20 +940,123 @@
         }
       }
 
-      const closeModal = () => {
-        showCreateModal.value = false
-        editingInstance.value = null
-        instanceForm.value = {
-          mainCourseId: '',
-          startDate: '',
-          endDate: '',
-          courseName: '',
-          courseCode: '',
-          coursePoints: '',
-          courseExtent: '',
-          version: '1.0',
-          notes: '',
-          isActive: true,
+      const openAddStudentModal = (instance) => {
+        selectedInstanceForAddStudent.value = instance
+        studentSearchQuery.value = ''
+        studentSearchResults.value = []
+        selectedStudentsToAdd.value = []
+        selectedStudentForAdd.value = null
+        // Pre-load all students for better autocomplete experience
+        if (allStudentsCache.value.length === 0) {
+          searchStudents('')
+        }
+        const modal = new bootstrap.Modal(document.getElementById('addStudentModal'))
+        modal.show()
+      }
+
+      const closeAddStudentModal = () => {
+        selectedInstanceForAddStudent.value = null
+        studentSearchQuery.value = ''
+        studentSearchResults.value = []
+        selectedStudentsToAdd.value = []
+        selectedStudentForAdd.value = null
+      }
+
+      const searchStudents = async (query) => {
+        studentSearchQuery.value = query || ''
+        const searchQuery = (query || '').trim()
+
+        if (searchQuery.length < 2) {
+          studentSearchResults.value = []
+          return
+        }
+
+        // If we don't have students cached yet, fetch all students
+        if (allStudentsCache.value.length === 0) {
+          isSearchingStudents.value = true
+          try {
+            const response = await api.get('/students', {
+              withCredentials: true,
+            })
+            allStudentsCache.value = Array.isArray(response.data) ? response.data : []
+            // Add displayName for each student
+            allStudentsCache.value = allStudentsCache.value.map((s) => ({
+              ...s,
+              displayName: `${s.name}${s.email ? ` (${s.email})` : ''}${
+                s.personalNumber ? ` - ${s.personalNumber}` : ''
+              }`,
+            }))
+          } catch (error) {
+            console.error('Error fetching students:', error)
+            allStudentsCache.value = []
+          } finally {
+            isSearchingStudents.value = false
+          }
+        }
+
+        // Filter students by search query (client-side filtering)
+        const lowerQuery = searchQuery.toLowerCase()
+        studentSearchResults.value = allStudentsCache.value.filter(
+          (s) =>
+            s.name?.toLowerCase().includes(lowerQuery) ||
+            s.email?.toLowerCase().includes(lowerQuery) ||
+            s.personalNumber?.includes(searchQuery)
+        )
+      }
+
+      const handleStudentSelect = (student) => {
+        if (student && !selectedStudentsToAdd.value.some((s) => s._id === student._id)) {
+          addStudentToList(student)
+          // Clear the selection after adding
+          selectedStudentForAdd.value = null
+        }
+      }
+
+      const addStudentToList = (student) => {
+        if (!selectedStudentsToAdd.value.some((s) => s._id === student._id)) {
+          selectedStudentsToAdd.value.push(student)
+        }
+      }
+
+      const removeStudentFromList = (index) => {
+        selectedStudentsToAdd.value.splice(index, 1)
+      }
+
+      const saveStudentsToInstance = async () => {
+        if (!selectedInstanceForAddStudent.value || selectedStudentsToAdd.value.length === 0) {
+          return
+        }
+
+        isAddingStudents.value = true
+        try {
+          const studentIds = selectedStudentsToAdd.value.map((s) => s._id)
+          await api.post(
+            `/course-instances/${selectedInstanceForAddStudent.value._id}/add-students`,
+            {
+              studentIds: studentIds,
+            },
+            { withCredentials: true }
+          )
+
+          alert(
+            `✅ ${selectedStudentsToAdd.value.length} student(er) tillagd(e) till kursinstansen!`
+          )
+          await loadInstances()
+          closeAddStudentModal()
+
+          // Hide Bootstrap modal
+          const modalElement = document.getElementById('addStudentModal')
+          if (modalElement) {
+            const modal = bootstrap.Modal.getInstance(modalElement)
+            if (modal) {
+              modal.hide()
+            }
+          }
+        } catch (error) {
+          console.error('Error adding students:', error)
+          alert('⚠️ Kunde inte lägga till studenter. Försök igen.')
+        } finally {
+          isAddingStudents.value = false
         }
       }
 
@@ -623,45 +1089,51 @@
       }
 
       const deleteAllCourseInstances = async () => {
-        if (!confirm('Är du säker på att du vill ta bort ALLA kursinstanser och tillhörande data? Detta går inte att ångra.')) return;
+        if (
+          !confirm(
+            'Är du säker på att du vill ta bort ALLA kursinstanser och tillhörande data? Detta går inte att ångra.'
+          )
+        )
+          return
         try {
-          await api.delete('/course-instances/all');
-          await loadInstances();
-          alert('Alla kursinstanser och tillhörande data har raderats.');
+          await api.delete('/course-instances/all')
+          await loadInstances()
+          alert('Alla kursinstanser och tillhörande data har raderats.')
         } catch (error) {
-          console.error('Error deleting all course instances:', error);
-          alert('Ett fel uppstod när alla kursinstanser skulle tas bort.');
+          console.error('Error deleting all course instances:', error)
+          alert('Ett fel uppstod när alla kursinstanser skulle tas bort.')
         }
-      };
+      }
 
       const deleteEnrollment = async (enrollmentId) => {
-        if (!confirm('Är du säker på att du vill ta bort denna inskrivning?')) return;
+        if (!confirm('Är du säker på att du vill ta bort denna inskrivning?')) return
         try {
-          await api.delete(`/enrollments/${enrollmentId}`);
-          await viewEnrollments(selectedInstance.value._id);
+          await api.delete(`/enrollments/${enrollmentId}`)
+          await viewEnrollments(selectedInstance.value._id)
         } catch (error) {
-          console.error('Error deleting enrollment:', error);
-          alert('Ett fel uppstod när inskrivningen skulle tas bort.');
+          console.error('Error deleting enrollment:', error)
+          alert('Ett fel uppstod när inskrivningen skulle tas bort.')
         }
-      };
+      }
 
       const deleteUnknownEnrollments = async () => {
-        if (!confirm('Ta bort ALLA okända elever från denna kursinstans?')) return;
+        if (!confirm('Ta bort ALLA okända elever från denna kursinstans?')) return
         try {
-          const unknowns = enrollments.value.filter(e => !e.studentId || !e.studentId._id);
+          const unknowns = enrollments.value.filter((e) => !e.studentId || !e.studentId._id)
           for (const e of unknowns) {
-            await api.delete(`/enrollments/${e._id}`);
+            await api.delete(`/enrollments/${e._id}`)
           }
-          await viewEnrollments(selectedInstance.value._id);
+          await viewEnrollments(selectedInstance.value._id)
         } catch (error) {
-          console.error('Error deleting unknown enrollments:', error);
-          alert('Ett fel uppstod när okända elever skulle tas bort.');
+          console.error('Error deleting unknown enrollments:', error)
+          alert('Ett fel uppstod när okända elever skulle tas bort.')
         }
-      };
+      }
 
       onMounted(() => {
         loadCourses()
         loadInstances()
+        loadTeachers()
       })
 
       // Watch for showCreateModal changes to show/hide the modal
@@ -669,7 +1141,7 @@
         if (newValue) {
           const modal = new bootstrap.Modal(document.getElementById('instanceModal'))
           modal.show()
-          
+
           // Listen for modal hidden event to reset showCreateModal
           const modalElement = document.getElementById('instanceModal')
           const handleModalHidden = () => {
@@ -683,6 +1155,7 @@
       return {
         instances,
         courses,
+        teachers,
         enrollments,
         selectedInstance,
         showCreateModal,
@@ -692,18 +1165,34 @@
         instanceForm,
         statistics,
         loadInstances,
+        loadTeachers,
         saveInstance,
         editInstance,
         deleteInstance,
         viewEnrollments,
         viewStudentDetails,
         closeModal,
+        autoGenerateCourseCode,
         formatDate,
         getStatusClass,
         getStatusText,
         deleteAllCourseInstances,
         deleteEnrollment,
         deleteUnknownEnrollments,
+        openAddStudentModal,
+        closeAddStudentModal,
+        searchStudents,
+        handleStudentSelect,
+        addStudentToList,
+        removeStudentFromList,
+        saveStudentsToInstance,
+        selectedInstanceForAddStudent,
+        studentSearchQuery,
+        studentSearchResults,
+        selectedStudentsToAdd,
+        isAddingStudents,
+        isSearchingStudents,
+        selectedStudentForAdd,
         sortKey,
         sortOrder,
         setSort,
@@ -963,5 +1452,67 @@
     .stats-section {
       grid-template-columns: 1fr;
     }
+  }
+
+  .actions-cell {
+    white-space: nowrap;
+  }
+
+  .actions-buttons {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .end-date-header {
+    min-width: 120px;
+    white-space: nowrap;
+  }
+
+  .student-search-results {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .student-result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .student-result-item:last-child {
+    border-bottom: none;
+  }
+
+  .selected-students {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+  }
+
+  .selected-student-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: #f8f9fa;
+    border-radius: 4px;
+  }
+
+  .btn-add-student {
+    background: #007bff;
+    color: white;
+    border: 1px solid #007bff;
+  }
+
+  .btn-add-student:hover {
+    background: #0056b3;
+    border-color: #0056b3;
   }
 </style>

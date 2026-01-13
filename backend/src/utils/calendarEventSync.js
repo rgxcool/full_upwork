@@ -162,3 +162,168 @@ export async function syncAllCalendarEvents() {
         throw error;
     }
 }
+
+/**
+ * Syncs calendar events from a StudentEnrollment with slutprovDate
+ * Groups students by date and teacherId (if available)
+ * Creates or updates calendar events accordingly
+ */
+export async function syncCalendarEventFromEnrollment(enrollmentId) {
+    try {
+        const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
+        const enrollment = await StudentEnrollment.findById(enrollmentId)
+            .populate("studentId")
+            .populate("mainCourseId")
+            .populate({
+                path: "teacherId",
+                populate: { path: "userId", select: "username" },
+            })
+            .populate({
+                path: "courseInstanceId",
+                populate: { path: "responsibleTeacher", populate: { path: "userId", select: "username" } },
+            });
+
+        if (!enrollment || !enrollment.slutprovDate) {
+            console.log(`⏭️ Enrollment ${enrollmentId} has no slutprovDate, skipping calendar sync`);
+            return;
+        }
+
+        if (!enrollment.studentId) {
+            console.log(`⏭️ Enrollment ${enrollmentId} has no student, skipping calendar sync`);
+            return;
+        }
+
+        const student = enrollment.studentId;
+
+        // Skip if student is a dropout
+        if (student.dropout) {
+            console.log(`⏭️ Student ${student._id} is a dropout, skipping calendar sync`);
+            return;
+        }
+
+        // Create date at local midnight to avoid timezone shifts
+        const examDate = new Date(enrollment.slutprovDate);
+        const year = examDate.getFullYear();
+        const month = examDate.getMonth();
+        const day = examDate.getDate();
+        const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; // YYYY-MM-DD
+
+        // Get course name from mainCourseId or courseInstanceId
+        let courseName = null;
+        if (enrollment.mainCourseId && enrollment.mainCourseId.courseName) {
+            courseName = enrollment.mainCourseId.courseName;
+        } else if (enrollment.courseInstanceId && enrollment.courseInstanceId.courseName) {
+            courseName = enrollment.courseInstanceId.courseName;
+        }
+
+        // Determine teacher info - ALWAYS prefer course instance responsibleTeacher if it exists
+        // This ensures students in the same course instance are grouped together
+        let teacherId = null;
+        let teacherName = "Okänd lärare";
+        let teacherColor = "#999999";
+
+        if (enrollment.courseInstanceId?.responsibleTeacher) {
+            // Course instance's responsible teacher takes priority
+            const responsibleTeacher = enrollment.courseInstanceId.responsibleTeacher;
+            teacherId = responsibleTeacher._id;
+            if (responsibleTeacher.userId) {
+                teacherName = responsibleTeacher.userId.username || teacherName;
+            }
+            teacherColor = responsibleTeacher.colorCode || teacherColor;
+        } else if (enrollment.teacherId) {
+            // Fallback to enrollment's teacherId if no course instance
+            teacherId = enrollment.teacherId._id;
+            if (enrollment.teacherId.userId) {
+                teacherName = enrollment.teacherId.userId.username || teacherName;
+            }
+            teacherColor = enrollment.teacherId.colorCode || teacherColor;
+        } else if (student.teacherId) {
+            // Last resort: student's teacherId
+            const studentTeacher = await Teacher.findById(student.teacherId).populate("userId", "username");
+            if (studentTeacher) {
+                teacherId = studentTeacher._id;
+                if (studentTeacher.userId) {
+                    teacherName = studentTeacher.userId.username || teacherName;
+                }
+                teacherColor = studentTeacher.colorCode || teacherColor;
+            }
+        }
+
+        // Find or create calendar event for this group
+        // Also check for courseInstanceId to group by course instance
+        const courseInstanceId = enrollment.courseInstanceId?._id?.toString();
+        const existingEvent = await CalendarEvent.findOne({
+            start: {
+                $gte: eventStartDate,
+                $lte: eventEndDate,
+            },
+            "extendedProps.type": "slutprov",
+            ...(teacherId ? { "extendedProps.teacherId": teacherId } : { "extendedProps.teacherId": { $exists: false } }),
+            ...(courseInstanceId ? { "extendedProps.courseInstanceIds": courseInstanceId } : {}),
+        });
+
+        const studentData = {
+            _id: student._id,
+            name: student.name,
+            personalNumber: student.personalNumber,
+            additionalInfo: student.additionalInfo || "",
+            attended: student.attendedExam || false,
+            courseName: courseName || "Okänd kurs",
+        };
+
+        if (existingEvent) {
+            // Update existing event - add student if not already present
+            const students = existingEvent.extendedProps?.students || [];
+            const studentExists = students.some((s) => s._id.toString() === student._id.toString());
+
+            if (!studentExists) {
+                students.push(studentData);
+                existingEvent.extendedProps.students = students;
+                existingEvent.title = `Slutprov${courseName ? ` - ${courseName}` : ""} (${students.length})`;
+                
+                // Also update courseInstanceIds if missing
+                if (courseInstanceId) {
+                    const courseInstanceIds = existingEvent.extendedProps?.courseInstanceIds || [];
+                    if (!courseInstanceIds.includes(courseInstanceId)) {
+                        courseInstanceIds.push(courseInstanceId);
+                        existingEvent.extendedProps.courseInstanceIds = courseInstanceIds;
+                    }
+                }
+                
+                await existingEvent.save();
+                console.log(`✅ Added student ${student.name} to existing calendar event for ${dateKey}`);
+            } else {
+                console.log(`ℹ️ Student ${student.name} already in calendar event for ${dateKey}`);
+            }
+        } else {
+            // Create new event with courseInstanceId in extendedProps for linking
+            const extendedProps = {
+                teacher: teacherName,
+                teacherId: teacherId,
+                type: "slutprov",
+                examMunicipality: student.examMunicipality || "",
+                examLocation: student.examLocation || "",
+                examTime: student.examTime || "",
+                students: [studentData],
+            };
+            
+            // Add courseInstanceId to link the event to the course instance
+            if (courseInstanceId) {
+                extendedProps.courseInstanceIds = [courseInstanceId];
+            }
+            
+            const newEvent = new CalendarEvent({
+                title: `Slutprov${courseName ? ` - ${courseName}` : ""} (1)`,
+                start: eventStartDate, // Use local midnight, not UTC
+                color: "#ff6b6b", // Red color for exams
+                extendedProps: extendedProps,
+            });
+
+            await newEvent.save();
+            console.log(`✅ Created new calendar event for student ${student.name} on ${dateKey} from enrollment (courseInstance: ${courseInstanceId || 'none'})`);
+        }
+    } catch (error) {
+        console.error(`❌ Error syncing calendar event for enrollment ${enrollmentId}:`, error);
+        // Don't throw - this is a background sync operation
+    }
+}

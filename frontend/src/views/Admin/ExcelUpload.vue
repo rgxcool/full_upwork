@@ -102,29 +102,69 @@
                     v-if="Array.isArray(student.education) && student.education.length > 0"
                     class="course-group"
                   >
+                    <!-- Collapsed view: show first education and count -->
                     <div
-                      v-for="course in getSortedEducation(student.education)"
-                      :key="course._id || course.refId?._id"
-                      class="course-item"
+                      v-if="!expandedEducations.includes(student._id)"
+                      class="course-item collapsed-view"
+                      @click.stop="toggleEducation(student._id)"
                     >
                       <div class="course-header">
-                        <strong>{{ course.type }}:</strong>
-                        {{ getEducationLabel(course) }}
-                        <span class="edu-grade">({{ course.grade || '-' }})</span>
+                        <strong>{{ getSortedEducation(student.education)[0].type }}:</strong>
+                        {{ getEducationLabel(getSortedEducation(student.education)[0]) }}
+                        <span class="expand-indicator" v-if="student.education.length > 1">
+                          +{{ student.education.length - 1 }} mer
+                        </span>
                       </div>
                       <div class="course-dates">
                         <span class="date-item">
                           <strong>Start:</strong>
-                          {{ formatDate(course.startDate) }}
+                          {{ formatDate(getSortedEducation(student.education)[0].startDate) }}
                         </span>
                         <span class="date-item">
                           <strong>Slut:</strong>
-                          {{ formatDate(course.endDate) }}
+                          {{ formatDate(getSortedEducation(student.education)[0].endDate) }}
                         </span>
-                        <span class="date-item">
-                          <strong>Slutprov:</strong>
-                          {{ formatDate(course.finalExamDate) }}
+                        <span
+                          v-if="getSortedEducation(student.education)[0].grade"
+                          class="date-item"
+                        >
+                          <strong>Grade:</strong>
+                          {{ getSortedEducation(student.education)[0].grade }}
                         </span>
+                      </div>
+                    </div>
+                    <!-- Expanded view: show all educations -->
+                    <div v-else>
+                      <div
+                        v-for="course in getSortedEducation(student.education)"
+                        :key="course._id || course.refId?._id"
+                        class="course-item"
+                      >
+                        <div class="course-header">
+                          <strong>{{ course.type }}:</strong>
+                          {{ getEducationLabel(course) }}
+                        </div>
+                        <div class="course-dates">
+                          <span class="date-item">
+                            <strong>Start:</strong>
+                            {{ formatDate(course.startDate) }}
+                          </span>
+                          <span class="date-item">
+                            <strong>Slut:</strong>
+                            {{ formatDate(course.endDate) }}
+                          </span>
+                          <span class="date-item">
+                            <strong>Slutprov:</strong>
+                            {{ formatDate(course.finalExamDate) }}
+                          </span>
+                          <span v-if="course.grade" class="date-item">
+                            <strong>Grade:</strong>
+                            {{ course.grade }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="collapse-trigger" @click.stop="toggleEducation(student._id)">
+                        <span class="collapse-text">▼ Dölj</span>
                       </div>
                     </div>
                   </div>
@@ -132,10 +172,7 @@
                 </div>
               </td>
               <td v-if="isAdmin">
-                <button 
-                  class="btn btn-secondary btn-xs" 
-                  @click="openEditStudent(student)"
-                >
+                <button class="btn btn-secondary btn-xs" @click="openEditStudent(student)">
                   Edit
                 </button>
               </td>
@@ -306,8 +343,16 @@
                       />
                       Avhopp (Dropout)
                     </label>
-                    <span v-if="processingDropout" style="color: #666; font-size: 0.9rem; margin-left: 8px;">Bearbetar...</span>
-                    <p v-if="editingStudent.dropout" style="color: #dc3545; font-weight: bold; margin-top: 8px; font-size: 1.1rem;">
+                    <span
+                      v-if="processingDropout"
+                      style="color: #666; font-size: 0.9rem; margin-left: 8px"
+                    >
+                      Bearbetar...
+                    </span>
+                    <p
+                      v-if="editingStudent.dropout"
+                      style="color: #dc3545; font-weight: bold; margin-top: 8px; font-size: 1.1rem"
+                    >
                       ⚠️ INAKTIV
                     </p>
                   </div>
@@ -358,7 +403,9 @@
               <div class="form-section">
                 <h4>Utbildning</h4>
                 <div
-                  v-for="(edu, index) in getSortedEducation(editingStudent.education.filter((e) => !e.removedAt))"
+                  v-for="(edu, index) in getSortedEducation(
+                    editingStudent.education.filter((e) => !e.removedAt)
+                  )"
                   :key="index"
                   class="education-box"
                 >
@@ -583,6 +630,7 @@
         formattedFinalExamDate: '',
         showGradeIndex: null,
         expandedComments: [],
+        expandedEducations: [], // Track which students have expanded educations
         // Flash message system
         flashMessage: {
           show: false,
@@ -661,31 +709,31 @@
 
       // Sort education: CoursePackages first, then courses chronologically
       getSortedEducation(education) {
-        if (!education || !Array.isArray(education)) return [];
-        
+        if (!education || !Array.isArray(education)) return []
+
         return [...education].sort((a, b) => {
           // First, separate CoursePackages from other types
-          const aIsPackage = a.type === 'CoursePackage';
-          const bIsPackage = b.type === 'CoursePackage';
-          
+          const aIsPackage = a.type === 'CoursePackage'
+          const bIsPackage = b.type === 'CoursePackage'
+
           // CoursePackages come first
-          if (aIsPackage && !bIsPackage) return -1;
-          if (!aIsPackage && bIsPackage) return 1;
-          
+          if (aIsPackage && !bIsPackage) return -1
+          if (!aIsPackage && bIsPackage) return 1
+
           // If both are CoursePackages, maintain their relative order (or sort by startDate if available)
           if (aIsPackage && bIsPackage) {
-            if (!a.startDate && !b.startDate) return 0;
-            if (!a.startDate) return 1;
-            if (!b.startDate) return -1;
-            return new Date(a.startDate) - new Date(b.startDate);
+            if (!a.startDate && !b.startDate) return 0
+            if (!a.startDate) return 1
+            if (!b.startDate) return -1
+            return new Date(a.startDate) - new Date(b.startDate)
           }
-          
+
           // For courses (non-packages), sort chronologically by startDate
-          if (!a.startDate && !b.startDate) return 0;
-          if (!a.startDate) return 1;
-          if (!b.startDate) return -1;
-          return new Date(a.startDate) - new Date(b.startDate);
-        });
+          if (!a.startDate && !b.startDate) return 0
+          if (!a.startDate) return 1
+          if (!b.startDate) return -1
+          return new Date(a.startDate) - new Date(b.startDate)
+        })
       },
 
       getEducationLabel(edu) {
@@ -711,6 +759,13 @@
           this.expandedComments = this.expandedComments.filter((id) => id !== studentId)
         } else {
           this.expandedComments.push(studentId)
+        }
+      },
+      toggleEducation(studentId) {
+        if (this.expandedEducations.includes(studentId)) {
+          this.expandedEducations = this.expandedEducations.filter((id) => id !== studentId)
+        } else {
+          this.expandedEducations.push(studentId)
         }
       },
       formatComment(text, expanded) {
@@ -848,10 +903,10 @@
             // Setting to dropout (checked = true) - use dedicated endpoint
             const confirmed = confirm(
               `Är du säker på att du vill markera ${this.editingStudent.name} som avbrott (inaktiv)?\n\n` +
-              `Detta kommer att:\n` +
-              `- Ta bort eleven från APL-listor\n` +
-              `- Ta bort eleven från slutprov\n` +
-              `- Skicka en notis till ansvarig lärare`
+                `Detta kommer att:\n` +
+                `- Ta bort eleven från APL-listor\n` +
+                `- Ta bort eleven från slutprov\n` +
+                `- Skicka en notis till ansvarig lärare`
             )
 
             if (!confirmed) {
@@ -860,12 +915,10 @@
               return
             }
 
-            const response = await api.post(
-              `/student-details/${this.editingStudent._id}/dropout`
-            )
+            const response = await api.post(`/student-details/${this.editingStudent._id}/dropout`)
             this.editingStudent.dropout = true
             this.dropoutHandledViaEndpoint = true
-            
+
             // Update the student in the local list immediately
             const index = this.students.findIndex(
               (student) => student._id === this.editingStudent._id
@@ -879,9 +932,9 @@
             // Unchecking (setting to false) - use update endpoint
             const confirmed = confirm(
               `Är du säker på att du vill ta bort avbrott-status för ${this.editingStudent.name}?\n\n` +
-              `Eleven kommer att:\n` +
-              `- Återfås i APL-listor (om relevant)\n` +
-              `- Kunna registreras för slutprov igen`
+                `Eleven kommer att:\n` +
+                `- Återfås i APL-listor (om relevant)\n` +
+                `- Kunna registreras för slutprov igen`
             )
 
             if (!confirmed) {
@@ -890,12 +943,10 @@
               return
             }
 
-            const response = await api.delete(
-              `/student-details/${this.editingStudent._id}/dropout`
-            )
+            const response = await api.delete(`/student-details/${this.editingStudent._id}/dropout`)
             this.editingStudent.dropout = false
             this.dropoutHandledViaEndpoint = false // Reset flag so it can be saved normally
-            
+
             // Update the student in the local list immediately
             const index = this.students.findIndex(
               (student) => student._id === this.editingStudent._id
@@ -1725,9 +1776,45 @@
     padding: 10px;
   }
 
-  .edu-grade {
-    color: #28a745;
-    font-weight: 600;
-    margin-left: 4px;
+  /* Grade is now shown in course-dates section, no special styling needed */
+
+  .collapsed-view {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .collapsed-view:hover {
+    background-color: #e9ecef;
+  }
+
+  .expand-indicator {
+    color: #007bff;
+    font-size: 0.85em;
+    font-weight: 500;
+    margin-left: 8px;
+    padding: 2px 6px;
+    background-color: #e7f3ff;
+    border-radius: 4px;
+  }
+
+  .collapse-trigger {
+    cursor: pointer;
+    text-align: center;
+    padding: 8px;
+    margin-top: 8px;
+    color: #007bff;
+    font-weight: 500;
+    font-size: 0.9em;
+    border-top: 1px dashed #dee2e6;
+    padding-top: 10px;
+    transition: color 0.2s ease;
+  }
+
+  .collapse-trigger:hover {
+    color: #0056b3;
+  }
+
+  .collapse-text {
+    display: inline-block;
   }
 </style>

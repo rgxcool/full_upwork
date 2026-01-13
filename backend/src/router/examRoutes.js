@@ -206,7 +206,11 @@ router.post("/calendar-events", async (req, res) => {
 
 router.get("/calendar-events", authenticateUser, async (req, res) => {
     try {
-        let query = {};
+        let query = {
+            // Exclude "slutprov" type events - these should come from /calendar-events/syncable instead
+            // to avoid duplicates and ensure they're always up-to-date from enrollments
+            "extendedProps.type": { $ne: "slutprov" }
+        };
 
         // If user is a teacher, filter events by their teacherId
         if (req.user.role === "teacher") {
@@ -222,7 +226,7 @@ router.get("/calendar-events", authenticateUser, async (req, res) => {
             // Filter events by this teacher's ID
             query.teacherId = teacher._id;
             console.log(
-                `🔍 Teacher ${teacher._id} fetching their calendar events`
+                `🔍 Teacher ${teacher._id} fetching their calendar events (excluding slutprov type)`
             );
         }
 
@@ -313,32 +317,84 @@ router.put(
                 });
             }
 
+            // Parse dates and create them at local midnight to avoid timezone issues
             const fromKey = new Date(fromDate);
             const toKey = new Date(toDate);
+            
+            // Create dates at local midnight (not UTC) to avoid timezone shifts
             const fromLocal = new Date(
                 fromKey.getFullYear(),
                 fromKey.getMonth(),
-                fromKey.getDate()
+                fromKey.getDate(),
+                0, 0, 0, 0
             );
             const toLocal = new Date(
                 toKey.getFullYear(),
                 toKey.getMonth(),
-                toKey.getDate()
+                toKey.getDate(),
+                0, 0, 0, 0
             );
 
-            // Date range for the fromDate
+            // Date range for the fromDate - use local midnight, not UTC
+            // This ensures we match dates correctly regardless of timezone
             const fromDateStart = new Date(
-                fromLocal.toISOString().split("T")[0] + "T00:00:00.000Z"
+                fromKey.getFullYear(),
+                fromKey.getMonth(),
+                fromKey.getDate(),
+                0, 0, 0, 0
             );
             const fromDateEnd = new Date(
-                fromLocal.toISOString().split("T")[0] + "T23:59:59.999Z"
+                fromKey.getFullYear(),
+                fromKey.getMonth(),
+                fromKey.getDate(),
+                23, 59, 59, 999
             );
 
             // Prepare options for updateMany operations
             const updateOptions = useTransaction && session ? { session } : {};
 
             // 1. Update enrollments
-            const enrollmentsUpdateResult = await StudentEnrollment.updateMany(
+            console.log(`[MOVE-GROUP] Updating enrollments for teacher ${teacherId} from ${fromDate} to ${toDate}`);
+            console.log(`[MOVE-GROUP] Date range: ${fromDateStart.toISOString()} to ${fromDateEnd.toISOString()}`);
+            
+            // First, find enrollments that match to see what we're working with
+            // Try multiple queries to catch all possible enrollments:
+            // 1. By teacherId and slutprovDate
+            // 2. By courseInstanceId's responsibleTeacher and slutprovDate (if courseInstanceIds provided)
+            const matchingEnrollmentsQuery1 = await StudentEnrollment.find({
+                teacherId,
+                slutprovDate: {
+                    $gte: fromDateStart,
+                    $lte: fromDateEnd,
+                },
+            }).populate('courseInstanceId', 'slutprovDate responsibleTeacher');
+            
+            let matchingEnrollmentsQuery2 = [];
+            if (courseInstanceIds && Array.isArray(courseInstanceIds) && courseInstanceIds.length > 0) {
+                matchingEnrollmentsQuery2 = await StudentEnrollment.find({
+                    courseInstanceId: { $in: courseInstanceIds },
+                    slutprovDate: {
+                        $gte: fromDateStart,
+                        $lte: fromDateEnd,
+                    },
+                }).populate('courseInstanceId', 'slutprovDate responsibleTeacher');
+            }
+            
+            // Combine and deduplicate
+            const allMatchingEnrollments = [
+                ...matchingEnrollmentsQuery1,
+                ...matchingEnrollmentsQuery2.filter(e2 => 
+                    !matchingEnrollmentsQuery1.some(e1 => e1._id.toString() === e2._id.toString())
+                )
+            ];
+            
+            console.log(`[MOVE-GROUP] Found ${allMatchingEnrollments.length} matching enrollments`);
+            allMatchingEnrollments.forEach(e => {
+                console.log(`  - Enrollment ${e._id}: student=${e.studentId}, courseInstance=${e.courseInstanceId?._id}, teacherId=${e.teacherId}, currentSlutprovDate=${e.slutprovDate}`);
+            });
+            
+            // Update enrollments by teacherId and date
+            const enrollmentsUpdateResult1 = await StudentEnrollment.updateMany(
                 {
                     teacherId,
                     slutprovDate: {
@@ -349,34 +405,126 @@ router.put(
                 { $set: { slutprovDate: toLocal } },
                 updateOptions
             );
-
-            // Update CourseInstance.slutprovDate if courseInstanceIds are provided
-            let courseInstancesUpdated = 0;
-            if (
-                courseInstanceIds &&
-                Array.isArray(courseInstanceIds) &&
-                courseInstanceIds.length > 0
-            ) {
-                const { default: CourseInstance } = await import(
-                    "../models/CourseInstance.js"
-                );
-                // Update all CourseInstances in the provided list that belong to this teacher
-                // The frontend provides the specific instances to update, so we trust that list
-                // and update them regardless of their current slutprovDate
-                const result = await CourseInstance.updateMany(
+            
+            // Also update enrollments by courseInstanceId if provided
+            let enrollmentsUpdateResult2 = { modifiedCount: 0 };
+            if (courseInstanceIds && Array.isArray(courseInstanceIds) && courseInstanceIds.length > 0) {
+                enrollmentsUpdateResult2 = await StudentEnrollment.updateMany(
                     {
-                        _id: { $in: courseInstanceIds },
-                        responsibleTeacher: teacherId,
+                        courseInstanceId: { $in: courseInstanceIds },
+                        slutprovDate: {
+                            $gte: fromDateStart,
+                            $lte: fromDateEnd,
+                        },
                     },
-                    {
-                        $set: { slutprovDate: toLocal },
-                    },
+                    { $set: { slutprovDate: toLocal } },
                     updateOptions
                 );
-                courseInstancesUpdated = result.modifiedCount;
-                console.log(
-                    `📅 Updated ${courseInstancesUpdated} CourseInstances from ${fromDate} to ${toDate}`
+            }
+            
+            const totalEnrollmentsUpdated = Math.max(
+                enrollmentsUpdateResult1.modifiedCount,
+                enrollmentsUpdateResult2.modifiedCount,
+                allMatchingEnrollments.length
+            );
+            
+            console.log(`[MOVE-GROUP] Updated ${totalEnrollmentsUpdated} enrollments (by teacher: ${enrollmentsUpdateResult1.modifiedCount}, by courseInstance: ${enrollmentsUpdateResult2.modifiedCount})`);
+
+            // 2. Update CourseInstance.slutprovDate
+            // First, find all course instances that have enrollments with the old date
+            const { default: CourseInstance } = await import(
+                "../models/CourseInstance.js"
+            );
+            
+            // Get unique course instance IDs from the matching enrollments
+            const courseInstanceIdsFromEnrollments = [...new Set(
+                allMatchingEnrollments
+                    .map(e => e.courseInstanceId?._id?.toString())
+                    .filter(id => id)
+            )];
+            
+            // Also include courseInstanceIds from the request if provided
+            const allCourseInstanceIds = [
+                ...courseInstanceIdsFromEnrollments,
+                ...(courseInstanceIds && Array.isArray(courseInstanceIds) ? courseInstanceIds.map(id => id.toString()) : [])
+            ];
+            const uniqueCourseInstanceIds = [...new Set(allCourseInstanceIds)];
+            
+            console.log(`[MOVE-GROUP] Course instance IDs to update:`, uniqueCourseInstanceIds);
+            
+            let courseInstancesUpdated = 0;
+            if (uniqueCourseInstanceIds.length > 0) {
+                // Update all CourseInstances that have enrollments being moved
+                // Use findByIdAndUpdate for each to set the flag to prevent pre-save hook recalculation
+                for (const instanceId of uniqueCourseInstanceIds) {
+                    try {
+                        const instance = await CourseInstance.findById(instanceId);
+                        if (instance && instance.responsibleTeacher?.toString() === teacherId.toString()) {
+                            instance.slutprovDate = toLocal;
+                            instance._slutprovDateExplicitlySet = true; // Prevent pre-save hook from recalculating
+                            if (useTransaction && session) {
+                                await instance.save({ session });
+                            } else {
+                                await instance.save();
+                            }
+                            courseInstancesUpdated++;
+                            console.log(`📅 Updated CourseInstance ${instanceId} from ${fromDate} to ${toDate}`);
+                        }
+                    } catch (err) {
+                        console.error(`❌ Error updating CourseInstance ${instanceId}:`, err);
+                    }
+                }
+                
+                // Also update ALL enrollments for these course instances (not just those with matching date)
+                // This ensures enrollments stay in sync with course instance
+                const enrollmentsForInstances = await StudentEnrollment.updateMany(
+                    {
+                        courseInstanceId: { $in: uniqueCourseInstanceIds },
+                    },
+                    { $set: { slutprovDate: toLocal } },
+                    updateOptions
                 );
+                console.log(`[MOVE-GROUP] Updated ${enrollmentsForInstances.modifiedCount} enrollments for course instances (all enrollments, not just matching date)`);
+            } else {
+                // If no courseInstanceIds provided, try to find course instances by teacher and date
+                const courseInstancesByDate = await CourseInstance.find({
+                    responsibleTeacher: teacherId,
+                    slutprovDate: {
+                        $gte: fromDateStart,
+                        $lte: fromDateEnd,
+                    },
+                });
+                
+                if (courseInstancesByDate.length > 0) {
+                    console.log(`[MOVE-GROUP] Found ${courseInstancesByDate.length} course instances by date, updating them`);
+                    for (const instance of courseInstancesByDate) {
+                        try {
+                            instance.slutprovDate = toLocal;
+                            instance._slutprovDateExplicitlySet = true; // Prevent pre-save hook from recalculating
+                            if (useTransaction && session) {
+                                await instance.save({ session });
+                            } else {
+                                await instance.save();
+                            }
+                            courseInstancesUpdated++;
+                        } catch (err) {
+                            console.error(`❌ Error updating CourseInstance ${instance._id}:`, err);
+                        }
+                    }
+                    
+                    // Update ALL enrollments for these course instances
+                    const instanceIds = courseInstancesByDate.map(ci => ci._id);
+                    const enrollmentsForInstances = await StudentEnrollment.updateMany(
+                        {
+                            courseInstanceId: { $in: instanceIds },
+                        },
+                        { $set: { slutprovDate: toLocal } },
+                        updateOptions
+                    );
+                    console.log(
+                        `📅 Updated ${courseInstancesUpdated} CourseInstances (by date) and ${enrollmentsForInstances.modifiedCount} enrollments from ${fromDate} to ${toDate}`
+                    );
+                }
             }
 
             // 3. Update students with manual finalExamDate (OPTIMIZED)
@@ -392,6 +540,106 @@ router.put(
                 updateOptions
             );
 
+            // 4. Update or move CalendarEvents for this teacher and date
+            // Find existing calendar events for the old date - use local midnight for consistency
+            const oldDateStartForEvents = new Date(
+                fromKey.getFullYear(),
+                fromKey.getMonth(),
+                fromKey.getDate(),
+                0, 0, 0, 0
+            );
+            const oldDateEndForEvents = new Date(
+                fromKey.getFullYear(),
+                fromKey.getMonth(),
+                fromKey.getDate(),
+                23, 59, 59, 999
+            );
+            const newDateStartForEvents = new Date(
+                toKey.getFullYear(),
+                toKey.getMonth(),
+                toKey.getDate(),
+                0, 0, 0, 0
+            );
+
+            const oldEvents = await CalendarEvent.find({
+                start: {
+                    $gte: oldDateStartForEvents,
+                    $lte: oldDateEndForEvents,
+                },
+                "extendedProps.type": "slutprov",
+                ...(teacherId ? { "extendedProps.teacherId": teacherId } : { "extendedProps.teacherId": { $exists: false } }),
+            });
+
+            let calendarEventsUpdated = 0;
+            const courseInstanceIdsFromEvents = new Set();
+            
+            for (const event of oldEvents) {
+                // Collect courseInstanceIds from the event's extendedProps
+                // This links the calendar event to its course instances
+                if (event.extendedProps?.courseInstanceIds && Array.isArray(event.extendedProps.courseInstanceIds)) {
+                    event.extendedProps.courseInstanceIds.forEach(id => {
+                        const idStr = id?.toString ? id.toString() : String(id);
+                        if (idStr) {
+                            courseInstanceIdsFromEvents.add(idStr);
+                        }
+                    });
+                    console.log(`[MOVE-GROUP] CalendarEvent ${event._id} has courseInstanceIds:`, Array.from(courseInstanceIdsFromEvents));
+                }
+                
+                // Update the event's start date to the new date (at local midnight)
+                event.start = newDateStartForEvents;
+                if (useTransaction && session) {
+                    await event.save({ session });
+                } else {
+                    await event.save();
+                }
+                calendarEventsUpdated++;
+                console.log(`📅 Moved CalendarEvent ${event._id} from ${fromDate} to ${toDate}`);
+            }
+            
+            // 5. Update course instances from calendar events' courseInstanceIds
+            // This ensures course instances are updated when their linked calendar event is moved
+            if (courseInstanceIdsFromEvents.size > 0) {
+                const eventCourseInstanceIds = Array.from(courseInstanceIdsFromEvents);
+                console.log(`[MOVE-GROUP] Updating ${eventCourseInstanceIds.length} course instances linked to calendar events:`, eventCourseInstanceIds);
+                
+                // Add these to the unique course instance IDs if not already there
+                eventCourseInstanceIds.forEach(id => {
+                    if (!uniqueCourseInstanceIds.includes(id)) {
+                        uniqueCourseInstanceIds.push(id);
+                    }
+                });
+                
+                // Update each course instance
+                for (const instanceId of eventCourseInstanceIds) {
+                    try {
+                        const instance = await CourseInstance.findById(instanceId);
+                        if (instance) {
+                            // Update the course instance's slutprovDate to match the new exam date
+                            instance.slutprovDate = toLocal;
+                            instance._slutprovDateExplicitlySet = true; // Prevent pre-save hook from recalculating
+                            if (useTransaction && session) {
+                                await instance.save({ session });
+                            } else {
+                                await instance.save();
+                            }
+                            courseInstancesUpdated++;
+                            console.log(`📅 Updated CourseInstance ${instanceId} from calendar event link from ${fromDate} to ${toDate}`);
+                            
+                            // Also update ALL enrollments for this course instance
+                            const enrollmentsForInstance = await StudentEnrollment.updateMany(
+                                { courseInstanceId: instanceId },
+                                { $set: { slutprovDate: toLocal } },
+                                updateOptions
+                            );
+                            console.log(`[MOVE-GROUP] Updated ${enrollmentsForInstance.modifiedCount} enrollments for course instance ${instanceId} (from calendar event link)`);
+                        }
+                    } catch (err) {
+                        console.error(`❌ Error updating CourseInstance ${instanceId} from calendar event:`, err);
+                    }
+                }
+            }
+
             // Commit the transaction if we're using one
             if (useTransaction && session) {
                 await session.commitTransaction();
@@ -399,9 +647,10 @@ router.put(
 
             res.json({
                 message: "Group moved successfully",
-                enrollmentsModified: enrollmentsUpdateResult.modifiedCount,
+                enrollmentsModified: totalEnrollmentsUpdated,
                 courseInstancesModified: courseInstancesUpdated,
                 studentsModified: studentUpdateResult.modifiedCount,
+                calendarEventsModified: calendarEventsUpdated,
             });
         } catch (error) {
             // If an error occurred and we're using a transaction, abort it
@@ -517,9 +766,21 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
         const allEnrollmentsWithSlutprov = await StudentEnrollment.find(
             enrollmentQuery
         )
-            .populate("studentId")
+            .populate({
+                path: "studentId",
+                populate: {
+                    path: "teacherId",
+                    populate: { path: "userId", select: "username" },
+                },
+            })
             .populate("mainCourseId")
-            .populate("courseInstanceId")
+            .populate({
+                path: "courseInstanceId",
+                populate: {
+                    path: "responsibleTeacher",
+                    populate: { path: "userId", select: "username" },
+                },
+            })
             .populate({
                 path: "teacherId",
                 populate: { path: "userId", select: "username" },
@@ -854,19 +1115,46 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
 
                 const dateKey = localDateKey(enrollment.slutprovDate);
 
-                // Lärare: från enrollment eller fallback på student
-                let teacherId = enrollment.teacherId;
+                // Lärare: ALWAYS prefer course instance's responsibleTeacher if it exists
+                // This ensures students in the same course instance are grouped together
+                let teacherId = null;
                 let teacherUsername = "Unknown";
                 let teacherColor = "#999999";
 
-                if (teacherId && teacherId.userId) {
-                    teacherUsername = teacherId.userId.username;
-                    teacherColor = teacherId.colorCode || "#999999";
-                } else if (student.teacherId && student.teacherId.userId) {
+                // Priority: courseInstance.responsibleTeacher > enrollment.teacherId > student.teacherId
+                if (enrollment.courseInstanceId?.responsibleTeacher) {
+                    const responsibleTeacher = enrollment.courseInstanceId.responsibleTeacher;
+                    teacherId = responsibleTeacher;
+                    // Check if userId is populated (it should be from the populate chain above)
+                    if (responsibleTeacher.userId) {
+                        teacherUsername = responsibleTeacher.userId.username || "Unknown";
+                        teacherColor = responsibleTeacher.colorCode || "#999999";
+                    } else {
+                        // If not populated, fetch it
+                        const { default: Teacher } = await import("../models/Teacher.js");
+                        const fullTeacher = await Teacher.findById(responsibleTeacher._id || responsibleTeacher)
+                            .populate("userId", "username");
+                        if (fullTeacher && fullTeacher.userId) {
+                            teacherUsername = fullTeacher.userId.username || "Unknown";
+                            teacherColor = fullTeacher.colorCode || "#999999";
+                        }
+                    }
+                } else if (enrollment.teacherId) {
+                    teacherId = enrollment.teacherId;
+                    if (enrollment.teacherId.userId) {
+                        teacherUsername = enrollment.teacherId.userId.username || "Unknown";
+                        teacherColor = enrollment.teacherId.colorCode || "#999999";
+                    }
+                } else if (student.teacherId) {
                     teacherId = student.teacherId;
-                    teacherUsername = student.teacherId.userId.username;
-                    teacherColor = student.teacherId.colorCode || "#999999";
-                } else {
+                    if (student.teacherId.userId) {
+                        teacherUsername = student.teacherId.userId.username || "Unknown";
+                        teacherColor = student.teacherId.colorCode || "#999999";
+                    }
+                }
+                
+                // If still no teacher found, skip this enrollment
+                if (!teacherId) {
                     console.log(
                         `⚠️ No teacher found for student ${student.name} in course ${course.courseName}`
                     );
@@ -1125,6 +1413,30 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
     } catch (err) {
         console.error("❌ Fel vid synk:", err.message, err.stack);
         res.status(500).json({ error: "Kunde inte hämta synkade events." });
+    }
+});
+
+// DELETE old duplicate "slutprov" type calendar events (cleanup endpoint)
+router.delete("/calendar-events/cleanup-slutprov", authenticateUser, async (req, res) => {
+    try {
+        // Only admins can clean up
+        if (!["admin", "systemadmin"].includes(req.user.role)) {
+            return res.status(403).json({ error: "Only admins can clean up calendar events" });
+        }
+
+        // Delete all CalendarEvents with type "slutprov"
+        // These should be generated dynamically from enrollments via /calendar-events/syncable
+        const result = await CalendarEvent.deleteMany({
+            "extendedProps.type": "slutprov"
+        });
+
+        res.json({
+            message: `Deleted ${result.deletedCount} old slutprov calendar events`,
+            deletedCount: result.deletedCount
+        });
+    } catch (err) {
+        console.error("❌ Fel vid cleanup:", err.message);
+        res.status(500).json({ error: "Kunde inte rensa events." });
     }
 });
 

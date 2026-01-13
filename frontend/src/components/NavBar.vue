@@ -714,8 +714,8 @@
           link: '/kalender',
           role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'],
         },
-        { name: 'SYV Samtal', link: '/syv/appointments', role: 'syv' },
-        { name: 'Specped Samtal', link: '/specped/appointments', role: 'specped' },
+        { name: 'SYV Samtal', link: '/syv/appointments', role: ['syv', 'admin', 'systemadmin'] },
+        { name: 'Specped Samtal', link: '/specped/appointments', role: ['specped', 'admin', 'systemadmin'] },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },
@@ -731,10 +731,24 @@
       const filteredMenuItems = computed(() => {
         if (!isLoggedIn.value) return []
         const userRole = store.getters.userRole
+        const isAdmin = store.getters.isAdmin
         console.log('🔍 Filtering menu items. User role:', userRole, 'User data:', store.state.user)
         const filtered = menuItems.filter((item) => {
           if (secretMenuNames.includes(item.name)) return false
           if (!item.role) return true
+          
+          // Admins and systemadmins can see all menus
+          if (isAdmin) return true
+          
+          // Special handling for SYV Samtal and Specped Samtal - only show to exact role
+          if (item.name === 'SYV Samtal') {
+            return userRole === 'syv'
+          }
+          if (item.name === 'Specped Samtal') {
+            return userRole === 'specped'
+          }
+          
+          // For all other items, use the standard permission check
           const hasPerm = hasPermission(item.role)
           console.log(`  - ${item.name}: hasPermission(${JSON.stringify(item.role)}) = ${hasPerm}`)
           return hasPerm
