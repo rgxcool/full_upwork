@@ -122,7 +122,7 @@ export default {
       this.showAddEventModal = false;
       this.eventType = null;
     },
-    addEventToCalendar(meeting) {
+    async addEventToCalendar(meeting) {
       const calendarApi = this.$refs.fullCalendar.getApi();
 
       // Format the meeting data similar to how it's done in fetchEvents
