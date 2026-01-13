@@ -1190,11 +1190,11 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                         `🔍 Final event exam info - Time: "${eventExamTime}", Municipality: "${eventExamMunicipality}", Location: "${eventExamLocation}"`
                     );
 
-                    const startDate = new Date(dateKey + "T00:00:00");
+                    const startDate = new Date(dateKey + "T12:00:00.000Z"); // noon UTC to avoid TZ drift
                     grouped[key] = {
                         id: teacherId ? `${teacherId}_${dateKey}` : `no_teacher_${dateKey}`,
                         title: student.teacherId?.userId?.username || "Okänd lärare",
-                        start: dateKey,
+                        start: dateKey + "T12:00:00.000Z",
                         color: student.teacherId?.colorCode || "#999999",
                         extendedProps: {
                             teacher: student.teacherId?.userId?.username || "Okänd lärare",
@@ -1435,7 +1435,7 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
                     grouped[key] = {
                         id: `${teacherId._id}_${dateKey}`,
                         title: teacherUsername,
-                        start: dateKey,
+                        start: dateKey + "T12:00:00.000Z",
                         color: teacherColor,
                         extendedProps: {
                             teacher: teacherUsername,

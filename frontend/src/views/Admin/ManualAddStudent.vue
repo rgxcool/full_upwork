@@ -192,7 +192,12 @@
         <div class="mb-3" v-if="addedCourses.length > 0">
           <label class="form-label">Tillagda kurser:</label>
           <div class="added-courses-list">
-            <div v-for="course in addedCourses" :key="course._id" class="course-item">
+            <!-- Use a composite key to avoid duplicate-key render errors when the same course appears multiple times (e.g., from packages) -->
+            <div
+              v-for="(course, idx) in addedCourses"
+              :key="`${course._id || 'no-id'}-${course.parentPackageId || 'solo'}-${idx}`"
+              class="course-item"
+            >
               <span class="course-name">
                 {{ course.displayText }}
                 <span v-if="course.type === 'CoursePackage'" class="badge bg-primary ms-1">
@@ -225,20 +230,12 @@
             <span class="text-danger">*</span>
           </label>
           <div class="datepicker-container">
-            <Datepicker
+            <input
+              type="date"
+              class="form-control"
               v-model="studentForm.startDate"
-              :text-input="textInputOptions"
-              :format="'yyyy-MM-dd'"
-              class="form-control-datepicker"
-              placeholder="yyyy-mm-dd"
-              :teleport="false"
-              :position="'bottom-start'"
-              :enable-time-picker="false"
-              ref="startDatepickerRef"
-              @keydown.enter.prevent="handleDatepickerEnter"
-              @input="calculateEndDate"
+              @change="() => { handleStartDateChange(studentForm.startDate); calculateEndDate() }"
             />
-            <span class="calendar-icon" @click="openDatepicker('startDatepickerRef')">🗓️</span>
           </div>
         </div>
 
@@ -297,25 +294,6 @@
           </div>
         </div>
 
-        <!-- Final Exam Date -->
-        <div class="mb-3 position-relative">
-          <label for="finalExamDate" class="form-label">Slutprovsdatum:</label>
-          <div class="datepicker-container">
-            <Datepicker
-              v-model="studentForm.finalExamDate"
-              :text-input="textInputOptions"
-              :format="'yyyy-MM-dd'"
-              class="form-control-datepicker"
-              placeholder="yyyy-mm-dd"
-              :teleport="false"
-              :position="'bottom-start'"
-              :enable-time-picker="false"
-              ref="finalExamDatepickerRef"
-              @keydown.enter.prevent="handleDatepickerEnter"
-            />
-            <span class="calendar-icon" @click="openDatepicker('finalExamDatepickerRef')">🗓️</span>
-          </div>
-        </div>
       </div>
 
       <!-- Location and Additional Info Section -->
@@ -344,18 +322,6 @@
             placeholder="Välj lärare"
             class="styled-select"
             :loading="isLoadingTeachers"
-          />
-        </div>
-
-        <!-- Exam Type -->
-        <div class="mb-3">
-          <label for="examType" class="form-label">Provtyp:</label>
-          <input
-            type="text"
-            id="examType"
-            v-model="studentForm.examType"
-            class="form-control"
-            placeholder="T.ex. Nationellt prov, Skriftlig examination"
           />
         </div>
 
@@ -404,9 +370,7 @@
 
 <script setup>
   import axios from 'axios'
-  import { VueDatePicker as Datepicker } from '@vuepic/vue-datepicker'
-  import '@vuepic/vue-datepicker/dist/main.css'
-  import { ref, reactive, watch, onMounted, computed } from 'vue'
+  import { ref, reactive, watch, onMounted, computed, nextTick } from 'vue'
 
   // Router (not needed; we stay on this page after submit)
 
@@ -430,10 +394,6 @@
   const fetchState = ref(false)
   const courseSchedules = ref({})
 
-  // Datepicker refs
-  const startDatepickerRef = ref(null)
-  const finalExamDatepickerRef = ref(null)
-
   // Form data
   const studentForm = reactive({
     name: '',
@@ -443,9 +403,7 @@
     startDate: '',
     studyPace: null,
     endDate: '',
-    finalExamDate: '',
     municipality: '',
-    examType: '',
     additionalInfo: '',
     dropout: false,
     attendedExam: false,
@@ -544,7 +502,7 @@
         `${import.meta.env.VITE_API_URL}/api/program/${programId}/courses`,
         { withCredentials: true }
       )
-      availableCourses.value = res.data.map((c) => ({
+      availableCourses.value = uniqueById(res.data).map((c) => ({
         ...c,
         displayText: `${c.courseName} (${c.courseCode || 'Ingen kod'})`,
       }))
@@ -562,7 +520,7 @@
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/courses`, {
         withCredentials: true,
       })
-      availableCourses.value = res.data.map((c) => ({
+      availableCourses.value = uniqueById(res.data).map((c) => ({
         ...c,
         displayText: `${c.courseName} (${c.courseCode || 'Ingen kod'})`,
       }))
@@ -581,7 +539,7 @@
       isLoadingCoursePackages.value = true
       const program = programs.value.find((p) => p._id === programId)
       if (program && program.programCoursePackages) {
-        availableCoursePackages.value = program.programCoursePackages.map((pkg) => ({
+        availableCoursePackages.value = uniqueById(program.programCoursePackages).map((pkg) => ({
           ...pkg,
           displayText: `${pkg.coursePackageName} (${pkg.coursePackageCode || 'Ingen kod'})`,
         }))
@@ -630,7 +588,7 @@
         })
 
         // Add all individual courses from the package
-        const individualCourses = selectedPackage.coursePackageCourses.map((course) => ({
+        const individualCourses = uniqueById(selectedPackage.coursePackageCourses).map((course) => ({
           ...course,
           displayText: `${course.courseName} (${course.courseCode || 'Ingen kod'})`,
           type: 'Course',
@@ -648,6 +606,20 @@
         calculateEndDate()
       }
     }
+  }
+
+  /**
+   * Deduplicate array items by their _id (or id) to avoid Vue key collisions.
+   */
+  const uniqueById = (items) => {
+    const seen = new Set()
+    return items.filter((item) => {
+      const id = item?._id || item?.id
+      if (!id) return true
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
   }
 
   const addIndividualCourse = () => {
@@ -732,6 +704,8 @@
     }
 
     const durationDays = parseInt(studentForm.studyPace) * 7
+    // Include ALL courses (both standalone and from packages) for scheduling
+    // This ensures the date range calculation includes all courses
     const courseEntries = addedCourses.value.filter((c) => c.type === 'Course')
 
     // If no specific courses selected yet, fall back to single span
@@ -769,21 +743,45 @@
     return new Date(dateString).toLocaleDateString('sv-SE')
   }
 
-  const openDatepicker = (refName) => {
-    if (refName === 'startDatepickerRef' && startDatepickerRef.value) {
-      startDatepickerRef.value.openMenu()
-    } else if (refName === 'finalExamDatepickerRef' && finalExamDatepickerRef.value) {
-      finalExamDatepickerRef.value.openMenu()
+  const formatStartDate = (date) => {
+    if (!date) return ''
+    const d = new Date(date)
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  const handleStartDateChange = (val) => {
+    if (!val) {
+      studentForm.startDate = ''
+      return
     }
+    if (typeof val === 'string') {
+      // Already formatted by model-type; strip any time part just in case
+      studentForm.startDate = val.split('T')[0]
+      return
+    }
+    const d = new Date(val)
+    // Normalize to yyyy-MM-dd (local)
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    studentForm.startDate = `${yyyy}-${mm}-${dd}`
+  }
+
+  const normalizeDateOnly = (val) => {
+    if (!val) return ''
+    if (typeof val === 'string') return val.split('T')[0]
+    const d = new Date(val)
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
   }
 
   const handleEnterKey = (e) => {
     if (!e.target.closest('.dp__input')) e.preventDefault()
-  }
-
-  const handleDatepickerEnter = (e) => {
-    e.stopPropagation()
-    e.preventDefault()
   }
 
   const resetForm = () => {
@@ -795,9 +793,7 @@
       startDate: '',
       studyPace: null,
       endDate: '',
-      finalExamDate: '',
       municipality: '',
-      examType: '',
       additionalInfo: '',
       dropout: false,
       attendedExam: false,
@@ -835,49 +831,78 @@
     errorMessage.value = ''
 
     try {
+      // Force date-only string for startDate and endDate before building schedules
+      studentForm.startDate = normalizeDateOnly(studentForm.startDate)
+      studentForm.endDate = normalizeDateOnly(studentForm.endDate)
+
       // Prepare phone numbers (filter out empty ones)
       const phoneNumbers = studentForm.phoneNumbers
         .map((phone) => phone.number.trim())
         .filter((number) => number.length > 0)
 
       // Prepare education entries with per-course dates
-      const courseEntries = addedCourses.value.filter((c) => c.type === 'Course')
+      // IMPORTANT: Exclude courses that belong to a package (parentPackageId) to avoid duplicates
+      // The backend will expand CoursePackage entries into individual course enrollments
+      const courseEntries = addedCourses.value.filter(
+        (c) => c.type === 'Course' && !c.parentPackageId
+      )
       const packageEntries = addedCourses.value.filter((c) => c.type === 'CoursePackage')
 
       // Ensure schedules are up-to-date
       calculateEndDate()
 
       const education = []
-      // Add individual course entries with their scheduled dates
+      // Add individual course entries with their scheduled dates (only standalone courses, not from packages)
       for (const c of courseEntries) {
         const sched = courseSchedules.value[c._id]
         education.push({
           type: 'Course',
           refId: c._id,
-          name: c.courseName,
+          name: c.courseCode || c.courseName,
           startDate: sched?.startDate || studentForm.startDate,
           endDate: sched?.endDate || studentForm.endDate,
-          slutprovDate: studentForm.finalExamDate,
         })
       }
-      // For course packages, use envelope spanning first-to-last course range
-      if (packageEntries.length > 0 && courseEntries.length > 0) {
-        const times = Object.values(courseSchedules.value)
+      // For course packages, calculate envelope from ALL courses (including package courses) for date range
+      // But only send the package entry - backend will expand it
+      if (packageEntries.length > 0) {
+        // Get all course schedules (including package courses) for date range calculation
+        const allCourseSchedules = Object.values(courseSchedules.value)
+        const times = allCourseSchedules
           .map((s) => [new Date(s.startDate).getTime(), new Date(s.endDate).getTime()])
           .flat()
           .filter((n) => !isNaN(n))
-        const minStart = Math.min(...times)
-        const maxEnd = Math.max(...times)
+        const minStart = times.length > 0 ? Math.min(...times) : null
+        const maxEnd = times.length > 0 ? Math.max(...times) : null
+        
         for (const pkg of packageEntries) {
           education.push({
             type: 'CoursePackage',
             refId: pkg._id,
-            name: pkg.courseName,
+            name: pkg.coursePackageCode || pkg.coursePackageName || pkg.courseName,
             startDate: isFinite(minStart) ? new Date(minStart).toISOString() : studentForm.startDate,
             endDate: isFinite(maxEnd) ? new Date(maxEnd).toISOString() : studentForm.endDate,
-            slutprovDate: studentForm.finalExamDate,
           })
         }
+      }
+
+      // Deduplicate education entries to avoid doubles (type + refId + start + end)
+      const dedupedEducation = []
+      const seenEdu = new Set()
+      for (const edu of education) {
+        const key = [
+          edu.type || '',
+          edu.refId || '',
+          normalizeDateOnly(edu.startDate),
+          normalizeDateOnly(edu.endDate),
+        ].join('|')
+        if (seenEdu.has(key)) continue
+        seenEdu.add(key)
+        dedupedEducation.push({
+          ...edu,
+          startDate: normalizeDateOnly(edu.startDate),
+          endDate: normalizeDateOnly(edu.endDate),
+        })
       }
 
       const payload = {
@@ -886,11 +911,9 @@
         email: studentForm.email.trim(),
         phone: phoneNumbers.length > 0 ? phoneNumbers[0] : '', // Primary phone
         phoneNumbers: phoneNumbers, // All phone numbers
-        startDate: studentForm.startDate,
-        endDate: studentForm.endDate,
-        finalExamDate: studentForm.finalExamDate,
+        startDate: normalizeDateOnly(studentForm.startDate),
+        endDate: normalizeDateOnly(studentForm.endDate),
         municipality: studentForm.municipality ? { type: studentForm.municipality } : undefined,
-        exam: studentForm.examType.trim(),
         additionalInfo: studentForm.additionalInfo.trim(),
         teacher: selectedTeacher.value
           ? teachers.value.find((t) => t._id === selectedTeacher.value)?.userId?.username
@@ -900,7 +923,7 @@
         attendedExam: studentForm.attendedExam,
         paidExamFee: studentForm.paidExamFee,
         program: selectedProgram.value,
-        education: education,
+        education: dedupedEducation,
       }
 
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/student`, payload, {
@@ -912,11 +935,12 @@
 
       successMessage.value = '✅ Eleven har lagts till framgångsrikt!'
 
-      // Reset form immediately
-      resetForm()
-
       // Re-enable button immediately after successful completion
       isSubmitting.value = false
+
+      // Reset form after Vue has finished processing updates to avoid rendering errors
+      await nextTick()
+      resetForm()
 
       // Keep user on the page; auto-hide message after a short delay
       setTimeout(() => {
@@ -1116,6 +1140,7 @@
   .alert-success .fas {
     color: #155724;
   }
+
 
   @media (max-width: 768px) {
     .scrollable-view {
