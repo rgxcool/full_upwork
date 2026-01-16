@@ -1,6 +1,6 @@
 <template>
   <v-card class="pa-6" elevation="2" rounded="lg">
-    <v-form ref="formRef" @submit.prevent="submitPlan">
+    <v-form @submit.prevent="submitPlan">
       <v-container fluid>
         <v-row
           v-for="(question, index) in questions"
@@ -109,11 +109,9 @@
 <script setup>
   import { ref, onMounted, computed } from 'vue'
   import axios from 'axios'
-  import html2pdf from 'html2pdf.js'
 
   const questions = ref([])
   const answers = ref({})
-  const formRef = ref(null)
   const teachers = ref([])
 
   const props = defineProps(['userData'])
@@ -121,6 +119,11 @@
   const selectedTeacherLabel = computed(
     () => teachers.value.find((t) => t._id === answers.value.teacherName)?.label || 'Okänd'
   )
+
+  const targetEducation = computed(() => {
+    if (!props.userData?.education || !props.userData.education.length) return null
+    return props.userData.education.find((edu) => edu.locked) || props.userData.education[0]
+  })
 
   const fetchTeachers = async () => {
     try {
@@ -180,40 +183,51 @@
     */
 
   const submitPlan = async () => {
+    const studentId = props.userData?._id
+    const educationId =
+      targetEducation.value?.refId ||
+      targetEducation.value?._id ||
+      targetEducation.value?.educationId
+    const courseId =
+      targetEducation.value?.courseId ||
+      targetEducation.value?.courseInstanceId ||
+      targetEducation.value?.refId ||
+      targetEducation.value?._id
+
+    if (!studentId) {
+      alert('Ingen studentdata hittades för att spara handlingsplanen.')
+      return
+    }
+
+    if (!educationId) {
+      alert('Kunde inte hitta någon utbildning kopplad till handlingsplanen.')
+      return
+    }
+
+    const normalizedAnswers = { ...answers.value }
+    if (normalizedAnswers.teacherName) {
+      normalizedAnswers.teacherId = normalizedAnswers.teacherName
+      normalizedAnswers.teacherName = selectedTeacherLabel.value
+    }
+
+    const payload = {
+      studentId,
+      educationId,
+      ...normalizedAnswers,
+    }
+
+    if (courseId) {
+      payload.courseId = courseId
+    }
+
     try {
-      const options = {
-        margin: 0.5,
-        filename: 'action_plan.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
-      }
-
-      await html2pdf()
-        .from(formRef.value)
-        .set(options)
-        .outputPdf('blob')
-        .then(async (pdfBlob) => {
-          const formData = new FormData()
-          formData.append('file', pdfBlob, 'action_plan.pdf')
-          formData.append('studentId', props.userData._id)
-
-          return axios.post('/api/documents/upload', formData)
-        })
-        .then(() => {
-          axios.put(`/api/notifications/resolve/${props.userData._id}`)
-        })
-        .then(() => {
-          alert('Handlingsplan sparad och PDF skapad!')
-        })
-
-        .catch((error) => {
-          console.error('Kunde inte spara handlingsplan:', error)
-          alert('Kunde inte spara handlingsplan.')
-        })
+      await axios.post('/api/save-actionplan', payload)
+      await axios.put(`/api/notifications/resolve/${studentId}`)
+      alert('Handlingsplan sparad!')
     } catch (error) {
       console.error('Kunde inte spara handlingsplan:', error)
       console.error('Error response and message:', error.response || error.message)
+      alert('Kunde inte spara handlingsplan.')
     }
   }
 </script>
