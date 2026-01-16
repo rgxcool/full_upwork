@@ -19,6 +19,91 @@ import CoursePackage from "../models/CoursePackage.js";
 
 console.log("[DEBUG] courseMatchingController.js loaded");
 
+const formatDateOnlyUTC = (dateValue) => {
+    if (!dateValue) return "";
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) return "";
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+};
+
+const getInstanceKey = (instance) => {
+    const mainCourseId = String(
+        instance.mainCourseId?._id || instance.mainCourseId || ""
+    );
+    const responsibleTeacher = String(
+        instance.responsibleTeacher?._id || instance.responsibleTeacher || ""
+    );
+    const startKey = formatDateOnlyUTC(instance.startDate);
+    const endKey = formatDateOnlyUTC(instance.endDate);
+    return `${mainCourseId}|${responsibleTeacher}|${startKey}|${endKey}`;
+};
+
+const mergeDuplicateCourseInstances = async (instances) => {
+    if (!instances || instances.length === 0) return false;
+    const grouped = new Map();
+    for (const instance of instances) {
+        const key = getInstanceKey(instance);
+        if (!key) continue;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(instance);
+    }
+
+    let mergedAny = false;
+    for (const duplicates of grouped.values()) {
+        if (duplicates.length <= 1) continue;
+        mergedAny = true;
+
+        const counts = await Promise.all(
+            duplicates.map(async (instance) => {
+                const count = await StudentEnrollment.countDocuments({
+                    courseInstanceId: instance._id,
+                });
+                return { instance, count };
+            })
+        );
+        counts.sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            return new Date(a.instance.createdAt || 0) - new Date(b.instance.createdAt || 0);
+        });
+
+        const base = counts[0].instance;
+        const duplicatesToMerge = counts.slice(1).map((c) => c.instance);
+
+        let needsSave = false;
+        for (const dup of duplicatesToMerge) {
+            await StudentEnrollment.updateMany(
+                { courseInstanceId: dup._id },
+                { $set: { courseInstanceId: base._id } }
+            );
+
+            if (!base.responsibleTeacher && dup.responsibleTeacher) {
+                base.responsibleTeacher = dup.responsibleTeacher;
+                needsSave = true;
+            }
+            if (!base.slutprovDate && dup.slutprovDate) {
+                base.slutprovDate = dup.slutprovDate;
+                needsSave = true;
+            }
+            if (base.isActive === false && dup.isActive === true) {
+                base.isActive = true;
+                needsSave = true;
+            }
+        }
+
+        if (needsSave) {
+            await base.save();
+        }
+
+        const duplicateIds = duplicatesToMerge.map((d) => d._id);
+        await CourseInstance.deleteMany({ _id: { $in: duplicateIds } });
+    }
+
+    return mergedAny;
+};
+
 /**
  * Uploads an Excel file of students for course matching, parses the file, creates teachers if needed, and returns results.
  * @async
@@ -1278,9 +1363,22 @@ export const getCourseInstances = async (req, res) => {
             })
             .sort({ startDate: -1 });
 
+        const merged = await mergeDuplicateCourseInstances(instances);
+        const finalInstances = merged
+            ? await CourseInstance.find(query)
+                  .populate("mainCourseId")
+                  .populate("createdBy", "username email")
+                  .populate({
+                      path: "responsibleTeacher",
+                      populate: { path: "userId", select: "username email" },
+                      select: "userId subject",
+                  })
+                  .sort({ startDate: -1 })
+            : instances;
+
         // For each instance, count enrollments and get slutprov date
         const instancesWithCounts = await Promise.all(
-            instances.map(async (instance) => {
+            finalInstances.map(async (instance) => {
                 const enrollmentCount = await StudentEnrollment.countDocuments({
                     courseInstanceId: instance._id,
                 });
@@ -1364,8 +1462,20 @@ export const getMyCourseInstances = async (req, res) => {
             console.log('[DEBUG] Sample course instance (full):', JSON.stringify(instances[0].toObject(), null, 2));
         }
 
+        const merged = await mergeDuplicateCourseInstances(instances);
+        const finalInstances = merged
+            ? await CourseInstance.find(query)
+                  .populate("mainCourseId")
+                  .populate({
+                      path: "responsibleTeacher",
+                      populate: { path: "userId", select: "username email" },
+                      select: "userId subject",
+                  })
+                  .sort({ startDate: -1 })
+            : instances;
+
         const instancesWithCounts = await Promise.all(
-            instances.map(async (instance) => {
+            finalInstances.map(async (instance) => {
                 const enrollmentCount = await StudentEnrollment.countDocuments({
                     courseInstanceId: instance._id,
                 });
@@ -1643,17 +1753,35 @@ export const createCourseInstance = async (req, res) => {
             return isNaN(parsed.getTime()) ? undefined : parsed;
         };
 
+        const parsedStartDate = parseDate(startDate);
+        const parsedEndDate = parseDate(endDate);
+        const responsibleTeacherId = responsibleTeacher || undefined;
+
+        // Prevent duplicate course instances for same course + dates + teacher
+        const existingInstance = await CourseInstance.findOne({
+            mainCourseId,
+            startDate: parsedStartDate,
+            endDate: parsedEndDate,
+            responsibleTeacher: responsibleTeacherId,
+        });
+        if (existingInstance) {
+            return res.status(409).json({
+                error: "Duplicate course instance exists for this course and date range",
+                instance: existingInstance,
+            });
+        }
+
         // Create the course instance
         const newInstance = new CourseInstance({
             mainCourseId,
-            startDate: parseDate(startDate),
-            endDate: parseDate(endDate),
+            startDate: parsedStartDate,
+            endDate: parsedEndDate,
             courseName: finalCourseName,
             courseCode: uniqueCourseCode,
             coursePoints: finalCoursePoints,
             courseExtent: finalCourseExtent,
             createdBy: userId,
-            responsibleTeacher: responsibleTeacher || undefined,
+            responsibleTeacher: responsibleTeacherId,
             slutprovDate: parseDate(slutprovDate),
             notes: notes || '',
             isActive: true,
