@@ -69,7 +69,7 @@ citest:
 	docker run --rm -e MONGO_URI="mongodb://mindful_mongo:27017" $(CITEST_BACKEND_MOUNT) "$(CITEST_IMAGE)"
 
 init:
-	npm ci && cd backend && npm ci && cd ../frontend && npm ci
+	volta run npm ci && npm ci && cd backend && npm ci && cd ../frontend && npm ci
 
 dev:
 	$(DC) up --build
