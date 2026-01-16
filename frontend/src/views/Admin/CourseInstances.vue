@@ -15,40 +15,18 @@
 
       <!-- Filters -->
       <div class="filters-section">
-        <div class="filter-group">
-          <label for="courseInstanceFilter">Kursinstans:</label>
-          <v-autocomplete
+        <div class="filter-group instance-filter-group">
+          <label for="courseInstanceFilter">Kurs (namn eller kod):</label>
+          <v-text-field
             id="courseInstanceFilter"
-            v-model="filters.courseInstanceId"
-            :items="filteredCourseInstances"
-            item-title="displayName"
-            item-value="_id"
-            label="Sök kursinstans"
-            :loading="isLoadingInstances"
+            v-model="instanceSearchQuery"
+            placeholder="Sök kurs (namn eller kod)"
             clearable
             density="compact"
             variant="outlined"
-            :search="instanceSearchQuery"
-            @update:search="instanceSearchQuery = $event"
-            @update:model-value="handleInstanceFilterChange"
-            :menu-props="{ maxHeight: '300px' }"
+            hide-details
             class="instance-autocomplete"
-            no-filter
-          >
-            <template #item="{ props, item }">
-              <v-list-item v-bind="props" :title="item.raw.displayName" />
-            </template>
-          </v-autocomplete>
-        </div>
-
-        <div class="filter-group">
-          <label for="courseFilter">Kurs:</label>
-          <select id="courseFilter" v-model="filters.courseId" @change="loadInstances">
-            <option value="">Alla kurser</option>
-            <option v-for="course in courses" :key="course._id" :value="course._id">
-              {{ course.courseName }} ({{ course.courseCode }})
-            </option>
-          </select>
+          />
         </div>
 
         <div class="filter-group">
@@ -67,7 +45,7 @@
           </select>
         </div>
 
-        <button class="btn btn-primary" @click="showCreateModal = true">
+        <button class="btn btn-primary create-instance-button" @click="showCreateModal = true">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
             <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
           </svg>
@@ -626,7 +604,6 @@
       const isSaving = ref(false)
 
       const filters = ref({
-        courseInstanceId: null,
         courseId: '',
         startDate: '',
         endDate: '',
@@ -636,26 +613,6 @@
       const allCourseInstancesForFilter = ref([])
       const isLoadingInstances = ref(false)
       const instanceSearchQuery = ref('')
-
-      // Computed property to filter course instances based on search query
-      const filteredCourseInstances = computed(() => {
-        if (!instanceSearchQuery.value || instanceSearchQuery.value.trim() === '') {
-          return allCourseInstancesForFilter.value
-        }
-
-        const query = instanceSearchQuery.value.toLowerCase().trim()
-        return allCourseInstancesForFilter.value.filter((instance) => {
-          const displayName = instance.displayName?.toLowerCase() || ''
-          const courseName = instance.courseName?.toLowerCase() || ''
-          const courseCode = instance.courseCode?.toLowerCase() || ''
-          
-          return (
-            displayName.includes(query) ||
-            courseName.includes(query) ||
-            courseCode.includes(query)
-          )
-        })
-      })
 
       const instanceForm = ref({
         mainCourseId: '',
@@ -718,11 +675,13 @@
       const filteredInstances = computed(() => {
         let filtered = instances.value
 
-        // Filter by selected course instance
-        if (filters.value.courseInstanceId) {
-          filtered = filtered.filter(
-            (i) => i._id === filters.value.courseInstanceId
-          )
+        const query = instanceSearchQuery.value?.toLowerCase().trim()
+        if (query) {
+          filtered = filtered.filter((i) => {
+            const courseName = i.courseName?.toLowerCase() || ''
+            const courseCode = i.courseCode?.toLowerCase() || ''
+            return courseName.includes(query) || courseCode.includes(query)
+          })
         }
 
         return filtered
@@ -790,18 +749,9 @@
       }
 
       const updateInstanceFilterOptions = (instancesList) => {
-        allCourseInstancesForFilter.value = instancesList.map((instance) => ({
-          _id: instance._id,
-          displayName: `${instance.courseName}${instance.courseCode ? ` (${instance.courseCode})` : ''}${instance.startDate ? ` - ${formatDate(instance.startDate)}` : ''}`,
-          courseName: instance.courseName,
-          courseCode: instance.courseCode,
-          startDate: instance.startDate,
-        }))
-      }
-
-      const handleInstanceFilterChange = () => {
-        // Client-side filtering is handled by filteredInstances computed property
-        // No need to reload from API
+        allCourseInstancesForFilter.value = Array.isArray(instancesList)
+          ? instancesList
+          : []
       }
 
       const saveInstance = async () => {
@@ -1291,9 +1241,7 @@
         sortedInstances,
         allCourseInstancesForFilter,
         isLoadingInstances,
-        handleInstanceFilterChange,
         instanceSearchQuery,
-        filteredCourseInstances,
       }
     },
   }
@@ -1335,7 +1283,7 @@
   .filters-section {
     display: flex;
     gap: 20px;
-    align-items: end;
+    align-items: flex-end;
     margin-bottom: 30px;
     padding: 20px;
     background: #f8f9fa;
@@ -1619,5 +1567,13 @@
 
   .filter-group .v-autocomplete {
     width: 100%;
+  }
+
+  .instance-filter-group {
+    align-self: flex-end;
+  }
+
+  .create-instance-button {
+    align-self: flex-end;
   }
 </style>
