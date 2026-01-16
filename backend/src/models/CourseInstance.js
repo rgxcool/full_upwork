@@ -142,6 +142,12 @@ courseInstanceSchema.methods.getDuration = function () {
     return Math.ceil((this.endDate - this.startDate) / (1000 * 60 * 60 * 24));
 };
 
+// Prevent duplicate instances for same course/date/teacher
+courseInstanceSchema.index(
+    { mainCourseId: 1, startDate: 1, endDate: 1, responsibleTeacher: 1 },
+    { unique: true }
+);
+
 export default mongoose.model(
     "CourseInstance",
     courseInstanceSchema,
