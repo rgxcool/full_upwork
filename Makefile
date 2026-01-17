@@ -16,7 +16,7 @@ endif
 
 # --- Targets -------------------------------------------------------
 
-.PHONY: deploy deploy-old estimate format init start-backend dev test citest stop npmup
+.PHONY: %
 
 deploy:
 	@echo "Pulling latest code..."
@@ -77,9 +77,13 @@ dev:
 format:
 	npx eslint --no-config-lookup --fix
 
-test:
-	cd backend && npx vitest run --mode test --reporter=$(CITEST_REPORTER); \
+test-backend:
+	cd backend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
+
+test-frontend:
 	cd ../frontend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
+
+test: test-backend test-frontend
 
 stop:
 	$(DC) down

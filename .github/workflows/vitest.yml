@@ -52,8 +52,11 @@ jobs:
             - name: Start MongoDB
               run: docker compose -f docker-compose.yml -p mindful-new up -d mongo
 
-            - name: Run tests
-              run: make test
+            - name: Backend Tests
+              run: make test-backend
+
+            - name: Frontend Tests
+              run: make test-frontend
 
             - name: Tear down MongoDB
               if: always()
