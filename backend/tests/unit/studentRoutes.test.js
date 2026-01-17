@@ -1166,6 +1166,7 @@ describe("DELETE /student/:id", () => {
 
         expect(res.json).toHaveBeenCalledWith({
             message: "Student deleted successfully",
+            deletedFilesCount: 0,
         });
     });
 
@@ -1185,6 +1186,9 @@ describe("DELETE /student/:id", () => {
 describe("DELETE /students", () => {
     it("clears all students", async () => {
         const handler = findRouteHandler("/students", "DELETE");
+        Student.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
         const res = createRes();
 
         await handler({ params: {} }, res);
@@ -1192,6 +1196,7 @@ describe("DELETE /students", () => {
         expect(Student.deleteMany).toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith({
             message: "All students deleted successfully",
+            deletedFilesCount: 0,
         });
     });
     it("handles delete all failures", async () => {

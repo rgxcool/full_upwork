@@ -16,7 +16,7 @@ endif
 
 # --- Targets -------------------------------------------------------
 
-.PHONY: deploy deploy-old estimate format init start-backend dev test citest stop npmup
+.PHONY: %
 
 deploy:
 	@echo "Pulling latest code..."
@@ -69,7 +69,7 @@ citest:
 	docker run --rm -e MONGO_URI="mongodb://mindful_mongo:27017" $(CITEST_BACKEND_MOUNT) "$(CITEST_IMAGE)"
 
 init:
-	npm ci && cd backend && npm ci && cd ../frontend && npm ci
+	volta run npm ci && npm ci && cd backend && npm ci && cd ../frontend && npm ci
 
 dev:
 	$(DC) up --build
@@ -77,9 +77,13 @@ dev:
 format:
 	npx eslint --no-config-lookup --fix
 
-test:
-	cd backend && npx vitest run --mode test --reporter=$(CITEST_REPORTER); \
-	cd ../frontend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
+test-backend:
+	cd backend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
+
+test-frontend:
+	cd frontend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
+
+test: test-backend test-frontend
 
 stop:
 	$(DC) down

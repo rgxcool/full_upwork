@@ -52,9 +52,22 @@ jobs:
             - name: Start MongoDB
               run: docker compose -f docker-compose.yml -p mindful-new up -d mongo
 
-            - name: Run tests
-              run: make test
+            - name: Backend Tests
+              id: backend_tests
+              continue-on-error: true
+              run: make test-backend
+
+            - name: Frontend Tests
+              id: frontend_tests
+              run: make test-frontend
 
             - name: Tear down MongoDB
               if: always()
               run: docker compose -f docker-compose.yml -p mindful-new down
+
+            - name: Fail job if any tests failed
+              if: always()
+              run: |
+                if [[ "${{ steps.backend_tests.outcome }}" != "success" || "${{ steps.frontend_tests.outcome }}" != "success" ]]; then
+                  exit 1
+                fi

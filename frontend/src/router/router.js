@@ -17,7 +17,6 @@ const ProgramsAndCourses = () => import('@/views/Admin/ProgramsAndCourses.vue')
 const ProgramsAndPackages = () => import('@/views/Admin/ProgramsAndPackages.vue')
 const AddUser = () => import('@/views/Admin/AddUser.vue')
 const EditStudent = () => import('@/views/Admin/EditStudent.vue')
-const PdfView = () => import('@/views/Admin/PdfView.vue')
 const SearchUser = () => import('@/views/Admin/SearchUser.vue')
 const SearchResultDetails = () => import('@/views/Admin/SearchResultDetails.vue')
 const EarningsOverview = () => import('@/views/Admin/EarningsOverview.vue')
@@ -260,12 +259,6 @@ const routes = [
   },
 
   // Utility Routes (General Access)
-  {
-    path: '/pdf',
-    name: 'PdfView',
-    component: PdfView,
-    meta: { title: 'PDF Viewer', role: 'admin' },
-  },
   {
     path: '/apl',
     name: 'APLView',

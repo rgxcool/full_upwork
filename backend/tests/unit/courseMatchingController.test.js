@@ -21,16 +21,26 @@ vi.mock("../../src/models/Student.js", () => {
         default: Student,
     };
 });
-vi.mock("../../src/models/CourseInstance.js", () => ({
-    __esModule: true,
-    default: {
+vi.mock("../../src/models/CourseInstance.js", () => {
+    const CourseInstanceMock = vi.fn(function (doc = {}) {
+        Object.assign(this, doc);
+        this.save = vi.fn().mockResolvedValue(this);
+    });
+
+    Object.assign(CourseInstanceMock, {
         find: vi.fn(),
+        findOne: vi.fn(),
         findById: vi.fn(),
         findByIdAndUpdate: vi.fn(),
         findByIdAndDelete: vi.fn(),
         deleteMany: vi.fn(),
-    },
-}));
+    });
+
+    return {
+        __esModule: true,
+        default: CourseInstanceMock,
+    };
+});
 vi.mock("../../src/models/StudentEnrollment.js", () => ({
     __esModule: true,
     default: {
@@ -52,6 +62,7 @@ vi.mock("../../src/models/Course.js", () => ({
     __esModule: true,
     default: {
         find: vi.fn(),
+        findById: vi.fn(),
     },
 }));
 vi.mock("../../src/utils/parseStudentExcel.js", () => ({
@@ -163,6 +174,13 @@ beforeEach(() => {
     Student.find.mockResolvedValue([]);
     CoursePackage.find.mockReturnValue({ lean: vi.fn().mockResolvedValue([]) });
     Course.find.mockReturnValue({ lean: vi.fn().mockResolvedValue([]) });
+    Course.findById = vi.fn().mockResolvedValue({
+        _id: "course1",
+        courseName: "Course One",
+        courseCode: "C1",
+        coursePoints: "10",
+        courseExtent: "5",
+    });
     StudentEnrollment.countDocuments.mockResolvedValue(0);
     StudentEnrollment.findOne.mockReturnValue({
         select: vi.fn().mockResolvedValue({
@@ -185,6 +203,7 @@ beforeEach(() => {
         ])
     );
     CourseInstance.findById.mockResolvedValue(null);
+    CourseInstance.findOne.mockResolvedValue(null);
     CourseInstance.findByIdAndUpdate.mockResolvedValue(null);
     CourseInstance.findByIdAndDelete.mockResolvedValue(null);
     CourseInstance.deleteMany.mockResolvedValue({ deletedCount: 0 });
@@ -355,7 +374,8 @@ describe("uploadStudentsForMatching", () => {
                     refId: coursePackage._id,
                     name: coursePackage.coursePackageName,
                 }),
-            ]
+            ],
+            expect.any(String)
         );
         expect(CourseMatchingService.processStudentEducation).toHaveBeenNthCalledWith(
             2,
@@ -365,7 +385,8 @@ describe("uploadStudentsForMatching", () => {
                     type: "Course",
                     name: "ENGCOURSE",
                 }),
-            ]
+            ],
+            expect.any(String)
         );
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -1757,10 +1778,23 @@ describe("getCourseInstanceEnrollments", () => {
 describe("updateEnrollmentStatus", () => {
     it("updates status and stats when enrollment exists", async () => {
         const changeStatus = vi.fn().mockResolvedValue(undefined);
-        StudentEnrollment.findById.mockResolvedValue({
+        const enrollmentDoc = {
             changeStatus,
             courseInstanceId: "ci-1",
-        });
+        };
+        const populatedEnrollment = {
+            _id: "enroll-1",
+            courseInstanceId: "ci-1",
+            status: "completed",
+        };
+        const populateChain = {
+            populate: vi.fn(() => populateChain),
+            then: (resolve) => resolve(populatedEnrollment),
+            catch: () => populateChain,
+        };
+        StudentEnrollment.findById
+            .mockResolvedValueOnce(enrollmentDoc)
+            .mockReturnValueOnce(populateChain);
         const req = {
             params: { enrollmentId: "enroll-1" },
             body: { status: "completed", reason: "done", notes: "ok" },
@@ -1775,7 +1809,7 @@ describe("updateEnrollmentStatus", () => {
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({
                 success: true,
-                enrollment: expect.any(Object),
+                enrollment: populatedEnrollment,
             })
         );
     });
@@ -1919,16 +1953,46 @@ describe("createCourseInstance", () => {
         });
     });
 
-    it("creates course instance via service", async () => {
-        CourseMatchingService.findOrCreateCourseInstance.mockResolvedValue({
-            instance: { _id: "ci1" },
+    it("creates a course instance with inherited values", async () => {
+        const req = {
+            body: {
+                mainCourseId: "course1",
+                startDate: "2025-01-01",
+                endDate: "2025-02-01",
+            },
+            user: { userId: "user1" },
+        };
+        const res = createRes();
+
+        await createCourseInstance(req, res);
+
+        const payload = res.json.mock.calls[0][0];
+        expect(payload).toMatchObject({
+            success: true,
+            message: "Course instance created successfully",
             wasCreated: true,
         });
+        expect(payload.instance).toMatchObject({
+            mainCourseId: "course1",
+            courseCode: "C12501",
+            courseName: "Course One",
+            coursePoints: "10",
+            courseExtent: "5",
+            createdBy: "user1",
+            isActive: true,
+        });
+        expect(payload.instance.save).toHaveBeenCalled();
+    });
+
+    it("applies provided course data when creating instance", async () => {
         const req = {
             body: {
                 mainCourseId: "course1",
                 startDate: "2025-01-01",
                 endDate: "2025-02-01",
+                courseName: "Updated Name",
+                coursePoints: "4",
+                responsibleTeacher: "teach-1",
             },
             user: { userId: "user1" },
         };
@@ -1936,59 +2000,19 @@ describe("createCourseInstance", () => {
 
         await createCourseInstance(req, res);
 
-        expect(res.json).toHaveBeenCalledWith(
-            expect.objectContaining({
-                success: true,
-                message: "Course instance created successfully",
-                instance: { _id: "ci1" },
-                wasCreated: true,
-            })
-        );
-    });
-
-    it("updates existing course instance when data provided", async () => {
-        const req = {
-            body: {
-                mainCourseId: "course1",
-                startDate: "2025-01-01",
-                endDate: "2025-02-01",
-                courseName: "Updated Name",
-            },
-            user: { userId: "user1" },
-        };
-        const res = createRes();
-        const instance = {
-            _id: "ci1",
-            save: vi.fn().mockResolvedValue(true),
-        };
-        CourseMatchingService.findOrCreateCourseInstance.mockResolvedValue({
-            instance,
-            wasCreated: false,
-        });
-        CourseInstance.findByIdAndUpdate.mockResolvedValue({
-            _id: "ci1",
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.success).toBe(true);
+        expect(payload.wasCreated).toBe(true);
+        expect(payload.instance).toMatchObject({
             courseName: "Updated Name",
+            coursePoints: "4",
+            responsibleTeacher: "teach-1",
         });
-
-        await createCourseInstance(req, res);
-
-        expect(CourseInstance.findByIdAndUpdate).toHaveBeenCalledWith(
-            "ci1",
-            expect.objectContaining({
-                courseName: "Updated Name",
-            })
-        );
-        expect(instance.save).toHaveBeenCalled();
-        expect(res.json).toHaveBeenCalledWith(
-            expect.objectContaining({
-                success: true,
-                message: "Course instance updated successfully",
-                wasCreated: false,
-            })
-        );
+        expect(payload.instance.save).toHaveBeenCalled();
     });
 
-    it("returns 500 if creating course instance fails", async () => {
+    it("returns 404 if main course is missing", async () => {
+        Course.findById.mockResolvedValueOnce(null);
         const req = {
             body: {
                 mainCourseId: "course1",
@@ -1997,14 +2021,11 @@ describe("createCourseInstance", () => {
             },
         };
         const res = createRes();
-        CourseMatchingService.findOrCreateCourseInstance.mockRejectedValue(
-            new Error("boom")
-        );
 
         await createCourseInstance(req, res);
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: "Main course not found" });
     });
 });
 
@@ -2021,12 +2042,14 @@ describe("updateCourseInstance", () => {
     });
 
     it("updates instance when found", async () => {
+        const savedInstance = { _id: "inst-2", courseName: "Demo" };
+        const save = vi.fn().mockResolvedValue(savedInstance);
         CourseInstance.findById.mockResolvedValue({
             _id: "inst-2",
             courseName: "Demo",
-            save: vi.fn().mockResolvedValue(true),
+            mainCourseId: "course1",
+            save,
         });
-        CourseInstance.findByIdAndUpdate.mockResolvedValue({ _id: "inst-2", courseName: "Demo" });
         const req = {
             params: { instanceId: "inst-2" },
             body: { notes: "updated" },
@@ -2035,11 +2058,12 @@ describe("updateCourseInstance", () => {
 
         await updateCourseInstance(req, res);
 
+        expect(save).toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({
                 success: true,
                 message: "Course instance updated successfully",
-                instance: expect.objectContaining({ courseName: "Demo" }),
+                instance: savedInstance,
             })
         );
     });
@@ -2058,32 +2082,29 @@ describe("updateCourseInstance", () => {
             courseName: "Auto",
             responsibleTeacher: "teacher1",
             endDate: new Date("2025-02-01"),
+            mainCourseId: "course1",
         };
-        CourseInstance.findById.mockResolvedValue(instance);
         const calculatedDate = new Date("2025-02-24");
-        calculateSlutprovDate.mockResolvedValue(calculatedDate);
-        CourseInstance.findByIdAndUpdate.mockResolvedValue({
-            _id: "inst-auto",
-            courseName: "Auto",
+        instance.save = vi.fn().mockResolvedValue({
+            ...instance,
+            slutprovDate: calculatedDate,
         });
+        CourseInstance.findById.mockResolvedValue(instance);
+        calculateSlutprovDate.mockResolvedValue(calculatedDate);
 
         await updateCourseInstance(req, res);
 
-        expect(calculateSlutprovDate).toHaveBeenCalledWith(
-            "teacher1",
-            new Date("2025-03-01")
-        );
-        expect(CourseInstance.findByIdAndUpdate).toHaveBeenCalledWith(
-            "inst-auto",
-            expect.objectContaining({
-                slutprovDate: calculatedDate,
-            }),
-            { new: true, runValidators: true }
-        );
+        expect(calculateSlutprovDate).toHaveBeenCalledWith("teacher1", expect.any(Date));
+        const calledDate = calculateSlutprovDate.mock.calls[0][1];
+        expect(calledDate.getFullYear()).toBe(2025);
+        expect(calledDate.getMonth()).toBe(2);
+        expect(calledDate.getDate()).toBe(1);
+        expect(instance.save).toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({
                 success: true,
                 message: "Course instance updated successfully",
+                instance: expect.objectContaining({ slutprovDate: calculatedDate }),
             })
         );
     });
