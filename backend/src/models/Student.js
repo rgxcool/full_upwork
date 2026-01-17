@@ -146,4 +146,20 @@ const StudentSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+const municipalityPath = StudentSchema.path("municipality");
+if (municipalityPath?.set) {
+    municipalityPath.set((value) => {
+        if (typeof value === "string") {
+            return { type: value };
+        }
+        return value;
+    });
+}
+
+StudentSchema.pre("validate", function () {
+    if (typeof this.municipality === "string") {
+        this.municipality = { type: this.municipality };
+    }
+});
+
 export default mongoose.model("Student", StudentSchema, "students");
