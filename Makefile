@@ -81,7 +81,7 @@ test-backend:
 	cd backend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
 
 test-frontend:
-	cd ../frontend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
+	cd frontend && npx vitest run --mode test --reporter=$(CITEST_REPORTER)
 
 test: test-backend test-frontend
 
