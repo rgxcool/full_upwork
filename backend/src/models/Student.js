@@ -49,6 +49,7 @@ const StudentSchema = new mongoose.Schema(
                 enum: [
                     "Botkyrka",
                     "Danderyd",
+                    "Göteborg",
                     "Huddinge",
                     "Järfälla",
                     "KCNO",
@@ -60,6 +61,7 @@ const StudentSchema = new mongoose.Schema(
                     "Sigtuna",
                     "Sollentuna",
                     "Solna",
+                    "Stockholm",
                     "Sundbyberg",
                     "Södertälje",
                     "Täby",
@@ -156,7 +158,7 @@ if (municipalityPath?.set) {
     });
 }
 
-StudentSchema.pre("validate", function () {
+StudentSchema.pre("validate", function() {
     if (typeof this.municipality === "string") {
         this.municipality = { type: this.municipality };
     }
