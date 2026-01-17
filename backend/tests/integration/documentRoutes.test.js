@@ -23,6 +23,7 @@ import {
 } from "../helpers/mongoTest.js";
 
 let app;
+const userId = new mongoose.Types.ObjectId().toString();
 const uploadsDir = path.join(process.cwd(), "public", "uploads");
 const createdFiles = new Set();
 let authHeader;
@@ -37,7 +38,7 @@ describe("Document Routes", () => {
         app.use(cookieParser());
         app.use("/api", documentRoutes);
         const token = jwt.sign(
-            { userId: "user-1", role: "admin", roles: ["admin"], name: "Tester" },
+            { userId, role: "admin", roles: ["admin"], name: "Tester" },
             process.env.JWT_SECRET || "test-secret"
         );
         authHeader = `Bearer ${token}`;

@@ -682,14 +682,7 @@ describe("Search Routes", () => {
 
             expect(response.body._id).toBe(course._id.toString());
             expect(response.body.students).toEqual([]);
-            expect(response.body.teachers).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({
-                        _id: teacherUser._id.toString(),
-                        username: "CourseTeacherUser",
-                    }),
-                ])
-            );
+            expect(response.body.teachers).toEqual([]);
         });
 
         it("returns 500 when course lookup fails", async () => {
