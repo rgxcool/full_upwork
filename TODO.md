@@ -1,14 +1,9 @@
 # TODO
 
-## Ekonomi och rapporter
+- Personnummer validator widget and use
 
--   Statistik per kommun, kurs och månad
+## Ekonomi
 -   Prognoser för intäkter
--   Statistik för:
-    -   Antal elever
-    -   Avbrott
-    -   F-betyg
--   Betygskurvor per kurs
 
 ---
 
