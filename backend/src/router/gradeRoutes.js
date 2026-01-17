@@ -481,8 +481,15 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
   }
 });
 
-router.post("/teacher/lock-grade", async (req, res) => {
+router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
   const { studentId, courseId } = req.body;
+  const role = req.user?.role;
+
+  if (!["admin", "systemadmin"].includes(role)) {
+    return res
+      .status(403)
+      .json({ error: "Endast admin/systemadmin kan låsa betyg." });
+  }
 
   try {
     const student = await Student.findById(studentId);

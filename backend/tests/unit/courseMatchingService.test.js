@@ -507,9 +507,11 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         createSpy.mockRestore();
 
         expect(result.enrollments).toHaveLength(1);
-        expect(StudentEnrollmentMock.instances[0].slutprovDate).toEqual(
-            new Date("2025-02-05")
-        );
+        expect(
+            StudentEnrollmentMock.instances[0].slutprovDate
+                .toISOString()
+                .slice(0, 10)
+        ).toBe("2025-02-05");
     });
 
     it("loads package courses by id, handles grouping, and skips duplicate enrollments", async () => {
@@ -1564,9 +1566,11 @@ describe("CourseMatchingService.processStudentEducation additional scenarios", (
         createSpy.mockRestore();
 
     expect(result.enrollments).toHaveLength(1);
-    expect(StudentEnrollmentMock.instances[0].slutprovDate).toEqual(
-        new Date("2025-03-29")
-    );
+    expect(
+        StudentEnrollmentMock.instances[0].slutprovDate
+            .toISOString()
+            .slice(0, 10)
+    ).toBe("2025-03-29");
   });
 
   it("adds an education entry when an individual course is newly created", async () => {

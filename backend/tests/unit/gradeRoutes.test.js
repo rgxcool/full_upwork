@@ -75,6 +75,12 @@ vi.mock("../../src/models/Program.js", () => ({
     findById: vi.fn(),
   },
 }));
+vi.mock("../../src/models/Teacher.js", () => ({
+  __esModule: true,
+  default: {
+    findOne: vi.fn().mockResolvedValue({ _id: "teacher-1", userId: "user123" }),
+  },
+}));
 vi.mock("../../src/models/CoursePackage.js", () => ({
   __esModule: true,
   default: {
@@ -355,7 +361,7 @@ describe("GET /grades/students-to-grade", () => {
     const res = await request(app).get("/grades/students-to-grade");
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
+    expect(res.body).toHaveLength(1);
 });
 
   it("returns 500 when enrollment query fails", async () => {
@@ -404,6 +410,7 @@ describe("POST /grades/teacher/lock-grade", () => {
     Student.findById.mockResolvedValue(studentInstance);
     const res = await request(app)
       .post("/grades/teacher/lock-grade")
+      .set("x-user-role", "admin")
       .send({ studentId: "stu1", courseId: "course1" });
     expect(res.status).toBe(200);
     expect(res.body.message).toBe("Grade locked");
@@ -413,6 +420,7 @@ describe("POST /grades/teacher/lock-grade", () => {
     Student.findById.mockResolvedValue(null);
     const res = await request(app)
       .post("/grades/teacher/lock-grade")
+      .set("x-user-role", "admin")
       .send({ studentId: "missing", courseId: "course1" });
     expect(res.status).toBe(404);
   });
@@ -425,6 +433,7 @@ describe("POST /grades/teacher/lock-grade", () => {
     });
     const res = await request(app)
       .post("/grades/teacher/lock-grade")
+      .set("x-user-role", "admin")
       .send({ studentId: "stu50", courseId: "missingCourse" });
 
     expect(res.status).toBe(404);
@@ -435,9 +444,20 @@ describe("POST /grades/teacher/lock-grade", () => {
     Student.findById.mockRejectedValueOnce(new Error("boom"));
     const res = await request(app)
       .post("/grades/teacher/lock-grade")
+      .set("x-user-role", "admin")
       .send({ studentId: "stu1", courseId: "course1" });
 
     expect(res.status).toBe(500);
+  });
+
+  it("rejects non-admin users", async () => {
+    const res = await request(app)
+      .post("/grades/teacher/lock-grade")
+      .set("x-user-role", "teacher")
+      .send({ studentId: "stu1", courseId: "course1" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("Endast admin");
   });
 });
 

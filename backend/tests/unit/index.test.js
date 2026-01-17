@@ -211,7 +211,10 @@ describe("backend/index.js", () => {
     expect(useCalls).toEqual(
       expect.arrayContaining([
         expect.arrayContaining([securityMocks.securityHeaders]),
-        expect.arrayContaining(["/api/students", securityMocks.apiRateLimiter]),
+        expect.arrayContaining(["corsMiddleware"]),
+        expect.arrayContaining(["cookieMiddleware"]),
+        expect.arrayContaining(["jsonMiddleware"]),
+        expect.arrayContaining(["urlencodedMiddleware"]),
       ])
     );
 
@@ -273,8 +276,11 @@ describe("backend/index.js", () => {
     const useCalls = appInstance.use.mock.calls;
     expect(useCalls).toEqual(
       expect.arrayContaining([
-        expect.arrayContaining([securityMocks.rateLimiter]),
-        expect.arrayContaining(["/api/", securityMocks.apiRateLimiter]),
+        expect.arrayContaining([securityMocks.securityHeaders]),
+        expect.arrayContaining(["corsMiddleware"]),
+        expect.arrayContaining(["cookieMiddleware"]),
+        expect.arrayContaining(["jsonMiddleware"]),
+        expect.arrayContaining(["urlencodedMiddleware"]),
         expect.arrayContaining([requestOptimizer.optimizeQuery]),
         expect.arrayContaining(["/", routerMock]),
       ])

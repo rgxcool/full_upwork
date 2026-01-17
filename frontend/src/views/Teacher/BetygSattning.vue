@@ -75,10 +75,11 @@
           </v-btn>
         </template>
 
-        <template #item.lock="{ item }">
+        <template v-if="isAdmin" #item.lock="{ item }">
           <v-checkbox
             v-model="item.course.locked"
             @change="toggleLock(item.student._id, item.course.refId, !item.course.locked)"
+            :disabled="!isAdmin"
             density="compact"
             hide-details
             variant="outlined"
@@ -101,7 +102,7 @@
   const studentsToGrade = ref([])
   const grades = ['A', 'B', 'C', 'D', 'E', 'F']
 
-  const headers = [
+  const baseHeaders = [
     { title: 'Elev', key: 'name', sortable: false },
     { title: 'Kurs', key: 'courseCode', sortable: false },
     { title: 'Lärare', key: 'teacher', sortable: false },
@@ -111,6 +112,10 @@
     { title: 'Spara', key: 'save', sortable: false },
     { title: 'Lås', key: 'lock', sortable: false },
   ]
+
+  const headers = computed(() =>
+    isAdmin.value ? baseHeaders : baseHeaders.filter((h) => h.key !== 'lock')
+  )
 
   const formattedRows = computed(() =>
     studentsToGrade.value.flatMap((student) =>
@@ -324,6 +329,11 @@
   }
 
   const toggleLock = async (studentId, courseId, isLocked) => {
+    if (!isAdmin.value) {
+      alert('Endast administratörer kan låsa eller låsa upp betyg.')
+      return
+    }
+
     try {
       if (!isLocked) {
         await axios.post(
