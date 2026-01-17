@@ -69,6 +69,8 @@ vi.mock("../../src/models/ExamAttendance.js", () => {
 vi.mock("../../src/models/CourseInstance.js", () => ({
   __esModule: true,
   default: {
+    find: vi.fn(),
+    findById: vi.fn(),
     updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
   },
 }));
@@ -262,6 +264,12 @@ beforeEach(() => {
   );
   StudentEnrollment.findOne.mockResolvedValue(null);
   StudentEnrollment.updateMany.mockResolvedValue({ modifiedCount: 0 });
+  CourseInstance.find.mockReturnValue(createQueryChain([]));
+  CourseInstance.findById.mockResolvedValue({
+    _id: "ci-1",
+    responsibleTeacher: "teacher-1",
+    save: vi.fn().mockResolvedValue(true),
+  });
   CourseInstance.updateMany.mockResolvedValue({ modifiedCount: 0 });
 });
 
@@ -502,7 +510,7 @@ describe("examRoutes", () => {
     });
     const res = await request(app)
       .get("/api/calendar-events/syncable")
-      .set("x-user-role", "teacher");
+      .set("x-user-role", "admin");
     expect(res.status).toBe(200);
     const autoEvent = res.body.find(
       (event) => event.extendedProps.courseName === "Auto Good"

@@ -13,6 +13,8 @@ import express from "express";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
 import Document from "../../src/models/Document.js";
 import documentRoutes from "../../src/router/documentRoutes.js";
 import {
@@ -23,6 +25,8 @@ import {
 let app;
 const uploadsDir = path.join(process.cwd(), "public", "uploads");
 const createdFiles = new Set();
+let authHeader;
+let authCookie;
 
 describe("Document Routes", () => {
     beforeAll(async () => {
@@ -30,7 +34,14 @@ describe("Document Routes", () => {
         fs.mkdirSync(uploadsDir, { recursive: true });
         app = express();
         app.use(express.json());
+        app.use(cookieParser());
         app.use("/api", documentRoutes);
+        const token = jwt.sign(
+            { userId: "user-1", role: "admin", roles: ["admin"], name: "Tester" },
+            process.env.JWT_SECRET || "test-secret"
+        );
+        authHeader = `Bearer ${token}`;
+        authCookie = `token=${token}`;
     }, 60000);
 
     afterAll(async () => {
@@ -58,6 +69,8 @@ describe("Document Routes", () => {
 
         const response = await request(app)
             .post("/api/documents/upload")
+            .set("Authorization", authHeader)
+            .set("Cookie", authCookie)
             .field("studentId", studentId.toString())
             .field("type", "REPORT")
             .attach("file", tempFile)
@@ -80,11 +93,13 @@ describe("Document Routes", () => {
     it("returns 500 when no file is provided", async () => {
         const response = await request(app)
             .post("/api/documents/upload")
+            .set("Authorization", authHeader)
+            .set("Cookie", authCookie)
             .field("studentId", new mongoose.Types.ObjectId().toString())
-            .expect(500);
+            .expect(400);
 
         expect(response.body).toMatchObject({
-            message: "Kunde inte ladda upp dokumentet",
+            message: "File is missing in the request",
         });
     });
 
@@ -96,6 +111,8 @@ describe("Document Routes", () => {
 
         const response = await request(app)
             .post("/api/documents/upload")
+            .set("Authorization", authHeader)
+            .set("Cookie", authCookie)
             .field("studentId", studentId.toString())
             .attach("file", tempFile)
             .expect(201);
@@ -193,6 +210,8 @@ describe("Document Routes", () => {
 
         const response = await request(app)
             .delete(`/api/documents/${doc._id.toString()}`)
+            .set("Authorization", authHeader)
+            .set("Cookie", authCookie)
             .expect(200);
 
         expect(response.body).toEqual({ message: "Raderad" });

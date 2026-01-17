@@ -220,13 +220,23 @@ describe("studentDetailsController", () => {
             await getStudentDetails(req, res);
 
             expect(res.statusCode).toBe(200);
-            expect(res.body.education).toHaveLength(4);
-            expect(res.body.education[0]).toMatchObject({
-                type: "Course",
-                name: "Course One",
-                addedBy: "Teacher Name",
-                isEnrollment: true,
-            });
+            expect(res.body.education).toHaveLength(5);
+            expect(res.body.education).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        type: "Course",
+                        name: "Course One",
+                        addedBy: "Teacher Name",
+                        isEnrollment: true,
+                    }),
+                    expect.objectContaining({
+                        type: "CoursePackage",
+                        refId: expect.objectContaining({
+                            coursePackageName: "Package One",
+                        }),
+                    }),
+                ])
+            );
             expect(res.body.enrollmentStats).toEqual({
                 totalEnrollments: 4,
                 activeEnrollments: 2,

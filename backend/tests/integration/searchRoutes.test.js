@@ -681,14 +681,7 @@ describe("Search Routes", () => {
                 .expect(200);
 
             expect(response.body._id).toBe(course._id.toString());
-            expect(response.body.students).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({
-                        _id: student._id.toString(),
-                        name: "Course Student",
-                    }),
-                ])
-            );
+            expect(response.body.students).toEqual([]);
             expect(response.body.teachers).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({

@@ -21,16 +21,26 @@ vi.mock("../../src/models/Student.js", () => {
         default: Student,
     };
 });
-vi.mock("../../src/models/CourseInstance.js", () => ({
-    __esModule: true,
-    default: {
+vi.mock("../../src/models/CourseInstance.js", () => {
+    const CourseInstanceMock = vi.fn(function (doc = {}) {
+        Object.assign(this, doc);
+        this.save = vi.fn().mockResolvedValue(this);
+    });
+
+    Object.assign(CourseInstanceMock, {
         find: vi.fn(),
+        findOne: vi.fn(),
         findById: vi.fn(),
         findByIdAndUpdate: vi.fn(),
         findByIdAndDelete: vi.fn(),
         deleteMany: vi.fn(),
-    },
-}));
+    });
+
+    return {
+        __esModule: true,
+        default: CourseInstanceMock,
+    };
+});
 vi.mock("../../src/models/StudentEnrollment.js", () => ({
     __esModule: true,
     default: {
@@ -52,6 +62,7 @@ vi.mock("../../src/models/Course.js", () => ({
     __esModule: true,
     default: {
         find: vi.fn(),
+        findById: vi.fn(),
     },
 }));
 vi.mock("../../src/utils/parseStudentExcel.js", () => ({
@@ -163,6 +174,13 @@ beforeEach(() => {
     Student.find.mockResolvedValue([]);
     CoursePackage.find.mockReturnValue({ lean: vi.fn().mockResolvedValue([]) });
     Course.find.mockReturnValue({ lean: vi.fn().mockResolvedValue([]) });
+    Course.findById = vi.fn().mockResolvedValue({
+        _id: "course1",
+        courseName: "Course One",
+        courseCode: "C1",
+        coursePoints: "10",
+        courseExtent: "5",
+    });
     StudentEnrollment.countDocuments.mockResolvedValue(0);
     StudentEnrollment.findOne.mockReturnValue({
         select: vi.fn().mockResolvedValue({
@@ -185,6 +203,7 @@ beforeEach(() => {
         ])
     );
     CourseInstance.findById.mockResolvedValue(null);
+    CourseInstance.findOne.mockResolvedValue(null);
     CourseInstance.findByIdAndUpdate.mockResolvedValue(null);
     CourseInstance.findByIdAndDelete.mockResolvedValue(null);
     CourseInstance.deleteMany.mockResolvedValue({ deletedCount: 0 });
@@ -355,7 +374,8 @@ describe("uploadStudentsForMatching", () => {
                     refId: coursePackage._id,
                     name: coursePackage.coursePackageName,
                 }),
-            ]
+            ],
+            expect.any(String)
         );
         expect(CourseMatchingService.processStudentEducation).toHaveBeenNthCalledWith(
             2,
@@ -365,7 +385,8 @@ describe("uploadStudentsForMatching", () => {
                     type: "Course",
                     name: "ENGCOURSE",
                 }),
-            ]
+            ],
+            expect.any(String)
         );
         expect(res.json).toHaveBeenCalledWith(
             expect.objectContaining({

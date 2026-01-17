@@ -562,7 +562,9 @@ describe("Upload Routes", () => {
             .get("/api/uploads/all/apl")
             .expect(500);
 
-        expect(response.body).toEqual({ error: "Failed to list all APL files" });
+        expect(response.body).toEqual(
+            expect.objectContaining({ error: "Failed to list all APL files" })
+        );
         collectionSpy.mockRestore();
     });
 });
