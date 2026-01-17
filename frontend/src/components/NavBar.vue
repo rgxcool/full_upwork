@@ -726,6 +726,7 @@
         { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: 'teacher' },
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
+        { name: 'Hantera Prövningar', link: '/provningar', role: 'admin' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
       ]
       const filteredMenuItems = computed(() => {

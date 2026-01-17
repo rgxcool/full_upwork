@@ -45,6 +45,30 @@ vi.mock("../../src/controllers/authController.js", () => ({
   },
 }));
 
+vi.mock("../../src/middleware/auth.js", () => ({
+  isAuthenticated: (req, res, next) => {
+    const role = req.headers["x-user-role"] || "teacher";
+    const rolesHeader = req.headers["x-user-roles"];
+    const roles = rolesHeader ? JSON.parse(rolesHeader) : undefined;
+    
+    req.user = {
+      role,
+      roles: roles || (role ? [role] : []),
+      userId: req.headers["x-user-id"] || "user-id",
+      _id: req.headers["x-user-objectid"] || "user-obj-id",
+    };
+    next();
+  },
+  hasRole: (allowedRoles) => (req, res, next) => {
+    const userRole = req.headers["x-user-role"] || "teacher";
+    if (allowedRoles.includes(userRole)) {
+      next();
+    } else {
+      res.status(403).json({ error: "Forbidden" });
+    }
+  },
+}));
+
 vi.mock("../../src/controllers/notificationController.js", () => ({
   createGlobalNotification: vi.fn().mockResolvedValue(true),
 }));
@@ -277,6 +301,7 @@ describe("examRoutes", () => {
   it("creates exams and removes empty fields", async () => {
     const res = await request(app)
       .post("/api/exams")
+      .set("x-user-role", "admin")
       .send({ name: "Exam", course: "Physics", teacherId: "", paymentDate: "" });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe("Exam");
@@ -300,7 +325,7 @@ describe("examRoutes", () => {
       };
     });
 
-    const res = await request(app).post("/api/exams").send({ name: "", course: "" });
+    const res = await request(app).post("/api/exams").set("x-user-role", "admin").send({ name: "", course: "" });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
@@ -1374,16 +1399,16 @@ describe("examRoutes", () => {
 
   it("deletes exams and handles missing ones gracefully", async () => {
     Exam.findByIdAndDelete.mockResolvedValueOnce({ _id: "exam-del" });
-    const deleted = await request(app).delete("/api/exams/exam-del");
+    const deleted = await request(app).delete("/api/exams/exam-del").set("x-user-role", "admin");
     expect(deleted.status).toBe(200);
 
-    const missing = await request(app).delete("/api/exams/exam-missing");
+    const missing = await request(app).delete("/api/exams/exam-missing").set("x-user-role", "admin");
     expect(missing.status).toBe(404);
   });
 
   it("returns 500 when exam deletion fails", async () => {
     Exam.findByIdAndDelete.mockRejectedValueOnce(new Error("boom"));
-    const res = await request(app).delete("/api/exams/exam-crash");
+    const res = await request(app).delete("/api/exams/exam-crash").set("x-user-role", "admin");
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Kunde inte radera prövning." });
   });

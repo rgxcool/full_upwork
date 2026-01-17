@@ -207,6 +207,13 @@ const routes = [
     meta: { title: 'Testa kursmatchning', role: 'admin' },
   },
 
+  {
+    path: '/provningar',
+    name: 'ProvningarCrud',
+    component: () => import('@/views/Provningar/ProvningarCrud.vue'),
+    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin'], requiresAuth: true }
+  },
+
   // Teacher Routes (Requires "teacher" or higher)
   {
     path: '/larare/kurser',
