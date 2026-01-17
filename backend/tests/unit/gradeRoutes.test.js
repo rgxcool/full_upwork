@@ -75,6 +75,12 @@ vi.mock("../../src/models/Program.js", () => ({
     findById: vi.fn(),
   },
 }));
+vi.mock("../../src/models/Teacher.js", () => ({
+  __esModule: true,
+  default: {
+    findOne: vi.fn().mockResolvedValue({ _id: "teacher-1", userId: "user123" }),
+  },
+}));
 vi.mock("../../src/models/CoursePackage.js", () => ({
   __esModule: true,
   default: {
