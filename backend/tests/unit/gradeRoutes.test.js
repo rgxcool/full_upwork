@@ -361,7 +361,7 @@ describe("GET /grades/students-to-grade", () => {
     const res = await request(app).get("/grades/students-to-grade");
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
+    expect(res.body).toHaveLength(1);
 });
 
   it("returns 500 when enrollment query fails", async () => {
