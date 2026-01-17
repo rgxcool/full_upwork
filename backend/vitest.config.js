@@ -11,6 +11,7 @@ export default defineConfig({
         },
         envDir: __dirname,
         environment: 'node',
+        setupFiles: ["./tests/setup.js"],
         exclude: ["node_modules/**", "dist/**"],
         include: ["tests/**/*.test.js"],
         maxWorkers: 12,
