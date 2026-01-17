@@ -11,12 +11,8 @@ export const generateGradeReport = async (filters) => {
         gradeDate: { $gte: new Date(startDate), $lte: new Date(endDate) }
     };
 
-    // The main aggregation pipeline
-    const pipeline = [
-        // 1. Filter enrollments by grade, date
+    const basePipeline = [
         { $match: matchStage },
-
-        // 2. Lookup student to filter by municipality
         {
             $lookup: {
                 from: 'students',
@@ -26,11 +22,9 @@ export const generateGradeReport = async (filters) => {
             }
         },
         { $unwind: '$studentInfo' },
-
-        // 3. Lookup course instance and then main course
         {
             $lookup: {
-                from: 'courseinstances',
+                from: 'courseInstances',
                 localField: 'courseInstanceId',
                 foreignField: '_id',
                 as: 'courseInstanceInfo'
@@ -46,15 +40,29 @@ export const generateGradeReport = async (filters) => {
             }
         },
         { $unwind: '$mainCourseInfo' },
-        
-        // 4. Apply municipality and course filters if provided
         {
-            $match: {
-                ...(municipality && { 'studentInfo.municipality': municipality }),
-                ...(courseId && { 'mainCourseInfo._id': new mongoose.Types.ObjectId(courseId) })
-            }
+            $match: (() => {
+                const filter = {};
+
+                if (municipality) {
+                    filter.$or = [
+                        { 'studentInfo.municipality': municipality },
+                        { 'studentInfo.municipality.type': municipality }
+                    ];
+                }
+
+                if (courseId) {
+                    filter['mainCourseInfo._id'] = new mongoose.Types.ObjectId(courseId);
+                }
+
+                return filter;
+            })()
         },
-        
+    ];
+
+    // The main aggregation pipeline
+    const pipeline = [
+        ...basePipeline,
         // 5. Group by year and month to calculate monthly stats
         {
             $group: {
@@ -111,7 +119,7 @@ export const generateGradeReport = async (filters) => {
 
     // Also, generate a summary table
     const tableDataPipeline = [
-        ...pipeline.slice(0, 4), // Reuse the same initial filtering
+        ...basePipeline, // Reuse the same filtering and lookups
         {
             $group: {
                 _id: '$grade',
