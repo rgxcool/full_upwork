@@ -6,10 +6,8 @@ import Teacher from "../models/Teacher.js";
 import Exam from "../models/Provning.js";
 import CalendarEvent from "../models/Event.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
-import { authenticateUser } from "../controllers/authController.js";
-
+import { isAuthenticated, hasRole } from "../middleware/auth.js";
 import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
-
 import Notification from "../models/Notification.js";
 
 function calculateExamDate(requestedMonth) {
@@ -65,7 +63,7 @@ function getNextMonth(currentMonth) {
     return `${newYear}-${(newMonth + 1).toString().padStart(2, "0")}`;
 }
 
-router.post("/exams", async (req, res) => {
+router.post("/exams", isAuthenticated, hasRole(['admin', 'systemadmin']), async (req, res) => {
     try {
         // Clean up the request body
         const examData = { ...req.body };
@@ -108,7 +106,37 @@ router.post("/exams", async (req, res) => {
     }
 });
 
-router.get("/exams", authenticateUser, async (req, res) => {
+router.put("/exams/:id", isAuthenticated, hasRole(['admin', 'systemadmin']), async (req, res) => {
+    try {
+        const updatedExam = await Exam.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!updatedExam) {
+            return res.status(404).json({ error: "Prövning not found." });
+        }
+        res.json(updatedExam);
+    } catch (err) {
+        console.error("Error updating exam:", err.message);
+        res.status(500).json({ error: "Failed to update exam." });
+    }
+});
+
+// GET all exams (Admin)
+router.get("/admin/exams", isAuthenticated, hasRole(['admin', 'systemadmin']), async (req, res) => {
+    try {
+        const exams = await Exam.find({}).populate({
+            path: "teacherId",
+            populate: {
+                path: "userId",
+                select: "username",
+            },
+        });
+        res.json(exams);
+    } catch (err) {
+        console.error("Error fetching exams for admin:", err.message);
+        res.status(500).json({ error: "Failed to fetch exams." });
+    }
+});
+
+router.get("/exams", isAuthenticated, async (req, res) => {
     try {
         let query = {};
 
@@ -204,7 +232,7 @@ router.post("/calendar-events", async (req, res) => {
     }
 });
 
-router.get("/calendar-events", authenticateUser, async (req, res) => {
+router.get("/calendar-events", isAuthenticated, async (req, res) => {
     try {
         let query = {
             // Exclude "slutprov" type events - these should come from /calendar-events/syncable instead
@@ -253,7 +281,7 @@ router.get("/calendar-events", authenticateUser, async (req, res) => {
 // IMPORTANT: This route must come BEFORE /calendar-events/:id to avoid route conflicts
 router.put(
     "/calendar-events/move-group",
-    authenticateUser,
+    isAuthenticated,
     async (req, res) => {
         // Check if transactions are supported (they require a replica set)
         // For local development with standalone MongoDB, skip transactions
@@ -842,7 +870,7 @@ router.put("/calendar-events/:id", async (req, res) => {
     }
 });
 
-router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
+router.get("/calendar-events/syncable", isAuthenticated, async (req, res) => {
     function pickFirstNonEmpty(arr, field) {
         return (
             (arr.find((e) => e[field] && e[field] !== "") || {})[field] || ""
@@ -1973,7 +2001,7 @@ router.get("/calendar-events/syncable", authenticateUser, async (req, res) => {
 });
 
 // POST: Cleanup and fix calendar event titles (use teacher names instead of course names)
-router.post("/calendar-events/fix-titles", authenticateUser, async (req, res) => {
+router.post("/calendar-events/fix-titles", isAuthenticated, async (req, res) => {
     try {
         if (req.user.role !== "admin" && req.user.role !== "systemadmin") {
             return res.status(403).json({ error: "Only admins can fix event titles" });
@@ -2091,7 +2119,7 @@ router.post("/calendar-events/fix-titles", authenticateUser, async (req, res) =>
 });
 
 // DELETE old duplicate "slutprov" type calendar events (cleanup endpoint)
-router.delete("/calendar-events/cleanup-slutprov", authenticateUser, async (req, res) => {
+router.delete("/calendar-events/cleanup-slutprov", isAuthenticated, async (req, res) => {
     try {
         // Only admins can clean up
         if (!["admin", "systemadmin"].includes(req.user.role)) {
@@ -2313,7 +2341,7 @@ router.get("/attendance-stats/:studentId", async (req, res) => {
     }
 });
 
-router.delete("/exams/:id", async (req, res) => {
+router.delete("/exams/:id", isAuthenticated, hasRole(['admin', 'systemadmin']), async (req, res) => {
     try {
         const examId = req.params.id;
         const exam = await Exam.findByIdAndDelete(examId);
@@ -2474,7 +2502,7 @@ router.post("/calendar-events/mark-attendance", async (req, res) => {
                 );
 
                 // Note: Exam info is stored in ExamAttendance records
-                // Event-level info is retrieved via /calendar-events/syncable endpoint
+                // Event-level info is retrieved via /calendar-events/syncable
 
                 // Update student's exam history
                 const existingHistoryIndex = studentDoc.examHistory.findIndex(
