@@ -206,6 +206,12 @@ const routes = [
     component: TEST,
     meta: { title: 'Testa kursmatchning', role: 'admin' },
   },
+  {
+    path: '/admin/betygsrapporter',
+    name: 'Betygsrapporter',
+    component: () => import('@/views/Admin/Betygsrapporter.vue'),
+    meta: { title: 'Betygsrapporter', role: ['admin', 'systemadmin'] },
+  },
 
   {
     path: '/provningar',
