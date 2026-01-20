@@ -246,7 +246,7 @@
                 </div>
 
                 <div class="row">
-                  <div class="col-md-6">
+                  <div class="col-md-4">
                     <div class="form-group">
                       <label for="startDate">Startdatum *</label>
                       <input
@@ -255,11 +255,28 @@
                         v-model="instanceForm.startDate"
                         class="form-control"
                         required
-                        @change="autoGenerateCourseCode"
+                        @change="handleStartDateChange"
                       />
                     </div>
                   </div>
-                  <div class="col-md-6">
+                  <div class="col-md-4">
+                    <div class="form-group">
+                      <label for="durationWeeks">Kurslängd</label>
+                      <select
+                        id="durationWeeks"
+                        v-model="durationWeeks"
+                        class="form-control"
+                        :disabled="editingInstance"
+                        @change="updateEndDateFromDuration"
+                      >
+                        <option value="">Välj längd</option>
+                        <option value="5">5 veckor</option>
+                        <option value="10">10 veckor</option>
+                        <option value="20">20 veckor</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
                     <div class="form-group">
                       <label for="endDate">Slutdatum *</label>
                       <input
@@ -627,6 +644,7 @@
         notes: '',
         isActive: true,
       })
+      const durationWeeks = ref('')
 
       const teachers = ref([])
 
@@ -886,6 +904,7 @@
           notes: instance.notes,
           isActive: instance.isActive,
         }
+        durationWeeks.value = ''
         showCreateModal.value = true
       }
 
@@ -928,6 +947,46 @@
         }
       }
 
+      const formatDateForInput = (date) => {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+
+      const parseInputDate = (dateString) => {
+        if (!dateString) return null
+        const [year, month, day] = dateString.split('-').map(Number)
+        if (!year || !month || !day) return null
+        return new Date(year, month - 1, day)
+      }
+
+      const calculateFridayEndDate = (startDate, weeks) => {
+        const baseDate = new Date(startDate)
+        baseDate.setDate(baseDate.getDate() + (weeks - 1) * 7)
+        const dayOfWeek = baseDate.getDay()
+        const daysUntilFriday = (5 - dayOfWeek + 7) % 7
+        baseDate.setDate(baseDate.getDate() + daysUntilFriday)
+        return baseDate
+      }
+
+      const updateEndDateFromDuration = () => {
+        if (editingInstance.value) return
+        if (!instanceForm.value.startDate || !durationWeeks.value) return
+
+        const startDate = parseInputDate(instanceForm.value.startDate)
+        const weeks = Number(durationWeeks.value)
+        if (!startDate || Number.isNaN(weeks)) return
+
+        const endDate = calculateFridayEndDate(startDate, weeks)
+        instanceForm.value.endDate = formatDateForInput(endDate)
+      }
+
+      const handleStartDateChange = () => {
+        autoGenerateCourseCode()
+        updateEndDateFromDuration()
+      }
+
       const closeModal = () => {
         editingInstance.value = null
         instanceForm.value = {
@@ -943,6 +1002,7 @@
           notes: '',
           isActive: true,
         }
+        durationWeeks.value = ''
         showCreateModal.value = false
       }
 
@@ -1205,6 +1265,7 @@
         isSaving,
         filters,
         instanceForm,
+        durationWeeks,
         statistics,
         loadInstances,
         loadTeachers,
@@ -1215,6 +1276,8 @@
         viewStudentDetails,
         closeModal,
         autoGenerateCourseCode,
+        updateEndDateFromDuration,
+        handleStartDateChange,
         formatDate,
         getStatusClass,
         getStatusText,
