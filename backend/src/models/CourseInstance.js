@@ -46,6 +46,10 @@ const courseInstanceSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "Teacher",
         },
+        assistantTeacher: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Teacher",
+        },
         notes: String,
         slutprovDate: Date,
 
