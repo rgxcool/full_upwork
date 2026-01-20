@@ -1361,6 +1361,11 @@ export const getCourseInstances = async (req, res) => {
                 populate: { path: "userId", select: "username email" },
                 select: "userId subject",
             })
+            .populate({
+                path: "assistantTeacher",
+                populate: { path: "userId", select: "username email" },
+                select: "userId subject",
+            })
             .sort({ startDate: -1 });
 
         const merged = await mergeDuplicateCourseInstances(instances);
@@ -1370,6 +1375,11 @@ export const getCourseInstances = async (req, res) => {
                   .populate("createdBy", "username email")
                   .populate({
                       path: "responsibleTeacher",
+                      populate: { path: "userId", select: "username email" },
+                      select: "userId subject",
+                  })
+                  .populate({
+                      path: "assistantTeacher",
                       populate: { path: "userId", select: "username email" },
                       select: "userId subject",
                   })
@@ -1451,6 +1461,11 @@ export const getMyCourseInstances = async (req, res) => {
             .populate("mainCourseId")
             .populate({
                 path: "responsibleTeacher",
+                populate: { path: "userId", select: "username email" },
+                select: "userId subject",
+            })
+            .populate({
+                path: "assistantTeacher",
                 populate: { path: "userId", select: "username email" },
                 select: "userId subject",
             })
@@ -1698,6 +1713,7 @@ export const createCourseInstance = async (req, res) => {
             notes,
             slutprovDate,
             responsibleTeacher,
+            assistantTeacher,
         } = req.body;
         const userId = req.user?.userId;
 
@@ -1756,6 +1772,7 @@ export const createCourseInstance = async (req, res) => {
         const parsedStartDate = parseDate(startDate);
         const parsedEndDate = parseDate(endDate);
         const responsibleTeacherId = responsibleTeacher || undefined;
+        const assistantTeacherId = assistantTeacher || undefined;
 
         // Prevent duplicate course instances for same course + dates + teacher
         const existingInstance = await CourseInstance.findOne({
@@ -1782,6 +1799,7 @@ export const createCourseInstance = async (req, res) => {
             courseExtent: finalCourseExtent,
             createdBy: userId,
             responsibleTeacher: responsibleTeacherId,
+            assistantTeacher: assistantTeacherId,
             slutprovDate: parseDate(slutprovDate),
             notes: notes || '',
             isActive: true,

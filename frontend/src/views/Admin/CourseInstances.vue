@@ -304,13 +304,37 @@
                   </div>
                   <div class="col-md-6">
                     <div class="form-group">
-                      <label for="responsibleTeacher">Ansvarig lärare</label>
+                      <div class="d-flex align-items-center justify-content-between">
+                        <label for="responsibleTeacher">Ansvarig lärare</label>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          title="Lägg till assisterande lärare"
+                          @click="addAssistantTeacher"
+                          :disabled="showAssistantTeacher"
+                        >
+                          +
+                        </button>
+                      </div>
                       <select
                         id="responsibleTeacher"
                         v-model="instanceForm.responsibleTeacher"
                         class="form-control"
                       >
                         <option value="">Ingen ansvarig lärare</option>
+                        <option v-for="teacher in teachers" :key="teacher._id" :value="teacher._id">
+                          {{ teacher.userId?.username || teacher.userId?.email || 'Okänd lärare' }}
+                        </option>
+                      </select>
+                    </div>
+                    <div v-if="showAssistantTeacher" class="form-group">
+                      <label for="assistantTeacher">Assisterande lärare</label>
+                      <select
+                        id="assistantTeacher"
+                        v-model="instanceForm.assistantTeacher"
+                        class="form-control"
+                      >
+                        <option value="">Ingen assisterande lärare</option>
                         <option v-for="teacher in teachers" :key="teacher._id" :value="teacher._id">
                           {{ teacher.userId?.username || teacher.userId?.email || 'Okänd lärare' }}
                         </option>
@@ -637,6 +661,7 @@
         endDate: '',
         slutprovDate: '',
         responsibleTeacher: '',
+        assistantTeacher: '',
         courseName: '',
         courseCode: '',
         coursePoints: '',
@@ -645,6 +670,7 @@
         isActive: true,
       })
       const durationWeeks = ref('')
+      const showAssistantTeacher = ref(false)
 
       const teachers = ref([])
 
@@ -842,6 +868,9 @@
           if (!formData.responsibleTeacher || formData.responsibleTeacher.trim() === '') {
             delete formData.responsibleTeacher
           }
+          if (!formData.assistantTeacher || formData.assistantTeacher.trim() === '') {
+            delete formData.assistantTeacher
+          }
           if (!formData.courseName || formData.courseName.trim() === '') {
             delete formData.courseName
           }
@@ -897,6 +926,7 @@
           endDate: instance.endDate.split('T')[0],
           slutprovDate: slutprovDateValue,
           responsibleTeacher: instance.responsibleTeacher?._id || instance.responsibleTeacher || '',
+          assistantTeacher: instance.assistantTeacher?._id || instance.assistantTeacher || '',
           courseName: instance.courseName,
           courseCode: instance.courseCode,
           coursePoints: instance.coursePoints,
@@ -905,6 +935,7 @@
           isActive: instance.isActive,
         }
         durationWeeks.value = ''
+        showAssistantTeacher.value = !!instanceForm.value.assistantTeacher
         showCreateModal.value = true
       }
 
@@ -987,6 +1018,10 @@
         updateEndDateFromDuration()
       }
 
+      const addAssistantTeacher = () => {
+        showAssistantTeacher.value = true
+      }
+
       const closeModal = () => {
         editingInstance.value = null
         instanceForm.value = {
@@ -995,6 +1030,7 @@
           endDate: '',
           slutprovDate: '',
           responsibleTeacher: '',
+          assistantTeacher: '',
           courseName: '',
           courseCode: '',
           coursePoints: '',
@@ -1003,6 +1039,7 @@
           isActive: true,
         }
         durationWeeks.value = ''
+        showAssistantTeacher.value = false
         showCreateModal.value = false
       }
 
@@ -1266,6 +1303,7 @@
         filters,
         instanceForm,
         durationWeeks,
+        showAssistantTeacher,
         statistics,
         loadInstances,
         loadTeachers,
@@ -1278,6 +1316,7 @@
         autoGenerateCourseCode,
         updateEndDateFromDuration,
         handleStartDateChange,
+        addAssistantTeacher,
         formatDate,
         getStatusClass,
         getStatusText,
