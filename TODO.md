@@ -36,3 +36,11 @@
 
 -   Bokning och betalning via hemsida
 -   Godkända prövningselever hamnar i slutprovskalender
+
+## Final touch
+
+- SYV skall ha tillgång till elevdetaljvy för att revidera kurser.
+- TA bort knapp för kurser I elevdetaljvyn - kurser ska "hoppa upp" och täppa glappet.
+- Dropdown för deltidsstudier I elevdetaljvyn, kurserna innan dagens datum skall ej påverkas.
+- "Till tid" för syv och specped samtalsbokning.
+- Fixar ekonomi och rapport I April.
