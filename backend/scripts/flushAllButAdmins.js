@@ -42,7 +42,7 @@ async function main() {
     const events = await CalendarEvent.deleteMany({});
     // Delete all users except admins and systemadmins
     const users = await User.deleteMany({
-        role: { $nin: ["admin", "systemadmin"] },
+        roles: { $nin: ["admin", "systemadmin"] },
     });
 
     console.log(
