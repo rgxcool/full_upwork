@@ -1674,6 +1674,112 @@ export const updateEnrollmentDates = async (req, res) => {
     }
 };
 
+/**
+ * Delete a student enrollment and shift subsequent course dates up
+ */
+export const deleteEnrollmentAndShift = async (req, res) => {
+    try {
+        const { studentId, enrollmentId } = req.params;
+        const userId = req.user?.userId || null;
+
+        const student = await Student.findById(studentId).select("teacherId name");
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        const enrollments = await StudentEnrollment.find({
+            studentId,
+            mainCourseId: { $exists: true, $ne: null },
+        }).sort({ startDate: 1, createdAt: 1 });
+
+        const targetIndex = enrollments.findIndex(
+            (enrollment) => String(enrollment._id) === String(enrollmentId)
+        );
+        if (targetIndex === -1) {
+            return res.status(404).json({ error: "Enrollment not found for student" });
+        }
+
+        const dateSlots = enrollments.map((enrollment) => ({
+            startDate: enrollment.startDate ? new Date(enrollment.startDate) : null,
+            endDate: enrollment.endDate ? new Date(enrollment.endDate) : null,
+        }));
+
+        const targetEnrollment = enrollments[targetIndex];
+        await StudentEnrollment.findByIdAndDelete(targetEnrollment._id);
+
+        if (targetEnrollment.courseInstanceId) {
+            const remainingForInstance = await StudentEnrollment.countDocuments({
+                courseInstanceId: targetEnrollment.courseInstanceId,
+            });
+            if (remainingForInstance === 0) {
+                await CourseInstance.findByIdAndDelete(targetEnrollment.courseInstanceId);
+            }
+        }
+
+        const remainingEnrollments = enrollments.filter(
+            (enrollment) => String(enrollment._id) !== String(enrollmentId)
+        );
+
+        const updatedEnrollments = [];
+        for (let i = 0; i < remainingEnrollments.length; i += 1) {
+            const enrollment = remainingEnrollments[i];
+            const slot = dateSlots[i];
+            if (!slot?.startDate || !slot?.endDate) continue;
+
+            const sameDates =
+                enrollment.startDate &&
+                enrollment.endDate &&
+                new Date(enrollment.startDate).getTime() === slot.startDate.getTime() &&
+                new Date(enrollment.endDate).getTime() === slot.endDate.getTime();
+
+            if (sameDates) continue;
+
+            const { instance } = await CourseMatchingService.findOrCreateCourseInstance(
+                enrollment.mainCourseId,
+                slot.startDate,
+                slot.endDate,
+                userId,
+                student.teacherId || enrollment.teacherId || null
+            );
+
+            const previousInstanceId = enrollment.courseInstanceId;
+            enrollment.startDate = slot.startDate;
+            enrollment.endDate = slot.endDate;
+            if (instance?._id) {
+                enrollment.courseInstanceId = instance._id;
+            }
+            if (!enrollment.teacherId && student.teacherId) {
+                enrollment.teacherId = student.teacherId;
+            }
+
+            await enrollment.save();
+            updatedEnrollments.push(enrollment);
+
+            if (
+                previousInstanceId &&
+                String(previousInstanceId) !== String(enrollment.courseInstanceId)
+            ) {
+                const remainingForPrevious = await StudentEnrollment.countDocuments({
+                    courseInstanceId: previousInstanceId,
+                });
+                if (remainingForPrevious === 0) {
+                    await CourseInstance.findByIdAndDelete(previousInstanceId);
+                }
+            }
+        }
+
+        res.json({
+            success: true,
+            message: "Enrollment deleted and study plan updated",
+            deletedEnrollmentId: enrollmentId,
+            updatedEnrollmentsCount: updatedEnrollments.length,
+        });
+    } catch (error) {
+        console.error("Error deleting enrollment and shifting dates:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
 export const getCourseStatistics = async (req, res) => {
     try {
         const { startDate, endDate, courseId } = req.query;

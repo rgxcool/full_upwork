@@ -258,14 +258,16 @@ export async function sendStudyplanChangedNotification({ doc, changeType, change
             return;
         }
 
+        const courseName = course.courseName || course.name || "okänd kurs";
+
         let message = '';
         if (changeType === 'created') {
-            message = `Ny studieplan skapad för ${student.name} i kursen ${course.name}.`;
+            message = `Ny studieplan skapad för ${student.name} i kursen ${courseName}.`;
         } else if (changeType === 'updated') {
             const changedFields = Object.keys(changes.newValues).join(', ');
-            message = `Studieplan uppdaterad för ${student.name} i kursen ${course.name}. Fält ändrade: ${changedFields}.`;
+            message = `Studieplan uppdaterad för ${student.name} i kursen ${courseName}. Fält ändrade: ${changedFields}.`;
         } else if (changeType === 'deleted') {
-            message = `Studieplan borttagen för ${student.name} i kursen ${course.name}.`;
+            message = `Studieplan borttagen för ${student.name} i kursen ${courseName}.`;
         }
 
         await Notification.create({
@@ -277,7 +279,7 @@ export async function sendStudyplanChangedNotification({ doc, changeType, change
                 studentName: student.name,
                 courseInstanceId: doc.courseInstanceId,
                 mainCourseId: doc.mainCourseId,
-                courseName: course.name,
+                courseName,
                 changeType,
                 details: changes // For 'updated', this contains changedFields, previousValues, newValues
             },
