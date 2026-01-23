@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 const meetingSchema = new mongoose.Schema({
     title: String,
     start: Date,
+    end: Date,
     location: String,
     student: {
         id: mongoose.Schema.Types.ObjectId,

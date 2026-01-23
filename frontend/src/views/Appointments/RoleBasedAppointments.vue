@@ -19,7 +19,7 @@
           <td>
             <router-link :to="`/student/${meeting.student.id}`">{{ meeting.student.name }}</router-link>
           </td>
-          <td>{{ new Date(meeting.start).toLocaleString() }}</td>
+          <td>{{ formatMeetingTime(meeting) }}</td>
           <td>{{ meeting.info }}</td>
           <td>
             <button @click="deleteMeeting(meeting._id)">Radera</button>
@@ -96,6 +96,18 @@ export default {
     }
   },
   methods: {
+    formatMeetingTime(meeting) {
+      if (!meeting?.start) return '';
+      const start = new Date(meeting.start);
+      const end = meeting.end ? new Date(meeting.end) : null;
+      const dateLabel = start.toLocaleDateString('sv-SE');
+      const startTime = start.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+      if (end && !isNaN(end.getTime())) {
+        const endTime = end.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+        return `${dateLabel} ${startTime} - ${endTime}`;
+      }
+      return `${dateLabel} ${startTime}`;
+    },
     async fetchMeetings() {
       try {
         if (!this.activeRole) {

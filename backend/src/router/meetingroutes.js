@@ -85,6 +85,7 @@ router.post('/meetings', authenticateUser, async (req, res) => {
         const {
             title,
             start,
+            end,
             location,
             studentId,
             studentName,
@@ -95,6 +96,15 @@ router.post('/meetings', authenticateUser, async (req, res) => {
 
         if (!studentId || !start || !title || !bookedBy) {
             return res.status(400).json({ error: 'Obligatoriska fält saknas' });
+        }
+
+        const startDate = new Date(start);
+        const endDate = end ? new Date(end) : new Date(start);
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            return res.status(400).json({ error: 'Ogiltigt datum eller tid' });
+        }
+        if (end && endDate.getTime() <= startDate.getTime()) {
+            return res.status(400).json({ error: 'Sluttid måste vara efter starttid' });
         }
 
         // Validate bookedBy value
@@ -114,7 +124,8 @@ router.post('/meetings', authenticateUser, async (req, res) => {
 
         const saved = await new Meeting({
             title,
-            start,
+            start: startDate,
+            end: end ? endDate : startDate,
             location,
             student: {
                 id: studentId,
@@ -143,10 +154,28 @@ router.post('/meetings', authenticateUser, async (req, res) => {
 // PUT: Uppdatera möte (t.ex. för att ändra datum/tid via drag-n-drop)
 router.put('/meetings/:id', authenticateUser, async (req, res) => {
     try {
-        const { start } = req.body;
+        const { start, end } = req.body;
+        const updates = {};
+        if (start) {
+            const startDate = new Date(start);
+            if (isNaN(startDate.getTime())) {
+                return res.status(400).json({ error: "Ogiltigt startdatum" });
+            }
+            updates.start = startDate;
+        }
+        if (end) {
+            const endDate = new Date(end);
+            if (isNaN(endDate.getTime())) {
+                return res.status(400).json({ error: "Ogiltigt slutdatum" });
+            }
+            updates.end = endDate;
+        }
+        if (updates.start && updates.end && updates.end.getTime() <= updates.start.getTime()) {
+            return res.status(400).json({ error: "Sluttid måste vara efter starttid" });
+        }
         const meeting = await Meeting.findByIdAndUpdate(
             req.params.id,
-            { start },
+            updates,
             { new: true }
         );
         if (!meeting) {
