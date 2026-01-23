@@ -25,7 +25,7 @@
           <span v-else>{{ event.extendedProps.studentName }}</span>
         </p>
         <p><strong>Datum:</strong> {{ formatDate(event.start) }}</p>
-        <p><strong>Tid:</strong> {{ formatTime(event.start) }}</p>
+        <p><strong>Tid:</strong> {{ formatTimeRange(event.start, event.end) }}</p>
         <p><strong>Plats:</strong> {{ event.extendedProps.location }}</p>
         <p v-if="event.extendedProps.info"><strong>Information:</strong> {{ event.extendedProps.info }}</p>
         <p><strong>Bokad av:</strong> {{ bookedByName }}</p>
@@ -135,6 +135,13 @@ export default {
         hour: '2-digit',
         minute: '2-digit'
       });
+    },
+    formatTimeRange(start, end) {
+      if (!start) return '';
+      const startTime = this.formatTime(start);
+      if (!end) return startTime;
+      const endTime = this.formatTime(end);
+      return `${startTime} - ${endTime}`;
     },
     async deleteMeeting() {
       if (!confirm('Är du säker på att du vill radera detta möte?')) {

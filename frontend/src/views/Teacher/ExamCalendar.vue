@@ -155,6 +155,7 @@
           id: meeting._id,
           title: displayTitle,
           start: meeting.start,
+          end: meeting.end || meeting.start,
           allDay: false,
           editable: true,
           color: '#999999',
@@ -282,6 +283,7 @@
                 id: meeting._id,
                 title: displayTitle,
                 start: meeting.start,
+                end: meeting.end || meeting.start,
                 allDay: false,
                 editable: true,
                 color: '#999999',
@@ -325,6 +327,7 @@
           _id: fcEvent.extendedProps?._id || fcEvent.id,
           title: fcEvent.title,
           start: fcEvent.start,
+          end: fcEvent.end,
           allDay: fcEvent.allDay,
           color: fcEvent.backgroundColor || fcEvent.extendedProps?.color || '#999999',
           extendedProps: {

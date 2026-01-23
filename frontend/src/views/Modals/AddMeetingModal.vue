@@ -12,8 +12,11 @@
         format="yyyy-MM-dd"
       />
 
-      <label>Tid:</label>
-      <input type="time" v-model="form.time" class="time-input"/>
+      <label>Från tid:</label>
+      <input type="time" v-model="form.timeFrom" class="time-input"/>
+
+      <label>Till tid:</label>
+      <input type="time" v-model="form.timeTo" class="time-input"/>
 
     <label>Elev:</label>
     <v-autocomplete
@@ -77,7 +80,8 @@ export default {
       svLocale: sv,
       form: {
         date: new Date(),
-        time: new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }), // Default to current time
+        timeFrom: new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }),
+        timeTo: new Date(new Date().getTime() + 60 * 60 * 1000).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }),
         student: null,
         location: '',
         info: '' // 👈 Add info to form data
@@ -206,9 +210,17 @@ export default {
       }
 
       // Combine date and time
-      const [hours, minutes] = this.form.time.split(':');
-      const combinedDateTime = new Date(this.form.date);
-      combinedDateTime.setHours(parseInt(hours), parseInt(minutes));
+      const [fromHours, fromMinutes] = this.form.timeFrom.split(':');
+      const [toHours, toMinutes] = this.form.timeTo.split(':');
+      const startDateTime = new Date(this.form.date);
+      startDateTime.setHours(parseInt(fromHours), parseInt(fromMinutes));
+      const endDateTime = new Date(this.form.date);
+      endDateTime.setHours(parseInt(toHours), parseInt(toMinutes));
+
+      if (endDateTime.getTime() <= startDateTime.getTime()) {
+        alert("Till tid måste vara efter från tid.");
+        return;
+      }
 
       // Determine title based on role and context
       let meetingTitle = this.eventTitle;
@@ -229,7 +241,8 @@ export default {
 
       const payload = {
         title: meetingTitle,
-        start: combinedDateTime.toISOString(), // Convert to ISO string for backend
+        start: startDateTime.toISOString(),
+        end: endDateTime.toISOString(),
         location: this.form.location || '',
         studentId: this.form.student._id,
         studentName: this.form.student.name,
