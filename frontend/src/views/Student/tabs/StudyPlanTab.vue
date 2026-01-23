@@ -1,8 +1,22 @@
 <template>
   <div class="card">
     <div class="card-header">
-      <h3>Studieplan</h3>
-      <div v-if="student.enrollmentStats" class="enrollment-stats">
+      <div class="header-column header-left">
+        <h3>Studieplan</h3>
+      </div>
+      <div class="header-column header-center">
+        <select
+          v-model="selectedTempo"
+          class="tempo-select"
+          :disabled="updatingTempo"
+          @change="handleTempoChange"
+        >
+          <option :value="5">5v (100%)</option>
+          <option :value="10">10v (50%)</option>
+          <option :value="20">20v (25%)</option>
+        </select>
+      </div>
+      <div v-if="student.enrollmentStats" class="header-column header-right enrollment-stats">
         <span class="stat-item">
           <strong>{{ student.enrollmentStats.totalEnrollments }}</strong>
           totalt
@@ -147,6 +161,8 @@ export default {
     const localStudent = ref(props.student);
     const updatingStatus = ref({});
     const removingEnrollment = ref({});
+    const selectedTempo = ref(5);
+    const updatingTempo = ref(false);
 
     const canEditStatus = computed(() => {
       const role = store.getters.userRole;
@@ -182,6 +198,36 @@ export default {
       });
     };
 
+    const getTempoFromEducation = (educationArray) => {
+      const tempoOptions = [5, 10, 20];
+      const counts = new Map(tempoOptions.map((tempo) => [tempo, 0]));
+
+      for (const item of educationArray || []) {
+        if (!item?.isEnrollment || !item.startDate || !item.endDate) continue;
+        const start = new Date(item.startDate);
+        const end = new Date(item.endDate);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
+        const weeks = Math.round((end - start) / (7 * 24 * 60 * 60 * 1000));
+        const closest = tempoOptions.reduce(
+          (prev, curr) =>
+            Math.abs(curr - weeks) < Math.abs(prev - weeks) ? curr : prev,
+          tempoOptions[0]
+        );
+        counts.set(closest, (counts.get(closest) || 0) + 1);
+      }
+
+      let bestTempo = tempoOptions[0];
+      let bestCount = -1;
+      for (const tempo of tempoOptions) {
+        const count = counts.get(tempo) || 0;
+        if (count > bestCount) {
+          bestTempo = tempo;
+          bestCount = count;
+        }
+      }
+      return bestTempo;
+    };
+
     watch(
       () => props.student,
       (newStudent) => {
@@ -191,6 +237,7 @@ export default {
           return;
         }
         sortedEducation.value = sortEducation(newStudent.education);
+        selectedTempo.value = getTempoFromEducation(sortedEducation.value);
       },
       { immediate: true, deep: true }
     );
@@ -406,6 +453,42 @@ export default {
       }
     };
 
+    const handleTempoChange = async () => {
+      const currentTempo = getTempoFromEducation(sortedEducation.value);
+      const nextTempo = Number(selectedTempo.value);
+      if (!nextTempo || nextTempo === currentTempo || !props.student?._id) {
+        selectedTempo.value = currentTempo;
+        return;
+      }
+
+      const confirmed = window.confirm(
+        'Är du säker på att du vill ändra studietakten? Endast framtida kurser ändras.'
+      );
+      if (!confirmed) {
+        selectedTempo.value = currentTempo;
+        return;
+      }
+
+      updatingTempo.value = true;
+      try {
+        await api.put(`/students/${props.student._id}/studyplan-tempo`, {
+          tempoWeeks: nextTempo,
+        });
+        const refreshed = await api.get(`/student-details/${props.student._id}`);
+        emit('student-updated', refreshed.data);
+      } catch (err) {
+        console.error('Error updating study plan tempo:', err);
+        const errorMessage =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          'Kunde inte uppdatera studietakten';
+        alert(`Kunde inte uppdatera studietakten: ${errorMessage}`);
+        selectedTempo.value = currentTempo;
+      } finally {
+        updatingTempo.value = false;
+      }
+    };
+
     return {
       sortedEducation,
       handleEducationReorder,
@@ -421,6 +504,9 @@ export default {
       updatingStatus,
       handleRemoveEnrollment,
       removingEnrollment,
+      selectedTempo,
+      updatingTempo,
+      handleTempoChange,
     };
   },
 };
@@ -437,13 +523,35 @@ export default {
   background: #f8f9fa;
   padding: 15px 20px;
   border-bottom: 1px solid #dee2e6;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  gap: 12px;
 }
 .card-header h3 {
   margin: 0;
   color: #2c3e50;
+}
+.header-column {
+  display: flex;
+  align-items: center;
+}
+.header-left {
+  justify-content: flex-start;
+}
+.header-center {
+  justify-content: center;
+}
+.header-right {
+  justify-content: flex-end;
+}
+.tempo-select {
+  min-width: 140px;
+  padding: 6px 10px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 14px;
+  background: #fff;
 }
 .card-body {
   padding: 20px;

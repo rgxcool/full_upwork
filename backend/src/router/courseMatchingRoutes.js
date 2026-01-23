@@ -13,6 +13,7 @@ import {
     updateEnrollmentStatus,
     updateEnrollmentDates,
     deleteEnrollmentAndShift,
+    updateStudyplanTempo,
     getCourseStatistics,
     createCourseInstance,
     updateCourseInstance,
@@ -124,6 +125,12 @@ router.delete(
     isAuthenticated,
     hasRole(["admin", "systemadmin", "teacher"]),
     deleteEnrollmentAndShift
+);
+router.put(
+    "/students/:studentId/studyplan-tempo",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin", "teacher"]),
+    updateStudyplanTempo
 );
 
 // Statistics routes
