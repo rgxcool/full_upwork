@@ -12,6 +12,7 @@ import {
     getCourseInstanceEnrollments,
     updateEnrollmentStatus,
     updateEnrollmentDates,
+    deleteEnrollmentAndShift,
     getCourseStatistics,
     createCourseInstance,
     updateCourseInstance,
@@ -117,6 +118,12 @@ router.put(
     isAuthenticated,
     hasRole(["admin", "systemadmin", "teacher"]),
     updateEnrollmentDates
+);
+router.delete(
+    "/students/:studentId/enrollments/:enrollmentId",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin", "teacher"]),
+    deleteEnrollmentAndShift
 );
 
 // Statistics routes

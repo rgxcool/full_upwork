@@ -52,9 +52,19 @@
                   <span v-else class="education-name">
                     {{ getEducationName(element) }}
                   </span>
-                  <span v-if="element.startDate && element.endDate" class="education-period">
-                    Period: {{ formatDateISO(element.startDate) }} - {{ formatDateISO(element.endDate) }}
-                  </span>
+                  <div class="education-actions">
+                    <span v-if="element.startDate && element.endDate" class="education-period">
+                      Period: {{ formatDateISO(element.startDate) }} - {{ formatDateISO(element.endDate) }}
+                    </span>
+                    <button
+                      v-if="element.isEnrollment && element.type === 'Course'"
+                      class="remove-course-button"
+                      :disabled="removingEnrollment[element.enrollmentId]"
+                      @click.stop="handleRemoveEnrollment(element)"
+                    >
+                      {{ removingEnrollment[element.enrollmentId] ? 'TAR BORT...' : 'TA BORT KURS' }}
+                    </button>
+                  </div>
                 </div>
 
                 <div class="education-details">
@@ -131,11 +141,12 @@ export default {
       required: true,
     },
   },
-  setup(props) {
+  setup(props, { emit }) {
     const store = useStore();
     const sortedEducation = ref([]);
     const localStudent = ref(props.student);
     const updatingStatus = ref({});
+    const removingEnrollment = ref({});
 
     const canEditStatus = computed(() => {
       const role = store.getters.userRole;
@@ -367,6 +378,34 @@ export default {
       }
     };
 
+    const handleRemoveEnrollment = async (element) => {
+      if (!element?.enrollmentId || !props.student?._id) return;
+
+      const confirmed = window.confirm(
+        `Är du säker på att du vill ta bort kursen "${getEducationName(element)}"?`
+      );
+      if (!confirmed) return;
+
+      removingEnrollment.value[element.enrollmentId] = true;
+      try {
+        await api.delete(
+          `/students/${props.student._id}/enrollments/${element.enrollmentId}`
+        );
+
+        const refreshed = await api.get(`/student-details/${props.student._id}`);
+        emit('student-updated', refreshed.data);
+      } catch (err) {
+        console.error('Error removing enrollment:', err);
+        const errorMessage =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          'Kunde inte ta bort kursen';
+        alert(`Kunde inte ta bort kursen: ${errorMessage}`);
+      } finally {
+        removingEnrollment.value[element.enrollmentId] = false;
+      }
+    };
+
     return {
       sortedEducation,
       handleEducationReorder,
@@ -380,6 +419,8 @@ export default {
       updateStatus,
       canEditStatus,
       updatingStatus,
+      handleRemoveEnrollment,
+      removingEnrollment,
     };
   },
 };
@@ -423,6 +464,13 @@ export default {
   align-items: center;
   flex-wrap: wrap;
 }
+.education-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .education-type {
   background: #007bff;
   color: white;
@@ -431,9 +479,27 @@ export default {
   font-size: 12px;
 }
 .education-period {
-  margin-left: auto;
   color: #6c757d;
   font-size: 14px;
+}
+.remove-course-button {
+  background: #dc3545;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.remove-course-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.remove-course-button:hover:not(:disabled) {
+  background: #c82333;
 }
 
 .type-package {
