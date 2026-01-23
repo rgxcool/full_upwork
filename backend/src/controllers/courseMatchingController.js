@@ -1780,6 +1780,108 @@ export const deleteEnrollmentAndShift = async (req, res) => {
     }
 };
 
+/**
+ * Update study plan tempo for future courses only
+ */
+export const updateStudyplanTempo = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const { tempoWeeks } = req.body;
+        const userId = req.user?.userId || null;
+
+        const validTempoWeeks = [5, 10, 20];
+        if (!validTempoWeeks.includes(Number(tempoWeeks))) {
+            return res.status(400).json({ error: "Invalid tempoWeeks" });
+        }
+
+        const student = await Student.findById(studentId).select("teacherId name");
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const enrollments = await StudentEnrollment.find({
+            studentId,
+            mainCourseId: { $exists: true, $ne: null },
+        }).sort({ startDate: 1, createdAt: 1 });
+
+        const futureEnrollments = enrollments.filter((enrollment) => {
+            if (!enrollment.startDate) return false;
+            const startDate = new Date(enrollment.startDate);
+            return startDate.getTime() > today.getTime();
+        });
+
+        if (futureEnrollments.length === 0) {
+            return res.json({
+                success: true,
+                message: "Study plan tempo updated",
+                updatedCount: 0,
+            });
+        }
+
+        let nextStartDate = new Date(futureEnrollments[0].startDate);
+        let updatedCount = 0;
+        for (const enrollment of futureEnrollments) {
+            const startDate = new Date(nextStartDate);
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + Number(tempoWeeks) * 7);
+
+            const { instance } = await CourseMatchingService.findOrCreateCourseInstance(
+                enrollment.mainCourseId,
+                startDate,
+                endDate,
+                userId,
+                student.teacherId || enrollment.teacherId || null
+            );
+
+            const previousInstanceId = enrollment.courseInstanceId;
+            const previousEnrollmentId = enrollment._id;
+
+            const newEnrollment = new StudentEnrollment({
+                studentId,
+                courseInstanceId: instance._id,
+                mainCourseId: enrollment.mainCourseId,
+                startDate,
+                endDate,
+                status: enrollment.status || "enrolled",
+                teacherId: enrollment.teacherId || student.teacherId || null,
+                notes: enrollment.notes || null,
+                needsSupport: enrollment.needsSupport || false,
+                examMode: enrollment.examMode || "on-site",
+                isReEnrollment: true,
+                previousEnrollmentId: previousEnrollmentId,
+            });
+
+            await newEnrollment.save();
+
+            await StudentEnrollment.findByIdAndDelete(previousEnrollmentId);
+
+            if (previousInstanceId) {
+                const remainingForPrevious = await StudentEnrollment.countDocuments({
+                    courseInstanceId: previousInstanceId,
+                });
+                if (remainingForPrevious === 0) {
+                    await CourseInstance.findByIdAndDelete(previousInstanceId);
+                }
+            }
+
+            updatedCount += 1;
+            nextStartDate = new Date(endDate);
+        }
+
+        res.json({
+            success: true,
+            message: "Study plan tempo updated",
+            updatedCount,
+        });
+    } catch (error) {
+        console.error("Error updating study plan tempo:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
 export const getCourseStatistics = async (req, res) => {
     try {
         const { startDate, endDate, courseId } = req.query;
