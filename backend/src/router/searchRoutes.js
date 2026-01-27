@@ -386,8 +386,12 @@ router.get("/details/:type/:id", async (req, res) => {
 
                     // Note: We don't show students here because students are enrolled in CourseInstances, not Courses
                     // To see students, query the CourseInstances that reference this Course
-                    const courseInstances = await CourseInstance.find({ mainCourseId: id })
+                    const courseInstances = await CourseInstance.find({
+                        mainCourseId: id,
+                        isActive: true,
+                    })
                         .populate("responsibleTeacher", "userId")
+                        .sort({ startDate: -1 })
                         .lean();
 
                     // Get unique students from all course instances of this course
@@ -435,6 +439,7 @@ router.get("/details/:type/:id", async (req, res) => {
                             courseCode: ci.courseCode,
                             startDate: ci.startDate,
                             endDate: ci.endDate,
+                            isActive: ci.isActive,
                         })),
                         isCourseTemplate: true, // Flag to indicate this is a template, not an instance
                     };

@@ -18,38 +18,60 @@
         </div>
       </div>
 
-      <div v-if="course.teacher && course.teacher._id" class="teacher-info">
-        <strong>Ansvarig lärare:</strong>
-        <router-link :to="`/detaljer/Lärare/${course.teacher._id}`">
-          {{ course.teacher.username }}
-        </router-link>
-      </div>
-      <div v-else-if="course.teachers && course.teachers.length > 0" class="teacher-info">
-        <strong>Lärare:</strong>
-        <span v-for="(teacher, index) in course.teachers" :key="teacher._id">
-          <router-link :to="`/detaljer/Lärare/${teacher._id}`">
-            {{ teacher.username }}
+      <div v-if="!course.isCourseTemplate">
+        <div v-if="course.teacher && course.teacher._id" class="teacher-info">
+          <strong>Ansvarig lärare:</strong>
+          <router-link :to="`/detaljer/Lärare/${course.teacher._id}`">
+            {{ course.teacher.username }}
           </router-link>
-          <span v-if="index < course.teachers.length - 1">, </span>
-        </span>
-      </div>
-      <div v-else class="teacher-info">
-        <strong>Lärare:</strong> Ingen ansvarig lärare tilldelad
+        </div>
+        <div v-else-if="course.teachers && course.teachers.length > 0" class="teacher-info">
+          <strong>Lärare:</strong>
+          <span v-for="(teacher, index) in course.teachers" :key="teacher._id">
+            <router-link :to="`/detaljer/Lärare/${teacher._id}`">
+              {{ teacher.username }}
+            </router-link>
+            <span v-if="index < course.teachers.length - 1">, </span>
+          </span>
+        </div>
+        <div v-else class="teacher-info">
+          <strong>Lärare:</strong> Ingen ansvarig lärare tilldelad
+        </div>
+
+        <h2>Elever ({{ course.students?.length || 0 }})</h2>
+        <div v-if="course.students && course.students.length > 0" class="students-list">
+          <ul>
+            <li v-for="student in course.students" :key="student._id">
+              <router-link :to="`/student/${student._id}`">
+                {{ student.name }}
+              </router-link>
+              <span v-if="student.email" class="student-email"> ({{ student.email }})</span>
+            </li>
+          </ul>
+        </div>
+        <div v-else class="no-students">
+          Inga elever inskrivna i denna kurs
+        </div>
       </div>
 
-      <h2>Elever ({{ course.students?.length || 0 }})</h2>
-      <div v-if="course.students && course.students.length > 0" class="students-list">
-        <ul>
-          <li v-for="student in course.students" :key="student._id">
-            <router-link :to="`/student/${student._id}`">
-              {{ student.name }}
-            </router-link>
-            <span v-if="student.email" class="student-email"> ({{ student.email }})</span>
-          </li>
-        </ul>
-      </div>
-      <div v-else class="no-students">
-        Inga elever inskrivna i denna kurs
+      <div v-else class="instances-section">
+        <h2>Kursinstanser ({{ course.courseInstances?.length || 0 }})</h2>
+        <div v-if="course.courseInstances && course.courseInstances.length > 0" class="instances-list">
+          <ul>
+            <li v-for="instance in course.courseInstances" :key="instance._id">
+              <router-link :to="`/education/${instance._id}?type=instance`">
+                <span class="instance-name">{{ instance.courseName }}</span>
+                <span v-if="instance.courseCode" class="instance-code">({{ instance.courseCode }})</span>
+                <span v-if="instance.startDate && instance.endDate" class="instance-dates">
+                  {{ formatDate(instance.startDate) }} - {{ formatDate(instance.endDate) }}
+                </span>
+              </router-link>
+            </li>
+          </ul>
+        </div>
+        <div v-else class="no-students">
+          Inga aktiva kursinstanser
+        </div>
       </div>
     </div>
   </div>
@@ -63,7 +85,7 @@ import { useRoute } from 'vue-router'
 export default {
   setup() {
     const route = useRoute()
-    const course = ref({ courseName: '', teacher: null, teachers: [], students: [] })
+    const course = ref({ courseName: '', teacher: null, teachers: [], students: [], courseInstances: [] })
 
     const formatDate = (date) => {
       if (!date) return ''
@@ -172,6 +194,49 @@ h2 {
 }
 
 .student-email {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.instances-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.instances-list li {
+  padding: 10px;
+  border-bottom: 1px solid #e9ecef;
+  transition: background-color 0.2s;
+}
+
+.instances-list li:hover {
+  background-color: #f8f9fa;
+}
+
+.instances-list li:last-child {
+  border-bottom: none;
+}
+
+.instances-list a {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.instances-list a:hover {
+  text-decoration: underline;
+}
+
+.instance-name {
+  font-weight: 600;
+}
+
+.instance-code,
+.instance-dates {
   color: #6c757d;
   font-size: 14px;
 }

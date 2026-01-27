@@ -546,10 +546,29 @@
         searchQuery.value = ''
 
         // Gå till special vy om det är kurs eller program eller kurspaket
-        const courseTypes = ['Kurs', 'Course', 'Program', 'CoursePackage']
+        const courseTypes = ['Kurs', 'Course', 'Program', 'CoursePackage', 'Kursinstans', 'CourseInstance']
 
         if (courseTypes.includes(result.type)) {
-          router.push(`/education/${result.id}`) // NY ruta för kurser
+          // Generella kurser (mallar) ska visa alla aktiva kursinstanser
+          if (['Kurs', 'Course'].includes(result.type)) {
+            router.push({
+              path: `/education/${result.id}`,
+              query: { type: 'course' },
+            })
+            return
+          }
+
+          // Kursinstanser ska visa instansvyn med elever
+          if (['Kursinstans', 'CourseInstance'].includes(result.type)) {
+            router.push({
+              path: `/education/${result.id}`,
+              query: { type: 'instance' },
+            })
+            return
+          }
+
+          // Övriga kursrelaterade typer (t.ex. Program, CoursePackage) använder befintlig vy
+          router.push(`/education/${result.id}`)
         } else if (['Elev', 'Student'].includes(result.type)) {
           router.push(`/student/${result.id}`)
         } else {
