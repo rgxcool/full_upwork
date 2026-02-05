@@ -4,7 +4,7 @@
       <div class="header-section">
         <h3 class="page-title">Lärarhantering</h3>
         <div class="header-actions">
-          <button class="btn btn-success" @click="showAddTeacherModal = true">
+          <button class="btn btn-success" @click="goToAddTeacher">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="20"
@@ -221,9 +221,7 @@
         </svg>
         <h4>Inga lärare hittades</h4>
         <p>Det finns inga lärare som matchar din sökning.</p>
-        <button class="btn btn-primary" @click="showAddTeacherModal = true">
-          Lägg till första läraren
-        </button>
+        <button class="btn btn-primary" @click="goToAddTeacher">Lägg till första läraren</button>
       </div>
 
       <!-- Edit Teacher Modal -->
@@ -330,7 +328,11 @@
                           Ta bort
                         </button>
                       </div>
-                      <button type="button" class="btn btn-outline-primary btn-sm mt-2" @click="addEditingPhone">
+                      <button
+                        type="button"
+                        class="btn btn-outline-primary btn-sm mt-2"
+                        @click="addEditingPhone"
+                      >
                         Lägg till telefonnummer
                       </button>
                     </div>
@@ -339,7 +341,9 @@
               </form>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                Avbryt
+              </button>
               <button
                 type="button"
                 class="btn btn-primary"
@@ -391,14 +395,19 @@
               </div>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                Avbryt
+              </button>
               <button
                 type="button"
                 class="btn btn-primary"
                 @click="saveNewPassword"
                 :disabled="isChangingPassword"
               >
-                <span v-if="isChangingPassword" class="spinner-border spinner-border-sm me-2"></span>
+                <span
+                  v-if="isChangingPassword"
+                  class="spinner-border spinner-border-sm me-2"
+                ></span>
                 {{ isChangingPassword ? 'Sparar...' : 'Spara nytt lösenord' }}
               </button>
             </div>
@@ -431,7 +440,12 @@
                   <div class="col-md-6">
                     <div class="form-group">
                       <label class="form-label">E-post *</label>
-                      <input type="email" v-model="newTeacher.email" class="form-control" required />
+                      <input
+                        type="email"
+                        v-model="newTeacher.email"
+                        class="form-control"
+                        required
+                      />
                     </div>
                   </div>
                 </div>
@@ -490,7 +504,9 @@
               </form>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                Avbryt
+              </button>
               <button
                 type="button"
                 class="btn btn-primary"
@@ -588,6 +604,9 @@
     },
 
     methods: {
+      goToAddTeacher() {
+        this.$router.push('/lagg-till-larare')
+      },
       async loadTeachers() {
         try {
           this.isLoading = true
@@ -617,7 +636,12 @@
       },
 
       getFormattedPermissions(subject) {
-        if (!subject || typeof subject !== 'string' || subject.trim() === '' || subject.trim() === 'Övrigt') {
+        if (
+          !subject ||
+          typeof subject !== 'string' ||
+          subject.trim() === '' ||
+          subject.trim() === 'Övrigt'
+        ) {
           return 'Inga behörigheter'
         }
         // Subject field stores permissions as comma-separated string
@@ -635,9 +659,13 @@
             ? teacher.phoneNumbers.map((p) => ({ number: p }))
             : [{ number: '' }],
         }
-        this.editingPermissions = typeof teacher.subject === 'string' && teacher.subject.length
-          ? teacher.subject.split(',').map((s) => s.trim()).filter(Boolean)
-          : []
+        this.editingPermissions =
+          typeof teacher.subject === 'string' && teacher.subject.length
+            ? teacher.subject
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : []
 
         const modal = new bootstrap.Modal(this.$refs.editTeacherModal)
         modal.show()
@@ -697,7 +725,10 @@
       },
 
       removeEditingPhone(index) {
-        if (Array.isArray(this.editingTeacher.phoneNumbers) && this.editingTeacher.phoneNumbers.length > 1) {
+        if (
+          Array.isArray(this.editingTeacher.phoneNumbers) &&
+          this.editingTeacher.phoneNumbers.length > 1
+        ) {
           this.editingTeacher.phoneNumbers.splice(index, 1)
         }
       },
@@ -799,42 +830,65 @@
       },
 
       async unassignAllStudents(teacher) {
-        if (!confirm(`Vill du ta bort alla kopplingar mellan läraren \"${teacher.userId?.username}\" och elever?`)) {
-          return;
+        if (
+          !confirm(
+            `Vill du ta bort alla kopplingar mellan läraren \"${teacher.userId?.username}\" och elever?`
+          )
+        ) {
+          return
         }
         try {
-          const { api } = await import('@/store/store.js');
-          await api.put(`/teachers/${teacher._id}/unassign-all-students`);
-          alert('Alla kopplingar till elever har tagits bort!');
+          const { api } = await import('@/store/store.js')
+          await api.put(`/teachers/${teacher._id}/unassign-all-students`)
+          alert('Alla kopplingar till elever har tagits bort!')
         } catch (error) {
-          console.error('Error unassigning students:', error);
-          alert('Kunde inte ta bort kopplingar till elever');
+          console.error('Error unassigning students:', error)
+          alert('Kunde inte ta bort kopplingar till elever')
         }
       },
 
       // Predefined color list for teacher profiles
       getNextAvailableColor(excludeColor = null) {
         const TEACHER_COLORS = [
-          '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', 
-          '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', 
-          '#ffffff', '#000000'
+          '#e6194b',
+          '#3cb44b',
+          '#ffe119',
+          '#4363d8',
+          '#f58231',
+          '#911eb4',
+          '#46f0f0',
+          '#f032e6',
+          '#bcf60c',
+          '#fabebe',
+          '#008080',
+          '#e6beff',
+          '#9a6324',
+          '#fffac8',
+          '#800000',
+          '#aaffc3',
+          '#808000',
+          '#ffd8b1',
+          '#000075',
+          '#808080',
+          '#ffffff',
+          '#000000',
         ]
-        
+
         // Get all used colors from existing teachers
         const usedColors = new Set(
           this.teachers
-            .map(t => t.colorCode)
+            .map((t) => t.colorCode)
             .filter(Boolean)
-            .filter(color => color !== excludeColor) // Exclude the current teacher's color when editing
+            .filter((color) => color !== excludeColor) // Exclude the current teacher's color when editing
         )
-        
+
         // Find the first color in the list that's not used
         for (const color of TEACHER_COLORS) {
           if (!usedColors.has(color)) {
             return color
           }
         }
-        
+
         // If all colors are used, cycle through the list
         const index = this.teachers.length % TEACHER_COLORS.length
         return TEACHER_COLORS[index]
