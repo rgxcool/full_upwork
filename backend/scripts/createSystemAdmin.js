@@ -19,8 +19,7 @@ async function createSystemAdmin() {
 
     // Connect to MongoDB
     await mongoose.connect(mongoUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+
     });
     console.log("✅ Connected to MongoDB");
 
