@@ -102,7 +102,11 @@
           console.log('🎯 Login result:', result)
 
           if (result.success) {
-            router.push('/profile')
+            if (result.requiresPasswordChange) {
+              router.push('/change-password')
+            } else {
+              router.push('/profile')
+            }
           } else {
             message.value = result.message || 'Inloggningen misslyckades'
           }
