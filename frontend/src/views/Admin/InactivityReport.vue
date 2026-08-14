@@ -197,6 +197,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter } from 'vue-router'
+import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
 import {
   getInactivityReport,
@@ -320,7 +321,7 @@ async function confirmWithdraw() {
   if (!withdrawStudent.value) return
   withdrawing.value = true
   try {
-    const response = await axios.post(`/api/student-details/${withdrawStudent.value.studentId}/dropout`)
+    const response = await client.post(`/student-details/${withdrawStudent.value.studentId}/dropout`)
     toast.success(`${withdrawStudent.value.name} avslutades`)
     await loadReport()
     closeWithdrawDialog()

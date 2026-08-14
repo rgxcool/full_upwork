@@ -3,7 +3,7 @@
     <div class="Reports-wrapper">
       <div class="Reports-header">
         <div class="Reports-title">
-          <h2><v-icon left>mdi-table</v icon>Kompletionsrapporter</h2>
+          <h2><v-icon left>mdi-table</v-icon>Kompletionsrapporter</h2>
           <p class="subtitle">Följ elevs och grupps framsteg på modulnivå</p>
         </div>
         <v-spacer></v-spacer>
@@ -64,7 +64,7 @@
         <v-card>
           <v-card-title>
             <v-card-title-text>
-              <v-icon left mdi="show-chart"></icon>
+              <v-icon left>mdi-chart-line</v-icon>
               <span>Kompletionsrapport: {{ selectedInstance ? selectedInstance.courseName : 'Ingen kurs vald' }}</span>
             </v-card-title-text>
           </v-card-title>
@@ -87,7 +87,7 @@
                   <v-card class="stat-card gradient-yellow">
                     <v-card-title>
                       <v-card-subtitle>Slutförda moduler</v-card-subtitle>
-                    </v-card-text>
+                    </v-card-title>
                     <v-card-text>
                       <h3 class="display-2">{{ completedModules }}</h3>
                     </v-card-text>
@@ -98,7 +98,7 @@
                   <v-card class="stat-card gradient-blue">
                     <v-card-title>
                       <v-card-subtitle>Genomslagsfrekvens</v-card-subtitle>
-                    </v-card-text>
+                    </v-card-title>
                     <v-card-text>
                       <h3 class="display-2">{{ completionRate }}%</h3>
                     </v-card-text>
@@ -158,13 +158,13 @@
             <v-btn
               color="primary"
               :disabled="!selectedInstance || !selectedStudent"
-              @downloadReport
+              @click="downloadReport"
             >
               Exportera rapport
             </v-btn>
             <v-spacer></v-spacer>
             <v-btn
-              @resetFilters
+              @click="resetFilters"
               variant="text"
             >
               Återställ filter
@@ -177,7 +177,8 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
+import client from '@/api/client.js'
 import { useStore } from 'vuex'
 
 export default {
