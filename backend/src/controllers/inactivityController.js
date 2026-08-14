@@ -22,6 +22,7 @@ import {
     safeInactivitySideEffect,
     summarizeInactivitySignal,
 } from "../services/inactivityDiscussionService.js";
+import { runInactivityAutomation } from "../services/inactivityAutomationService.js";
 
 const uniq = (values) => [...new Set(values.filter(Boolean))];
 
@@ -63,6 +64,14 @@ const buildReport = (today) => ({
  * Admins/systemadmins see every evaluated student; teachers only see students
  * on their own enrollments.
  */
+export const runInactivityAutomationController = async (req, res) => {
+    const result = await runInactivityAutomation({
+        actorId: req.user.userId,
+        actorRole: req.user.role,
+    });
+    res.status(200).json({ success: true, ...result });
+};
+
 export const getInactivityReport = async (req, res) => {
     const today = new Date();
     const isTeacherScope = req.user?.role === "teacher";

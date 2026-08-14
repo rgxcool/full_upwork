@@ -4,6 +4,7 @@ import { can } from "../middleware/authorization.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import {
     getInactivityReport,
+    runInactivityAutomationController,
     sendInactivityWarning,
 } from "../controllers/inactivityController.js";
 
@@ -14,6 +15,13 @@ router.get(
     isAuthenticated,
     can("inactivity:read"),
     asyncHandler(getInactivityReport)
+);
+
+router.post(
+    "/run",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    asyncHandler(runInactivityAutomationController)
 );
 
 router.post(

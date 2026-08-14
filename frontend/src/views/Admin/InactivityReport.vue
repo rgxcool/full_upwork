@@ -2,7 +2,19 @@
   <div class="scrollable-view">
     <div class="inactivity-report-container">
       <div class="header-section">
-        <h3 class="page-title">Inaktivitetsrapport</h3>
+        <div>
+          <p class="eyebrow">ADMIN · UPPFÖLJNING</p>
+          <h3 class="page-title">Inaktivitetsrapport</h3>
+          <p class="page-subtitle">Prioritera elever som behöver en snabb och tydlig åtgärd.</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-outline-secondary" :disabled="loading || runningAutomation" @click="loadReport">
+            {{ loading ? 'Laddar...' : 'Uppdatera' }}
+          </button>
+          <button v-if="isAdmin" class="btn btn-success" :disabled="runningAutomation" @click="runAutomation">
+            {{ runningAutomation ? 'Kör regel...' : 'Kör inaktivitetsregel' }}
+          </button>
+        </div>
         <div class="breadcrumb">
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
             <path fill="#2c9316" d="M20 9v6h-8v4.84L4.16 12L12 4.16V9z" />
@@ -35,6 +47,10 @@
         <div class="summary-card card-warning">
           <span class="summary-value">{{ summary.inactiveForWarning }}</span>
           <span class="summary-label">Varningsmail</span>
+        </div>
+        <div class="summary-card card-neutral">
+          <span class="summary-value">{{ summary.ok }}</span>
+          <span class="summary-label">Aktiva enligt regel</span>
         </div>
       </div>
 
@@ -181,8 +197,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
 import { useToast } from '@/composables/useToast.js'
+import {
+  getInactivityReport,
+  runInactivityAutomation,
+  sendInactivityWarning as sendWarningRequest,
+} from '@/api/inactivity.js'
 
 const toast = useToast()
 const store = useStore()
@@ -198,6 +218,7 @@ const thresholds = ref({ withdrawDays: 5, warningDays: 14 })
 const sendingWarningFor = ref(null)
 const withdrawStudent = ref(null)
 const withdrawing = ref(false)
+const runningAutomation = ref(false)
 
 const isAdmin = computed(() => store.getters.isAdmin)
 
@@ -223,14 +244,27 @@ async function loadReport() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const response = await axios.get('/api/inactivity/report')
+    const response = await getInactivityReport()
     students.value = response.data.students || []
     summary.value = response.data.summary || summary.value
     thresholds.value = response.data.thresholds || thresholds.value
   } catch (error) {
-    errorMessage.value = error.response?.data?.error || 'Kunde inte hämta inaktivitetsrapporten'
+    errorMessage.value = error.message || 'Kunde inte hämta inaktivitetsrapporten'
   } finally {
     loading.value = false
+  }
+}
+
+async function runAutomation() {
+  runningAutomation.value = true
+  try {
+    const response = await runInactivityAutomation()
+    toast.success(`${response.data.withdrawn} elev(er) avslutades enligt inaktivitetsregeln`)
+    await loadReport()
+  } catch (error) {
+    toast.error(error.message || 'Kunde inte köra inaktivitetsregeln')
+  } finally {
+    runningAutomation.value = false
   }
 }
 
@@ -260,14 +294,14 @@ function discussStudent(student) {
 async function sendWarningEmail(student) {
   sendingWarningFor.value = student.studentId
   try {
-    const response = await axios.post(`/api/inactivity/${student.studentId}/warning-email`)
+    const response = await sendWarningRequest(student.studentId)
     toast.success(`Varningsmail skickat till ${student.name}`)
     await loadReport()
     if (response.data.conversationId) {
       router.push({ path: '/messages', query: { conversationId: response.data.conversationId } })
     }
   } catch (error) {
-    toast.error(error.response?.data?.error || 'Kunde inte skicka varningsmail')
+    toast.error(error.message || 'Kunde inte skicka varningsmail')
   } finally {
     sendingWarningFor.value = null
   }
@@ -294,7 +328,7 @@ async function confirmWithdraw() {
       router.push({ path: '/messages', query: { conversationId: response.data.conversationId } })
     }
   } catch (error) {
-    toast.error(error.response?.data?.error || 'Kunde inte avsluta eleven')
+    toast.error(error.message || 'Kunde inte avsluta eleven')
   } finally {
     withdrawing.value = false
   }
@@ -305,7 +339,68 @@ onMounted(loadReport)
 
 <style scoped>
 .inactivity-report-container {
-  padding: 20px;
+  padding: 28px;
+  max-width: 1800px;
+  margin: 0 auto;
+}
+
+.header-section {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #2c9316;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.page-title {
+  margin: 0;
+  font-size: clamp(1.5rem, 2vw, 2rem);
+}
+
+.page-subtitle {
+  margin: 6px 0 0;
+  color: #68727d;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-neutral {
+  border-left-color: #68727d;
+}
+
+.table-container {
+  overflow-x: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(31, 42, 52, 0.06);
+}
+
+.table {
+  margin-bottom: 0;
+  min-width: 1180px;
+}
+
+.table th {
+  white-space: nowrap;
+  background: #f6f8f7;
+  color: #495057;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .thresholds-note {
