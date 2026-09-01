@@ -79,6 +79,40 @@
         </div>
       </div>
     </div>
+
+    <!-- Password Reset Section -->
+    <div v-if="hasUser" class="card mt-3">
+      <div class="card-header">
+        <h3>Lösenord</h3>
+        <p class="small text-muted">Återställ elevens lösenord och visa det nya lösenordet</p>
+      </div>
+      <div class="card-body">
+        <button
+          class="btn btn-primary"
+          :disabled="isResettingPassword"
+          @click="resetStudentPassword"
+        >
+          {{ isResettingPassword ? 'Återställer...' : newTempPassword ? 'Återställ lösenord igen' : 'Återställ lösenord' }}
+        </button>
+        <div v-if="newTempPassword" class="alert alert-info mt-3">
+          <p><strong>Nytt tillfälligt lösenord!</strong></p>
+          <label for="temp-password-display">Tillfälligt lösenord</label>
+          <div class="temporary-password">
+            <input
+              id="temp-password-display"
+              :type="showTempPassword ? 'text' : 'password'"
+              :value="newTempPassword"
+              readonly
+              autocomplete="off"
+            />
+            <button type="button" class="btn btn-secondary" @click="showTempPassword = !showTempPassword">
+              {{ showTempPassword ? 'Dölj' : 'Visa' }}
+            </button>
+          </div>
+          <p class="small">Spara lösenordet säkert och berätta det för eleven. Eleven måste byta lösenord vid nästa inloggning.</p>
+        </div>
+      </div>
+    </div>
   </div>
   <div v-else>
     <p>Du har inte behörighet att se denna sida.</p>
@@ -189,12 +223,14 @@ export default {
   emits: ['user-created'],
   setup(props, { emit }) {
     const store = useStore();
-    const route = useRoute();
     const toast = useToast();
     const isSavingPermissions = ref(false);
     const isCreatingUser = ref(false);
     const createdUserPassword = ref(null);
     const showCreatedPassword = ref(false);
+    const isResettingPassword = ref(false);
+    const newTempPassword = ref(null);
+    const showTempPassword = ref(false);
     const features = ref(FEATURES);
     
     // Custom permissions state
@@ -305,6 +341,24 @@ export default {
       }
     };
 
+    const resetStudentPassword = async () => {
+      if (!props.student?.user?._id) {
+        toast.error('Ingen användare hittades för denna elev.');
+        return;
+      }
+      isResettingPassword.value = true;
+      newTempPassword.value = null;
+      try {
+        const response = await client.post(`/users/${props.student.user._id}/reset-password`);
+        newTempPassword.value = response.data.tempPassword;
+        toast.success('Lösenordet har återställts! Det nya lösenordet visas nedan.');
+      } catch (error) {
+        toast.error('Kunde inte återställa lösenord. ' + error.message);
+      } finally {
+        isResettingPassword.value = false;
+      }
+    };
+
     const savePermissions = async () => {
       if (!props.student || !props.student.user || !props.student.user._id) {
         toast.error('Ingen användare hittades för denna elev. Kan inte spara behörigheter.');
@@ -338,6 +392,10 @@ export default {
       savePermissions,
       createUserForStudent,
       hasPermissionChanges,
+      isResettingPassword,
+      newTempPassword,
+      showTempPassword,
+      resetStudentPassword,
     };
   },
 };

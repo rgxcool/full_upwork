@@ -250,7 +250,7 @@ router.post("/teacher", isAuthenticated, can("teachers:create"), async (req, res
     logger.info({ payloadKeys: req.body ? Object.keys(req.body) : [] }, "Incoming teacher POST")
 
     try {
-            const { username, email, colorCode, subject, phoneNumbers } = req.body;
+            const { username, email, colorCode, subject, phoneNumbers, generatePassword } = req.body;
 
         if (!username || !email) {
             return res
@@ -266,11 +266,17 @@ router.post("/teacher", isAuthenticated, can("teachers:create"), async (req, res
                 .json({ error: "A user with this email already exists." });
         }
 
-        // Create new User (without password for backward compatibility)
+        // Generate a password so the User satisfies its required field
+        const plainPassword = generateStrongPassword();
+        const hashedPassword = await bcrypt.hash(plainPassword, 12);
+
+        // Create new User
         const user = new User({
             username,
             email,
+            password: hashedPassword,
             roles: ["teacher"],
+            mustChangePassword: !generatePassword,
         });
         const savedUser = await user.save();
 
@@ -292,6 +298,7 @@ router.post("/teacher", isAuthenticated, can("teachers:create"), async (req, res
                 user: savedUser,
                 teacher: savedTeacher,
             },
+            password: plainPassword,
         });
     } catch (error) {
         logger.error({ err: error.message }, "Error in POST /teacher")

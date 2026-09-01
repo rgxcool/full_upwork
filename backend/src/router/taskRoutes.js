@@ -1,9 +1,18 @@
 import { Router } from "express";
 import Task from "../models/Task.js";
 import { authenticateUser } from "../controllers/authController.js";
+import { syncTaskReminderForUser } from "../services/taskReminderScan.js";
 import logger from "../utils/logger.js";
 
 const router = Router();
+
+const syncReminder = async (userId) => {
+    try {
+        await syncTaskReminderForUser(userId);
+    } catch (err) {
+        logger.warn({ err, userId: String(userId) }, "Task reminder sync skipped (non-fatal)");
+    }
+};
 
 /**
  * ✅ Fetch All Tasks (Only for the Authenticated User)
@@ -25,7 +34,7 @@ router.get("/task/", authenticateUser, async (req, res) => {
  */
 router.post("/task/", authenticateUser, async (req, res) => {
   try {
-    const { description } = req.body;
+    const { description, dueDate, dueTime } = req.body;
 
     if (
       !description ||
@@ -39,10 +48,13 @@ router.post("/task/", authenticateUser, async (req, res) => {
       description: description.trim(),
       isDone: false,
       userId: req.userId, // ✅ Fixed userId reference
+      dueDate: dueDate || null,
+      dueTime: dueTime || null,
     });
 
     logger.info({ newTask }, "New task created")
     res.status(201).json(newTask);
+    void syncReminder(req.userId);
   } catch (error) {
     logger.error({ err: error }, "Error creating task")
     res.status(500).json({ error: "Serverfel vid skapande av uppgift." });
@@ -54,15 +66,32 @@ router.post("/task/", authenticateUser, async (req, res) => {
  */
 router.put("/task/:id", authenticateUser, async (req, res) => {
   try {
-    const { isDone } = req.body;
+    const { isDone, description, dueDate, dueTime } = req.body;
 
-    if (typeof isDone !== "boolean") {
+    if (isDone !== undefined && typeof isDone !== "boolean") {
       return res.status(400).json({ error: "Ogiltigt värde för isDone." });
+    }
+
+    if (
+      description !== undefined &&
+      (typeof description !== "string" || description.trim() === "")
+    ) {
+      return res.status(400).json({ error: "Beskrivning krävs" });
+    }
+
+    const updates = {};
+    if (isDone !== undefined) updates.isDone = isDone;
+    if (description !== undefined) updates.description = description.trim();
+    if (dueDate !== undefined) updates.dueDate = dueDate || null;
+    if (dueTime !== undefined) updates.dueTime = dueTime || null;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "Inga fält att uppdatera." });
     }
 
     const updatedTask = await Task.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId }, // ✅ Ensuring the task belongs to the user
-      { isDone },
+      updates,
       { new: true }
     );
 
@@ -73,6 +102,7 @@ router.put("/task/:id", authenticateUser, async (req, res) => {
     }
 
     res.json(updatedTask);
+    void syncReminder(req.userId);
   } catch (error) {
     logger.error({ err: error }, "Error updating task")
     res.status(500).json({
@@ -102,6 +132,7 @@ router.delete("/task/:id", authenticateUser, async (req, res) => {
 
     logger.info({ taskId: deletedTask._id }, "Task deleted")
     res.json({ message: "Uppgift borttagen", taskId: req.params.id });
+    void syncReminder(req.userId);
   } catch (error) {
     logger.error({ err: error }, "Error deleting task")
     res.status(500).json({
@@ -120,6 +151,7 @@ router.delete("/delalltasks", authenticateUser, async (req, res) => {
       message: "Alla uppgifter borttagna",
       deletedCount: result.deletedCount,
     });
+    void syncReminder(req.userId);
   } catch (error) {
     logger.error({ err: error }, "Error deleting all tasks")
     res.status(500).json({

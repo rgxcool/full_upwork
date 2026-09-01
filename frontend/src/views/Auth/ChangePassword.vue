@@ -34,7 +34,10 @@
               required
               autocomplete="new-password"
               class="form-input"
+              :class="{ 'input-error': newPasswordError }"
+              @input="newPasswordError = validatePassword(newPassword)"
             />
+            <span v-if="newPasswordError" class="field-error">{{ newPasswordError }}</span>
           </div>
 
           <div class="form-group">
@@ -91,9 +94,30 @@
       const confirmPassword = ref('')
       const message = ref('')
       const isLoading = ref(false)
+      const newPasswordError = ref('')
+
+      const validatePassword = (password) => {
+        if (!password) return 'Ange ett nytt lösenord.'
+        const checks = [
+          { ok: password.length >= 8, msg: 'Lösenordet måste vara minst 8 tecken långt.' },
+          { ok: /[A-Z]/.test(password), msg: 'Lösenordet måste innehålla minst en stor bokstav (A–Z).' },
+          { ok: /[a-z]/.test(password), msg: 'Lösenordet måste innehålla minst en liten bokstav (a–z).' },
+          { ok: /\d/.test(password), msg: 'Lösenordet måste innehålla minst en siffra (0–9).' },
+          { ok: /[!@#$%^&*(),.?":{}|<>]/.test(password), msg: 'Lösenordet måste innehålla ett specialtecken, t.ex. ! @ # $ % ^ & * ( ) , . ? " : { } | < >' },
+        ]
+        const failed = checks.find((c) => !c.ok)
+        return failed ? failed.msg : ''
+      }
 
       const handleChangePassword = async () => {
         if (isLoading.value) return
+
+        const validationError = validatePassword(newPassword.value)
+        if (validationError) {
+          newPasswordError.value = validationError
+          message.value = validationError
+          return
+        }
 
         if (newPassword.value !== confirmPassword.value) {
           message.value = 'De nya lösenorden matchar inte.'
@@ -102,6 +126,7 @@
 
         isLoading.value = true
         message.value = ''
+        newPasswordError.value = ''
 
         try {
           const result = await store.dispatch('changePassword', {
@@ -133,6 +158,8 @@
         confirmPassword,
         message,
         isLoading,
+        newPasswordError,
+        validatePassword,
         handleChangePassword,
         handleLogout,
       }
@@ -233,6 +260,15 @@
   .form-input:focus {
     border-color: var(--color-primary);
     box-shadow: 0 0 0 3px var(--color-primary-light);
+  }
+
+  .form-input.input-error {
+    border-color: var(--color-error);
+  }
+
+  .field-error {
+    color: var(--color-error);
+    font-size: 0.8125rem;
   }
 
   .login-btn {

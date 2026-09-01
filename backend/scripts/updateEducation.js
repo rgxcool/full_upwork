@@ -18,6 +18,7 @@ async function parseEducation(filePath) {
 
     // Parse Courses and Programs
     let currentProgram;
+    let courseOrder = 1;
     for (const row of coursesSheet.getRows(2, coursesSheet.rowCount - 1)) {
       const programName = row.getCell(1).text.trim().toUpperCase();
       const courseName = row.getCell(2).text.trim().toUpperCase();
@@ -31,6 +32,7 @@ async function parseEducation(filePath) {
           { programName },
           { new: true, upsert: true }
         );
+        courseOrder = 1;
         console.log(`🆕 Program processed: ${programName}`);
       }
 
@@ -43,10 +45,11 @@ async function parseEducation(filePath) {
       );
 
       await Program.findByIdAndUpdate(currentProgram._id, {
-        $addToSet: { programCourses: course._id },
+        $addToSet: { programCourses: { courseId: course._id, order: courseOrder } },
       });
 
       console.log(`✅ Course processed: ${courseName}`);
+      courseOrder++;
     }
 
     // Parse Course Packages
@@ -61,6 +64,7 @@ async function parseEducation(filePath) {
       const itemCode = row.getCell(3).text.trim().toUpperCase();
       const itemPoints = row.getCell(4).text.trim();
       const itemExtent = row.getCell(5).text.trim();
+      const isPackage = isBold || /-\s*\d+\s*v$/i.test(itemName);
 
       if (programName) {
         currentProgram = await Program.findOneAndUpdate(
@@ -68,10 +72,13 @@ async function parseEducation(filePath) {
           { programName },
           { new: true, upsert: true }
         );
+        currentPackage = null;
         console.log(`🆕 Program updated: ${programName}`);
       }
 
-      if (isBold) {
+      if (!itemName && !itemCode && !itemPoints && !itemExtent) continue;
+
+      if (isPackage) {
         currentPackage = await CoursePackage.findOneAndUpdate(
           { coursePackageName: itemName },
           {
@@ -115,4 +122,4 @@ async function parseEducation(filePath) {
 export default parseEducation;
 
 // Usage example
-parseEducation('./test.xlsx');
+parseEducation(process.argv[2] || "./test.xlsx");
