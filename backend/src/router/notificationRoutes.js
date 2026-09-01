@@ -129,9 +129,20 @@ router.get("/notifications", authenticateUser, async (req, res) => {
     }
     
     const notes = await Notification.find(query);
-    logger.debug({ count: notes.length, query }, "Found notifications matching query")
+
+    // Filter task_reminder notifications: only the user they belong to may
+    // see them (they are stored with a non-ObjectId meta.userId so the Mongo
+    // query above cannot scope them per role).
+    const filteredNotes = notes.filter((note) => {
+        if (note.type === "task_reminder") {
+            return String(note.meta?.userId || "") === String(req.user.userId);
+        }
+        return true;
+    });
+
+    logger.debug({ count: filteredNotes.length, query }, "Found notifications matching query")
     if (logger.level === "debug") {
-    notes.forEach((note, idx) => {
+    filteredNotes.forEach((note, idx) => {
       logger.debug({ index: idx + 1, type: note.type, teacher: note.teacher ? note.teacher.toString() : 'MISSING', student: note.meta?.studentId ? note.meta.studentId.toString() : 'MISSING', resolved: note.resolved }, "Notification detail")
       if (query.teacher && note.teacher) {
         const noteTeacherId = note.teacher.toString();
@@ -146,7 +157,7 @@ router.get("/notifications", authenticateUser, async (req, res) => {
     const seenTypes = new Set();
     const seenDropouts = new Set();
 
-    for (const note of notes) {
+    for (const note of filteredNotes) {
       if (['action_plan_required', 'grades_pending'].includes(note.type)) {
         if (!seenTypes.has(note.type)) {
           uniqueNotes.push(note);

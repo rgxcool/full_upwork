@@ -72,7 +72,7 @@ import {
 } from "./src/utils/errorHandler.js";
 
 import { cacheManager, dbOptimizer, requestOptimizer } from "./src/utils/performance.js";
-import { startInactivityScheduler, stopInactivityScheduler } from "./src/services/scheduler.js";
+import { startInactivityScheduler, stopInactivityScheduler, startTaskReminderScheduler, stopTaskReminderScheduler } from "./src/services/scheduler.js";
 
 // Apply security headers
 app.use(securityHeaders);
@@ -294,6 +294,7 @@ async function shutdown(signal) {
 
     try {
         stopInactivityScheduler();
+        stopTaskReminderScheduler();
         logger.info("Background scheduler stopped");
     } catch (err) {
         logger.error({ err }, "Error stopping background scheduler");
@@ -333,6 +334,8 @@ if (process.env.NODE_ENV !== "test") {
 
             // Daily inactivity automation (skipped in test mode / when disabled).
             startInactivityScheduler();
+            // Task-reminder refresh (skipped in test mode).
+            startTaskReminderScheduler();
         });
 }
 
