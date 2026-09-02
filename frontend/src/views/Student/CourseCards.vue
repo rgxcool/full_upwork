@@ -66,6 +66,12 @@
               </div>
             </div>
 
+            <div v-if="card.currentModule || card.currentModuleNumber" class="current-module" aria-label="Aktuell modul">
+              <span class="date-label">Aktuell modul</span>
+              <strong>{{ card.currentModule?.title || card.currentModule?.name || `Modul ${card.currentModuleNumber}` }}</strong>
+              <span v-if="card.currentModule?.status" class="module-status">{{ card.currentModule.status }}</span>
+            </div>
+
             <div class="course-card-dates">
               <div class="date-block">
                 <span class="date-label">Start</span>
@@ -115,10 +121,11 @@
               </div>
 
               <div class="activity-feed">
-                <div class="activity-heading"><h5>Aktuellt i kursen</h5><button type="button" class="refresh-btn" @click="loadActivity(card)">Uppdatera</button></div>
+                <div class="activity-heading"><h5>Anslagstavla och aktivitet</h5><button type="button" class="refresh-btn" @click="loadActivity(card)">Uppdatera</button></div>
                 <p v-if="activityLoading[card.courseInstanceId]" class="activity-muted">Laddar meddelanden...</p>
                 <p v-else-if="!activities[card.courseInstanceId]?.length" class="activity-muted">Inga nya meddelanden.</p>
-                <article v-for="item in activities[card.courseInstanceId] || []" :key="item.id" class="activity-item">
+                <article v-for="item in activities[card.courseInstanceId] || []" :key="item.id" class="activity-item" :class="{ 'staff-notice': item.isNotice || item.type === 'notice' || item.createdByRole === 'admin' }">
+                  <span v-if="item.isNotice || item.type === 'notice' || item.createdByRole === 'admin'" class="notice-label">Personalmeddelande</span>
                   <strong>{{ item.text }}</strong><time>{{ formatDateTime(item.createdAt) }}</time>
                 </article>
               </div>
@@ -675,7 +682,7 @@ onMounted(loadCourseCards)
 .document-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; margin-top: .85rem; padding-top: .75rem; border-top: 1px dashed #e5e7eb; }
 .document-btn { border: 1px solid #1d4f43; background: #1d4f43; color: #fff; padding: .5rem .7rem; cursor: pointer; font-size: .78rem; font-weight: 700; }
 .document-btn:disabled { opacity: .55; cursor: wait; }.document-btn-secondary { background: #fff; color: #1d4f43; }.document-hint { color: #6b7280; font-size: .75rem; }
-.activity-feed { margin-top: 1rem; padding: .85rem; border: 1px solid #dbe4df; background: #fbfcfb; }.activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.activity-heading h5 { margin: 0; color: #374151; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }.refresh-btn { border: 0; background: transparent; color: #1d4f43; cursor: pointer; font-size: .75rem; }.activity-muted { color: #6b7280; font-size: .8rem; }.activity-item { display: flex; justify-content: space-between; gap: 1rem; padding: .65rem 0; border-top: 1px solid #e5ebe7; font-size: .82rem; }.activity-item time { color: #7b8881; white-space: nowrap; font-size: .72rem; }
+.activity-feed { margin-top: 1rem; padding: .85rem; border: 1px solid #dbe4df; background: #fbfcfb; }.activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.activity-heading h5 { margin: 0; color: #374151; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }.refresh-btn { border: 0; background: transparent; color: #1d4f43; cursor: pointer; font-size: .75rem; }.activity-muted { color: #6b7280; font-size: .8rem; }.activity-item { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; padding: .65rem 0; border-top: 1px solid #e5ebe7; font-size: .82rem; }.activity-item time { color: #7b8881; white-space: nowrap; font-size: .72rem; }.activity-item.staff-notice { padding: .65rem; border-left: 3px solid #1d4f43; background: #f0f7f4; }.notice-label { flex-basis: 100%; color: #1d4f43; font-size: .7rem; font-weight: 700; text-transform: uppercase; }
 
 .assignment-block {
   margin: 0.6rem 0 0.2rem 1rem;

@@ -49,8 +49,9 @@
             <thead class="table-light">
               <tr>
                 <th>Namn</th>
-                <th>Personnummer</th>
-                <th>Info</th>
+                <th>Kurs</th>
+                <th>Information</th>
+                <th>Ackommodationer</th>
                 <th>Närvaro</th>
               </tr>
             </thead>
@@ -59,7 +60,7 @@
                 <td>
                   <router-link :to="`/student/${student._id}`">{{ student.name }}</router-link>
                 </td>
-                <td>{{ student.personalNumber }}</td>
+                <td>{{ student.courseName || student.courseInstanceCode || '–' }}</td>
                 <td>
                   <v-textarea
                     v-if="canEdit"
@@ -73,6 +74,11 @@
                     @blur="updateStudentInfo(student)"
                   />
                   <span v-else style="white-space: pre-wrap;">{{ student.additionalInfo || '-' }}</span>
+                </td>
+                <td>
+                  <span class="accommodation-summary">
+                    {{ formatAccommodations(student.examAccommodations || student.accommodations) }}
+                  </span>
                 </td>
                 <td>
                   <input
@@ -275,6 +281,12 @@
           if (!newEvent) return
 
           const exProps = newEvent.extendedProps || {}
+          this.examRoom = exProps.examRoom || newEvent.examRoom || ''
+          this.examAccommodations = {
+            extraTime: exProps.examAccommodations?.extraTime || 0,
+            computer: Boolean(exProps.examAccommodations?.computer),
+            separateRoom: Boolean(exProps.examAccommodations?.separateRoom),
+          }
 
           if (exProps.students && Array.isArray(exProps.students) && exProps.students.length > 0) {
             await this.setStudentsFromProps(exProps)
@@ -446,6 +458,14 @@
         // Save the updated info field
         this.saveEventStudents();
       },
+      formatAccommodations(accommodations) {
+        if (!accommodations) return 'Inga registrerade'
+        const items = []
+        if (Number(accommodations.extraTime) > 0) items.push(`Extra tid: ${accommodations.extraTime} min`)
+        if (accommodations.computer) items.push('Dator')
+        if (accommodations.separateRoom) items.push('Separat rum')
+        return items.length ? items.join(', ') : 'Inga registrerade'
+      },
       async saveEventStudents() {
         if (!this.event.id) return;
         
@@ -456,7 +476,6 @@
             return {
               _id: s._id,
               name: s.name,
-              personalNumber: s.personalNumber,
               additionalInfo: s.additionalInfo || "",
               attended: s.attended ?? false,
               courseInstanceCode: selectedInstance?.courseInstanceCode || s.courseInstanceCode || '',
