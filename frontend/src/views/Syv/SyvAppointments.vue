@@ -17,7 +17,9 @@
       <tbody>
         <tr v-for="meeting in meetings" :key="meeting._id">
           <td>
-            <router-link :to="`/student/${meeting.student.id}`">{{ meeting.student.name }}</router-link>
+            <button class="student-link" type="button" @click="openStudent(meeting.student)">
+              {{ meeting.student.name }}
+            </button>
           </td>
           <td>{{ formatMeetingTime(meeting) }}</td>
           <td>{{ meeting.info }}</td>
@@ -27,6 +29,8 @@
         </tr>
       </tbody>
     </table>
+
+    <p v-if="meetings.length === 0" class="empty-state">Inga bokade samtal hittades.</p>
 
     <!-- Pagination -->
     <div v-if="pagination.totalPages > 1">
@@ -108,6 +112,19 @@
       </v-card-actions>
     </v-card>
 
+    <v-card v-if="selectedStudent && activeRole === 'specped'" class="mt-4">
+      <v-card-title>Examensackommodationer: {{ selectedStudent.name }}</v-card-title>
+      <v-card-text>
+        <v-row>
+          <v-col cols="12" sm="4"><v-text-field v-model.number="examAccommodations.extraTime" type="number" min="0" label="Extra tid (minuter)" /></v-col>
+          <v-col cols="12" sm="4"><v-checkbox v-model="examAccommodations.computer" label="Dator" /></v-col>
+          <v-col cols="12" sm="4"><v-checkbox v-model="examAccommodations.separateRoom" label="Separat rum" /></v-col>
+          <v-col cols="12"><v-textarea v-model="examAccommodations.notes" label="Anteckning" rows="2" /></v-col>
+        </v-row>
+      </v-card-text>
+      <v-card-actions><v-btn color="primary" :loading="savingAccommodations" @click="saveExamAccommodations">Spara ackommodationer</v-btn></v-card-actions>
+    </v-card>
+
     <!-- Study Plan Revision Section -->
     <v-card v-if="selectedStudent" class="mt-4">
       <v-card-title>
@@ -185,7 +202,9 @@ export default {
       studyPlan: {
         aplStatus: 'GRAY',
         notes: ''
-      }
+      },
+      savingAccommodations: false,
+      examAccommodations: { extraTime: 0, computer: false, separateRoom: false, notes: '' }
     };
   },
   computed: {
@@ -242,6 +261,23 @@ export default {
     this.fetchMeetings();
   },
   methods: {
+    async openStudent(student) {
+      const id = student?._id || student?.id
+      if (!id) return
+      try {
+        const { data } = await client.get(`/students/${id}`)
+        this.selectedStudent = data.student || data
+        const accommodations = this.selectedStudent.examAccommodations || this.selectedStudent.accommodations || {}
+        this.examAccommodations = {
+          extraTime: accommodations.extraTime || 0,
+          computer: Boolean(accommodations.computer),
+          separateRoom: Boolean(accommodations.separateRoom),
+          notes: accommodations.notes || ''
+        }
+      } catch {
+        toast.error('Kunde inte hämta elevens information.')
+      }
+    },
     formatMeetingTime(meeting) {
       if (!meeting?.start) return '';
       const start = new Date(meeting.start);
@@ -267,13 +303,6 @@ export default {
         const response = await client.get(url);
         
         const meetings = response.data.data || [];
-        console.log(`📋 Fetched ${meetings.length} ${this.activeRole} appointments`);
-        console.log(`📋 Meeting bookedBy values:`, meetings.map(m => ({ 
-          id: m._id, 
-          student: m.student?.name, 
-          bookedBy: m.bookedBy 
-        })));
-        
         const filteredMeetings = meetings.filter(m => m.bookedBy === this.activeRole);
         if (filteredMeetings.length !== meetings.length) {
           console.warn(`⚠️ Backend returned ${meetings.length} meetings but only ${filteredMeetings.length} match bookedBy=${this.activeRole}`);
@@ -296,6 +325,18 @@ export default {
           console.error("Kunde inte radera mötet:", error);
           toast.error('Kunde inte radera mötet.');
         }
+      }
+    },
+    async saveExamAccommodations() {
+      if (!this.selectedStudent) return
+      this.savingAccommodations = true
+      try {
+        await client.put(`/meetings/students/${this.selectedStudent._id}/exam-accommodations`, this.examAccommodations)
+        toast.success('Examensackommodationer sparade.')
+      } catch {
+        toast.error('Kunde inte spara examensackommodationer.')
+      } finally {
+        this.savingAccommodations = false
       }
     },
     async saveProfile() {

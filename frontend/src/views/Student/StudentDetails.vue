@@ -206,8 +206,11 @@ export default {
         { name: 'Kursarkiv', component: CourseArchiveTab, alwaysShow: true, description: 'Historik över genomförda kurser' },
       ];
 
-      // Conditionally show APL tab - work placement
-      if (student.value) {
+      // Conditionally show APL tab - work placement. Staff profiles never expose student APL tabs.
+      const isStaffProfile = ['teacher', 'staff', 'admin', 'systemadmin'].includes(
+        String(student.value?.role || student.value?.userRole || '').toLowerCase()
+      )
+      if (student.value && !isStaffProfile) {
         const hasCoursePackage = student.value.education && 
           Array.isArray(student.value.education) &&
           student.value.education.some(e => 

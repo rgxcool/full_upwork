@@ -85,6 +85,7 @@
             <tr>
               <th class="text-left">Namn</th>
               <th class="text-left">Typ</th>
+              <th class="text-left">Senast aktiv på kurskort</th>
               <th class="text-left">Åtgärd</th>
             </tr>
           </thead>
@@ -92,6 +93,7 @@
             <tr v-for="p in participants" :key="p._id || p.studentId">
               <td>{{ p.name || p.studentName || '–' }}</td>
               <td>{{ p.role || p.type || 'student' }}</td>
+              <td>{{ formatDateTime(p.lastActiveOnCourse || p.lastActiveAt || p.courseLastActiveAt) }}</td>
               <td>
                 <v-btn size="x-small" variant="tonal" color="error" :loading="removingId === (p._id || p.studentId)" @click="removeParticipant(p)">
                   Ta bort
@@ -99,7 +101,7 @@
               </td>
             </tr>
             <tr v-if="participants.length === 0">
-              <td colspan="3" class="text-center text-grey">Inga deltagare.</td>
+              <td colspan="4" class="text-center text-grey">Inga deltagare.</td>
             </tr>
           </tbody>
         </v-table>

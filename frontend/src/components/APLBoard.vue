@@ -40,8 +40,10 @@
         </label>
       </div>
       <div class="color-filter-section">
-        <label>Filtrera efter färg:</label>
-        <select v-model="colorFilter" class="color-filter-select">
+        <label for="apl-student-filter">Filtrera elever:</label>
+        <input id="apl-student-filter" v-model="studentFilter" type="search" class="student-filter-input" placeholder="Namn eller e-post" />
+        <label for="apl-color-filter">Filtrera efter färg:</label>
+        <select id="apl-color-filter" v-model="colorFilter" class="color-filter-select">
           <option value="">Alla</option>
           <option v-for="status in allStatusMap" :key="status.key" :value="status.key">{{ status.label }}</option>
         </select>
@@ -75,6 +77,8 @@
         @click="openComments(student)"
       >
         <router-link :to="`/student/${student._id}`" @click.stop>{{ student.name }}</router-link>
+        <span class="student-context">{{ student.coursePackageName || student.coursePackage?.name || 'Kurspaket' }}</span>
+        <span v-if="student.aplEndDate" class="student-context">Slut: {{ formatDateOnly(student.aplEndDate) }}</span>
         <span
           v-if="student.aplStatusAuto"
           class="auto-red-badge"
@@ -355,6 +359,7 @@ const isBehindSchedule = (student) => {
   const commentAscOrder = ref(true)
   const summaryExpanded = ref(false)
   const colorFilter = ref('')
+  const studentFilter = ref('')
   const copied = ref(false)
   const blinkedField = ref('')
   const copiedPosition = ref({ x: 0, y: 0 })
@@ -432,12 +437,15 @@ const isBehindSchedule = (student) => {
       return student.education.some((edu) => edu.type === 'CoursePackage')
     })
 
-    if (props.filterType === 'completed') {
-      // In "Avslutad" tab, only show GREEN students
-      return baseFiltered.filter((s) => s.aplStatus === 'GREEN')
-    }
+    const scopedStudents = props.filterType === 'completed'
+      ? baseFiltered.filter((s) => s.aplStatus === 'GREEN')
+      : baseFiltered
     // In "Pågående" tab, show all students including GREEN (as redundancy)
-    return baseFiltered
+    const query = studentFilter.value.trim().toLowerCase()
+    if (!query) return scopedStudents
+    return scopedStudents.filter((student) => [student.name, student.email, student.coursePackageName]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query)))
   })
 
   const studentsByStatus = computed(() => {
