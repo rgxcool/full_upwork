@@ -28,6 +28,12 @@
           <div v-if="record.placementCompany" class="info-row">
             <strong>Praktikplats:</strong> {{ record.placementCompany }}
           </div>
+          <div v-if="record.placementContact || record.studentId?.email || record.studentId?.phone" class="info-row contact-row">
+            <strong>Kontakt:</strong>
+            <span>{{ record.placementContact || '–' }}</span>
+            <span v-if="record.studentId?.email"> · {{ record.studentId.email }}</span>
+            <span v-if="record.studentId?.phone"> · {{ record.studentId.phone }}</span>
+          </div>
           <div v-if="record.internshipStartDate || record.internshipEndDate" class="info-row">
             <strong>Period:</strong>
             {{ formatDate(record.internshipStartDate || record.aplStartDate) }}
@@ -36,6 +42,16 @@
           </div>
           <div v-if="record.completedAt" class="info-row">
             <strong>Avslutad:</strong> {{ formatDate(record.completedAt) }}
+          </div>
+          <div class="document-status-row" aria-label="Dokumentstatus">
+            <span :class="['document-status', record.cvDocId ? 'is-present' : 'is-missing']">
+              <v-icon size="16">{{ record.cvDocId ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}</v-icon>
+              CV {{ record.cvDocId ? 'uppladdat' : 'saknas' }}
+            </span>
+            <span :class="['document-status', record.contractDocId ? 'is-present' : 'is-missing']">
+              <v-icon size="16">{{ record.contractDocId ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}</v-icon>
+              Avtal {{ record.contractDocId ? 'uppladdat' : 'saknas' }}
+            </span>
           </div>
           <div v-if="record.notes" class="info-row notes">
             <strong>Anteckningar:</strong> {{ record.notes }}
@@ -141,6 +157,20 @@ onMounted(loadCompleted)
   color: #6c757d;
   margin-top: 8px;
 }
+.document-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+.document-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.document-status.is-present { color: #2e7d32; }
+.document-status.is-missing { color: #b45309; }
 .empty-state {
   text-align: center;
   padding: 40px;
