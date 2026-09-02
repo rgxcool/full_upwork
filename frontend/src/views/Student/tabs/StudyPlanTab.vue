@@ -95,7 +95,12 @@
                   </div>
                 </div>
 
-                <div class="education-details">
+                  <div class="education-details">
+                  <div class="study-plan-dates" v-if="element.startDate || element.endDate || element.slutprovDate">
+                    <span><strong>Start:</strong> {{ formatDate(element.startDate) || '–' }}</span>
+                    <span><strong>Slut:</strong> {{ formatDate(element.endDate) || '–' }}</span>
+                    <span v-if="element.slutprovDate"><strong>Slutprov:</strong> {{ formatDate(element.slutprovDate) }}</span>
+                  </div>
                   <!-- Teacher Information -->
                   <div v-if="getTeacherName(element)" class="education-teacher">
                     <strong>Lärare:</strong>
@@ -1290,5 +1295,13 @@ export default {
   gap: 12px;
   font-size: 12px;
   color: #6c757d;
+}
+.study-plan-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #475467;
+  font-size: 13px;
 }
 </style>
