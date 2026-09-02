@@ -409,6 +409,16 @@
                 <span class="notis-type">{{ notificationTypeLabel(notification.type) }}</span>
                 <span class="notis-message">{{ notification.message }}</span>
               </div>
+              <div v-if="notification.type === 'task_reminder'" class="task-reminder-detail">
+                <div
+                  v-for="task in notification.meta?.tasks"
+                  :key="task.description + task.dueDate + task.dueTime"
+                  class="task-reminder-row"
+                >
+                  <span class="task-reminder-desc">{{ task.description }}</span>
+                  <span class="task-reminder-time">{{ remainingLabel(task.dueDate, task.dueTime) }}</span>
+                </div>
+              </div>
               <div class="notis-actions">
                 <template v-if="isAdmin && notification.type === 'inactivity_action'">
                   <button
@@ -448,6 +458,7 @@
   import { useToast } from '@/composables/useToast.js'
   import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
   import '@vuepic/vue-datepicker/dist/main.css'
+  import { remainingLabel } from '@/utils/taskTime.js'
 
   export default {
     components: { DatePicker },
@@ -631,6 +642,7 @@
         diploma_ready: 'Diplom klart',
         grade_locked: 'Betyg låst',
         grade_unlocked: 'Betyg upplåst',
+        task_reminder: 'Att göra',
       }
 
       const notificationTypeLabel = (type) => notificationTypeLabels[type] || type
@@ -1037,6 +1049,8 @@
         resetAllNotifications,
         notifications,
         showNotisPanel,
+        notificationTypeLabel,
+        remainingLabel,
         showProfileMenu,
         toggleProfileMenu,
         profileDropdown,
@@ -1425,6 +1439,39 @@
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
+  }
+
+  .task-reminder-detail {
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background: #f8fafc;
+    border: 1px solid #eef2f7;
+    border-radius: 0.375rem;
+  }
+
+  .task-reminder-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.2rem 0;
+  }
+
+  .task-reminder-row + .task-reminder-row {
+    border-top: 1px dashed #e5e7eb;
+  }
+
+  .task-reminder-desc {
+    font-size: 0.8125rem;
+    color: #374151;
+    overflow-wrap: anywhere;
+  }
+
+  .task-reminder-time {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #667eea;
+    white-space: nowrap;
   }
 
   .action-btn {

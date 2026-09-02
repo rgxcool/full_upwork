@@ -14,6 +14,7 @@
 import logger from "../utils/logger.js";
 import { runInactivityScan } from "./inactivityScanner.js";
 import { runDiplomaNotificationScan } from "./diplomaNotificationScan.js";
+import { runTaskReminderScan } from "./taskReminderScan.js";
 
 const SCAN_HOUR_UTC = (() => {
     const raw = parseInt(process.env.INACTIVITY_SCAN_HOUR_UTC, 10);
@@ -76,6 +77,58 @@ const scheduleNext = () => {
 };
 
 export const isSchedulerStarted = () => started;
+
+/**
+ * Run the task-reminder scan every few minutes so the bell reflects the latest
+ * due times even when no task mutation happened on the server recently.
+ */
+let taskTimer = null;
+let taskRunning = false;
+let taskStarted = false;
+
+const TASK_SCAN_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
+
+const executeTaskScan = async () => {
+    if (taskRunning) return;
+    taskRunning = true;
+    try {
+        await runTaskReminderScan();
+    } catch (err) {
+        logger.error({ err }, "Task reminder scan failed");
+    } finally {
+        taskRunning = false;
+    }
+};
+
+const scheduleNextTaskScan = () => {
+    taskTimer = setTimeout(() => {
+        executeTaskScan();
+        scheduleNextTaskScan();
+    }, TASK_SCAN_INTERVAL_MS);
+    taskTimer.unref?.();
+};
+
+export const startTaskReminderScheduler = () => {
+    if (taskStarted) return;
+    if (process.env.NODE_ENV === "test") {
+        logger.info("Task reminder scheduler skipped (test mode)");
+        return;
+    }
+    taskStarted = true;
+    executeTaskScan();
+    scheduleNextTaskScan();
+};
+
+export const stopTaskReminderScheduler = () => {
+    if (taskTimer) {
+        clearTimeout(taskTimer);
+        taskTimer = null;
+    }
+    if (taskStarted) {
+        executeTaskScan();
+    }
+    taskStarted = false;
+};
 
 /**
  * Start the daily inactivity scan. No-op when disabled (test mode or

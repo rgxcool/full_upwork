@@ -504,12 +504,12 @@
           console.error('Error creating teacher:', error)
 
           let errorMessage = 'Ett fel uppstod när lärarkontot skulle skapas.'
-          if (error.response?.status === 401) {
+          if (error.status === 401) {
             errorMessage = 'Du är inte behörig. Vänligen logga in igen.'
-          } else if (error.response?.status === 409) {
+          } else if (error.status === 409) {
             errorMessage = 'En användare med denna e-postadress finns redan.'
-          } else if (error.response?.data?.error) {
-            errorMessage = error.response.data.error
+          } else if (error.message) {
+            errorMessage = error.message
           }
 
           this.toast.error(errorMessage)

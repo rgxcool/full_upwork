@@ -81,7 +81,23 @@ if [ ! -d "$ROOT/frontend/node_modules" ]; then
 fi
 log "Dependencies ready"
 
-# ── 3. Kill any existing processes on our ports ──────
+# ── 3. Load education data ───────────────────────────
+log "Loading education data (dropData + updateEducation)..."
+(
+  set -a
+  # shellcheck disable=SC1091
+  source "$ENV_FILE"
+  set +a
+  cd "$ROOT/backend"
+  node scripts/dropData.js
+  node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
+) || {
+  err "Failed to load education data. Check the script output above."
+  exit 1
+}
+log "Education data loaded"
+
+# ── 4. Kill any existing processes on our ports ──────
 for port in $BACKEND_PORT $FRONTEND_PORT; do
   pid=$(lsof -ti :"$port" 2>/dev/null || true)
   if [ -n "$pid" ]; then
@@ -91,7 +107,7 @@ for port in $BACKEND_PORT $FRONTEND_PORT; do
   fi
 done
 
-# ── 4. Start backend ────────────────────────────────
+# ── 5. Start backend ────────────────────────────────
 log "Starting backend on port $BACKEND_PORT..."
 (cd "$ROOT/backend" && node index.js &>"$ROOT/backend.log") &
 BACKEND_PID=$!
@@ -109,7 +125,7 @@ else
   exit 1
 fi
 
-# ── 5. Start frontend ───────────────────────────────
+# ── 6. Start frontend ───────────────────────────────
 log "Starting frontend on port $FRONTEND_PORT..."
 (cd "$ROOT/frontend" && npx vite --host &>"$ROOT/frontend.log") &
 FRONTEND_PID=$!
@@ -127,7 +143,7 @@ else
   exit 1
 fi
 
-# ── 6. Print summary ────────────────────────────────
+# ── 7. Print summary ────────────────────────────────
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${CYAN}  Mindful Learning — App is running!${NC}"
@@ -152,7 +168,7 @@ echo ""
 echo -e "  ${YELLOW}Press Ctrl+C to stop all services${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# ── 7. Cleanup on exit ──────────────────────────────
+# ── 8. Cleanup on exit ──────────────────────────────
 cleanup() {
   echo ""
   warn "Shutting down..."

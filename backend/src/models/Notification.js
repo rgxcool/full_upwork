@@ -22,6 +22,16 @@ const notificationSchema = new mongoose.Schema({
       catalogId: { type: mongoose.Schema.Types.ObjectId, ref: "GradeCatalog" }, // Betygskatalog (Scrive)
       documentId: { type: String }, // Scrive Document ID
       url: { type: String }, // för direktlänk i frontend
+      // Att göra-påminnelser (task_reminder)
+      userId: { type: String }, // Target user for the task reminder
+      taskCount: { type: Number, default: 0 },
+      tasks: [
+        {
+          description: { type: String },
+          dueDate: { type: String },
+          dueTime: { type: String },
+        },
+      ],
     }
 });
 
