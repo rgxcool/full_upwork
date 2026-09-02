@@ -115,23 +115,25 @@
               >
                 <template #headers>
                   <tr>
+                    <th>Elev</th>
                     <th>Modul</th>
                     <th>Status</th>
-                    <th>Senast uppdaterad</th>
+                    <th>Planerat datum</th>
+                    <th>Inlämnat</th>
                   </tr>
                 </template>
                 <template #item="{ item }">
                   <tr>
-                    <td>{{ item.moduleNumber }}</td>
+                    <td>{{ item.studentName || selectedStudentName }}</td>
+                    <td>{{ item.moduleName || item.moduleNumber }}</td>
                     <td>
-                      <v-icon v-if="item.status === '✓'" color="green">mdi-check</v-icon>
-                      <v-icon v-else-if="item.status === '✗'" color="red">mdi-close</v-icon>
-                      <span v-else>Ej valt</span>
+                      <span class="status-indicator" :class="item.status === '✓' ? 'is-complete' : 'is-incomplete'">
+                        <v-icon size="18">{{ item.status === '✓' ? 'mdi-check-circle' : 'mdi-close-circle-outline' }}</v-icon>
+                        {{ item.status === '✓' ? 'Klar' : 'Ej klar' }}
+                      </span>
                     </td>
-                    <td>
-                      <span v-if="item.updatedAt">{{ formatDate(item.updatedAt) }}</span>
-                      <span v-else>Ej uppfört</span>
-                    </td>
+                    <td>{{ item.scheduledDate ? formatDate(item.scheduledDate) : '–' }}</td>
+                    <td>{{ item.submittedAt ? formatDate(item.submittedAt) : '–' }}</td>
                   </tr>
                 </template>
               </v-data-table>
@@ -183,6 +185,7 @@ export default {
     const completedModules = ref(0)
     const completionRate = ref(0)
     const tableData = ref([])
+    const selectedStudentName = computed(() => filteredStudents.value.find((student) => student._id === selectedStudent.value)?.name || '–')
     const hasReport = ref(false)
 
     const loadCourseInstances = async () => {
@@ -236,7 +239,13 @@ export default {
           completedModules.value = data.completedModules || 0
           completionRate.value = parseFloat(data.completionRate) || 0
           tableData.value = Object.entries(data.completedComponents || {}).map(
-            ([moduleNumber, status]) => ({ moduleNumber, status })
+            ([moduleNumber, value]) => ({
+              moduleNumber,
+              status: typeof value === 'object' ? (value.completed ? '✓' : '✗') : value,
+              moduleName: typeof value === 'object' ? value.moduleName : undefined,
+              scheduledDate: typeof value === 'object' ? value.scheduledDate : undefined,
+              submittedAt: typeof value === 'object' ? value.submittedAt : undefined,
+            })
           )
         }
       } catch (err) {

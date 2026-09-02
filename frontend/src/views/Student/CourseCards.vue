@@ -66,6 +66,12 @@
               </div>
             </div>
 
+            <div v-if="card.currentModule || card.currentModuleNumber" class="current-module" aria-label="Aktuell modul">
+              <span class="date-label">Aktuell modul</span>
+              <strong>{{ card.currentModule?.title || card.currentModule?.name || `Modul ${card.currentModuleNumber}` }}</strong>
+              <span v-if="card.currentModule?.status" class="module-status">{{ card.currentModule.status }}</span>
+            </div>
+
             <div class="course-card-dates">
               <div class="date-block">
                 <span class="date-label">Start</span>
