@@ -127,6 +127,20 @@ describe("Task Routes", () => {
             });
         });
 
+        it("creates a task with a due date and time", async () => {
+            const response = await request(app)
+                .post("/api/task/")
+                .set(buildAuthHeader(userId))
+                .send({ description: "Meeting", dueDate: "2026-09-10", dueTime: "14:30" })
+                .expect(201);
+
+            expect(response.body).toMatchObject({
+                description: "Meeting",
+                dueDate: "2026-09-10",
+                dueTime: "14:30",
+            });
+        });
+
         it("returns 500 when task creation fails", async () => {
             vi.spyOn(Task, "create").mockRejectedValueOnce(
                 new Error("Create failed")
@@ -178,6 +192,46 @@ describe("Task Routes", () => {
                 _id: task._id.toString(),
                 isDone: true,
                 userId,
+            });
+        });
+
+        it("updates description, due date and due time", async () => {
+            const task = await Task.create({
+                description: "Old task",
+                userId,
+            });
+
+            const response = await request(app)
+                .put(`/api/task/${task._id}`)
+                .set(buildAuthHeader(userId))
+                .send({ description: "New task", dueDate: "2026-09-15", dueTime: "09:00" })
+                .expect(200);
+
+            expect(response.body).toMatchObject({
+                _id: task._id.toString(),
+                description: "New task",
+                dueDate: "2026-09-15",
+                dueTime: "09:00",
+            });
+        });
+
+        it("clears due date and time when sent as null", async () => {
+            const task = await Task.create({
+                description: "Task",
+                dueDate: "2026-09-15",
+                dueTime: "09:00",
+                userId,
+            });
+
+            const response = await request(app)
+                .put(`/api/task/${task._id}`)
+                .set(buildAuthHeader(userId))
+                .send({ dueDate: null, dueTime: null })
+                .expect(200);
+
+            expect(response.body).toMatchObject({
+                dueDate: null,
+                dueTime: null,
             });
         });
 

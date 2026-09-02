@@ -184,12 +184,20 @@ const store = createStore({
       }
     },
 
-    async addTask({ commit }, description) {
+    async addTask({ commit }, payload) {
       try {
-        const { data } = await api.post('/task', { description })
-        commit('ADD_TASK', data)
+        const body =
+          typeof payload === "string"
+            ? { description: payload }
+            : {
+                description: payload?.description,
+                dueDate: payload?.dueDate || null,
+                dueTime: payload?.dueTime || null,
+              };
+        const { data } = await api.post("/task", body)
+        commit("ADD_TASK", data)
       } catch (error) {
-        console.error('Failed to add task:', error)
+        console.error("Failed to add task:", error)
       }
     },
 

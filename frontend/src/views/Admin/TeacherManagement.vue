@@ -955,10 +955,10 @@
         } catch (error) {
           console.error('Error creating teacher:', error)
           let errorMessage = 'Kunde inte skapa lärare'
-          if (error.response?.status === 409) {
+          if (error.status === 409) {
             errorMessage = 'En användare med denna e-postadress finns redan'
-          } else if (error.response?.data?.error) {
-            errorMessage = error.response.data.error
+          } else if (error.message) {
+            errorMessage = error.message
           }
           this.toast.error(errorMessage)
         } finally {

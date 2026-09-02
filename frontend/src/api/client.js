@@ -85,6 +85,9 @@ function extractUserMessage(error) {
   if (data?.error?.message && typeof data.error.message === 'string') {
     return data.error.message
   }
+  if (data?.error && typeof data.error === 'string') {
+    return data.error
+  }
 
   return GENERIC_MESSAGES[error.response?.status] || 'Ett fel uppstod. Försök igen.'
 }
