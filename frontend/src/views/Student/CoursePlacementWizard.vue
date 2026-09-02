@@ -120,8 +120,24 @@
         <div v-if="step === 3" class="wizard-step">
           <h4>Studietakt & period</h4>
           <div class="form-group">
-            <label>Startdatum</label>
-            <input v-model="startDate" type="date" class="form-control" />
+            <label for="placement-start-date">Startdatum</label>
+            <input id="placement-start-date" v-model="startDate" type="date" class="form-control" />
+          </div>
+          <div class="form-group support-needs-field">
+            <label>
+              <input v-model="needsSupport" type="checkbox" />
+              Eleven har stödbehov
+            </label>
+            <small class="field-hint">{{ needsSupport ? 'Stödbehov markerat' : 'Inga stödbehov markerade' }}</small>
+          </div>
+          <div v-if="placementType === 'package'" class="form-group">
+            <label for="package-pace">Studietakt för kurspaket</label>
+            <select id="package-pace" v-model="pace" class="form-control">
+              <option :value="100">100%</option>
+              <option :value="50">50%</option>
+              <option :value="25">25%</option>
+            </select>
+            <small class="field-hint">Vald studietakt: {{ pace }}%</small>
           </div>
           <div v-if="placementType === 'course'" class="form-group">
             <label>Kurslängd</label>
@@ -143,6 +159,21 @@
               {{ packageCourses.length - excludeCourseIds.length }} kurser,
               startar {{ formatDate(startDate) }}
             </p>
+            <label class="apl-checkbox">
+              <input v-model="aplCompletedElsewhere" type="checkbox" />
+              APL redan genomförd på annan plats
+            </label>
+            <div v-if="aplCompletedElsewhere" class="apl-upload-note">
+              Dokumentet laddas upp till elevens Dokument.
+              <FileUploaderDownloader :student-id="student._id" :student-name="student.name" />
+            </div>
+          </div>
+          <div class="calculated-dates" aria-live="polite">
+            <strong>Beräknade datum</strong>
+            <span>Startdatum: {{ formatDate(startDate) }}</span>
+            <span>Slutdatum: {{ formatDate(calculatedEndDate) }}</span>
+            <span v-if="placementType === 'package'">Studietakt: {{ pace }}%</span>
+            <span v-if="placementType === 'course' || placementType === 'package'">Slutprov: enligt kursplan</span>
           </div>
         </div>
 
@@ -292,6 +323,7 @@ import { ref, computed, watch, onMounted } from 'vue';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
 import { municipalityPricing } from '@/utils/municipalityPricing.js';
+import FileUploaderDownloader from '@/components/FileUploaderDownloader.vue';
 
 export default {
   name: 'CoursePlacementWizard',
@@ -301,6 +333,7 @@ export default {
     preselectedInstanceId: { type: String, default: null },
   },
   emits: ['close', 'placed'],
+  components: { FileUploaderDownloader },
   setup(props, { emit }) {
     const toast = useToast();
 
@@ -319,6 +352,18 @@ export default {
 
     const startDate = ref('');
     const durationWeeks = ref(5);
+    const pace = ref(100);
+    const needsSupport = ref(Boolean(props.student.needsSupport));
+    const aplCompletedElsewhere = ref(false);
+    const calculatedEndDate = computed(() => {
+      if (!startDate.value) return '';
+      const weeks = placementType.value === 'package'
+        ? Math.round(5 * (100 / pace.value))
+        : durationWeeks.value;
+      const date = new Date(`${startDate.value}T00:00:00`);
+      date.setDate(date.getDate() + weeks * 7);
+      return date.toISOString().slice(0, 10);
+    });
 
     const examMode = ref('on-site');
     const examMunicipality = ref('');
@@ -429,6 +474,8 @@ export default {
           startDate: startDate.value,
           examMode: examMode.value,
           municipality: examMunicipality.value || props.student.municipality?.type || '',
+          pace: placementType.value === 'package' ? pace.value : undefined,
+          needsSupport: needsSupport.value,
         };
 
         if (placementType.value === 'course' && selectedCourse.value) {
@@ -483,7 +530,9 @@ export default {
         await client.post('/process-education', {
           studentId: props.student._id,
           educationEntries: entries,
-          needsSupport: false,
+          needsSupport: needsSupport.value,
+          pace: placementType.value === 'package' ? pace.value : undefined,
+          aplCompletedElsewhere: placementType.value === 'package' ? aplCompletedElsewhere.value : false,
           examMode: examMode.value,
         });
 
@@ -560,6 +609,10 @@ export default {
       excludeCourseIds,
       startDate,
       durationWeeks,
+      pace,
+      needsSupport,
+      aplCompletedElsewhere,
+      calculatedEndDate,
       examMode,
       examMunicipality,
       isLoadingPreview,
@@ -942,6 +995,31 @@ export default {
 
 .footer-spacer {
   flex: 1;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 4px;
+  color: #667085;
+}
+
+.calculated-dates {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #d9e2ec;
+  border-radius: 6px;
+  background: #f7fafc;
+}
+
+.calculated-dates span { color: #344054; }
+.apl-checkbox { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.apl-upload-note { margin-top: 12px; }
+
+@media (max-width: 640px) {
+  .wizard-footer { padding: 12px 16px; }
+  .preview-table-wrapper { overflow-x: auto; }
 }
 
 .btn {
