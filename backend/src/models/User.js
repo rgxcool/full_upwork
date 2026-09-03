@@ -32,6 +32,9 @@ const UserSchema = new mongoose.Schema(
         },
         mustChangePassword: { type: Boolean, default: false },
         lastLoginAt: { type: Date, default: null },
+        // When false the account is disabled/deactivated: protected operations
+        // are denied regardless of any roles/permissions in a valid JWT.
+        active: { type: Boolean, default: true },
         // Staff vacation tracking (Section 6.7)
         onVacation: { type: Boolean, default: false },
         vacationStart: { type: Date },

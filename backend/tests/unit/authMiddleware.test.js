@@ -20,7 +20,7 @@ describe("auth middleware", () => {
         expect(authSpy).toHaveBeenCalledWith(req, res, next);
     });
 
-    it("hasRole returns 401 when user or role missing", () => {
+    it("hasRole returns 401 when user or role missing", async () => {
         const middleware = hasRole(["admin"]);
         const req = {};
         const json = vi.fn();
@@ -33,14 +33,14 @@ describe("auth middleware", () => {
         };
         const next = vi.fn();
 
-        middleware(req, res, next);
+        await middleware(req, res, next);
 
         expect(res.statusCode).toBe(401);
         expect(json).toHaveBeenCalledWith({ error: "Unauthorized" });
         expect(next).not.toHaveBeenCalled();
     });
 
-    it("hasRole returns 403 when role not allowed", () => {
+    it("hasRole returns 403 when role not allowed", async () => {
         const middleware = hasRole(["admin"]);
         const req = { user: { role: "student" } };
         const json = vi.fn();
@@ -53,20 +53,20 @@ describe("auth middleware", () => {
         };
         const next = vi.fn();
 
-        middleware(req, res, next);
+        await middleware(req, res, next);
 
         expect(res.statusCode).toBe(403);
         expect(json).toHaveBeenCalledWith({ error: "Forbidden" });
         expect(next).not.toHaveBeenCalled();
     });
 
-    it("hasRole calls next for allowed roles", () => {
+    it("hasRole calls next for allowed roles", async () => {
         const middleware = hasRole(["teacher", "admin"]);
         const req = { user: { role: "teacher" } };
         const res = {};
         const next = vi.fn();
 
-        middleware(req, res, next);
+        await middleware(req, res, next);
 
         expect(next).toHaveBeenCalledOnce();
     });

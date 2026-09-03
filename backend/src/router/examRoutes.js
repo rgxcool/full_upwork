@@ -1278,7 +1278,10 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
 
                 logger.debug({ student: student.name, finalExamDate: student.finalExamDate }, "Manual - Added student");
             } catch (err) {
-                logger.warn({ err, student }, "Error in studentsWithFinalExam loop");
+                logger.warn(
+                  { err, studentId: student._id, studentName: student.name },
+                  "Error in studentsWithFinalExam loop",
+                );
             }
         }
 
@@ -2211,7 +2214,7 @@ router.put("/mark-attendance/:personalNumber", isAuthenticated, hasRole(ALLOWED_
 
         const student = await Student.findOne({ personalNumber: normalizedPN });
 
-        logger.debug({ student }, "Found student");
+        logger.debug({ studentId: student?._id ?? null }, "Student found for mark-attendance");
         if (!student) {
             return res.status(404).json({ message: "Student not found" });
         }
@@ -2346,7 +2349,10 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
             examMunicipality: eventExamMunicipality,
             examLocation: eventExamLocation,
         } = req.body;
-        logger.debug({ date, teacherId, students, courseName, courseId }, "mark-attendance called with");
+        logger.debug(
+          { date, teacherId, studentCount: Array.isArray(students) ? students.length : undefined, courseName, courseId },
+          "mark-attendance called with",
+        );
 
         if (!date || !teacherId || !Array.isArray(students)) {
             return res

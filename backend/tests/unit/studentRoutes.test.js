@@ -1597,18 +1597,35 @@ describe("DELETE /student/:id", () => {
 });
 
 describe("DELETE /students", () => {
-    it("clears all students", async () => {
+    it("requires an explicit confirmation token before clearing all students", async () => {
         const handler = findRouteHandler("/students", "DELETE");
         Student.find.mockReturnValue({
             lean: vi.fn().mockResolvedValue([]),
         });
         const res = createRes();
 
-        await handler({ params: {}, user: { role: "admin" } }, res);
+        await handler({ params: {}, body: {}, user: { role: "admin" } }, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(Student.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("clears all students when confirmation token is supplied", async () => {
+        const handler = findRouteHandler("/students", "DELETE");
+        Student.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+        const res = createRes();
+
+        await handler(
+            { params: {}, body: { confirm: "DELETE ALL STUDENTS" }, user: { role: "admin" } },
+            res
+        );
 
         expect(Student.deleteMany).toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith({
             message: "All students deleted successfully",
+            deletedStudents: 0,
             deletedFilesCount: 0,
         });
     });
@@ -1617,7 +1634,10 @@ describe("DELETE /students", () => {
         Student.deleteMany.mockRejectedValueOnce(new Error("boom all"));
         const res = createRes();
 
-        await handler({ params: {}, user: { role: "admin" } }, res);
+        await handler(
+            { params: {}, body: { confirm: "DELETE ALL STUDENTS" }, user: { role: "admin" } },
+            res
+        );
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({

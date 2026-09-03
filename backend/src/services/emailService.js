@@ -51,6 +51,19 @@ export const getEmailSignature = () =>
 let transporter = null;
 let transportMode = null;
 
+// Bounded retry for transient SMTP failures. A single send must never throw,
+// but a flaky SMTP connection should get a couple of quick retries before we
+// give up and report the failure (see sendEmail). Read per call so tests and
+// operators can tune via env without restarting module-load semantics.
+const maxEmailAttempts = () => {
+    const raw = parseInt(process.env.EMAIL_MAX_ATTEMPTS, 10);
+    return Number.isFinite(raw) && raw >= 1 ? raw : 3;
+};
+const emailRetryDelayMs = () => {
+    const raw = parseInt(process.env.EMAIL_RETRY_DELAY_MS, 10);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 500;
+};
+
 /**
  * Select (and cache) the outbound transporter based on configured credentials.
  * @returns {{ transporter: import("nodemailer").Transporter, transportMode: string }}
@@ -124,41 +137,61 @@ export const sendEmail = async ({ to, subject, text, html, attachments }) => {
 
     const { transporter: mailer, transportMode: mode } = getTransporter();
 
-    try {
-        const info = await mailer.sendMail({
-            from: EMAIL_FROM,
-            to,
-            subject,
-            text,
-            html,
-            ...(Array.isArray(attachments) && attachments.length
-                ? { attachments }
-                : {}),
-        });
+    const maxAttempts = maxEmailAttempts();
+    const retryDelayMs = emailRetryDelayMs();
 
-        if (mode === "stream") {
-            // Real delivery is NOT configured — say so explicitly on every send
-            // instead of pretending the mail went out.
-            logger.warn(
-                { to, subject, messageId: info?.messageId },
-                "EMAIL NOT DELIVERED (stream transport — unconfigured SMTP). Would have sent: " +
-                    `"${subject}" to ${to}`
-            );
-        } else {
-            logger.info(
-                { to, subject, messageId: info?.messageId, transportMode: mode },
-                "Email sent"
-            );
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const info = await mailer.sendMail({
+                from: EMAIL_FROM,
+                to,
+                subject,
+                text,
+                html,
+                ...(Array.isArray(attachments) && attachments.length
+                    ? { attachments }
+                    : {}),
+            });
+
+            if (mode === "stream") {
+                // Real delivery is NOT configured — say so explicitly on every send
+                // instead of pretending the mail went out.
+                logger.warn(
+                    { to, subject, messageId: info?.messageId },
+                    "EMAIL NOT DELIVERED (stream transport — unconfigured SMTP). Would have sent: " +
+                        `"${subject}" to ${to}`
+                );
+            } else {
+                logger.info(
+                    { to, subject, messageId: info?.messageId, transportMode: mode, attempt },
+                    "Email sent"
+                );
+            }
+
+            return { success: true, messageId: info?.messageId, transportMode: mode, attempt };
+        } catch (err) {
+            lastError = err;
+            if (attempt < maxAttempts) {
+                logger.warn(
+                    { err, to, subject, attempt },
+                    `Email send attempt ${attempt} failed; retrying`
+                );
+                await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+            }
         }
-
-        return { success: true, messageId: info?.messageId, transportMode: mode };
-    } catch (err) {
-        logger.error(
-            { err, to, subject },
-            "Email send failed (non-fatal, caller continues)"
-        );
-        return { success: false, error: err.message, transportMode: mode };
     }
+
+    logger.error(
+        { err: lastError, to, subject, attempts: maxAttempts },
+        "Email send failed after retries (non-fatal, caller continues)"
+    );
+    return {
+        success: false,
+        error: lastError?.message || "Unknown error",
+        transportMode: mode,
+        attempts: maxAttempts,
+    };
 };
 
 // ── Templates ──────────────────────────────────────────────────────────────
