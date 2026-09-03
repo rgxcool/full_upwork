@@ -136,6 +136,35 @@ describe("sendEmail", () => {
     expect(result).toMatchObject({ success: false, transportMode: "gmail" });
     expect(result.error).toContain("SMTP connection refused");
   });
+
+  it("retries a transient transport failure and succeeds on a later attempt", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    process.env.EMAIL_MAX_ATTEMPTS = "3";
+    process.env.EMAIL_RETRY_DELAY_MS = "0";
+    sendMailMock
+      .mockRejectedValueOnce(new Error("temporary reject"))
+      .mockRejectedValueOnce(new Error("temporary reject"))
+      .mockResolvedValue({ messageId: "retried-id" });
+
+    const result = await sendEmail({ to: "b@c.se", subject: "Retry me" });
+
+    expect(result).toMatchObject({ success: true, messageId: "retried-id" });
+    expect(result.attempt).toBe(3);
+    expect(sendMailMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up after a bounded number of attempts on a persistent failure", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    process.env.EMAIL_MAX_ATTEMPTS = "2";
+    process.env.EMAIL_RETRY_DELAY_MS = "0";
+    sendMailMock.mockRejectedValue(new Error("persistent reject"));
+
+    const result = await sendEmail({ to: "d@e.se", subject: "Give up" });
+
+    expect(result).toMatchObject({ success: false, transportMode: "gmail" });
+    expect(result.attempts).toBe(2);
+    expect(sendMailMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("renderLarteametEmail", () => {

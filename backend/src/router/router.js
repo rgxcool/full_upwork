@@ -35,6 +35,8 @@ import placementRoutes from "./placementRoutes.js";
 import aplRoutes from "./aplRoutes.js";
 import courseBankRoutes from "./courseBankRoutes.js";
 import questionBankRoutes from "./questionBankRoutes.js";
+import certificateRoutes from "./certificateRoutes.js";
+import certificateRecordRoutes from "./certificateRecordRoutes.js";
 
 const router = Router();
 
@@ -72,7 +74,9 @@ router.use("/api/chatbot", chatbotRoutes);
 router.use("/api", faqRoutes);
 router.use("/api/course-bank", courseBankRoutes);
 router.use("/api/question-bank", questionBankRoutes);
-router.use("/api", studyCertificateRoutes);
+ router.use("/api", studyCertificateRoutes);
+ router.use("/api", certificateRoutes);
+ router.use("/api", certificateRecordRoutes);
 router.use("/api/auditlogs", auditRoutes);
 router.use("/api", placementRoutes);
 router.use("/api", aplRoutes);

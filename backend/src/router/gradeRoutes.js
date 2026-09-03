@@ -18,6 +18,7 @@ import {
     gradeFromScale,
     validateScalePayload,
 } from "../utils/gradingScale.js";
+import { recordAudit } from "../utils/auditLog.js";
 
 import {
   createNotification,
@@ -518,6 +519,13 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
       }
     );
 
+    await recordAudit(req, {
+      entityType: "StudentEnrollment",
+      entityId: studentId || courseId,
+      action: "grade_upsert",
+      description: `Betyg ${grade || "N/A"} sparat för student ${studentId} i kurs ${courseId}`,
+    });
+
     let studentRecord = null;
     let teacherRecord = null;
     if (studentId && Student.findById) {
@@ -634,14 +642,42 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
     }
 
     const lockerName = req.user?.name || req.user?.username || "Användare";
+
+    // Target the notification to the responsible teacher (the student's assigned
+    // teacher), not the person performing the lock. This keeps the "grade locked"
+    // alert visible to the teacher who owns the student/course so it reaches the
+    // intended audience. Falls back to the acting user when none can be resolved.
+    let responsibleTeacherUser = null;
+    let responsibleTeacherRecord = null;
+    try {
+      const studentForTarget = targetStudentId && Student.findById
+        ? await Student.findById(targetStudentId).select("teacherId").catch(() => null)
+        : null;
+      if (studentForTarget?.teacherId) {
+        responsibleTeacherRecord = await Teacher.findById(studentForTarget.teacherId).catch(() => null) ||
+          (Teacher.findOne ? await Teacher.findOne({ userId: studentForTarget.teacherId }).catch(() => null) : null);
+      }
+      if (!responsibleTeacherRecord && Teacher?.findOne) {
+        responsibleTeacherRecord = await Teacher.findOne({ userId }).catch(() => null);
+      }
+      if (responsibleTeacherRecord) {
+        responsibleTeacherUser = responsibleTeacherRecord.userId || responsibleTeacherRecord._id;
+      }
+    } catch (targetErr) {
+      logger.warn({ err: targetErr }, "Could not resolve responsible teacher for grade lock notification");
+    }
+    // Fall back to the acting user so a notification is always targeted.
+    responsibleTeacherUser = responsibleTeacherUser || userId;
+
     await Notification.create({
       type: NOTIFICATION_TYPES.GRADE_LOCKED,
       message: `Betyg låst för ${studentName} (${courseName}) av ${role === "teacher" ? "lärare" : "admin"} ${lockerName}.`,
+      teacher: responsibleTeacherRecord?._id || undefined,
       meta: {
         studentId: targetStudentId,
         courseId: targetCourseId,
         enrollmentId: enrollmentId || null,
-        teacherId: userId,
+        teacherId: responsibleTeacherUser || undefined,
       },
       resolved: false,
     });
@@ -812,6 +848,13 @@ router.put('/update-grade/:enrollmentId', authenticateUser, async (req, res) => 
 
     await enrollment.save();
 
+    await recordAudit(req, {
+      entityType: "StudentEnrollment",
+      entityId: enrollmentId,
+      action: "grade_update",
+      description: `Betyg uppdaterat till ${enrollment.grade || "N/A"} för enrollment ${enrollmentId}`,
+    });
+
     const targetStudentId = enrollment.studentId?.toString() || enrollment.studentId;
     const targetCourseId = enrollment.courseInstanceId?.toString() || enrollment.courseInstanceId;
 
@@ -941,6 +984,12 @@ router.post("/grading-scale", authenticateUser, async (req, res) => {
       return res.status(409).json({ error: "En betygsskala för den termen och det ämnet finns redan." });
     }
     const doc = await GradingScale.create({ term: term.trim(), subject: subject.trim(), scale });
+    await recordAudit(req, {
+      entityType: "GradingScale",
+      entityId: doc._id,
+      action: "grading_scale_create",
+      description: `Betygsskala skapad för ${term.trim()} ${subject.trim()}`,
+    });
     res.status(201).json(doc);
   } catch (error) {
     logger.error({ err: error }, "Error creating grading scale");
@@ -975,6 +1024,12 @@ router.put("/grading-scale/:id", authenticateUser, async (req, res) => {
     existing.subject = subject.trim();
     existing.scale = scale;
     await existing.save();
+    await recordAudit(req, {
+      entityType: "GradingScale",
+      entityId: id,
+      action: "grading_scale_update",
+      description: `Betygsskala uppdaterad (${existing.term} ${existing.subject})`,
+    });
     res.json(existing);
   } catch (error) {
     logger.error({ err: error }, "Error updating grading scale");
@@ -992,6 +1047,12 @@ router.delete("/grading-scale/:id", authenticateUser, async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: "Betygsskalan hittades inte." });
     }
+    await recordAudit(req, {
+      entityType: "GradingScale",
+      entityId: id,
+      action: "grading_scale_delete",
+      description: `Betygsskala borttagen (${deleted.term} ${deleted.subject})`,
+    });
     res.json({ success: true, message: "Betygsskala borttagen." });
   } catch (error) {
     logger.error({ err: error }, "Error deleting grading scale");

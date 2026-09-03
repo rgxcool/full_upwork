@@ -14,6 +14,7 @@
 import logger from "../utils/logger.js";
 import { runInactivityScan } from "./inactivityScanner.js";
 import { runDiplomaNotificationScan } from "./diplomaNotificationScan.js";
+import { runGradingReminderScan } from "./gradingReminderScan.js";
 import { runTaskReminderScan } from "./taskReminderScan.js";
 
 const SCAN_HOUR_UTC = (() => {
@@ -55,6 +56,12 @@ const executeScan = async () => {
             logger.info({ summary: diplomaSummary }, "Diploma notification scan completed");
         } catch (err) {
             logger.error({ err }, "Diploma notification scan failed");
+        }
+        try {
+            const gradingSummary = await runGradingReminderScan();
+            logger.info({ summary: gradingSummary }, "Grading reminder scan completed");
+        } catch (err) {
+            logger.error({ err }, "Grading reminder scan failed");
         }
     } catch (error) {
         logger.error({ err: error }, "Scheduled inactivity scan failed");

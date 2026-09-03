@@ -112,7 +112,11 @@ router.get("/actionplan/:studentId", isAuthenticated, hasRole(ALLOWED_STAFF_ROLE
     }
 });
 
-router.post("/form-questions", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+// Modifying the action-plan questionnaire structure (the form questions) is a
+// system-wide configuration change. Only system administrators may do so —
+// never trust a frontend isSystemAdmin flag. Teachers edit per-student action
+// plans via /save-actionplan, not the questionnaire structure.
+router.post("/form-questions", isAuthenticated, hasRole(["systemadmin"]), async (req, res) => {
     try {
 
         const { type, questions} = req.body
@@ -260,12 +264,8 @@ router.get('/form-questions/:type', isAuthenticated, hasRole(ALLOWED_STAFF_ROLES
     }
   })
   
-  router.put('/form-questions/:type', isAuthenticated, async (req, res) => {
+  router.put('/form-questions/:type', isAuthenticated, hasRole(["systemadmin"]), async (req, res) => {
     try {
-      if (req.user.role !== 'systemadmin') {
-        return res.status(403).json({ message: 'Ej behörig' })
-      }
-  
       const { type } = req.params
       const { questions } = req.body
   

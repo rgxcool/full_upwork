@@ -58,7 +58,8 @@ describe("Stats Routes", () => {
             courseExtent: "5 weeks",
         });
 
-        vi.spyOn(Student, "find").mockResolvedValueOnce([
+        vi.spyOn(Student, "find").mockReturnValueOnce({
+            select: vi.fn().mockResolvedValueOnce([
             {
                 municipality: { type: "CityA" },
                 education: [
@@ -113,7 +114,7 @@ describe("Stats Routes", () => {
                     },
                 ],
             },
-        ]);
+        ])});
 
         const token = signToken();
         const response = await request(app)
@@ -134,12 +135,14 @@ describe("Stats Routes", () => {
     });
 
     it("returns an empty object when no stats are available", async () => {
-        vi.spyOn(Student, "find").mockResolvedValueOnce([
-            {
-                name: "Student No Courses",
-                municipality: { type: "CityC" },
-            },
-        ]);
+        vi.spyOn(Student, "find").mockReturnValueOnce({
+            select: vi.fn().mockResolvedValueOnce([
+                {
+                    name: "Student No Courses",
+                    municipality: { type: "CityC" },
+                },
+            ]),
+        });
 
         const token = signToken();
         const response = await request(app)

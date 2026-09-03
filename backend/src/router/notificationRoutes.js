@@ -15,6 +15,17 @@ import { evaluateActionPlanStatusAndNotify } from "../controllers/notificationCo
 
 router.get("/notifications", authenticateUser, async (req, res) => {
   try {
+    // Pagination: sensible default page size, hard max, newest-first ordering.
+    const DEFAULT_LIMIT = 100;
+    const MAX_LIMIT = 200;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(rawLimit, MAX_LIMIT)
+      : DEFAULT_LIMIT;
+    const rawPage = parseInt(req.query.page, 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const skip = (page - 1) * limit;
+
     // Exclude notifications that this user has already resolved
     // Use $nin (not in) to exclude notifications where current user is in resolvedByUsers array
     const mongoose = (await import("mongoose")).default;
@@ -128,7 +139,7 @@ router.get("/notifications", authenticateUser, async (req, res) => {
       logger.debug({ count: notesWithStringMatch.length }, "Query with string match found notifications")
     }
     
-    const notes = await Notification.find(query);
+    const notes = await Notification.find(query).sort({ createdAt: -1, _id: -1 });
 
     // Filter task_reminder notifications: only the user they belong to may
     // see them (they are stored with a non-ObjectId meta.userId so the Mongo
@@ -178,7 +189,13 @@ router.get("/notifications", authenticateUser, async (req, res) => {
     
     logger.info({ count: uniqueNotes.length }, "After deduplication: unique notifications");
 
-    res.json(uniqueNotes);
+    // Server-side bounding/pagination applied AFTER deduplication so the result
+    // array stays bounded while preserving the dedup invariants. Newest-first
+    // ordering is guaranteed by the sort on the Mongo query. `limit` is capped
+    // at the top of the handler so the endpoint stays bounded regardless.
+    const responseNotes = uniqueNotes.slice(skip, skip + limit);
+
+    res.json(responseNotes);
   } catch (err) {
     logger.error({ err }, "Error fetching notifications");
     res.status(500).json({ message: 'Server error' });

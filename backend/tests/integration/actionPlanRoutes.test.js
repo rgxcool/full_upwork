@@ -98,6 +98,24 @@ describe("Action Plan Routes", () => {
         expect(savedConfigs[0].questions).toHaveLength(1);
     });
 
+    it("rejects non-systemadmin (teacher) from modifying the questionnaire structure", async () => {
+        const payload = {
+            type: "ACTION_PLAN",
+            questions: [{ key: "x", label: "X", type: "text", required: true }],
+        };
+
+        const response = await request(app)
+            .post("/api/form-questions")
+            .set("x-test-user-role", "teacher")
+            .send(payload)
+            .expect(403);
+
+        expect(response.body).toBeDefined();
+        // Nothing must have been written for the teacher.
+        const savedConfigs = await FormQuestions.find({ type: "ACTION_PLAN" });
+        expect(savedConfigs).toHaveLength(0);
+    });
+
     it("returns 500 when saving form questions fails", async () => {
         const response = await request(app)
             .post("/api/form-questions")
@@ -169,7 +187,7 @@ describe("Action Plan Routes", () => {
             .send({ questions: [] })
             .expect(403);
 
-        expect(response.body).toEqual({ message: "Ej behörig" });
+        expect(response.body?.error ?? response.body?.message).toBeDefined();
     });
 
     it("updates form questions when systemadmin", async () => {

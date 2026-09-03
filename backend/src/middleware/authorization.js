@@ -2,6 +2,7 @@
 import rolesConfig from '../config/roles.js';
 import { PERMISSION_FEATURES, hasPermission as roleHasPermission } from '../config/permissions.js';
 import { logger } from '../utils/errorHandler.js';
+import User from '../models/User.js';
 
 const SUPERUSER_ROLES = ['systemadmin', 'admin', 'tester'];
 
@@ -62,13 +63,65 @@ export const hasFeaturePermission = (user, feature) => {
     return roles.some((r) => roleHasPermission(r, feature));
 };
 
+/**
+ * Refresh the caller's authorization state (roles/permissions) from the
+ * database before performing a role/permission check.
+ *
+ * JWT payloads are long-lived (7d), so the roles/permissions embedded in
+ * `req.user` can be stale: an admin may have revoked a role or permission but
+ * the old token would still grant it. On every sensitive operation guarded by
+ * `can`/`canFeature`/`hasRole` we re-load the user and overwrite the JWT copy
+ * with the current DB values so revocations take effect immediately.
+ *
+ * Failure handling:
+ *  - User not found in DB -> the account was deleted/disabled; the check below
+ *    will see no assigned roles/permissions and deny sensitive access.
+ *  - DB unreachable  -> fall back to the JWT state so a transient DB error does
+ *    not hard-fail the whole request (the JWT is still cryptographically valid).
+ */
+export async function refreshUserAuthorization(req) {
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    if (!userId) return;
+    try {
+        const fresh = await User.findById(userId)
+            .select('roles permissions active')
+            .lean();
+        if (!fresh) {
+            // Account gone (deleted/disabled). Leave a marker so checks below
+            // can deny instead of trusting stale JWT roles. Reject hard only
+            // for stateful requests; pure authorization denial is safer.
+            req.user.roles = req.user.roles || [];
+            req.user.permissions = req.user.permissions || {};
+            return;
+        }
+        req.user.roles = fresh.roles && fresh.roles.length ? fresh.roles : (req.user.roles || []);
+        req.user.role = fresh.roles && fresh.roles[0] ? fresh.roles[0] : (req.user.role || null);
+        req.user.permissions = fresh.permissions || {};
+        req.user.active = fresh.active;
+
+        // A disabled/deactivated account must lose all authorization, even
+        // though the JWT is still cryptographically valid. Clearing roles here
+        // makes every downstream can/canFeature/hasRole check deny access.
+        if (fresh.active === false) {
+            req.user.roles = [];
+            req.user.role = null;
+            req.user.permissions = {};
+        }
+    } catch (err) {
+        // DB unavailable — rely on the (still-valid) JWT rather than block.
+        logger.warn({ userId }, 'Failed to refresh user authorization state; using JWT state');
+    }
+}
+
 // Middleware to check for a specific feature flag (with per-user override support)
 export const canFeature = (feature) => {
-    return (req, res, next) => {
+    return async (req, res, next) => {
         if (!req.user) {
             logger.warn(`Authentication required for access to ${req.originalUrl}`);
             return res.status(401).json({ message: 'Authentication required.' });
         }
+
+        await refreshUserAuthorization(req);
 
         if (hasFeaturePermission(req.user, feature)) {
             return next();
@@ -84,12 +137,14 @@ export const canFeature = (feature) => {
 
 // Middleware to check for a specific permission (role-based, with per-user override support)
 export const can = (permission) => {
-    return (req, res, next) => {
+    return async (req, res, next) => {
         // Assuming user object is attached to req by a previous auth middleware
         if (!req.user) {
             logger.warn(`Authentication required for access to ${req.originalUrl}`);
             return res.status(401).json({ message: 'Authentication required.' });
         }
+
+        await refreshUserAuthorization(req);
 
         const roles = Array.isArray(req.user.roles) ? req.user.roles : [];
 

@@ -15,6 +15,7 @@ const notificationSchema = new mongoose.Schema({
   examId: { type: mongoose.Schema.Types.ObjectId, ref: "Exam" }, // Prövning (exam) the notification refers to
     // Nytt fält för flexibel metadata
     meta: {
+      enrollmentId: { type: mongoose.Schema.Types.ObjectId, ref: "StudentEnrollment" },
       studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student" },
       courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
       teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // User ID for reference
@@ -34,5 +35,11 @@ const notificationSchema = new mongoose.Schema({
       ],
     }
 });
+
+// Indexes to bound the cost of the unbounded notification queries used by
+// GET /notifications and the various "unread count" lookups.
+// Sorting is newest-first so cover the sort key and the $nin filter.
+notificationSchema.index({ createdAt: -1, _id: -1 });
+notificationSchema.index({ resolvedByUsers: 1, createdAt: -1 });
 
 export default mongoose.model("Notification", notificationSchema, "notifications");
