@@ -21,6 +21,8 @@ import {
   renderMessageCopyEmail,
   renderInactivityWarningEmail,
   sendInactivityWarningEmail,
+  renderDiplomaEmail,
+  sendDiplomaEmail,
   maybeSendLarteametEmail,
   getStudentMunicipality,
   resolveLarteametBrochure,
@@ -363,6 +365,79 @@ describe("sendInactivityWarningEmail", () => {
       studentName: "Anna Svensson",
       email: "",
       withdrawalDate: new Date("2026-09-20"),
+    });
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toBe("no_email");
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("renderDiplomaEmail", () => {
+  it("renders a congratulatory diploma email without echoing sensitive data", () => {
+    const { subject, text } = renderDiplomaEmail({ studentName: "Bea Berg" });
+
+    expect(subject).toContain("diplom");
+    expect(text).toContain("Bea Berg");
+    expect(text).toContain("bifogat");
+    // Personal data must never be echoed in the email body.
+    expect(text).not.toContain("1992");
+  });
+
+  it("greets without a name", () => {
+    const { text } = renderDiplomaEmail();
+    expect(text).toContain("Hej!");
+  });
+});
+
+describe("sendDiplomaEmail", () => {
+  it("attaches the PDF and reports real delivery for a real SMTP transport", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    const pdf = Buffer.from("%PDF-1.4 fake diploma");
+
+    const result = await sendDiplomaEmail({
+      studentName: "Bea Berg",
+      email: "bea@elev.se",
+      pdf,
+      filename: "diplom-abc.pdf",
+    });
+
+    expect(result.deliveredForReal).toBe(true);
+    expect(result.sent).toBe(true);
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    const call = sendMailMock.mock.calls[0][0];
+    expect(call.to).toBe("bea@elev.se");
+    expect(call.subject).toContain("diplom");
+    expect(call.attachments).toEqual([
+      expect.objectContaining({
+        filename: "diplom-abc.pdf",
+        contentType: "application/pdf",
+      }),
+    ]);
+  });
+
+  it("reports NOT delivered for a placeholder/stream transport", async () => {
+    // No real GOOGLE_PWD / SMTP creds => stream transport (no real delivery).
+    const pdf = Buffer.from("%PDF-1.4 fake diploma");
+
+    const result = await sendDiplomaEmail({
+      studentName: "Bea Berg",
+      email: "bea@elev.se",
+      pdf,
+    });
+
+    // The send call itself still returns a non-throwing success on stream
+    // transport, but the helper must be honest: NOT delivered for real.
+    expect(result.deliveredForReal).toBe(false);
+    expect(result.sent).toBe(false);
+    expect(result.transportMode).toBe("stream");
+  });
+
+  it("skips without an email address", async () => {
+    const result = await sendDiplomaEmail({
+      studentName: "Bea Berg",
+      email: "",
+      pdf: Buffer.from("%PDF-1.4"),
     });
 
     expect(result.sent).toBe(false);
