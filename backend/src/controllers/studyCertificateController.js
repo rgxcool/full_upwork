@@ -1,6 +1,8 @@
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import { ROLES } from "../config/permissions.js";
 import { buildStudyCertificatePdf } from "../services/studyCertificatePdf.js";
+import { PdfBuilder } from "../services/pdfGenerator.js";
+import { sendDiplomaEmail } from "../services/emailService.js";
 import logger from "../utils/logger.js";
 
 const STAFF_ROLES = [
@@ -18,7 +20,8 @@ const STAFF_ROLES = [
  */
 const addCertificateAuditTrail = async (studentId, enrollmentId, certificateType, user) => {
     try {
-        const Student = await import("../models/Student.js");
+        const studentModule = await import("../models/Student.js");
+        const Student = studentModule?.default || studentModule;
         const studentDoc = await Student.findById(studentId);
         if (!studentDoc) {
             return;
@@ -127,7 +130,7 @@ export const generateDiplomaPdf = async (req, res) => {
                 path: "teacherId",
                 populate: { path: "userId", select: "username" },
             })
-            .populate("studentId", "name personalNumber email")
+            .populate("studentId", "name personalNumber email aplStatus")
             .populate("coursePackageId");
 
         if (!enrollment) {
@@ -175,9 +178,15 @@ export const generateDiplomaPdf = async (req, res) => {
         }).lean();
 
         // Check if this student has completed enrollments in the package
-        const studentPackageEnrollments = packageEnrollments.filter(
-            (e) => String(e.studentId?._id) === String(enrollment.studentId?._id)
+        // `packageEnrollments` is lean (studentId is a scalar ObjectId) while
+        // `enrollment.studentId` is populated; normalize both before comparing.
+        const targetStudentId = String(
+            enrollment.studentId?._id || enrollment.studentId
         );
+        const studentPackageEnrollments = packageEnrollments.filter((e) => {
+            const eStudentId = String(e.studentId?._id || e.studentId);
+            return eStudentId === targetStudentId;
+        });
 
         // Check APL approval - student's APL status must be GREEN
         const studentDoc = await enrollment.studentId;
@@ -233,12 +242,39 @@ export const generateDiplomaPdf = async (req, res) => {
         );
         res.send(pdf);
 
+        // P7/P8 — deliver the diploma PDF to the student by email. This is a
+        // real send attempt whose success is reported honestly (never claimed
+        // for a non-delivering stream transport). Fire-and-forget on purpose:
+        // a delivery failure must not fail the download the requestor already
+        // received; it is reflected in the audit description instead.
+        let auditSuffix = "";
+        const studentEmail = enrollment.studentId?.email || null;
+        if (!studentEmail) {
+            logger.warn(
+                { enrollmentId: enrollment._id, studentId: enrollment.studentId?._id },
+                "Diploma generated but student has no email — email send skipped"
+            );
+            auditSuffix = "_no_email";
+        } else {
+            const delivery = await sendDiplomaEmail({
+                studentName: enrollment.studentId?.name || "",
+                email: studentEmail,
+                pdf,
+                filename: `diplom-${enrollment._id}.pdf`,
+            });
+            logger.info(
+                { enrollmentId: enrollment._id, deliveredForReal: delivery.deliveredForReal, transportMode: delivery.transportMode },
+                "Diploma email processing finished"
+            );
+            auditSuffix = delivery.deliveredForReal ? "_email_sent" : "_email_not_delivered";
+        }
+
         // Add audit trail after successful generation
         try {
             await addCertificateAuditTrail(
                 enrollment.studentId._id,
                 enrollment._id,
-                "diplom",
+                `diplom${auditSuffix}`,
                 req.user
             );
         } catch (auditError) {

@@ -399,6 +399,77 @@ export const maybeSendLarteametEmail = async ({
 };
 
 /**
+ * Diploma delivery email template (P7/P8).
+ *
+ * Sent to a course-package student when their diploma PDF is generated, with
+ * the PDF attached. The copy keeps the wording generic and avoids echoing the
+ * sensitive fields that live inside the PDF (personnummer etc.).
+ * @param {{ studentName?: string }} ctx
+ */
+export const renderDiplomaEmail = ({ studentName } = {}) => {
+    const greeting = studentName ? `Hej ${studentName}!` : "Hej!";
+    const subject = "Ditt diplom från Mindful Learning";
+    const text = [
+        greeting,
+        "",
+        "Grattis! Du har slutfört din utbildning och vi har tagit fram ett diplom åt dig.",
+        "",
+        "Diplomet finns bifogat i detta mail.",
+        "",
+        "Vänliga hälsningar",
+        getEmailSignature(),
+    ].join("\n");
+    return { subject, text };
+};
+
+/**
+ * Send the diploma PDF to the student's email (P8 diploma delivery). Never
+ * throws; failures are logged by sendEmail and reported in the result.
+ *
+ * Delivery is reported honestly: `deliveredForReal` is only true when the
+ * configured transport actually delivers (gmail/smtp). When the transport falls
+ * back to nodemailer's stream transport (unconfigured SMTP) the email is NOT
+ * delivered and `deliveredForReal` is false — the caller must not claim "sent".
+ *
+ * @param {{ studentName: string, email: string, pdf: Buffer, filename?: string }} args
+ * @returns {Promise<{sent: boolean, deliveredForReal: boolean, transportMode?: string, reason?: string, result?: Object}>}
+ */
+export const sendDiplomaEmail = async ({
+    studentName,
+    email,
+    pdf,
+    filename = "diplom.pdf",
+}) => {
+    if (!email) {
+        logger.warn({ studentName }, "Diploma email skipped — no student email");
+        return { sent: false, reason: "no_email" };
+    }
+
+    const { subject, text } = renderDiplomaEmail({ studentName });
+    const result = await sendEmail({
+        to: email,
+        subject,
+        text,
+        attachments: [
+            {
+                filename,
+                content: pdf,
+                contentType: "application/pdf",
+            },
+        ],
+    });
+
+    // Only claim real delivery for a real (non-stream) transport.
+    const deliveredForReal = result.success && result.transportMode !== "stream";
+    return {
+        sent: deliveredForReal,
+        deliveredForReal,
+        transportMode: result.transportMode,
+        result,
+    };
+};
+
+/**
  * Send the inactivity warning email to a student (Etapp 2, Phase 4B). Never
  * throws; failures are logged by sendEmail and reported in the result.
  * @param {{ studentName: string, email: string, withdrawalDate: Date|string }} args
