@@ -30,6 +30,9 @@ const UserSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.Mixed,
             default: {},
         },
+        // Tenant (kommun) data scope. Which municipalities this user may read
+        // / mutate. An empty list means global/system-wide access (no scoping).
+        municipalities: { type: [String], default: [] },
         mustChangePassword: { type: Boolean, default: false },
         lastLoginAt: { type: Date, default: null },
         // When false the account is disabled/deactivated: protected operations

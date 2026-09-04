@@ -84,7 +84,7 @@ export async function refreshUserAuthorization(req) {
     if (!userId) return;
     try {
         const fresh = await User.findById(userId)
-            .select('roles permissions active')
+            .select('roles permissions active municipalities')
             .lean();
         if (!fresh) {
             // Account gone (deleted/disabled). Leave a marker so checks below
@@ -98,6 +98,7 @@ export async function refreshUserAuthorization(req) {
         req.user.role = fresh.roles && fresh.roles[0] ? fresh.roles[0] : (req.user.role || null);
         req.user.permissions = fresh.permissions || {};
         req.user.active = fresh.active;
+        req.user.municipalities = Array.isArray(fresh.municipalities) ? fresh.municipalities : [];
 
         // A disabled/deactivated account must lose all authorization, even
         // though the JWT is still cryptographically valid. Clearing roles here
@@ -106,6 +107,7 @@ export async function refreshUserAuthorization(req) {
             req.user.roles = [];
             req.user.role = null;
             req.user.permissions = {};
+            req.user.municipalities = [];
         }
     } catch (err) {
         // DB unavailable — rely on the (still-valid) JWT rather than block.

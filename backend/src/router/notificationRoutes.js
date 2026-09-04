@@ -11,6 +11,42 @@ const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "
 
 import { evaluateActionPlanStatusAndNotify } from "../controllers/notificationController.js";
 
+// Determine whether the acting user is allowed to see/act on a given
+// notification, mirroring the scoping rules applied by GET /notifications.
+// Prevents one user from resolving/resetting notifications belonging to
+// another role/tenant (IDOR on the per-user resolve/reset endpoints).
+async function isUserAuthorizedForNotification(req, note) {
+  if (!note) return false;
+  const role = req.user?.role;
+  const userId = req.user?.userId;
+  if (!userId) return false;
+
+  const objectId = (v) =>
+    mongoose.Types.ObjectId.isValid(v) ? new mongoose.Types.ObjectId(v) : v;
+  const userIdStr = String(objectId(userId));
+
+  if (role === "student") {
+    return String(note.meta?.studentUserId || "") === userIdStr;
+  }
+
+  if (role === "teacher") {
+    const teacher = await Teacher.findOne({ userId });
+    if (!teacher) return false;
+    return String(note.teacher || "") === String(objectId(teacher._id));
+  }
+
+  if (role === "admin" || role === "systemadmin") {
+    if (note.type === "dropout") {
+      return String(note.createdByAdmin || "") === userIdStr;
+    }
+    return true;
+  }
+
+  // coordinator / syv / specped / tester: GET exposes all non-resolved notes
+  return true;
+}
+
+
 
 
 router.get("/notifications", authenticateUser, async (req, res) => {
@@ -241,6 +277,10 @@ router.put("/notifications/:id/resolve", authenticateUser, async (req, res) => {
       return res.status(404).send("Notis hittades inte");
     }
 
+    if (!(await isUserAuthorizedForNotification(req, note))) {
+      return res.status(403).send("Du har inte behörighet att hantera denna notis");
+    }
+
     // Add current user to resolvedByUsers array (per-user resolution)
     const mongoose = (await import("mongoose")).default;
     const userId = mongoose.Types.ObjectId.isValid(req.user.userId) 
@@ -298,11 +338,14 @@ router.put("/notifications/:id/resolve", authenticateUser, async (req, res) => {
 
 
 
-router.put("/notifications/:id/reset", authenticateUser, async (req, res) => {
+    router.put("/notifications/:id/reset", authenticateUser, async (req, res) => {
     try {
       const note = await Notification.findById(req.params.id);
       if (!note) return res.status(404).send("Notis hittades inte");
   
+      if (!(await isUserAuthorizedForNotification(req, note))) {
+        return res.status(403).send("Du har inte behörighet att hantera denna notis");
+      }
       // Remove current user from resolvedByUsers array (per-user reset)
       const mongoose = (await import("mongoose")).default;
       const userId = mongoose.Types.ObjectId.isValid(req.user.userId) 

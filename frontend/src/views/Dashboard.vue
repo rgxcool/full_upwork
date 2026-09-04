@@ -43,15 +43,11 @@
       <article v-if="role === 'student' && aplStatus" class="panel today-panel">
         <div class="panel-heading"><div><p class="eyebrow">Arbetspraktik</p><h2>APL-status</h2></div><span class="status-pill" :style="{ background: aplColor, color: '#fff' }">{{ aplStatusLabel }}</span></div>
         <ul class="check-list">
-          <li v-if="aplStatus.period"><span class="check-dot">✓</span><span><strong>Period</strong><small>{{ aplStatus.period }}</small></span></li>
-          <li v-if="aplStatus.workplace"><span class="check-dot">✓</span><span><strong>Arbetsplats</strong><small>{{ aplStatus.workplace }}</small></span></li>
-          <li v-if="aplStatus.supervisor"><span class="check-dot">✓</span><span><strong>Handledare</strong><small>{{ aplStatus.supervisor }}</small></span></li>
-          <template v-if="aplStatusKitLinks.length > 0">
-            <li v-for="link in aplStatusKitLinks" :key="link.to">
-              <span class="check-dot">→</span>
-              <span><router-link :to="link.to"><strong>{{ link.label }}</strong></router-link><small>{{ link.description }}</small></span>
-            </li>
-          </template>
+          <li v-if="aplPeriod"><span class="check-dot">✓</span><span><strong>Period</strong><small>{{ aplPeriod }}</small></span></li>
+          <li v-if="aplWorkplace"><span class="check-dot">✓</span><span><strong>Arbetsplats</strong><small>{{ aplWorkplace }}</small></span></li>
+          <li v-if="aplSupervisor"><span class="check-dot">✓</span><span><strong>Handledare</strong><small>{{ aplSupervisor }}</small></span></li>
+          <li v-if="aplStatus.hasLogbook"><span class="check-dot">✓</span><span><strong>Loggbok</strong><small>Dokumentation finns för praktiken.</small></span></li>
+          <li v-if="aplStatus.hasCv"><span class="check-dot">✓</span><span><strong>CV</strong><small>CV är uppladdat.</small></span></li>
         </ul>
       </article>
 
@@ -89,21 +85,28 @@ export default {
     const loadError = ref('')
     const unreadCount = ref(null)
     const aplStatus = ref(null)
+    // Map the real GET /apl/my fields onto the panel. /apl/my returns
+    // status (color word), placementCompany (workplace), placementContact
+    // (supervisor), and internshipStartDate/EndDate (period) — NOT the old
+    // color/period/workplace/supervisor keys. This makes the student APL panel
+    // render actual persisted data instead of blank rows.
     const aplColor = computed(() => {
       const colors = { GRAY: '#9e9e9e', BLUE: '#2196f3', YELLOW: '#ffc107', PURPLE: '#9c27b0', RED: '#f44336', GREEN: '#4caf50' }
-      return colors[aplStatus.value?.color] || '#9e9e9e'
+      return colors[aplStatus.value?.status] || '#9e9e9e'
     })
     const aplStatusLabel = computed(() => {
       const labels = { GRAY: 'Inte påbörjad', BLUE: 'Pågående', YELLOW: 'Försenad', PURPLE: 'Avslutande', RED: 'Ej godkänd', GREEN: 'Godkänd' }
-      return labels[aplStatus.value?.color] || 'Okänd'
+      return labels[aplStatus.value?.status] || 'Okänd'
     })
-    const aplStatusKitLinks = computed(() => {
-      if (!aplStatus.value) return []
-      const links = []
-      if (aplStatus.value.hasLogbook) links.push({ to: '/student/apl', label: 'Loggbok', description: 'Dokumentera din praktik' })
-      if (aplStatus.value.hasCv) links.push({ to: '/student/apl', label: 'CV', description: 'Visa ditt uppdaterade CV' })
-      return links
+    const aplPeriod = computed(() => {
+      const s = aplStatus.value?.internshipStartDate
+      const e = aplStatus.value?.internshipEndDate
+      if (!s && !e) return ''
+      const fmt = (v) => (v ? String(v).slice(0, 10) : '–')
+      return `${fmt(s)} → ${fmt(e)}`
     })
+    const aplWorkplace = computed(() => aplStatus.value?.placementCompany || '')
+    const aplSupervisor = computed(() => aplStatus.value?.placementContact || '')
     const displayName = computed(() => user.value.name || user.value.username || user.value.email?.split('@')[0] || 'där')
     const roleLabel = computed(() => ({ student: 'Elev', teacher: 'Lärare', admin: 'Administratör', systemadmin: 'Systemadministratör', syv: 'SYV', specped: 'Specialpedagog', coordinator: 'Koordinator' }[role.value] || 'Medarbetare'))
     const greeting = computed(() => new Date().getHours() < 12 ? 'God morgon' : new Date().getHours() < 18 ? 'God eftermiddag' : 'God kväll')
@@ -141,7 +144,7 @@ export default {
     ])
     onMounted(loadDashboard)
 
-    return { displayName, roleLabel, greeting, primaryAction, stats, quickLinks, loading, refreshing, loadError, loadDashboard, aplStatus, aplColor, aplStatusLabel, aplStatusKitLinks }
+    return { displayName, roleLabel, greeting, primaryAction, stats, quickLinks, loading, refreshing, loadError, loadDashboard, aplStatus, aplColor, aplStatusLabel, aplPeriod, aplWorkplace, aplSupervisor }
   },
 }
 </script>
