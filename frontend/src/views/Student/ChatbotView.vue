@@ -140,11 +140,18 @@ const ask = async (text) => {
         sources: [`Vanliga frågor${selectedCategory.value ? ` · ${selectedCategory.value.name}` : ''}`],
       })
     } else {
-      messages.value.push({
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        text: 'Jag hittar inget verifierat svar på den frågan i den valda FAQ-kategorin. Välj en fråga bland vanliga frågor eller kontakta din lärare.',
-      })
+      try {
+        const { data } = await client.post('/chatbot/ask', { question: value })
+        const { answer, sources } = data?.data || {}
+        messages.value.push({
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          text: answer || 'Jag kunde inte hitta ett svar på den frågan.',
+          sources: Array.isArray(sources) && sources.length ? sources : undefined,
+        })
+      } catch (requestError) {
+        error.value = requestError.message || 'Kunde inte hämta ett svar. Försök igen.'
+      }
     }
   } catch (requestError) {
     error.value = requestError.message || 'Kunde inte söka i vanliga frågor.'

@@ -37,6 +37,13 @@ const mockAuthenticateUser = vi.hoisted(() => (req, _res, next) => {
         userId: "test-user",
     };
     req.userId = req.user.userId;
+
+    const muniHeader = req.headers["x-test-municipalities"];
+    if (muniHeader) {
+        const munis = Array.isArray(muniHeader) ? muniHeader : [muniHeader];
+        req.user.municipalities = munis;
+    }
+
     next();
 });
 
@@ -218,6 +225,89 @@ describe("Student Routes Auth Enforcement", () => {
                 .delete(`/api/student/${id}`)
                 .set("x-test-role", "student")
                 .expect(403);
+        });
+    });
+
+    describe("Tenant (kommun) isolation on GET /api/students", () => {
+        it("returns only students within the caller's municipality scope", async () => {
+            await Student.create({
+                name: "Sollentuna Student",
+                email: "sollentuna@example.com",
+                personalNumber: "11111111111",
+                municipality: { type: "Sollentuna" },
+            });
+            await Student.create({
+                name: "Stockholm Student",
+                email: "stockholm@example.com",
+                personalNumber: "22222222222",
+                municipality: { type: "Stockholm" },
+            });
+
+            const res = await request(staffApp)
+                .get("/api/students")
+                .set("x-test-role", "admin")
+                .set("x-test-municipalities", "Sollentuna")
+                .expect(200);
+
+            const names = res.body.map((s) => s.name);
+            expect(names).toContain("Sollentuna Student");
+            expect(names).not.toContain("Stockholm Student");
+        });
+
+        it("returns all students for a global (unscoped) admin", async () => {
+            await Student.create({
+                name: "Global A",
+                email: "globala@example.com",
+                personalNumber: "33333333333",
+                municipality: { type: "Täby" },
+            });
+            await Student.create({
+                name: "Global B",
+                email: "globalb@example.com",
+                personalNumber: "44444444444",
+                municipality: { type: "Solna" },
+            });
+
+            const res = await request(staffApp)
+                .get("/api/students")
+                .set("x-test-role", "admin")
+                .expect(200);
+
+            const names = res.body.map((s) => s.name);
+            expect(names).toContain("Global A");
+            expect(names).toContain("Global B");
+        });
+    });
+
+    describe("Tenant write-guard on POST /api/student", () => {
+        it("forbids a scoped admin from creating a student outside their scope", async () => {
+            await request(staffApp)
+                .post("/api/student")
+                .set("x-test-role", "admin")
+                .set("x-test-municipalities", "Sollentuna")
+                .send({
+                    name: "Out of scope",
+                    email: "out@example.com",
+                    personalNumber: "55555555555",
+                    municipality: "Stockholm",
+                })
+                .expect(403);
+        });
+
+        it("allows a scoped admin to create a student within their scope", async () => {
+            const res = await request(staffApp)
+                .post("/api/student")
+                .set("x-test-role", "admin")
+                .set("x-test-municipalities", "Sollentuna")
+                .send({
+                    name: "In scope",
+                    email: "inscope@example.com",
+                    personalNumber: "66666666666",
+                    municipality: "Sollentuna",
+                })
+                .expect(201);
+
+            expect(res.body).toBeTruthy();
         });
     });
 });

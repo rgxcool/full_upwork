@@ -2,6 +2,7 @@ import { normalizeCodeForMatching } from "./parseStudentExcel.js";
 import { cloneModules } from "../models/courseModuleSchema.js";
 import logger from "./logger.js";
 import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
+import CourseInstance from "../models/CourseInstance.js";
 
 class CourseMatchingService {
     /**
@@ -1317,6 +1318,70 @@ class CourseMatchingService {
         });
 
         return results;
+    }
+
+    /**
+     * Aggregate course statistics for a date range (optionally a single course).
+     * Counts course instances that OVERLAP the range, so a period filter shows
+     * the courses running at that time.
+     *
+     * @param {Date} startDate
+     * @param {Date} endDate
+     * @param {string} [courseId]  optional mainCourseId filter
+     * @returns {Promise<object>}
+     */
+    static async getCourseStatistics(startDate, endDate, courseId) {
+        const query = {
+            startDate: { $lt: endDate },
+            endDate: { $gt: startDate },
+        };
+        if (courseId) {
+            query.mainCourseId = courseId;
+        }
+
+        const instances = await CourseInstance.find(query)
+            .select(
+                "courseName courseCode isActive enrollmentCount completionCount dropoutCount"
+            )
+            .lean();
+
+        const totalInstances = instances.length;
+        const activeInstances = instances.filter((i) => i.isActive).length;
+        const totalEnrollments = instances.reduce(
+            (sum, i) => sum + (Number(i.enrollmentCount) || 0),
+            0
+        );
+        const completions = instances.reduce(
+            (sum, i) => sum + (Number(i.completionCount) || 0),
+            0
+        );
+        const dropouts = instances.reduce(
+            (sum, i) => sum + (Number(i.dropoutCount) || 0),
+            0
+        );
+        const averageEnrollments =
+            totalInstances > 0
+                ? Number((totalEnrollments / totalInstances).toFixed(1))
+                : 0;
+
+        return {
+            totalInstances,
+            activeInstances,
+            totalEnrollments,
+            completions,
+            dropouts,
+            averageEnrollments,
+            byCourse: instances.reduce((acc, i) => {
+                const key = i.courseCode || i.courseName || "Okänd kurs";
+                if (!acc[key]) {
+                    acc[key] = { total: 0, active: 0, enrollments: 0 };
+                }
+                acc[key].total += 1;
+                if (i.isActive) acc[key].active += 1;
+                acc[key].enrollments += Number(i.enrollmentCount) || 0;
+                return acc;
+            }, {}),
+        };
     }
 }
 

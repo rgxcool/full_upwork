@@ -14,6 +14,7 @@ import { cloneModules } from "../models/courseModuleSchema.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import * as enrollmentService from "../services/enrollmentService.js";
+import { recordAudit } from "../utils/auditLog.js";
 
 /**
  * Course Matching Controller
@@ -294,9 +295,13 @@ export const uploadStudentsForMatching = async (req, res) => {
 
                     // Create notification for the user who uploaded the file
                     try {
+                        // NOTE: The temporary password is intentionally NOT included
+                        // here — it is returned to the uploading admin via
+                        // `results.createdTeachers` and must not be persisted in a
+                        // broadcast notification message (credential leak).
                         await createGlobalNotification(
                             "teacher_auto_created",
-                            `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Lösenord: ${teacherResult.password}`
+                            `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Temporärt lösenord finns i uppladdningsresultatet.`
                         );
                     } catch (notificationError) {
                         logger.error({ err: notificationError }, "Error creating notification");
@@ -522,7 +527,11 @@ export const uploadStudentsForMatching = async (req, res) => {
 
                 if (!dbStudent) {
                     // Create new student
-                    logger.debug({ studentData }, "Creating student with data");
+                    // Log only non-sensitive identifiers — never personalNumber or full payload.
+                    logger.debug(
+                        { name: studentData.name || studentData.email, municipality: studentData.municipality },
+                        "Creating student with data"
+                    );
                     logger.debug({ municipality: studentData.municipality }, "Municipality value before creation");
 
                     // Allowed municipality types from schema
@@ -2537,12 +2546,26 @@ export const getCourseInstanceReports = async (req, res) => {
 };
 
 // Bulk delete all course instances and related enrollments
+const DELETE_ALL_CONFIRMATION = "DELETE_ALL_COURSE_INSTANCES";
+
 export const deleteAllCourseInstances = async (req, res) => {
     try {
+        // Server-side destroy confirmation — never trust the frontend dialog.
+        if (req.body?.confirmation !== DELETE_ALL_CONFIRMATION) {
+            logger.warn("DELETE /course-instances/all rejected: missing confirmation token");
+            return res
+                .status(400)
+                .json({ error: "Missing confirmation token. This destructive action requires explicit server-side confirmation." });
+        }
         logger.info("DELETE /course-instances/all called");
         const courseResult = await CourseInstance.deleteMany({});
         const enrollmentResult = await StudentEnrollment.deleteMany({});
         logger.info({ courseInstancesDeleted: courseResult.deletedCount, enrollmentsDeleted: enrollmentResult.deletedCount }, "Deleted course instances and enrollments");
+        await recordAudit(req, {
+            entityType: "CourseInstance",
+            action: "delete_all",
+            description: `Deleted all course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount})`,
+        });
         res.json({
             success: true,
             message: `All course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount}) deleted`,

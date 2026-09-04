@@ -32,14 +32,22 @@ router.get("/apl/my", isAuthenticated, async (req, res) => {
         if (!student) return res.status(404).json({ error: "Ingen elevprofil hittad." });
         const AplRecord = (await import("../models/AplRecord.js")).default;
         const record = await AplRecord.findOne({ studentId: student._id }).lean();
-        if (!record) return res.json(null);
+        // Use the actual schema fields (status, placement, dates, doc ids) and
+        // the student-level aplStatus that drives the staff board. Previously
+        // this read non-existent fields (color/period/workplace/supervisor/
+        // logbook/cvUrl) and returned dummy data.
         res.json({
-            color: record.color || "GRAY",
-            period: record.period || null,
-            workplace: record.workplace || null,
-            supervisor: record.supervisor || null,
-            hasLogbook: Boolean(record.logbook && record.logbook.length > 0),
-            hasCv: Boolean(record.cvUrl),
+            status: record?.status || student.aplStatus || "GRAY",
+            aplStatus: student.aplStatus || null,
+            placementCompany: record?.placementCompany || null,
+            placementContact: record?.placementContact || null,
+            placementAddress: record?.placementAddress || null,
+            internshipStartDate: record?.internshipStartDate || null,
+            internshipEndDate: record?.internshipEndDate || null,
+            requirements: record?.requirements || null,
+            hasCv: Boolean(record?.cvDocId),
+            hasContract: Boolean(record?.contractDocId),
+            hasLogbook: Boolean(student.logbook && student.logbook.length > 0),
         });
     } catch (err) {
         res.status(500).json({ error: "Kunde inte hämta APL-status." });

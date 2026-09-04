@@ -12,6 +12,7 @@ import { canFeature } from "../middleware/authorization.js";
 import { PERMISSION_FEATURES } from "../config/permissions.js";
 import logger from "../utils/logger.js";
 import { escapeRegExp } from '../utils/escapeRegExp.js';
+import { studentScopeFilter } from "../utils/tenantScope.js";
 
 const router = express.Router();
 
@@ -108,6 +109,10 @@ router.get("/search", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_US
     try {
         const results = [];
         let studentQuery = {};
+
+        // Backend-enforced tenant (kommun) scope for students. Scoped users only
+        // discover students in their allowed municipalities; global users get {}.
+        Object.assign(studentQuery, studentScopeFilter(req.user));
 
         // If user is a teacher, filter students by their teacherId
         if (req.user.role === "teacher") {
@@ -655,8 +660,26 @@ router.put("/update-student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES)
     }
 });
 
-router.put("/update-user/:id", authenticateUser, canFeature(PERMISSION_FEATURES.MANAGE_USERS_PERMISSIONS), async (req, res) => {
+router.put("/update-user/:id", authenticateUser, hasRole(["admin", "systemadmin"]), canFeature(PERMISSION_FEATURES.MANAGE_USERS_PERMISSIONS), async (req, res) => {
     try {
+        const VALID_USER_ROLES = [
+            "guest", "user", "student", "coordinator", "specped",
+            "syv", "teacher", "admin", "systemadmin",
+        ];
+
+        if (req.body.role !== undefined && !VALID_USER_ROLES.includes(req.body.role)) {
+            return res.status(400).json({ message: `Invalid role: ${req.body.role}` });
+        }
+        if (req.body.roles !== undefined) {
+            if (!Array.isArray(req.body.roles)) {
+                return res.status(400).json({ message: "roles must be an array" });
+            }
+            const invalidRoles = req.body.roles.filter((r) => !VALID_USER_ROLES.includes(r));
+            if (invalidRoles.length > 0) {
+                return res.status(400).json({ message: `Invalid role(s): ${invalidRoles.join(", ")}` });
+            }
+        }
+
         const allowedUserFields = ['name', 'email', 'role', 'roles', 'username'];
         const updates = {};
         for (const field of allowedUserFields) {

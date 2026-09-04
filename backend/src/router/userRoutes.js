@@ -9,6 +9,7 @@ import { validate, validateId } from "../middleware/validation.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { PERMISSION_FEATURES } from "../config/permissions.js";
+import { ALL_MUNICIPALITIES } from "../config/municipalities.js";
 import logger from "../utils/logger.js";
 
 const LOGBOOK_ROLES = ["admin", "systemadmin", "teacher"];
@@ -266,6 +267,56 @@ router.put(
             logger.error({ err: error }, "Error updating user permissions");
             res.status(500).send({
                 message: "An error occurred while updating user permissions.",
+            });
+        }
+    }
+);
+
+/**
+ * Update user municipality (tenant) scope
+ * PUT /api/users/:userId/municipalities
+ */
+router.put(
+    "/users/:userId/municipalities",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { municipalities } = req.body;
+            const { userId } = req.params;
+
+            if (!municipalities || !Array.isArray(municipalities)) {
+                return res
+                    .status(400)
+                    .send({ message: "Municipalities must be an array." });
+            }
+
+            const unique = [...new Set(municipalities)];
+            const invalid = unique.filter(
+                (m) => !ALL_MUNICIPALITIES.includes(m)
+            );
+            if (invalid.length > 0) {
+                return res
+                    .status(400)
+                    .send({ message: `Invalid municipality: ${invalid.join(", ")}. Valid: ${ALL_MUNICIPALITIES.join(", ")}` });
+            }
+
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).send({ message: "User not found." });
+            }
+
+            user.municipalities = unique;
+            await user.save();
+
+            res.send({
+                message: "User municipality scope updated successfully.",
+                user: { _id: user._id, name: user.name, email: user.email, municipalities: user.municipalities },
+            });
+        } catch (error) {
+            logger.error({ err: error }, "Error updating user municipality scope");
+            res.status(500).send({
+                message: "An error occurred while updating user municipality scope.",
             });
         }
     }

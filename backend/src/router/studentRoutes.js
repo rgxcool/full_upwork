@@ -25,6 +25,7 @@ import {
     performStudentDropout,
     removeStudentDropoutRecord,
 } from "../services/dropoutService.js";
+import { studentScopeFilter, municipalityInScope } from "../utils/tenantScope.js";
 
 const router = Router();
 
@@ -137,6 +138,10 @@ router.put(
 router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
         let query = {};
+
+        // Backend-enforced tenant (kommun) scope. For scoped users the query is
+        // restricted to their allowed municipalities; global users get {}.
+        Object.assign(query, studentScopeFilter(req.user));
 
         const userRoles = req.user.roles || (req.user.role ? [req.user.role] : []);
         const hasCoordinatorRole = userRoles.includes("coordinator") || userRoles.includes("specped") || userRoles.includes("syv") || userRoles.includes("admin") || userRoles.includes("systemadmin") || userRoles.includes("tester");
@@ -521,6 +526,20 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
         if (typeof studentData.municipality === "string") {
             studentData.municipality = { type: studentData.municipality };
         }
+
+        // Backend-enforced tenant write guard: a scoped user may only create /
+        // re-register students within their own municipality scope. A global
+        // (unscoped) user is unaffected.
+        const targetMunicipality = studentData.municipality?.type;
+        if (!municipalityInScope(req.user, targetMunicipality)) {
+            logger.warn(
+                { email: req.user.email, targetMunicipality },
+                "Tenant scope DENIED: municipality outside caller's scope on student create"
+            );
+            return res.status(403).json({
+                error: "Du saknar behörighet för denna kommun (municipality).",
+            });
+        }
         // Re-registration (returning student): if a student with the same
         // personalNumber or email already exists, auto-fill their record with
         // the submitted details and register the new courses instead of
@@ -758,6 +777,12 @@ router.get("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async
         if (!student)
             return res.status(404).json({ error: "Student not found" });
 
+        // Backend-enforced tenant (kommun) scope: scoped users may only read
+        // students in their allowed municipalities.
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+
         res.json(student);
     } catch (error) {
         logger.error({ err: error }, "Error fetching student");
@@ -780,6 +805,10 @@ router.get("/student/:id/basic", authenticateUser, hasRole(ALLOWED_STAFF_ROLES),
 
         if (!student)
             return res.status(404).json({ error: "Student not found" });
+
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
 
         res.json(student);
     } catch (error) {

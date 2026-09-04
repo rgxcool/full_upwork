@@ -217,6 +217,9 @@ router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
 });
 
 router.get('/students-to-grade', authenticateUser, async (req, res) => {
+  if (!ALLOWED_GRADING_ROLES.includes(req.user?.role)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
   try {
     const now = new Date();
     const user = req.user;
