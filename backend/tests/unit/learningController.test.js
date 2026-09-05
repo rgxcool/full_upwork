@@ -1,8 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const h = vi.hoisted(() => {
+    const studentEnrollment = vi.fn(function (doc) {
+        Object.assign(this, doc);
+        this.save = vi.fn().mockResolvedValue(this);
+    });
+    studentEnrollment.find = vi.fn();
+    studentEnrollment.findOne = vi.fn();
+    studentEnrollment.findById = vi.fn();
+    return { studentEnrollment };
+});
+
 vi.mock("../../src/models/Student.js", () => ({
     __esModule: true,
-    default: { findOne: vi.fn() },
+    default: { findOne: vi.fn(), findById: vi.fn() },
 }));
 vi.mock("../../src/models/Teacher.js", () => ({
     __esModule: true,
@@ -14,11 +25,20 @@ vi.mock("../../src/models/CourseInstance.js", () => ({
 }));
 vi.mock("../../src/models/StudentEnrollment.js", () => ({
     __esModule: true,
-    default: { find: vi.fn(), findOne: vi.fn() },
+    default: h.studentEnrollment,
 }));
 vi.mock("../../src/models/AssignmentSubmission.js", () => ({
     __esModule: true,
-    default: { find: vi.fn(), findById: vi.fn(), findOneAndUpdate: vi.fn() },
+    default: {
+        find: vi.fn(),
+        findById: vi.fn(),
+        findOne: vi.fn(),
+        findOneAndUpdate: vi.fn(),
+    },
+}));
+vi.mock("../../src/models/User.js", () => ({
+    __esModule: true,
+    default: { findById: vi.fn() },
 }));
 
 import Student from "../../src/models/Student.js";
@@ -26,12 +46,21 @@ import Teacher from "../../src/models/Teacher.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import AssignmentSubmission from "../../src/models/AssignmentSubmission.js";
+import User from "../../src/models/User.js";
 import {
     getInstanceModules,
     getInstanceSubmissions,
     getPendingSubmissions,
     setSubmissionFeedback,
     submitAssignment,
+    getCourseInstanceReport,
+    getCourseInstanceParticipants,
+    addCourseInstanceParticipant,
+    removeCourseInstanceParticipant,
+    getStudentLastAccess,
+    getCourseInstanceReports,
+    getSubmissionComments,
+    addSubmissionComment,
 } from "../../src/controllers/learningController.js";
 
 const STUDENT_ID = "111111111111111111111111";
@@ -388,6 +417,711 @@ describe("learningController", () => {
             expect(Teacher.findOne).not.toHaveBeenCalled();
             expect(AssignmentSubmission.find.mock.calls[0][0]).toEqual({ "feedback.status": "" });
             expect(res.json).toHaveBeenCalledWith({ success: true, submissions });
+        });
+    });
+
+    describe("completedComponents tracking", () => {
+        it("resets module completion on resubmission", async () => {
+            Student.findOne.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            const completedComponents = { set: vi.fn() };
+            const enrollmentWithTracking = {
+                _id: ENROLLMENT_ID,
+                studentId: STUDENT_ID,
+                courseInstanceId: INSTANCE_ID,
+                status: "active",
+                completedComponents,
+                skipNotification: false,
+                save: vi.fn().mockResolvedValue(true),
+            };
+            StudentEnrollment.findOne.mockResolvedValue(enrollmentWithTracking);
+            CourseInstance.findById.mockResolvedValue(instance);
+            AssignmentSubmission.findOneAndUpdate.mockResolvedValue({ _id: SUBMISSION_ID });
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, moduleNumber: "1" }, body: { submittedText: "igen" } });
+            const res = makeRes();
+            await submitAssignment(req, res);
+
+            expect(completedComponents.set).toHaveBeenCalledWith("1", "✗");
+            expect(enrollmentWithTracking.skipNotification).toBe(true);
+            expect(enrollmentWithTracking.save).toHaveBeenCalled();
+        });
+
+        it("marks a godkänd module complete on feedback", async () => {
+            Teacher.findOne.mockResolvedValue(teacher);
+            CourseInstance.findById.mockResolvedValue(instance);
+            const completedComponents = { set: vi.fn(), get: vi.fn() };
+            StudentEnrollment.findById.mockResolvedValue({
+                _id: ENROLLMENT_ID,
+                completedComponents,
+                skipNotification: false,
+                save: vi.fn().mockResolvedValue(true),
+            });
+            const submission = {
+                _id: SUBMISSION_ID,
+                courseInstanceId: INSTANCE_ID,
+                enrollmentId: ENROLLMENT_ID,
+                moduleNumber: 1,
+                feedback: {},
+                save: vi.fn().mockResolvedValue(true),
+            };
+            AssignmentSubmission.findById.mockResolvedValue(submission);
+
+            const req = reqFor({
+                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                params: { submissionId: SUBMISSION_ID },
+                body: { comment: "Bra!", status: "godkänd" },
+            });
+            const res = makeRes();
+            await setSubmissionFeedback(req, res);
+
+            expect(StudentEnrollment.findById).toHaveBeenCalledWith(ENROLLMENT_ID);
+            expect(completedComponents.set).toHaveBeenCalledWith("1", "✓");
+            expect(submission.feedback.status).toBe("godkänd");
+        });
+
+        it("marks a komplettera module as needing revision", async () => {
+            Teacher.findOne.mockResolvedValue(teacher);
+            CourseInstance.findById.mockResolvedValue(instance);
+            const completedComponents = { set: vi.fn() };
+            StudentEnrollment.findById.mockResolvedValue({
+                _id: ENROLLMENT_ID,
+                completedComponents,
+                skipNotification: false,
+                save: vi.fn().mockResolvedValue(true),
+            });
+            const submission = {
+                _id: SUBMISSION_ID,
+                courseInstanceId: INSTANCE_ID,
+                enrollmentId: ENROLLMENT_ID,
+                moduleNumber: 2,
+                feedback: {},
+                save: vi.fn().mockResolvedValue(true),
+            };
+            AssignmentSubmission.findById.mockResolvedValue(submission);
+
+            const req = reqFor({
+                user: { userId: USER_ID, roles: ["admin"], role: "admin" },
+                params: { submissionId: SUBMISSION_ID },
+                body: { comment: "Komplettera", status: "komplettera" },
+            });
+            const res = makeRes();
+            await setSubmissionFeedback(req, res);
+
+            expect(completedComponents.set).toHaveBeenCalledWith("2", "✗");
+            expect(res.json).toHaveBeenCalledWith({ success: true, submission });
+        });
+
+        it("returns 404 when the submission is missing", async () => {
+            AssignmentSubmission.findById.mockResolvedValue(null);
+            const req = reqFor({
+                user: { userId: USER_ID, roles: ["admin"], role: "admin" },
+                params: { submissionId: SUBMISSION_ID },
+                body: { status: "godkänd" },
+            });
+            const res = makeRes();
+            await setSubmissionFeedback(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+    });
+
+    describe("getCourseInstanceReport", () => {
+        const reportInstance = {
+            _id: INSTANCE_ID,
+            courseName: "Svenska 1",
+            modules: [
+                { moduleNumber: 1, title: "Modul 1", isPartialExam: false, isCaseStudy: false },
+                { moduleNumber: 2, title: "Modul 2", isPartialExam: true, isCaseStudy: true },
+            ],
+            sectionDates: [new Date("2026-09-21"), new Date("2026-10-05")],
+        };
+
+        beforeEach(() => {
+            CourseInstance.findById.mockResolvedValue(reportInstance);
+            Student.findById.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            StudentEnrollment.findOne.mockResolvedValue({
+                _id: ENROLLMENT_ID,
+                studentId: STUDENT_ID,
+                completedComponents: new Map([
+                    ["1", "✓"],
+                    ["2", "✗"],
+                ]),
+                students: [],
+            });
+            AssignmentSubmission.find.mockReturnValue(
+                chainable([
+                    {
+                        moduleNumber: 1,
+                        submittedText: "svar",
+                        fileId: null,
+                        submittedAt: new Date("2026-09-22"),
+                        feedback: { status: "godkänd", comment: "Bra" },
+                    },
+                ])
+            );
+        });
+
+        it("returns a full per-student completion report", async () => {
+            User.findById.mockReturnValue({
+                select: vi.fn().mockResolvedValue({ lastLoginAt: new Date("2026-09-20") }),
+            });
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getCourseInstanceReport(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.success).toBe(true);
+            expect(payload.totalModules).toBe(2);
+            expect(payload.completedModules).toBe(1);
+            expect(payload.completionRate).toBe("50.0");
+            expect(payload.modules[0].completed).toBe(true);
+            expect(payload.assignmentStatus[1].status).toBe("godkänd");
+            expect(payload.scheduledDates).toHaveLength(2);
+            expect(payload.studentActivity.lastAccess).toBeInstanceOf(Date);
+        });
+
+        it("returns 400 for invalid ids", async () => {
+            const req = reqFor({ params: { instanceId: "bad", studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getCourseInstanceReport(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 404 when the instance is missing", async () => {
+            CourseInstance.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getCourseInstanceReport(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+
+        it("returns 404 when the student is missing", async () => {
+            Student.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getCourseInstanceReport(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+
+        it("handles a student without enrollment or activity", async () => {
+            StudentEnrollment.findOne.mockResolvedValue(null);
+            User.findById.mockReturnValue({ select: vi.fn().mockResolvedValue(null) });
+            AssignmentSubmission.findOne.mockReturnValue(chainable(null));
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getCourseInstanceReport(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.totalModules).toBe(0);
+            expect(payload.completedModules).toBe(0);
+            expect(payload.completionRate).toBe(0);
+            expect(payload.studentActivity.lastAccess).toBeNull();
+        });
+
+        it("falls back to the latest submission for activity", async () => {
+            User.findById.mockReturnValue({ select: vi.fn().mockResolvedValue(null) });
+            AssignmentSubmission.findOne.mockReturnValue(
+                chainable({ submittedAt: new Date("2026-09-19") })
+            );
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getCourseInstanceReport(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.studentActivity.lastAccess).toBeInstanceOf(Date);
+        });
+    });
+
+    describe("getCourseInstanceParticipants", () => {
+        it("returns participants from enrollments", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            StudentEnrollment.find.mockReturnValue(
+                chainable([
+                    {
+                        _id: ENROLLMENT_ID,
+                        studentId: { _id: STUDENT_ID, name: "Anna", email: "anna@x.se" },
+                        status: "active",
+                    },
+                ])
+            );
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID } });
+            const res = makeRes();
+            await getCourseInstanceParticipants(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.success).toBe(true);
+            expect(payload.participants).toEqual([
+                {
+                    participantId: STUDENT_ID,
+                    name: "Anna",
+                    email: "anna@x.se",
+                    role: "student",
+                    status: "active",
+                },
+            ]);
+        });
+
+        it("returns 400 for invalid input", async () => {
+            const req = reqFor({ params: { instanceId: "bad" } });
+            const res = makeRes();
+            await getCourseInstanceParticipants(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 404 when the instance is missing", async () => {
+            CourseInstance.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { instanceId: INSTANCE_ID } });
+            const res = makeRes();
+            await getCourseInstanceParticipants(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+    });
+
+    describe("addCourseInstanceParticipant", () => {
+        const body = { participantId: STUDENT_ID, role: "student" };
+
+        it("lets an admin add a participant", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            StudentEnrollment.findOne.mockReturnValue(chainable(null));
+
+            const req = reqFor({
+                params: { instanceId: INSTANCE_ID },
+                body,
+                user: { userId: USER_ID, roles: ["admin"] },
+            });
+            const res = makeRes();
+            await addCourseInstanceParticipant(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.success).toBe(true);
+            expect(payload.enrollment.studentId).toBe(STUDENT_ID);
+            expect(h.studentEnrollment).toHaveBeenCalled();
+            expect(res.status).not.toHaveBeenCalled();
+        });
+
+        it("lets a teacher add a student to an owned course", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            StudentEnrollment.findOne.mockReturnValue(chainable(null));
+
+            const req = reqFor({
+                params: { instanceId: INSTANCE_ID },
+                body,
+                user: { userId: TEACHER_ID, role: "teacher" },
+            });
+            const res = makeRes();
+            await addCourseInstanceParticipant(req, res);
+
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+        });
+
+        it("returns 400 when participantId or role is missing", async () => {
+            const req = reqFor({ params: { instanceId: INSTANCE_ID }, body: {} });
+            const res = makeRes();
+            await addCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 400 for an invalid participantId", async () => {
+            const req = reqFor({
+                params: { instanceId: INSTANCE_ID },
+                body: { participantId: "junk", role: "student" },
+            });
+            const res = makeRes();
+            await addCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 404 when the instance is missing", async () => {
+            CourseInstance.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { instanceId: INSTANCE_ID }, body });
+            const res = makeRes();
+            await addCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+
+        it("forbids callers without permission", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            const req = reqFor({
+                params: { instanceId: INSTANCE_ID },
+                body,
+                user: { userId: USER_ID, roles: ["student"], role: "student" },
+            });
+            const res = makeRes();
+            await addCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+        });
+
+        it("returns 409 when the student is already enrolled", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            StudentEnrollment.findOne.mockReturnValue(chainable({ _id: ENROLLMENT_ID }));
+
+            const req = reqFor({
+                params: { instanceId: INSTANCE_ID },
+                body,
+                user: { userId: USER_ID, roles: ["admin"], role: "admin" },
+            });
+            const res = makeRes();
+            await addCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(409);
+        });
+    });
+
+    describe("removeCourseInstanceParticipant", () => {
+        it("removes a participant as admin", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            const enrollment = {
+                _id: ENROLLMENT_ID,
+                status: "enrolled",
+                save: vi.fn().mockResolvedValue(true),
+            };
+            StudentEnrollment.findOne.mockResolvedValue(enrollment);
+
+            const req = reqFor({
+                params: { instanceId: INSTANCE_ID, participantId: STUDENT_ID },
+                user: { userId: USER_ID, roles: ["systemadmin"] },
+            });
+            const res = makeRes();
+            await removeCourseInstanceParticipant(req, res);
+
+            expect(enrollment.status).toBe("withdrawn");
+            expect(enrollment.dropoutDate).toBeInstanceOf(Date);
+            expect(enrollment.save).toHaveBeenCalled();
+            expect(res.json).toHaveBeenCalledWith({
+                success: true,
+                message: "Deltagare har tagits bort från kursen",
+            });
+        });
+
+        it("returns 400 for invalid ids", async () => {
+            const req = reqFor({ params: { instanceId: "bad", participantId: STUDENT_ID } });
+            const res = makeRes();
+            await removeCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 404 when the instance is missing", async () => {
+            CourseInstance.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, participantId: STUDENT_ID } });
+            const res = makeRes();
+            await removeCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+
+        it("forbids callers without permission", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            const req = reqFor({
+                params: { instanceId: INSTANCE_ID, participantId: STUDENT_ID },
+                user: { userId: USER_ID, roles: ["student"], role: "student" },
+            });
+            const res = makeRes();
+            await removeCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+        });
+
+        it("returns 404 when the enrollment is missing", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            StudentEnrollment.findOne.mockResolvedValue(null);
+            const req = reqFor({
+                params: { instanceId: INSTANCE_ID, participantId: STUDENT_ID },
+                user: { userId: USER_ID, roles: ["admin"] },
+            });
+            const res = makeRes();
+            await removeCourseInstanceParticipant(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+    });
+
+    describe("getStudentLastAccess", () => {
+        beforeEach(() => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            Student.findById.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            StudentEnrollment.findOne.mockResolvedValue(enrollment);
+        });
+
+        it("returns last login and submission", async () => {
+            User.findById.mockReturnValue({
+                select: vi.fn().mockResolvedValue({ lastLoginAt: new Date("2026-09-01") }),
+            });
+            AssignmentSubmission.findOne.mockReturnValue(
+                chainable({ submittedAt: new Date("2026-09-10") })
+            );
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getStudentLastAccess(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.lastLogin).toBeInstanceOf(Date);
+            expect(payload.lastSubmission).toBeInstanceOf(Date);
+        });
+
+        it("returns nulls when there is no activity", async () => {
+            User.findById.mockReturnValue({ select: vi.fn().mockResolvedValue(null) });
+            AssignmentSubmission.findOne.mockReturnValue(chainable(null));
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getStudentLastAccess(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.lastLogin).toBeNull();
+            expect(payload.lastSubmission).toBeNull();
+        });
+
+        it("returns 400 for invalid ids", async () => {
+            const req = reqFor({ params: { instanceId: "bad", studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getStudentLastAccess(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 404 when the instance is missing", async () => {
+            CourseInstance.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getStudentLastAccess(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+
+        it("returns 404 when the student is missing", async () => {
+            Student.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getStudentLastAccess(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+    });
+
+    describe("getCourseInstanceReports", () => {
+        it("computes enrollment completion metrics", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            StudentEnrollment.find.mockReturnValue(
+                chainable([
+                    {
+                        _id: ENROLLMENT_ID,
+                        completedAt: new Date("2026-10-01"),
+                        completedComponents: { 1: "✓", 2: "✓", 3: "✗" },
+                    },
+                    { _id: "x2", completedAt: null, completedComponents: { 1: "✓" } },
+                ])
+            );
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID } });
+            const res = makeRes();
+            await getCourseInstanceReports(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.totalEnrollments).toBe(2);
+            expect(payload.totalCompletedStudents).toBe(1);
+            expect(payload.totalCompletedModules).toBe(3);
+            expect(payload.overallCompletionRate).toBe("50.0");
+        });
+
+        it("returns 400 for invalid input", async () => {
+            const req = reqFor({ params: { instanceId: "bad" } });
+            const res = makeRes();
+            await getCourseInstanceReports(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 404 when the instance is missing", async () => {
+            CourseInstance.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { instanceId: INSTANCE_ID } });
+            const res = makeRes();
+            await getCourseInstanceReports(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+    });
+
+    describe("getSubmissionComments", () => {
+        const submission = { _id: SUBMISSION_ID, studentId: STUDENT_ID, comments: [{ id: "c1" }] };
+
+        beforeEach(() => {
+            AssignmentSubmission.findById.mockResolvedValue(submission);
+        });
+
+        it("returns comments for a teacher", async () => {
+            const req = reqFor({
+                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                params: { submissionId: SUBMISSION_ID },
+            });
+            const res = makeRes();
+            await getSubmissionComments(req, res);
+            expect(res.json).toHaveBeenCalledWith({ success: true, comments: [{ id: "c1" }] });
+        });
+
+        it("lets a student read their own submission comments", async () => {
+            Student.findOne.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            const req = reqFor({ params: { submissionId: SUBMISSION_ID } });
+            const res = makeRes();
+            await getSubmissionComments(req, res);
+            expect(res.json).toHaveBeenCalledWith({ success: true, comments: [{ id: "c1" }] });
+        });
+
+        it("forbids a student reading someone else's comments", async () => {
+            Student.findOne.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            AssignmentSubmission.findById.mockResolvedValue({
+                ...submission,
+                studentId: "999999999999999999999999",
+            });
+            const req = reqFor({ params: { submissionId: SUBMISSION_ID } });
+            const res = makeRes();
+            await getSubmissionComments(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+        });
+
+        it("returns 400 for invalid input", async () => {
+            const req = reqFor({ params: { submissionId: "bad" } });
+            const res = makeRes();
+            await getSubmissionComments(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 404 when the submission is missing", async () => {
+            AssignmentSubmission.findById.mockResolvedValue(null);
+            const req = reqFor({ params: { submissionId: SUBMISSION_ID } });
+            const res = makeRes();
+            await getSubmissionComments(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+    });
+
+    describe("addSubmissionComment", () => {
+        let submission;
+
+        beforeEach(() => {
+            submission = {
+                _id: SUBMISSION_ID,
+                studentId: STUDENT_ID,
+                courseInstanceId: INSTANCE_ID,
+                comments: [],
+                save: vi.fn().mockResolvedValue(true),
+            };
+            AssignmentSubmission.findById.mockResolvedValue(submission);
+        });
+
+        it("adds a top-level comment for the owning student", async () => {
+            Student.findOne.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            const req = reqFor({
+                params: { submissionId: SUBMISSION_ID },
+                body: { text: "Tack för feedbacken!" },
+            });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+
+            expect(submission.comments).toHaveLength(1);
+            expect(submission.comments[0].text).toBe("Tack för feedbacken!");
+            expect(submission.comments[0].parentCommentId).toBeNull();
+            expect(submission.save).toHaveBeenCalled();
+            expect(res.json).toHaveBeenCalledWith({
+                success: true,
+                comments: submission.comments,
+            });
+        });
+
+        it("adds a reply for the owning teacher", async () => {
+            Teacher.findOne.mockResolvedValue(teacher);
+            CourseInstance.findById.mockResolvedValue(instance);
+            const req = reqFor({
+                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                params: { submissionId: SUBMISSION_ID },
+                body: { text: "Bra ", parentCommentId: "507f1f77bcf86cd799439011" },
+            });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(submission.comments).toHaveLength(1);
+            expect(submission.comments[0].parentCommentId).toBe("507f1f77bcf86cd799439011");
+        });
+
+        it("returns 400 for invalid input", async () => {
+            const req = reqFor({ params: { submissionId: "bad" }, body: { text: "hej" } });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 400 when text is empty", async () => {
+            const req = reqFor({ params: { submissionId: SUBMISSION_ID }, body: { text: " " } });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 400 for an invalid parentCommentId", async () => {
+            const req = reqFor({
+                params: { submissionId: SUBMISSION_ID },
+                body: { text: "hej", parentCommentId: "junk" },
+            });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        it("returns 404 when the submission is missing", async () => {
+            AssignmentSubmission.findById.mockResolvedValue(null);
+            const req = reqFor({
+                params: { submissionId: SUBMISSION_ID },
+                body: { text: "hej" },
+            });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+
+        it("forbids callers with no recognized role", async () => {
+            const req = reqFor({
+                user: { userId: USER_ID, roles: ["mentor"] },
+                params: { submissionId: SUBMISSION_ID },
+                body: { text: "hej" },
+            });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+        });
+
+        it("forbids a teacher who does not own the instance", async () => {
+            Teacher.findOne.mockResolvedValue(teacher);
+            CourseInstance.findById.mockResolvedValue({
+                ...instance,
+                responsibleTeacher: "999999999999999999999999",
+            });
+            const req = reqFor({
+                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                params: { submissionId: SUBMISSION_ID },
+                body: { text: "hej" },
+            });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+        });
+
+        it("forbids a student commenting on someone else's submission", async () => {
+            Student.findOne.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            AssignmentSubmission.findById.mockResolvedValue({
+                ...submission,
+                studentId: "999999999999999999999999",
+            });
+            const req = reqFor({
+                params: { submissionId: SUBMISSION_ID },
+                body: { text: "hej" },
+            });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+        });
+
+        it("returns 403 when the student profile is missing", async () => {
+            Student.findOne.mockResolvedValue(null);
+            const req = reqFor({
+                params: { submissionId: SUBMISSION_ID },
+                body: { text: "hej" },
+            });
+            const res = makeRes();
+            await addSubmissionComment(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
         });
     });
 });

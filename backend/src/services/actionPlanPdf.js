@@ -1,4 +1,7 @@
 import { PdfBuilder } from "./pdfGenerator.js";
+import Student from "../models/Student.js";
+import FormQuestions from "../models/ActionPlanQuestions.js";
+import Course from "../models/Course.js";
 
 function normalizeList(value) {
     if (value === undefined || value === null || value === "") return [];
@@ -36,6 +39,27 @@ const KNOWN_KEYS = new Set([
     "_id",
     "__v",
 ]);
+
+export async function getOrBuildActionPlanPdf(plan) {
+    if (plan.pdf && plan.pdf.length > 0) return plan.pdf;
+
+    const student = await Student.findById(plan.studentId).select("name");
+    const formConfig = await FormQuestions.findOne({ type: "ACTION_PLAN" }).lean().catch(() => null);
+    let courseName = plan.courseName;
+    if (!courseName && plan.courseId) {
+        const course = await Course.findById(plan.courseId).select("courseName").lean().catch(() => null);
+        if (course) courseName = course.courseName;
+    }
+    const pdf = buildActionPlanPdf({
+        plan: plan.toObject(),
+        studentName: student?.name || plan.studentName || "",
+        courseName,
+        questions: formConfig?.questions,
+    });
+    plan.pdf = pdf;
+    await plan.save().catch(() => null);
+    return pdf;
+}
 
 export function buildActionPlanPdf({ plan, studentName, courseName, questions }) {
     const builder = new PdfBuilder();

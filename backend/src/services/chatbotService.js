@@ -1,5 +1,6 @@
 import logger from "../utils/logger.js";
 import Student from "../models/Student.js";
+import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
 import mongoose from "mongoose";
 

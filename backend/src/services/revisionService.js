@@ -336,12 +336,6 @@ async function adjustDates({ studentId, adjustments, userId: _userId, session })
  * Send notifications to teacher and student about the study-plan revision.
  */
 async function sendRevisionNotifications({ student, revisionReason, description, userId: _userId }) {
-    const teacherId = student.teacherId;
-    if (!teacherId) return;
-
-    const teacher = await User.findById(teacherId).select("name email");
-    if (!teacher?.email) return;
-
     const reasonLabels = {
         pace_change: "Tempoändring",
         course_added: "Kurs tillagd",
@@ -355,26 +349,27 @@ async function sendRevisionNotifications({ student, revisionReason, description,
     const message = `Studieplanen för ${student.name} har reviderats: ${reasonLabel}${description ? ` — ${description}` : ""}`;
 
     // Create in-app notification for teacher
-    try {
-        await Notification.create({
-            type: "studyplan_changed",
-            message,
-            teacher: teacherId,
-            meta: {
-                studentId: student._id,
-                studentName: student.name,
-                revisionReason,
-                description: description || "",
-            },
-        });
-    } catch (notifError) {
-        logger.error({ err: notifError }, "Error creating revision notification");
-    }
+    const teacherId = student.teacherId;
+    if (teacherId) {
+        try {
+            const teacher = await User.findById(teacherId).select("name email");
+            if (teacher?.email) {
+                await Notification.create({
+                    type: "studyplan_changed",
+                    message,
+                    teacher: teacherId,
+                    meta: {
+                        studentId: student._id,
+                        studentName: student.name,
+                        revisionReason,
+                        description: description || "",
+                    },
+                });
 
-    // Send email to teacher
-    try {
-        const signature = await getEmailSignature();
-        const emailBody = `
+                // Send email to teacher
+                try {
+                    const signature = await getEmailSignature();
+                    const emailBody = `
 Hej ${teacher.name},
 
 ${message}
@@ -383,13 +378,70 @@ Med vänlig hälsning,
 ${signature}
         `.trim();
 
-        await sendEmail({
-            to: teacher.email,
-            subject: `Studieplan reviderad — ${student.name}`,
-            body: emailBody,
-        });
-    } catch (emailError) {
-        logger.error({ err: emailError }, "Error sending revision email to teacher");
+                    await sendEmail({
+                        to: teacher.email,
+                        subject: `Studieplan reviderad — ${student.name}`,
+                        text: emailBody,
+                    });
+                } catch (emailError) {
+                    logger.error({ err: emailError }, "Error sending revision email to teacher");
+                }
+            }
+        } catch (notifError) {
+            logger.error({ err: notifError }, "Error creating revision notification for teacher");
+        }
+    }
+
+    // Notify the student as well (in-app + email)
+    if (student.email) {
+        // Find the student's login account so the in-app notification reaches them
+        let studentUserId = null;
+        try {
+            const studentUser = await User.findOne({ email: student.email });
+            studentUserId = studentUser?._id || null;
+        } catch (userError) {
+            logger.error({ err: userError, studentId: student._id }, "Error looking up student user for revision notification");
+        }
+
+        const studentMessage = `Din studieplan har reviderats: ${reasonLabel}${description ? ` — ${description}` : ""}`;
+
+        try {
+            await Notification.create({
+                type: "studyplan_changed",
+                message: studentMessage,
+                studentId: student._id,
+                meta: {
+                    studentId: student._id,
+                    studentName: student.name,
+                    studentUserId,
+                    revisionReason,
+                    description: description || "",
+                },
+            });
+        } catch (notifError) {
+            logger.error({ err: notifError }, "Error creating revision notification for student");
+        }
+
+        // Send email to student
+        try {
+            const signature = await getEmailSignature();
+            const emailBody = `
+Hej ${student.name},
+
+${studentMessage}
+
+Med vänlig hälsning,
+${signature}
+            `.trim();
+
+            await sendEmail({
+                to: student.email,
+                subject: `Studieplan reviderad`,
+                text: emailBody,
+            });
+        } catch (emailError) {
+            logger.error({ err: emailError }, "Error sending revision email to student");
+        }
     }
 }
 

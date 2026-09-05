@@ -177,6 +177,17 @@ export const submitAssignment = async (req, res) => {
             { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
         );
 
+        // A resubmission invalidates any prior "godkänd" marking for the module.
+        try {
+            if (enrollment.completedComponents) {
+                enrollment.completedComponents.set(String(moduleNumberInt), "✗");
+                enrollment.skipNotification = true;
+                await enrollment.save();
+            }
+        } catch (completedError) {
+            logger.warn({ err: completedError, enrollmentId: enrollment._id }, "Error resetting module completion on resubmission");
+        }
+
         logger.info(
             { studentId: student._id, enrollmentId: enrollment._id, moduleNumber: moduleNumberInt },
             "Assignment submitted"
@@ -281,6 +292,24 @@ export const setSubmissionFeedback = async (req, res) => {
             at: new Date(),
         };
         await submission.save();
+
+        // Keep the enrollment's per-module completion tracking in sync so the
+        // activity/report ✓/✗ views reflect teacher feedback. "godkänd" marks
+        // the module complete, anything else marks it as needing revision.
+        if (submission.enrollmentId) {
+            try {
+                const enrollment = await StudentEnrollment.findById(submission.enrollmentId);
+                if (enrollment) {
+                    const completedComponents = enrollment.completedComponents || new Map();
+                    completedComponents.set(String(submission.moduleNumber), status === "godkänd" ? "✓" : "✗");
+                    enrollment.completedComponents = completedComponents;
+                    enrollment.skipNotification = true;
+                    await enrollment.save();
+                }
+            } catch (completedError) {
+                logger.warn({ err: completedError, submissionId: submission._id }, "Error updating enrollment module completion");
+            }
+        }
 
         logger.info(
             { submissionId: submission._id, status, by: user.userId },

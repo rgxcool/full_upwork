@@ -1093,6 +1093,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                 const studentExamTime = student.examTime || "";
                 const studentExamMunicipality = student.examMunicipality || "";
                 const studentExamLocation = student.examLocation || "";
+                const studentExamRoom = student.examRoom || "";
 
                 // Get attendance data for this specific student and event
                 const { default: ExamAttendance } = await import(
@@ -1124,6 +1125,9 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                 const finalExamLocation = attendanceRecord
                     ? attendanceRecord.examLocation
                     : studentExamLocation;
+                const finalExamRoom = attendanceRecord
+                    ? attendanceRecord.examRoom
+                    : student.examRoom;
 
                 if (!grouped[key]) {
                     // Samla samma tid/kommun/plats bland gruppen
@@ -1142,6 +1146,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                             time: s.examTime,
                             municipality: s.examMunicipality,
                             location: s.examLocation,
+                            room: s.examRoom,
                         }));
 
                     // Get the most common exam info from attendance records for this event
@@ -1181,16 +1186,21 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                     const recordsWithLocation = attendanceRecords.filter(
                         (r) => r.examLocation && r.examLocation.trim() !== ""
                     );
+                    const recordsWithRoom = attendanceRecords.filter(
+                        (r) => r.examRoom && r.examRoom.trim() !== ""
+                    );
 
                     // Debug logging
                     logger.debug({ key, count: attendanceRecords.length }, "Event attendance records found");
-                    logger.debug({ withTime: recordsWithTime.length, withMunicipality: recordsWithMunicipality.length, withLocation: recordsWithLocation.length }, "Attendance records breakdown");
+                    logger.debug({ withTime: recordsWithTime.length, withMunicipality: recordsWithMunicipality.length, withLocation: recordsWithLocation.length, withRoom: recordsWithRoom.length }, "Attendance records breakdown");
                     if (recordsWithTime.length > 0)
                         logger.debug({ examTime: recordsWithTime[0].examTime }, "First time record");
                     if (recordsWithMunicipality.length > 0)
                         logger.debug({ examMunicipality: recordsWithMunicipality[0].examMunicipality }, "First municipality record");
                     if (recordsWithLocation.length > 0)
                         logger.debug({ examLocation: recordsWithLocation[0].examLocation }, "First location record");
+                    if (recordsWithRoom.length > 0)
+                        logger.debug({ examRoom: recordsWithRoom[0].examRoom }, "First room record");
 
                     // Get the most common values (or first if all are the same)
                     const eventExamTime =
@@ -1211,6 +1221,12 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                             : pickFirstNonEmpty(sameTime, "location") ||
                               studentExamLocation ||
                               "";
+                    const eventExamRoom =
+                        recordsWithRoom.length > 0
+                            ? recordsWithRoom[0].examRoom
+                            : pickFirstNonEmpty(sameTime, "room") ||
+                              studentExamRoom ||
+                              "";
 
                     logger.debug({ examTime: eventExamTime, examMunicipality: eventExamMunicipality, examLocation: eventExamLocation }, "Final event exam info");
 
@@ -1227,6 +1243,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                             type: "slutprov",
                             examMunicipality: eventExamMunicipality,
                             examLocation: eventExamLocation,
+                            examRoom: eventExamRoom,
                             examTime: eventExamTime,
                             courseName: courseName || null,
                             students: [],
@@ -1253,6 +1270,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                         examTime: finalExamTime,
                         examMunicipality: finalExamMunicipality,
                         examLocation: finalExamLocation,
+                        examRoom: finalExamRoom,
                         courseName: courseName || null,
                         finalExamDate: student.finalExamDate,
                     });
@@ -1274,6 +1292,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                     existingStudent.examTime = finalExamTime;
                     existingStudent.examMunicipality = finalExamMunicipality;
                     existingStudent.examLocation = finalExamLocation;
+                    if (finalExamRoom) existingStudent.examRoom = finalExamRoom;
                 }
 
                 logger.debug({ student: student.name, finalExamDate: student.finalExamDate }, "Manual - Added student");
@@ -1375,6 +1394,9 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                 const examLocation = attendanceRecord
                     ? attendanceRecord.examLocation
                     : "";
+                const examRoom = attendanceRecord
+                    ? attendanceRecord.examRoom
+                    : "";
 
                 if (!grouped[key]) {
                      
@@ -1411,16 +1433,21 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                     const recordsWithLocation = attendanceRecords.filter(
                         (r) => r.examLocation && r.examLocation.trim() !== ""
                     );
+                    const recordsWithRoom = attendanceRecords.filter(
+                        (r) => r.examRoom && r.examRoom.trim() !== ""
+                    );
 
                     // Debug logging
                     logger.debug({ key, count: attendanceRecords.length }, "Auto event attendance records found");
-                    logger.debug({ withTime: recordsWithTime.length, withMunicipality: recordsWithMunicipality.length, withLocation: recordsWithLocation.length }, "Auto attendance records breakdown");
+                    logger.debug({ withTime: recordsWithTime.length, withMunicipality: recordsWithMunicipality.length, withLocation: recordsWithLocation.length, withRoom: recordsWithRoom.length }, "Auto attendance records breakdown");
                     if (recordsWithTime.length > 0)
                         logger.debug({ examTime: recordsWithTime[0].examTime }, "Auto first time record");
                     if (recordsWithMunicipality.length > 0)
                         logger.debug({ examMunicipality: recordsWithMunicipality[0].examMunicipality }, "Auto first municipality record");
                     if (recordsWithLocation.length > 0)
                         logger.debug({ examLocation: recordsWithLocation[0].examLocation }, "Auto first location record");
+                    if (recordsWithRoom.length > 0)
+                        logger.debug({ examRoom: recordsWithRoom[0].examRoom }, "Auto first room record");
 
                     const eventExamTime =
                         recordsWithTime.length > 0
@@ -1434,8 +1461,12 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                         recordsWithLocation.length > 0
                             ? recordsWithLocation[0].examLocation
                             : student.examLocation || "";
+                    const eventExamRoom =
+                        recordsWithRoom.length > 0
+                            ? recordsWithRoom[0].examRoom
+                            : student.examRoom || "";
 
-                    logger.debug({ examTime: eventExamTime, examMunicipality: eventExamMunicipality, examLocation: eventExamLocation }, "Auto final event exam info");
+                    logger.debug({ examTime: eventExamTime, examMunicipality: eventExamMunicipality, examLocation: eventExamLocation, examRoom: eventExamRoom }, "Auto final event exam info");
 
                     grouped[key] = {
                         id: `${teacherId._id}_${dateKey}`,
@@ -1448,6 +1479,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                             type: "slutprov",
                             examMunicipality: eventExamMunicipality,
                             examLocation: eventExamLocation,
+                            examRoom: eventExamRoom,
                             examTime: eventExamTime,
                             courseName: course.courseName,
                             courseInstanceIds: [],
@@ -1491,6 +1523,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                         examTime,
                         examMunicipality,
                         examLocation,
+                        examRoom,
                         courseName: course.courseName,
                         finalExamDate: enrollment.slutprovDate, // Use the enrollment's exam date
                         courseInstanceId:
@@ -1516,6 +1549,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                         existingStudent.examTime = examTime;
                         existingStudent.examMunicipality = examMunicipality;
                         existingStudent.examLocation = examLocation;
+                        if (examRoom) existingStudent.examRoom = examRoom;
                     }
                 }
 
@@ -2232,7 +2266,7 @@ router.put("/mark-attendance/:personalNumber", isAuthenticated, hasRole(ALLOWED_
 });
 
 router.post("/examtime-location", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
-    const { studentIds, examTime, examMunicipality, examLocation } = req.body;
+    const { studentIds, examTime, examMunicipality, examLocation, examRoom } = req.body;
 
     if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
         return res.status(400).json({ message: "Inga student-ID:n angivna" });
@@ -2246,6 +2280,7 @@ router.post("/examtime-location", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES),
                     examTime,
                     examMunicipality,
                     examLocation,
+                    examRoom,
                 },
             }
         );
@@ -2348,6 +2383,7 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
             examTime: eventExamTime,
             examMunicipality: eventExamMunicipality,
             examLocation: eventExamLocation,
+            examRoom: eventExamRoom,
         } = req.body;
         logger.debug(
           { date, teacherId, studentCount: Array.isArray(students) ? students.length : undefined, courseName, courseId },
@@ -2425,9 +2461,10 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
                             "",
                         examLocation:
                             student.examLocation || eventExamLocation || "",
+                        examRoom: student.examRoom || eventExamRoom || "",
                         recordedBy: req.user?._id,
                     });
-                    logger.debug({ examDate: attendanceRecord.examDate, teacherId: attendanceRecord.teacherId, studentId: attendanceRecord.studentId, examTime: attendanceRecord.examTime, examMunicipality: attendanceRecord.examMunicipality, examLocation: attendanceRecord.examLocation }, "Created new ExamAttendance record");
+                    logger.debug({ examDate: attendanceRecord.examDate, teacherId: attendanceRecord.teacherId, studentId: attendanceRecord.studentId, examTime: attendanceRecord.examTime, examMunicipality: attendanceRecord.examMunicipality, examLocation: attendanceRecord.examLocation, examRoom: attendanceRecord.examRoom }, "Created new ExamAttendance record");
                 } else {
                     logger.debug("Found existing record, updating it");
                     // Update existing record
@@ -2445,6 +2482,9 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
                     if (student.examLocation || eventExamLocation)
                         attendanceRecord.examLocation =
                             student.examLocation || eventExamLocation;
+                    if (student.examRoom || eventExamRoom)
+                        attendanceRecord.examRoom =
+                            student.examRoom || eventExamRoom;
                 }
 
                 logger.debug("About to save attendance record");
@@ -2477,6 +2517,8 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
                         !!student.attended;
                     studentDoc.examHistory[existingHistoryIndex].updatedAt =
                         new Date();
+                    studentDoc.examHistory[existingHistoryIndex].examRoom =
+                        student.examRoom || eventExamRoom || studentDoc.examHistory[existingHistoryIndex].examRoom || "";
                 } else {
                     // Add new history entry
                     studentDoc.examHistory.push({
@@ -2492,6 +2534,7 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
                             "",
                         examLocation:
                             student.examLocation || eventExamLocation || "",
+                        examRoom: student.examRoom || eventExamRoom || "",
                         recordedAt: new Date(),
                         recordedBy: req.user?._id,
                     });
@@ -2499,6 +2542,8 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
 
                 studentDoc.attendedExam = !!student.attended;
                 studentDoc.paidExamFee = !!student.paidExamFee;
+                studentDoc.examRoom =
+                    student.examRoom || eventExamRoom || studentDoc.examRoom;
 
                 await studentDoc.save();
 

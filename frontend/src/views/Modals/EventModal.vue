@@ -28,6 +28,10 @@
             {{ examMunicipality }}
             <strong>Plats:</strong>
             {{ examLocation }}
+            <span v-if="examRoom">
+              <strong>Rum:</strong>
+              {{ examRoom }}
+            </span>
           </div>
           <div v-else class="text-muted">
             <em>
@@ -515,6 +519,7 @@
           examTime: s.examTime || '',
           examMunicipality: s.examMunicipality || '',
           examLocation: s.examLocation || '',
+          examRoom: s.examRoom || '',
           finalExamDate: s.finalExamDate || null,
           availableCourseInstances: [],
           selectedCourseInstance: null
@@ -549,6 +554,7 @@
                   examTime: attendance.examTime || student.examTime,
                   examMunicipality: attendance.examMunicipality || student.examMunicipality,
                   examLocation: attendance.examLocation || student.examLocation,
+                  examRoom: attendance.examRoom || student.examRoom,
                   finalExamDate: student.finalExamDate, // Preserve the finalExamDate
                 }
               }
@@ -573,17 +579,21 @@
           ''
         this.examLocation =
           exProps.examLocation || this.studentsData.find((s) => s.examLocation)?.examLocation || ''
+        this.examRoom =
+          exProps.examRoom || this.studentsData.find((s) => s.examRoom)?.examRoom || ''
 
         // Debug logging
         console.log('🔍 Frontend - ExtendedProps exam info:', {
           examTime: exProps.examTime,
           examMunicipality: exProps.examMunicipality,
           examLocation: exProps.examLocation,
+          examRoom: exProps.examRoom,
         })
         console.log('🔍 Frontend - Final exam info:', {
           examTime: this.examTime,
           examMunicipality: this.examMunicipality,
           examLocation: this.examLocation,
+          examRoom: this.examRoom,
         })
 
         // Debug logging for students and finalExamDate
@@ -660,11 +670,13 @@
                   examTime: student.examTime || this.examTime || '',
                   examMunicipality: student.examMunicipality || this.examMunicipality || '',
                   examLocation: student.examLocation || this.examLocation || '',
+                  examRoom: student.examRoom || this.examRoom || '',
                 },
               ],
               examTime: this.examTime,
               examMunicipality: this.examMunicipality,
               examLocation: this.examLocation,
+              examRoom: this.examRoom,
             }
           )
           // Refresh the event data to show the updated information
@@ -725,10 +737,12 @@
                 examTime: this.examTime,
                 examMunicipality: this.examMunicipality,
                 examLocation: this.examLocation,
+                examRoom: this.examRoom,
               })),
               examTime: this.examTime,
               examMunicipality: this.examMunicipality,
               examLocation: this.examLocation,
+              examRoom: this.examRoom,
             }
           )
 
@@ -739,6 +753,7 @@
               examTime: this.examTime,
               examMunicipality: this.examMunicipality,
               examLocation: this.examLocation,
+              examRoom: this.examRoom,
             }
           )
           // eslint-disable-next-line vue/no-mutating-props
@@ -747,6 +762,8 @@
           this.event.extendedProps.examMunicipality = this.examMunicipality
           // eslint-disable-next-line vue/no-mutating-props
           this.event.extendedProps.examLocation = this.examLocation
+          // eslint-disable-next-line vue/no-mutating-props
+          this.event.extendedProps.examRoom = this.examRoom
 
           this.showSuccessMessage = true
           await this.refreshEventData()
