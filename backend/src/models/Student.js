@@ -15,6 +15,7 @@ const StudentSchema = new mongoose.Schema(
         examMunicipality: String,
         examLocation: String,
         examTime: String,
+        examRoom: String,
 
         // Exam history tracking
         examHistory: [
@@ -33,6 +34,7 @@ const StudentSchema = new mongoose.Schema(
                 examTime: String,
                 examMunicipality: String,
                 examLocation: String,
+                examRoom: String,
                 grade: String,
                 notes: String,
                 recordedAt: { type: Date, default: Date.now },

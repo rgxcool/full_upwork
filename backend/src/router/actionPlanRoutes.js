@@ -5,7 +5,7 @@ import FormQuestions from "../models/ActionPlanQuestions.js"
 import Student from "../models/Student.js";
 import Course from "../models/Course.js";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
-import { buildActionPlanPdf } from "../services/actionPlanPdf.js";
+import { buildActionPlanPdf, getOrBuildActionPlanPdf } from "../services/actionPlanPdf.js";
 import { evaluateActionPlanStatusAndNotify } from "../controllers/notificationController.js";
 import logger from "../utils/logger.js";
 const router = Router();
@@ -18,24 +18,7 @@ router.get("/actionplan/:studentId/pdf", isAuthenticated, hasRole(ALLOWED_STAFF_
         if (!plan) {
             return res.status(404).json({ message: "Ingen handlingsplan hittad" });
         }
-        let pdf = plan.pdf;
-        if (!pdf || pdf.length === 0) {
-            const student = await Student.findById(plan.studentId).select("name");
-            const formConfig = await FormQuestions.findOne({ type: "ACTION_PLAN" }).lean().catch(() => null);
-            let courseName = plan.courseName;
-            if (!courseName && plan.courseId) {
-                const course = await Course.findById(plan.courseId).select("courseName").lean().catch(() => null);
-                if (course) courseName = course.courseName;
-            }
-            pdf = buildActionPlanPdf({
-                plan: plan.toObject(),
-                studentName: student?.name || plan.studentName || "",
-                courseName,
-                questions: formConfig?.questions,
-            });
-            plan.pdf = pdf;
-            await plan.save().catch(() => null);
-        }
+        const pdf = await getOrBuildActionPlanPdf(plan);
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
             "Content-Disposition",
@@ -54,24 +37,7 @@ router.get("/actionplan/document/:id/pdf", isAuthenticated, hasRole(ALLOWED_STAF
         if (!plan) {
             return res.status(404).json({ message: "Ingen handlingsplan hittad" });
         }
-        let pdf = plan.pdf;
-        if (!pdf || pdf.length === 0) {
-            const student = await Student.findById(plan.studentId).select("name");
-            const formConfig = await FormQuestions.findOne({ type: "ACTION_PLAN" }).lean().catch(() => null);
-            let courseName = plan.courseName;
-            if (!courseName && plan.courseId) {
-                const course = await Course.findById(plan.courseId).select("courseName").lean().catch(() => null);
-                if (course) courseName = course.courseName;
-            }
-            pdf = buildActionPlanPdf({
-                plan: plan.toObject(),
-                studentName: student?.name || plan.studentName || "",
-                courseName,
-                questions: formConfig?.questions,
-            });
-            plan.pdf = pdf;
-            await plan.save().catch(() => null);
-        }
+        const pdf = await getOrBuildActionPlanPdf(plan);
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
             "Content-Disposition",

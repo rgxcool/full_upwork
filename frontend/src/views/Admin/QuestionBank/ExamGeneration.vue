@@ -236,9 +236,14 @@ export default {
 
     // Load questions based on filters
     const loadQuestions = async () => {
+      if (!selectedCourse.value) {
+        availableQuestions.value = [];
+        selectedQuestions.value = {};
+        return;
+      }
       try {
         const { data } = await client.get(
-          `/question-bank/generate-exam?courseId=${selectedCourse.value || ""}&subject=${selectedSubject.value}&questionType=${selectedType.value}&numberOfQuestions=${numberOfQuestions.value}`
+          `/question-bank/by-course/${selectedCourse.value}?subject=${selectedSubject.value || ""}&questionType=${selectedType.value || ""}`
         );
         availableQuestions.value = data.questions || [];
         // Initialize selection
@@ -257,12 +262,11 @@ export default {
     };
 
     const generateExam = async () => {
-      if (!selectedCourse.value) {
-        toast.error("Välj en kurs");
-        return;
-      }
+      const selectedIds = availableQuestions.value
+        .filter((q) => selectedQuestions.value[q._id])
+        .map((q) => q._id);
 
-      if (selectedQuestions.value && Object.values(selectedQuestions.value).filter((v) => v).length === 0) {
+      if (selectedIds.length === 0) {
         toast.error("Välj minst en fråga");
         return;
       }
@@ -274,28 +278,43 @@ export default {
             courseId: selectedCourse.value,
             subject: selectedSubject.value,
             questionType: selectedType.value,
-            numberOfQuestions: numberOfQuestions.value,
+            numberOfQuestions: selectedIds.length,
           }
         );
 
+        // Persist the user's exact selection onto the generated attempt.
+        let examAttemptId = data.examAttemptId;
+        if (examAttemptId) {
+          try {
+            const updateRes = await client.put(
+              `/question-bank/exam-attempts/${examAttemptId}/questions`,
+              { questionIds: selectedIds }
+            );
+            examAttemptId = updateRes.data.examAttempt?._id || examAttemptId;
+          } catch (updateError) {
+            console.error("Error persisting question selection:", updateError);
+          }
+        }
+
+        const selectedTexts = availableQuestions.value
+          .filter((q) => selectedQuestions.value[q._id])
+          .map((q) => q.questionText);
+        const selectedTypes = availableQuestions.value
+          .filter((q) => selectedQuestions.value[q._id])
+          .map((q) => q.questionType);
+
         generatedExam.value = {
-          title: data.title || "Generated Exam",
+          title: data.title || examTitle.value || "Generated Exam",
           courseId: data.courseId,
-          questions: data.selectedQuestions.map((qId, i) => {
-            const question = data.questions.find((q) => q._id.toString() === qId);
-            return {
-              id: qId,
-              text: question ? question.questionText : "Okänd fråga",
-              type: question ? question.questionType : "multipleChoice",
-            };
-          }),
-          questionTexts: data.questions.map((q) => q.questionText),
-          questionTypes: data.questions.map((q) => q.questionType),
-          selectedCount: data.selectedCount,
+          examAttemptId,
+          questions: selectedIds,
+          questionTexts: selectedTexts,
+          questionTypes: selectedTypes,
+          selectedCount: selectedIds.length,
           totalAvailable: data.totalAvailable,
         };
 
-        toast.success("Exam genererad");
+        toast.success("Exam genererad och sparad i frågebanken");
       } catch (error) {
         toast.error("Kunde inte generera exam");
         console.error("Error generating exam:", error);
@@ -315,20 +334,12 @@ export default {
         return;
       }
 
-      try {
-        await client.post("/question-bank/save-exam", {
-          title: generatedExam.value.title,
-          courseId: generatedExam.value.courseId,
-          questions: generatedExam.value.questions,
-        });
-
-        toast.success("Exam sparad");
-        generatedExam.value = null;
-        resetSelection();
-      } catch (error) {
-        toast.error("Kunde inte spara exam");
-        console.error("Error saving exam:", error);
-      }
+      // The exam attempt is already persisted in the question bank when it was
+      // generated (POST /generate-exam), with the exact selection attached via
+      // PUT /exam-attempts/:id/questions. Reset the preview flow.
+      toast.success("Exam sparad i frågebanken");
+      generatedExam.value = null;
+      resetSelection();
     };
 
     const printExam = () => {

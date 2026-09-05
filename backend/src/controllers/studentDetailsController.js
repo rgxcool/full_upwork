@@ -634,7 +634,7 @@ export const reactivateStudentWithCourses = async (req, res) => {
         for (const notif of dropoutNotifications) {
             notif.resolved = true;
             if (!notif.resolvedByUsers) notif.resolvedByUsers = [];
-            notif.resolvedByUsers.push({ userId, resolvedAt: new Date() });
+            notif.resolvedByUsers.push(userId);
             await notif.save();
         }
 
