@@ -17,7 +17,7 @@
           <v-col cols="12" sm="4">
             <v-select
               v-model="selectedSubject"
-              :items="['Alla', 'Matematik', 'Svenska', 'Engelska', 'Naturkunskap', 'Samhällskunskap', 'Histori', 'Geografi', 'Idrott', 'Kemi', 'Fysik', 'Biologi', 'Teknik', 'Musik', 'Slöjd', 'Konst', 'Övrig']"
+              :items="['Alla', 'Matematik', 'Svenska', 'Engelska', 'Naturkunskap', 'Samhällskunskap', 'Historia', 'Geografi', 'Idrott', 'Kemi', 'Fysik', 'Biologi', 'Teknik', 'Musik', 'Slöjd', 'Konst', 'Övrig']"
               label="Ämne"
               dense
               outlined
@@ -334,12 +334,18 @@ export default {
         return;
       }
 
-      // The exam attempt is already persisted in the question bank when it was
-      // generated (POST /generate-exam), with the exact selection attached via
-      // PUT /exam-attempts/:id/questions. Reset the preview flow.
-      toast.success("Exam sparad i frågebanken");
-      generatedExam.value = null;
-      resetSelection();
+      try {
+        const updateRes = await client.put(
+          `/question-bank/exam-attempts/${generatedExam.value.examAttemptId}/questions`,
+          { questionIds: generatedExam.value.questions }
+        );
+        toast.success("Exam sparad i frågebanken");
+        generatedExam.value = null;
+        resetSelection();
+      } catch (error) {
+        toast.error("Kunde inte spara exam");
+        console.error("Error saving exam:", error);
+      }
     };
 
     const printExam = () => {

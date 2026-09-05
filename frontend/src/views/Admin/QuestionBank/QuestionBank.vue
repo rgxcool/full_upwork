@@ -408,7 +408,7 @@ export default {
       "Engelska",
       "Naturkunskap",
       "Samhällskunskap",
-      "Histori",
+      "Historia",
       "Geografi",
       "Idrott",
       "Kemi",

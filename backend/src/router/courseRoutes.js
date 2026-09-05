@@ -20,9 +20,26 @@ const objectIdArray = (value) => {
     return null;
 };
 
+// Accepts a number or a numeric string; rejects negatives and non-numeric
+// values so a course price can never be stored as garbage.
+const nonNegativeNumber = (value) => {
+    const num = typeof value === "number" ? value : Number(value);
+    if (typeof value === "boolean" || !Number.isFinite(num) || num < 0) {
+        return "måste vara ett icke-negativt tal";
+    }
+    return null;
+};
+
+// Normalize whatever the client sent into a number (or null to clear).
+const parsePrice = (value) => {
+    if (value === undefined || value === null || value === "") return null;
+    return Number(value);
+};
+
 const createCourseSchema = {
     courseName: { type: "string", required: true, min: 1, max: 200, sanitize: true },
     courseCode: { type: "string", required: true, min: 1, max: 50, sanitize: true },
+    price: { custom: nonNegativeNumber },
     programs: { custom: objectIdArray },
 };
 
@@ -31,6 +48,7 @@ const updateCourseSchema = {
     courseCode: { type: "string", min: 1, max: 50, sanitize: true },
     coursePoints: { type: "string", max: 50, sanitize: true },
     courseExtent: { type: "string", max: 100, sanitize: true },
+    price: { custom: nonNegativeNumber },
     programs: { custom: objectIdArray },
     isActive: { type: "boolean" },
 };
@@ -111,6 +129,7 @@ router.post(
                 courseCode,
                 coursePoints,
                 courseExtent,
+                price: parsePrice(req.body.price),
                 isActive: isActive === undefined ? true : isActive,
                 programs: (programs || []).map((id) =>
                     mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
@@ -153,6 +172,10 @@ router.put(
                     updates[field] = req.body[field];
                     changed.push(`${field}: ${course[field]} -> ${req.body[field]}`);
                 }
+            }
+            if (req.body.price !== undefined) {
+                updates.price = parsePrice(req.body.price);
+                changed.push(`price: ${course.price ?? 0} -> ${updates.price ?? 0}`);
             }
             if (Array.isArray(req.body.programs)) {
                 updates.programs = req.body.programs.map((id) =>

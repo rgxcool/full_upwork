@@ -26,6 +26,7 @@ import {
     removeStudentDropoutRecord,
 } from "../services/dropoutService.js";
 import { studentScopeFilter, municipalityInScope } from "../utils/tenantScope.js";
+import { getRevenueReport } from "../services/analyticsService.js";
 
 const router = Router();
 
@@ -1541,21 +1542,30 @@ router.put("/student/:id/education/:courseId/grade", authenticateUser, hasRole(A
 
 /**
  * @route   GET /students/earnings
- * @desc    Returns students with non-null education grades (for analytics).
+ * @desc    Earnings report computed server-side from real StudentEnrollment
+ *          data (realized = graded enrollments, forecasted = active/enrolled).
+ *          Reuses the same revenue logic as the analytics revenue report.
  * @access  Protected (Staff only)
  */
 router.get("/students/earnings", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
-        const students = await Student.find(
-            { "education.grade": { $ne: null } },
-            {
-                municipality: 1,
-                education: 1,
-            }
-        );
-        res.json(students);
+        const { startDate, endDate, municipality } = req.query;
+        const report = await getRevenueReport({
+            startDate: startDate ? String(startDate) : undefined,
+            endDate: endDate ? String(endDate) : undefined,
+            municipality: municipality ? String(municipality) : undefined,
+        });
+
+        res.json({
+            totalEarnings: report.totalRealized,
+            totalRevenue: report.totalRevenue,
+            totalForecasted: report.totalForecasted,
+            byMunicipality: report.byMunicipality,
+            byCourse: report.byCourse,
+            generatedAt: new Date().toISOString(),
+        });
     } catch (err) {
-        logger.error({ err }, "Failed to fetch earnings students");
+        logger.error({ err }, "Failed to fetch earnings report");
         res.status(500).json({ error: "Server error" });
     }
 });

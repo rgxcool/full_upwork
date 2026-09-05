@@ -137,6 +137,9 @@ const studentEnrollmentSchema = new mongoose.Schema(
             enum: ["pending", "paid", "partial", "overdue", "waived"],
             default: "pending",
         },
+        // Course price snapshot at the time of enrollment, for historical
+        // revenue accuracy. Null when the course had no price set.
+        enrollmentPrice: { type: Number, default: null, min: 0 },
 
         // Metadata
         teacherId: {

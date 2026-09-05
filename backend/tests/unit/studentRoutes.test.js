@@ -91,6 +91,13 @@ vi.mock("../../src/services/emailService.js", () => ({
     SOLLENTUNA_MUNICIPALITY: "Sollentuna",
 }));
 
+const { getRevenueReportMock } = vi.hoisted(() => ({
+    getRevenueReportMock: vi.fn(),
+}));
+vi.mock("../../src/services/analyticsService.js", () => ({
+    getRevenueReport: getRevenueReportMock,
+}));
+
 const loggerMock = vi.hoisted(() => ({
     info: vi.fn(),
     warn: vi.fn(),
@@ -251,6 +258,7 @@ beforeEach(() => {
     StudentEnrollmentMock.findOne.mockReset();
     StudentEnrollmentMock.findById.mockReset();
     StudentEnrollmentMock.findByIdAndDelete.mockReset();
+    getRevenueReportMock.mockReset();
     CoursePackage.find.mockReset();
     CoursePackage.findById.mockReset();
     CoursePackage.findById.mockResolvedValue(null);
@@ -2590,26 +2598,47 @@ describe("PUT /student/:id/education/:courseId/grade", () => {
 });
 
 describe("GET /students/earnings", () => {
-    it("queries graded students", async () => {
+    it("returns the revenue report from the analytics service", async () => {
         const handler = findRouteHandler("/students/earnings", "GET");
-        Student.find.mockResolvedValue([{ _id: "earn-1" }]);
+        getRevenueReportMock.mockResolvedValue({
+            totalRevenue: 12300,
+            totalRealized: 8200,
+            totalForecasted: 4100,
+            byMunicipality: [
+                {
+                    municipality: "Botkyrka",
+                    revenue: 8200,
+                    realized: 8200,
+                    forecasted: 0,
+                },
+            ],
+            byCourse: [],
+        });
         const res = createRes();
+        const req = { query: { municipality: "Botkyrka" } };
 
-        await handler({}, res);
+        await handler(req, res);
 
-        expect(Student.find).toHaveBeenCalledWith(
-            { "education.grade": { $ne: null } },
-            { municipality: 1, education: 1 }
-        );
-        expect(res.json).toHaveBeenCalledWith([{ _id: "earn-1" }]);
+        expect(getRevenueReportMock).toHaveBeenCalledWith({
+            startDate: undefined,
+            endDate: undefined,
+            municipality: "Botkyrka",
+        });
+        expect(res.status).not.toHaveBeenCalledWith(500);
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.totalEarnings).toBe(8200);
+        expect(payload.totalForecasted).toBe(4100);
+        expect(payload.totalRevenue).toBe(12300);
+        expect(payload.byMunicipality[0].municipality).toBe("Botkyrka");
     });
 
-    it("returns 500 when earnings query fails", async () => {
+    it("returns 500 when the earnings report fails", async () => {
         const handler = findRouteHandler("/students/earnings", "GET");
-        Student.find.mockRejectedValueOnce(new Error("boom"));
+        getRevenueReportMock.mockRejectedValueOnce(new Error("boom"));
         const res = createRes();
+        const req = { query: {} };
 
-        await handler({}, res);
+        await handler(req, res);
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ error: "Server error" });

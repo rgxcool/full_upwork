@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
+import Course from "../models/Course.js";
 import CourseInstance from "../models/CourseInstance.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
@@ -584,9 +585,18 @@ export const addCourseInstanceParticipant = async (req, res) => {
         }
 
         // Create new enrollment
+        let mainCourseId = instance.mainCourseId || null;
+        let enrollmentPrice = null;
+        if (mainCourseId && mongoose.isValidObjectId(mainCourseId)) {
+            const mainCourse = await Course.findById(mainCourseId).lean();
+            enrollmentPrice = mainCourse?.price ?? null;
+        }
+
         const newEnrollment = new StudentEnrollment({
             studentId: participantId,
             courseInstanceId: instance._id,
+            mainCourseId,
+            enrollmentPrice,
             status: "enrolled",
         });
 

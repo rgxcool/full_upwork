@@ -7,6 +7,7 @@ const courseSchema = new mongoose.Schema(
         courseCode: { type: String, required: true },
         coursePoints: { type: String },
         courseExtent: String,
+        price: { type: Number, default: null, min: 0 },
         isActive: { type: Boolean, default: true },
     },
     { timestamps: true }
