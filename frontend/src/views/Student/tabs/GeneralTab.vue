@@ -192,8 +192,14 @@
             </label>
             <div v-if="(editMode && isAdmin) || specpedAccommodationMode" class="checkbox-group">
               <label class="checkbox-label">
-                <input v-model="editData.examAccommodations.extraTime" type="checkbox" />
-                Extra skrivtid
+                <input
+                  v-model.number="editData.examAccommodations.extraTime"
+                  type="number"
+                  min="0"
+                  step="1"
+                  style="width: 90px"
+                />
+                Extra skrivtid (minuter)
               </label>
               <label class="checkbox-label">
                 <input v-model="editData.examAccommodations.computer" type="checkbox" />
@@ -217,7 +223,7 @@
               </div>
             </div>
             <div v-else>
-              <span v-if="student.examAccommodations?.extraTime" class="badge bg-info me-1">Extra skrivtid</span>
+              <span v-if="Number(student.examAccommodations?.extraTime) > 0" class="badge bg-info me-1">Extra skrivtid: {{ student.examAccommodations.extraTime }} min</span>
               <span v-if="student.examAccommodations?.computer" class="badge bg-info me-1">Dator</span>
               <span v-if="student.examAccommodations?.separateRoom" class="badge bg-info me-1">Sitter ensam</span>
               <span v-if="student.examAccommodations?.notes" class="text-muted d-block mt-1">{{ student.examAccommodations.notes }}</span>
@@ -656,9 +662,9 @@ export default {
             additionalInfo: localStudent.value.additionalInfo || '',
             specialNeeds: localStudent.value.specialNeeds || '',
             examAccommodations: {
-                extraTime: localStudent.value.examAccommodations?.extraTime || false,
-                computer: localStudent.value.examAccommodations?.computer || false,
-                separateRoom: localStudent.value.examAccommodations?.separateRoom || false,
+                extraTime: Number(localStudent.value.examAccommodations?.extraTime) || 0,
+                computer: Boolean(localStudent.value.examAccommodations?.computer),
+                separateRoom: Boolean(localStudent.value.examAccommodations?.separateRoom),
                 notes: localStudent.value.examAccommodations?.notes || '',
             },
         };
@@ -708,11 +714,16 @@ export default {
     const saveAccommodations = async () => {
       try {
         saving.value = true;
-        await client.put(
-          `/student-details/${route.params.id}`,
-          { examAccommodations: editData.value.examAccommodations }
+        const { data: updated } = await client.put(
+          `/meetings/students/${route.params.id}/exam-accommodations`,
+          {
+            extraTime: Number(editData.value.examAccommodations.extraTime) || 0,
+            computer: Boolean(editData.value.examAccommodations.computer),
+            separateRoom: Boolean(editData.value.examAccommodations.separateRoom),
+            notes: String(editData.value.examAccommodations.notes || '').trim(),
+          }
         );
-        localStudent.value.examAccommodations = { ...editData.value.examAccommodations };
+        localStudent.value.examAccommodations = updated.examAccommodations;
         specpedAccommodationMode.value = false;
         toast.success('Anpassningar sparade');
       } catch (err) {

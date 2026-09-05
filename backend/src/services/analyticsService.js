@@ -91,6 +91,10 @@ const buildBasePipeline = (filters, dateField) => {
  * Revenue grouped by municipality and by course, based on graded
  * enrollments in the selected date range (realized) + active/enrolled
  * enrollments in the selected date range (forecasted).
+ *
+ * Revenue uses the per-course price snapshot (`enrollmentPrice`) when the
+ * enrollment has one, otherwise it falls back to the municipality/grade
+ * based `gradeToRevenue()` pricing.
  */
 export const getRevenueReport = async (filters) => {
     const realizedPipeline = [
@@ -102,6 +106,7 @@ export const getRevenueReport = async (filters) => {
                 municipalityName: 1,
                 courseName: 1,
                 grade: 1,
+                enrollmentPrice: 1,
             },
         },
     ];
@@ -119,6 +124,7 @@ export const getRevenueReport = async (filters) => {
                 _id: 0,
                 municipalityName: 1,
                 courseName: 1,
+                enrollmentPrice: 1,
             },
         },
     ];
@@ -134,7 +140,9 @@ export const getRevenueReport = async (filters) => {
     let totalForecasted = 0;
 
     for (const row of realizedRows) {
-        const revenue = gradeToRevenue(row.municipalityName, row.grade);
+        const revenue =
+            row.enrollmentPrice ??
+            gradeToRevenue(row.municipalityName, row.grade);
         if (!revenue) continue;
 
         totalRealized += revenue;
@@ -155,8 +163,11 @@ export const getRevenueReport = async (filters) => {
     }
 
     for (const row of forecastedRows) {
-        // Forecast uses AtoE price as default
-        const revenue = gradeToRevenue(row.municipalityName, "A");
+        // Forecast uses the course price when one is snapshotted, otherwise
+        // the AtoE municipality price as default assumption.
+        const revenue =
+            row.enrollmentPrice ??
+            gradeToRevenue(row.municipalityName, "A");
         if (!revenue) continue;
 
         totalForecasted += revenue;
@@ -202,9 +213,10 @@ export const getRevenueReport = async (filters) => {
 /**
  * Monthly income for the trailing months plus a simple forecast for the
  * next `forecastMonths` months, based on the average of the last 3
- * observed months. This is an estimate, not an accounting figure - there
- * is no invoicing/pricing model in the system yet, so it is derived from
- * graded enrollments x municipality pricing, same as the revenue report.
+ * observed months. This is an estimate, not an accounting figure. It uses
+ * each enrollment's course price snapshot (`enrollmentPrice`) when present,
+ * otherwise it falls back to graded enrollments x municipality pricing,
+ * same as the revenue report.
  */
 export const getMonthlyIncomeForecast = async (filters) => {
     const forecastMonths = Math.min(Math.max(Number(filters.forecastMonths) || 3, 1), 12);
@@ -217,6 +229,7 @@ export const getMonthlyIncomeForecast = async (filters) => {
                 _id: 0,
                 municipalityName: 1,
                 grade: 1,
+                enrollmentPrice: 1,
                 year: { $year: "$gradeDate" },
                 month: { $month: "$gradeDate" },
             },
@@ -227,7 +240,9 @@ export const getMonthlyIncomeForecast = async (filters) => {
 
     const monthly = {};
     for (const row of rows) {
-        const revenue = gradeToRevenue(row.municipalityName, row.grade);
+        const revenue =
+            row.enrollmentPrice ??
+            gradeToRevenue(row.municipalityName, row.grade);
         if (!revenue) continue;
         const key = `${row.year}-${String(row.month).padStart(2, "0")}`;
         monthly[key] = (monthly[key] || 0) + revenue;

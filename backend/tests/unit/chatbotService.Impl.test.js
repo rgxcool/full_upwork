@@ -18,7 +18,7 @@ vi.mock("../../src/models/Student.js", () => ({
 
 vi.mock("../../src/models/StudentEnrollment.js", () => ({
     __esModule: true,
-    default: { findOne: vi.fn() },
+    default: { find: vi.fn(), findOne: vi.fn() },
 }));
 
 vi.mock("../../src/models/CourseInstance.js", () => ({
@@ -28,6 +28,16 @@ vi.mock("../../src/models/CourseInstance.js", () => ({
 
 vi.mock("../../src/services/faqService.js", () => ({
     findMatchingFaq: vi.fn(),
+}));
+
+const { isAiEnabled, generateAiAnswer } = vi.hoisted(() => ({
+    isAiEnabled: vi.fn(),
+    generateAiAnswer: vi.fn(),
+}));
+
+vi.mock("../../src/services/aiAnswerService.js", () => ({
+    isAiEnabled,
+    generateAiAnswer,
 }));
 
 import logger from "../../src/utils/logger.js";
@@ -60,6 +70,13 @@ describe("chatbotService.impl", () => {
         vi.clearAllMocks();
         Student.findById.mockReturnValue({ lean: vi.fn() });
         StudentEnrollment.findOne.mockReturnValue({ lean: vi.fn() });
+        StudentEnrollment.find.mockReturnValue({
+            select: vi.fn().mockReturnValue({
+                lean: vi.fn().mockResolvedValue([]),
+            }),
+        });
+        isAiEnabled.mockReturnValue(false);
+        generateAiAnswer.mockReset();
     });
 
     describe("ask", () => {
@@ -96,9 +113,6 @@ describe("chatbotService.impl", () => {
 
         it("tells students without enrollments that no courses are available", async () => {
             findMatchingFaq.mockResolvedValue(null);
-            Student.findById.mockReturnValue({
-                lean: vi.fn().mockResolvedValue(null),
-            });
             const result = await chatbotService.ask("student-1", "Vad läser vi?");
             expect(result.answer).toContain("inte inskriven på några kurser");
             expect(result.approved).toBe(false);
@@ -115,10 +129,9 @@ describe("chatbotService.impl", () => {
 
         it("returns a low-confidence fallback when no approved sources exist", async () => {
             findMatchingFaq.mockResolvedValue(null);
-            Student.findById.mockReturnValue({
-                lean: vi.fn().mockResolvedValue({
-                    _id: "student-1",
-                    enrollments: [{ status: "active", courseInstanceId: ciId }],
+            StudentEnrollment.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([{ courseInstanceId: ciId }]),
                 }),
             });
             CourseInstance.find.mockReturnValue(
@@ -133,10 +146,9 @@ describe("chatbotService.impl", () => {
 
         it("builds an approved answer from course content and logs it", async () => {
             findMatchingFaq.mockResolvedValue(null);
-            Student.findById.mockReturnValue({
-                lean: vi.fn().mockResolvedValue({
-                    _id: "student-1",
-                    enrollments: [{ status: "active", courseInstanceId: ciId }],
+            StudentEnrollment.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([{ courseInstanceId: ciId }]),
                 }),
             });
             CourseInstance.find.mockReturnValue(
@@ -153,7 +165,61 @@ describe("chatbotService.impl", () => {
             expect(result.confidence).toBe(0.8);
             expect(result.answer).toBeTruthy();
             expect(logger.info).toHaveBeenCalledWith(
-                expect.objectContaining({ event: "chatbot_interaction", success: true }),
+                expect.objectContaining({
+                    event: "chatbot_interaction",
+                    success: true,
+                    aiGenerated: false,
+                }),
+                "Chatbot interaction logged"
+            );
+        });
+
+        it("uses the AI-generated answer when an AI provider is enabled", async () => {
+            findMatchingFaq.mockResolvedValue(null);
+            isAiEnabled.mockReturnValue(true);
+            generateAiAnswer.mockResolvedValue("Svara på svenska: algebra handlar om symboler.");
+            StudentEnrollment.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([{ courseInstanceId: ciId }]),
+                }),
+            });
+            CourseInstance.find.mockReturnValue(
+                courseFindChain([{ _id: ciId, modules: [moduleWith()] }])
+            );
+
+            const result = await chatbotService.ask("student-1", "algebra");
+
+            expect(result.answer).toBe("Svara på svenska: algebra handlar om symboler.");
+            expect(result.approved).toBe(true);
+            expect(generateAiAnswer).toHaveBeenCalled();
+            expect(logger.info).toHaveBeenCalledWith(
+                expect.objectContaining({ aiGenerated: true }),
+                "Chatbot interaction logged"
+            );
+        });
+
+        it("falls back to the heuristic answer when the AI call fails", async () => {
+            findMatchingFaq.mockResolvedValue(null);
+            isAiEnabled.mockReturnValue(true);
+            generateAiAnswer.mockResolvedValue(null);
+            StudentEnrollment.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue([{ courseInstanceId: ciId }]),
+                }),
+            });
+            CourseInstance.find.mockReturnValue(
+                courseFindChain([{ _id: ciId, modules: [moduleWith()] }])
+            );
+
+            const result = await chatbotService.ask(
+                "student-1",
+                "inlämningsuppgift algebra"
+            );
+
+            expect(result.approved).toBe(true);
+            expect(result.answer).toBeTruthy();
+            expect(logger.info).toHaveBeenCalledWith(
+                expect.objectContaining({ aiGenerated: false }),
                 "Chatbot interaction logged"
             );
         });
@@ -181,13 +247,17 @@ describe("chatbotService.impl", () => {
 
         it("logs an interaction and returns an error answer on failure", async () => {
             findMatchingFaq.mockResolvedValue(null);
-            Student.findById.mockReturnValue({
-                lean: vi.fn().mockRejectedValue(new Error("db down")),
+            StudentEnrollment.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockRejectedValue(new Error("db down")),
+                }),
             });
 
             const result = await chatbotService.ask("student-1", "Vad gör vi?");
 
             expect(result.answer).toContain("Ett fel uppstod");
+            expect(result.approved).toBe(false);
+            expect(result.confidence).toBe(0);
             expect(logger.error).toHaveBeenCalled();
             expect(logger.info).toHaveBeenCalledWith(
                 expect.objectContaining({ event: "chatbot_interaction", success: false }),

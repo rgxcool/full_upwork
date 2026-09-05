@@ -4,6 +4,7 @@ import { AppError } from "../utils/errorHandler.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
+import Course from "../models/Course.js";
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import CourseMatchingService from "../utils/courseMatchingService.js";
@@ -199,6 +200,7 @@ async function rescheduleByTempo({ student, tempoWeeks, userId, session }) {
             studentId: student._id,
             courseInstanceId: instance._id,
             mainCourseId: enrollment.mainCourseId,
+            enrollmentPrice: enrollment.enrollmentPrice ?? null,
             startDate,
             endDate,
             status: enrollment.status || "enrolled",
@@ -283,10 +285,13 @@ async function addNewCourses({ student, courses, userId, userRole: _userRole, se
             student.teacherId || null
         );
 
+        const courseDoc = await Course.findById(course.courseId).lean();
+
         const enrollment = new StudentEnrollment({
             studentId: student._id,
             courseInstanceId: instance._id,
             mainCourseId: course.courseId,
+            enrollmentPrice: courseDoc?.price ?? null,
             startDate,
             endDate,
             status: "enrolled",

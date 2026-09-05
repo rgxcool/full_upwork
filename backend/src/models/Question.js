@@ -22,7 +22,7 @@ const questionSchema = new mongoose.Schema(
                 "Engelska",
                 "Naturkunskap",
                 "Samhällskunskap",
-                "Histori",
+                "Historia",
                 "Geografi",
                 "Idrott",
                 "Kemi",

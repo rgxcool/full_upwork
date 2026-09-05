@@ -1,5 +1,4 @@
 import logger from "../utils/logger.js";
-import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
 import mongoose from "mongoose";
@@ -95,26 +94,26 @@ class BaseChatbotService {
   /**
    * Get the student's enrolled course instances.
    * Only content from these courses will be included in the answer context.
+   * Uses the canonical StudentEnrollment records (not the legacy embedded
+   * `student.enrollments` field, which is no longer maintained).
    *
    * @param {string} studentId - The student's ID
    * @returns {Promise<Array<string>>} Array of course instance IDs the student is enrolled in
    */
   async getEnrolledCourseInstances(studentId) {
-    const student = await Student.findById(studentId).lean();
-    if (!student) return [];
+    const enrollments = await StudentEnrollment.find({
+      studentId,
+      status: { $in: ["enrolled", "active"] },
+      courseInstanceId: { $ne: null },
+    })
+      .select("courseInstanceId")
+      .lean();
 
-    const enrollmentIds = (student.enrollments || [])
-      .filter((e) => e.status && ["enrolled", "active"].includes(e.status))
+    const ids = enrollments
       .map((e) => e.courseInstanceId?.toString())
       .filter((id) => id);
 
-    const courseInstances = await CourseInstance.find({
-      _id: { $in: enrollmentIds },
-    })
-      .select("_id")
-      .lean();
-
-    return courseInstances.map((ci) => ci._id.toString());
+    return [...new Set(ids)];
   }
 
   /**
@@ -142,8 +141,9 @@ class BaseChatbotService {
    * @param {string|null} answer - The answer provided (null if fallback/human)
    * @param {Array} sources - The sources used (may be empty if fallback)
    * @param {boolean} success - Whether the answer was successfully generated
+   * @param {Object} [extra] - Extra metadata to include in the log entry
    */
-  async logInteraction(studentId, question, answer, sources, success) {
+  async logInteraction(studentId, question, answer, sources, success, extra = {}) {
     try {
       logger.info({
         event: "chatbot_interaction",
@@ -152,6 +152,7 @@ class BaseChatbotService {
         answerLength: answer ? answer.length : 0,
         sourcesCount: sources ? sources.length : 0,
         success,
+        ...extra,
       }, "Chatbot interaction logged");
     } catch (error) {
       logger.warn({ err: error }, "Failed to log chatbot interaction (non-fatal)");

@@ -195,7 +195,7 @@
   const pickerType = ref('Alla')
   const pickerSubjects = ref([
     'Matematik', 'Svenska', 'Engelska', 'Naturkunskap', 'Samhällskunskap',
-    'Histori', 'Geografi', 'Idrott', 'Kemi', 'Fysik', 'Biologi', 'Teknik',
+    'Historia', 'Geografi', 'Idrott', 'Kemi', 'Fysik', 'Biologi', 'Teknik',
   ])
 
   // Generera månader dynamiskt

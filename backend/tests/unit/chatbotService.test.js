@@ -17,7 +17,7 @@ vi.mock("../../src/models/Student.js", () => ({
 
 vi.mock("../../src/models/StudentEnrollment.js", () => ({
     __esModule: true,
-    default: { findOne: vi.fn() },
+    default: { find: vi.fn(), findOne: vi.fn() },
 }));
 
 vi.mock("../../src/models/CourseInstance.js", () => ({
@@ -43,6 +43,11 @@ describe("chatbotService", () => {
         });
         CourseInstance.aggregate.mockResolvedValue([]);
         StudentEnrollment.findOne.mockReturnValue({ lean: vi.fn() });
+        StudentEnrollment.find.mockReturnValue({
+            select: vi.fn().mockReturnValue({
+                lean: vi.fn().mockResolvedValue([]),
+            }),
+        });
     });
 
     it("generates a unique session id", () => {
@@ -53,31 +58,29 @@ describe("chatbotService", () => {
     });
 
     it("returns the enrolled course instance ids for a student", async () => {
-        Student.findById.mockReturnValue({
-            lean: vi.fn().mockResolvedValue({
-                _id: "student-1",
-                enrollments: [
-                    { status: "enrolled", courseInstanceId: "ci-1" },
-                    { status: "active", courseInstanceId: "ci-2" },
-                    { status: "cancelled", courseInstanceId: "ci-3" },
-                ],
-            }),
-        });
-        CourseInstance.find.mockReturnValue({
+        StudentEnrollment.find.mockReturnValue({
             select: vi.fn().mockReturnValue({
-                lean: vi.fn().mockResolvedValue([{ _id: "ci-1" }, { _id: "ci-2" }]),
+                lean: vi.fn().mockResolvedValue([
+                    { courseInstanceId: "ci-1" },
+                    { courseInstanceId: "ci-2" },
+                    { courseInstanceId: "ci-1" },
+                ]),
             }),
         });
 
         const ids = await service.getEnrolledCourseInstances("student-1");
         expect(ids).toEqual(["ci-1", "ci-2"]);
-        expect(CourseInstance.find).toHaveBeenCalledWith({
-            _id: { $in: ["ci-1", "ci-2"] },
+        expect(StudentEnrollment.find).toHaveBeenCalledWith({
+            studentId: "student-1",
+            status: { $in: ["enrolled", "active"] },
+            courseInstanceId: { $ne: null },
         });
     });
 
-    it("returns an empty list when the student is not found", async () => {
-        Student.findById.mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+    it("returns an empty list when there are no active enrollments", async () => {
+        StudentEnrollment.find.mockReturnValue({
+            select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([]) }),
+        });
         const ids = await service.getEnrolledCourseInstances("missing");
         expect(ids).toEqual([]);
     });
@@ -120,17 +123,9 @@ describe("chatbotService", () => {
             },
         ]);
         const ciId = "507f1f77bcf86cd799439011";
-        Student.findById.mockReturnValue({
-            lean: vi.fn().mockResolvedValue({
-                _id: "student-1",
-                enrollments: [
-                    { status: "active", courseInstanceId: ciId },
-                ],
-            }),
-        });
-        CourseInstance.find.mockReturnValue({
+        StudentEnrollment.find.mockReturnValue({
             select: vi.fn().mockReturnValue({
-                lean: vi.fn().mockResolvedValue([{ _id: ciId }]),
+                lean: vi.fn().mockResolvedValue([{ courseInstanceId: ciId }]),
             }),
         });
 

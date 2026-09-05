@@ -95,7 +95,7 @@ const StudentSchema = new mongoose.Schema(
 
         // Exam accommodations (Section 19.8, 21.5)
         examAccommodations: {
-            extraTime: { type: Boolean, default: false },
+            extraTime: { type: Number, default: 0, min: 0 },
             computer: { type: Boolean, default: false },
             separateRoom: { type: Boolean, default: false },
             notes: { type: String },

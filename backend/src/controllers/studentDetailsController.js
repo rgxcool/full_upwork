@@ -666,10 +666,13 @@ export const reactivateStudentWithCourses = async (req, res) => {
                     student.teacherId || null
                 );
 
+                const courseDoc = await Course.findById(courseId).lean();
+
                 const enrollment = new StudentEnrollment({
                     studentId: id,
                     courseInstanceId: instance._id,
                     mainCourseId: courseId,
+                    enrollmentPrice: courseDoc?.price ?? null,
                     startDate,
                     endDate,
                     status: "enrolled",

@@ -59,6 +59,10 @@
 </template>
 
 <script>
+import { useToast } from '@/composables/useToast.js'
+
+const PERMISSIONS_API = '/api/permissions'
+
 const ROLE_OPTIONS = [
   { key: 'systemadmin', label: 'Systemadmin' },
   { key: 'admin', label: 'Admin' },
@@ -93,71 +97,43 @@ const PERMISSION_MATRIX = {
   course_templates: { systemadmin: true, admin: true, teacher: true, syv: false, specped: false, coordinator: false, student: false },
 }
 
-const RBAC_PERMISSIONS = {
-  systemadmin: ['users:create', 'users:read', 'users:update', 'users:delete', 'teachers:read', 'teachers:create', 'teachers:update', 'teachers:delete', 'teachers:unassign', 'assignments:create', 'assignments:read:own', 'assignments:update:own', 'assignments:grade', 'students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update', 'courseTemplates:delete'],
-  admin: ['users:create', 'users:read', 'users:update', 'users:delete', 'teachers:read', 'teachers:create', 'teachers:update', 'teachers:delete', 'teachers:unassign', 'analytics:read', 'inactivity:read', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update', 'courseTemplates:delete'],
-  teacher: ['inactivity:read', 'assignments:create', 'assignments:read:own', 'assignments:update:own', 'assignments:grade', 'students:view_list:assigned', 'students:view_grades:assigned', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update'],
-  coordinator: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
-  syv: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
-  specped: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
-  student: ['viewOwnGrades', 'viewOwnSchedule', 'viewOwnProfile', 'viewCourseInfo', 'viewNotifications'],
-}
-
-const ALL_RBAC_KEYS = [...new Set(Object.values(RBAC_PERMISSIONS).flat())].sort()
-
-const RBAC_LABELS = {
-  'users:create': 'Skapa användare',
-  'users:read': 'Visa användare',
-  'users:update': 'Uppdatera användare',
-  'users:delete': 'Ta bort användare',
-  'teachers:read': 'Visa lärare',
-  'teachers:create': 'Skapa lärare',
-  'teachers:update': 'Uppdatera lärare',
-  'teachers:delete': 'Ta bort lärare',
-  'teachers:unassign': 'Avlotta lärare',
-  'assignments:create': 'Skapa uppgifter',
-  'assignments:read:own': 'Visa egna uppgifter',
-  'assignments:update:own': 'Uppdatera egna uppgifter',
-  'assignments:grade': 'Betygsätt',
-  'students:view_list:assigned': 'Visa elever (tilldelade)',
-  'students:view_grades:assigned': 'Visa betyg (tilldelade)',
-  'analytics:read': 'Statistik & analys',
-  'inactivity:read': 'Inaktivitetsrapport',
-  'courseTemplates:create': 'Skapa kursmallar',
-  'courseTemplates:read': 'Visa kursmallar',
-  'courseTemplates:update': 'Uppdatera kursmallar',
-  'courseTemplates:delete': 'Ta bort kursmallar',
-  'viewOwnGrades': 'Visa egna betyg',
-  'viewOwnSchedule': 'Visa eget schema',
-  'viewOwnProfile': 'Visa egen profil',
-  'viewCourseInfo': 'Visa kursinfo',
-  'viewNotifications': 'Visa aviseringar',
-}
-
 export default {
   name: 'PermissionsTab',
   setup() {
-    const roles = ROLE_OPTIONS
-    const features = FEATURE_OPTIONS
+    const toast = useToast()
+    const roles = ref(ROLE_OPTIONS)
+    const features = ref(FEATURE_OPTIONS)
+    const permissionMatrix = ref(PERMISSION_MATRIX)
+    const rbacPermissions = ref([]) // loaded separately if needed
 
-    const rbacPermissions = ALL_RBAC_KEYS.map((key) => ({
-      key,
-      label: RBAC_LABELS[key] || key,
-    }))
+    const loadPermissions = async () => {
+      try {
+        const res = await client.get(PERMISSIONS_API)
+        roles.value = res.data.roles
+        features.value = res.data.features
+        permissionMatrix.value = res.data.permissionMatrix
+        // rbacPermissions could also be loaded but keeping existing RBAC table separate for now
+      } catch (err) {
+        toast.error('Kunde inte ladda behörigheter från server.')
+        console.error('Error loading permissions:', err)
+      }
+    }
+
+    onMounted(loadPermissions)
 
     const getCellClass = (roleKey, featureKey) => {
-      return PERMISSION_MATRIX[featureKey]?.[roleKey] ? 'granted' : 'denied'
+      return permissionMatrix.value[featureKey]?.[roleKey] ? 'granted' : 'denied'
     }
 
     const getCellLabel = (roleKey, featureKey) => {
-      return PERMISSION_MATRIX[featureKey]?.[roleKey] ? 'Ja' : 'Nej'
+      return permissionMatrix.value[featureKey]?.[roleKey] ? 'Ja' : 'Nej'
     }
 
     const hasRbacPerm = (roleKey, permKey) => {
-      return (RBAC_PERMISSIONS[roleKey] || []).includes(permKey)
+      return (rbacPermissions.value || []).includes(permKey)
     }
 
-    return { roles, features, rbacPermissions, getCellClass, getCellLabel, hasRbacPerm }
+    return { roles, features, permissionMatrix, rbacPermissions, getCellClass, getCellLabel, hasRbacPerm }
   },
 }
 </script>

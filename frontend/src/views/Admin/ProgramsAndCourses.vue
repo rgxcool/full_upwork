@@ -20,6 +20,7 @@
               <th class="text-left">Kod</th>
               <th class="text-left">Poäng</th>
               <th class="text-left">Omfattning</th>
+              <th class="text-left">Pris</th>
               <th class="text-left">Program</th>
               <th class="text-left">Status</th>
               <th class="text-left">Åtgärder</th>
@@ -33,6 +34,7 @@
               <td>{{ course.courseCode }}</td>
               <td>{{ course.coursePoints || '–' }}</td>
               <td>{{ course.courseExtent || '–' }}</td>
+              <td>{{ formatPrice(course.price) }}</td>
               <td>
                 <v-chip
                   v-for="p in programNames(course)"
@@ -58,7 +60,7 @@
               </td>
             </tr>
             <tr v-if="courses.length === 0">
-              <td colspan="7" class="text-center text-grey">Inga kurser ännu.</td>
+              <td colspan="8" class="text-center text-grey">Inga kurser ännu.</td>
             </tr>
           </tbody>
         </v-table>
@@ -85,6 +87,13 @@
             />
             <v-text-field v-model="form.coursePoints" label="Poäng" />
             <v-text-field v-model="form.courseExtent" label="Omfattning" />
+            <v-text-field
+              v-model.number="form.price"
+              label="Pris (kr)"
+              type="number"
+              min="0"
+              :error-messages="validationErrors.price"
+            />
             <v-select
               v-model="form.programs"
               :items="programOptions"
@@ -158,9 +167,15 @@
     courseCode: '',
     coursePoints: '',
     courseExtent: '',
+    price: null,
     programs: [],
     isActive: true,
   })
+
+  const formatPrice = (price) =>
+    price === null || price === undefined || price === ''
+      ? '–'
+      : `${new Intl.NumberFormat('sv-SE').format(price)} kr`
 
   const fetchCourses = async () => {
     try {
@@ -191,6 +206,7 @@
       courseCode: '',
       coursePoints: '',
       courseExtent: '',
+      price: null,
       programs: [],
       isActive: true,
     }
@@ -205,6 +221,7 @@
       courseCode: course.courseCode,
       coursePoints: course.coursePoints || '',
       courseExtent: course.courseExtent || '',
+      price: course.price ?? null,
       programs: (course.programs || []).map((p) => (typeof p === 'string' ? p : p._id)),
       isActive: course.isActive !== false,
     }
@@ -229,6 +246,10 @@
         courseCode: form.value.courseCode.trim(),
         coursePoints: form.value.coursePoints || undefined,
         courseExtent: form.value.courseExtent || undefined,
+        price:
+          form.value.price === '' || form.value.price === null || form.value.price === undefined
+            ? null
+            : Number(form.value.price),
         programs: form.value.programs || [],
         isActive: form.value.isActive,
       }
