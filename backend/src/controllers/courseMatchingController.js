@@ -1537,6 +1537,27 @@ export const getCourseInstanceEnrollments = async (req, res) => {
         const { instanceId } = req.params;
         const { status } = req.query;
 
+        if (req.user?.role === "teacher") {
+            const Teacher = mongoose.model("Teacher");
+            const CourseInstance = mongoose.model("CourseInstance");
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            const instance = await CourseInstance.findById(instanceId).lean();
+            if (instance) {
+                const respId = instance.responsibleTeacher?._id?.toString() || instance.responsibleTeacher?.toString();
+                const asstId = instance.assistantTeacher?._id?.toString() || instance.assistantTeacher?.toString();
+                if (respId && asstId) {
+                    if (respId !== teacher._id.toString() && asstId !== teacher._id.toString()) {
+                        return res.status(403).json({ error: "Du är inte behörig för denna kursomgång." });
+                    }
+                } else if (respId && respId !== teacher._id.toString()) {
+                    return res.status(403).json({ error: "Du är inte behörig för denna kursomgång." });
+                }
+            }
+        }
+
         const enrollments = await enrollmentService.fetchCourseInstanceEnrollments({
             instanceId,
             status,

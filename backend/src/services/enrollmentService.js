@@ -248,8 +248,8 @@ export const fetchCourseInstanceEnrollments = async ({ instanceId, status }) => 
     if (status) query.status = status;
 
     const enrollments = await StudentEnrollment.find(query)
-        .populate("studentId", "name email dropout")
-        .populate("mainCourseId", "courseName courseCode")
+        .populate("studentId", "name email dropout personalNumber")
+        .populate("mainCourseId", "courseName courseCode resultTypes")
         .populate("teacherId", "username email")
         .populate("gradeBy", "username email")
         .sort({ startDate: -1 })
