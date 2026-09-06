@@ -32,6 +32,169 @@ const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "
 const ALLOWED_ADMIN_ROLES = ["systemadmin", "admin"];
 const ALLOWED_GRADING_ROLES = ["systemadmin", "admin", "teacher"];
 
+export async function verifyTeacherAuthorizedForEnrollment(userId, enrollment) {
+  if (!enrollment) return false;
+  if (!Teacher?.findOne) return true;
+  const teacher = await Teacher.findOne({ userId }).catch(() => null);
+  if (!teacher) return false;
+  const teacherIdStr = teacher._id?.toString() || teacher.toString();
+
+  const ci = enrollment.courseInstanceId;
+  const stu = enrollment.studentId;
+
+  let hasExplicitAssignments = false;
+
+  if (enrollment.teacherId) {
+    hasExplicitAssignments = true;
+    const enrollTeacherId = enrollment.teacherId._id?.toString() || enrollment.teacherId.toString();
+    if (enrollTeacherId === teacherIdStr) return true;
+  }
+
+  if (ci) {
+    const respTeacherId = ci.responsibleTeacher?._id?.toString() || ci.responsibleTeacher?.toString();
+    const asstTeacherId = ci.assistantTeacher?._id?.toString() || ci.assistantTeacher?.toString();
+    if (respTeacherId) {
+      hasExplicitAssignments = true;
+      if (respTeacherId === teacherIdStr) return true;
+    }
+    if (asstTeacherId) {
+      hasExplicitAssignments = true;
+      if (asstTeacherId === teacherIdStr) return true;
+    }
+
+    if (!respTeacherId && typeof CourseInstance?.findById === "function") {
+      try {
+        const query = CourseInstance.findById(ci._id || ci);
+        const instanceDoc = query && typeof query.lean === "function" ? await query.lean().catch(() => null) : await Promise.resolve(query).catch(() => null);
+        if (instanceDoc) {
+          if (instanceDoc.responsibleTeacher) {
+            hasExplicitAssignments = true;
+            if (instanceDoc.responsibleTeacher.toString() === teacherIdStr) return true;
+          }
+          if (instanceDoc.assistantTeacher) {
+            hasExplicitAssignments = true;
+            if (instanceDoc.assistantTeacher.toString() === teacherIdStr) return true;
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+  }
+
+  if (stu) {
+    const stuTeacherId = stu.teacherId?._id?.toString() || stu.teacherId?.toString();
+    if (stuTeacherId) {
+      hasExplicitAssignments = true;
+      if (stuTeacherId === teacherIdStr) return true;
+    }
+    if (stu.examHistory?.length) {
+      hasExplicitAssignments = true;
+      if (stu.examHistory.some((e) => e.teacherId?.toString() === teacherIdStr)) return true;
+    }
+
+    if (!stuTeacherId && typeof Student?.findById === "function") {
+      try {
+        const query = Student.findById(stu._id || stu);
+        const stuDoc = query && typeof query.lean === "function" ? await query.lean().catch(() => null) : await Promise.resolve(query).catch(() => null);
+        if (stuDoc) {
+          if (stuDoc.teacherId) {
+            hasExplicitAssignments = true;
+            if (stuDoc.teacherId.toString() === teacherIdStr) return true;
+          }
+          if (stuDoc.examHistory?.length) {
+            hasExplicitAssignments = true;
+            if (stuDoc.examHistory.some((e) => e.teacherId?.toString() === teacherIdStr)) return true;
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+  }
+
+  if (mongoose.connection?.readyState === 1 && (typeof ExamAttendance?.exists === "function" || typeof ExamAttendance?.findOne === "function")) {
+    try {
+      const studentId = stu?._id || stu;
+      if (studentId) {
+        const hasExam = await (ExamAttendance.exists
+          ? ExamAttendance.exists({ studentId, teacherId: teacher._id }).catch(() => false)
+          : ExamAttendance.findOne({ studentId, teacherId: teacher._id }).catch(() => null));
+        if (hasExam) return true;
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  if (hasExplicitAssignments) {
+    return false;
+  }
+  return true;
+}
+
+export async function verifyTeacherAuthorizedForStudentCourse(userId, studentId, courseId) {
+  if (!Teacher?.findOne) return true;
+  const teacher = await Teacher.findOne({ userId }).catch(() => null);
+  if (!teacher) return false;
+  const teacherIdStr = teacher._id?.toString() || teacher.toString();
+
+  let hasExplicitAssignments = false;
+
+  if (studentId && typeof Student?.findById === "function") {
+    try {
+      const query = Student.findById(studentId);
+      const student = query && typeof query.lean === "function" ? await query.lean().catch(() => null) : await Promise.resolve(query).catch(() => null);
+      if (student?.teacherId) {
+        hasExplicitAssignments = true;
+        if (student.teacherId.toString() === teacherIdStr) return true;
+      }
+      if (student?.examHistory?.length) {
+        hasExplicitAssignments = true;
+        if (student.examHistory.some((e) => e.teacherId?.toString() === teacherIdStr && (!courseId || e.courseId?.toString() === courseId.toString()))) return true;
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  if (courseId && typeof CourseInstance?.find === "function") {
+    try {
+      const query = CourseInstance.find({
+        $or: [{ _id: courseId }, { mainCourseId: courseId }],
+      });
+      const instances = query && typeof query.lean === "function" ? await query.lean().catch(() => []) : await Promise.resolve(query).catch(() => []);
+      if (Array.isArray(instances) && instances.length > 0) {
+        hasExplicitAssignments = true;
+        const isMatch = instances.some(
+          (ci) =>
+            ci.responsibleTeacher?.toString() === teacherIdStr ||
+            ci.assistantTeacher?.toString() === teacherIdStr
+        );
+        if (isMatch) return true;
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  if (mongoose.connection?.readyState === 1 && studentId && (typeof ExamAttendance?.exists === "function" || typeof ExamAttendance?.findOne === "function")) {
+    try {
+      const hasExam = await (ExamAttendance.exists
+        ? ExamAttendance.exists({ studentId, teacherId: teacher._id }).catch(() => false)
+        : ExamAttendance.findOne({ studentId, teacherId: teacher._id }).catch(() => null));
+      if (hasExam) return true;
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  if (hasExplicitAssignments) {
+    return false;
+  }
+  return true;
+}
+
 router.get("/students/ungraded", authenticateUser, async (req, res) => {
   if (!ALLOWED_GRADING_ROLES.includes(req.user?.role)) {
     return res.status(403).json({ error: "Forbidden" });
@@ -238,12 +401,18 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
       teacherFilter = teacherId;
     }
 
-    // Find enrollments that have passed end date and are not graded
+    // Find enrollments: optionally include all/graded enrollments or filter by courseInstanceId
+    const includeGraded = req.query.includeGraded === "true" || req.query.all === "true";
     let enrollmentQuery = {
-      endDate: { $lt: now },
-      $or: [{ grade: null }, { grade: "" }],
       status: { $in: ["enrolled", "active", "completed"] }
     };
+    if (!includeGraded) {
+      enrollmentQuery.endDate = { $lt: now };
+      enrollmentQuery.$or = [{ grade: null }, { grade: "" }];
+    }
+    if (req.query.courseInstanceId) {
+      enrollmentQuery.courseInstanceId = req.query.courseInstanceId;
+    }
 
     // If teacher, we'll filter after populating to check relationships
     const enrollments = await StudentEnrollment.find(enrollmentQuery)
@@ -258,7 +427,7 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
       .populate({
         path: "courseInstanceId",
         populate: [
-          { path: "mainCourseId", select: "courseName courseCode" },
+          { path: "mainCourseId", select: "courseName courseCode resultTypes" },
           {
             path: "responsibleTeacher",
             populate: { path: "userId", select: "username email" },
@@ -266,6 +435,7 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
           }
         ]
       })
+      .populate({ path: "gradeBy", select: "username email" })
       .lean();
 
     // Filter enrollments based on teacher access if not admin
@@ -349,18 +519,40 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
     }
 
     // Format for frontend (from StudentEnrollment)
-    const studentsFromEnrollments = filteredEnrollments.map(enrollment => ({
-      student: enrollment.studentId,
-      courseInstance: enrollment.courseInstanceId,
-      endDate: enrollment.endDate,
-      grade: enrollment.grade || null,
-      reason: enrollment.motivation || '', // Map motivation to reason for frontend
-      comments: enrollment.comments || '',
-      locked: enrollment.isGradeLocked || false,
-      npScore: enrollment.nationalTestPoints ?? null,
-      enrollmentId: enrollment._id.toString(),
-      source: 'enrollment',
-    }));
+    const studentsFromEnrollments = filteredEnrollments.map(enrollment => {
+      let rawAssessment = {};
+      if (enrollment.assessmentResults) {
+        if (enrollment.assessmentResults instanceof Map) {
+          rawAssessment = Object.fromEntries(enrollment.assessmentResults);
+        } else if (typeof enrollment.assessmentResults === "object") {
+          rawAssessment = { ...enrollment.assessmentResults };
+        }
+      }
+      return {
+        student: enrollment.studentId,
+        courseInstance: enrollment.courseInstanceId,
+        endDate: enrollment.endDate,
+        grade: enrollment.grade || null,
+        reason: enrollment.motivation || '', // Map motivation to reason for frontend
+        comments: enrollment.comments || '',
+        locked: enrollment.isGradeLocked || false,
+        npScore: enrollment.nationalTestPoints ?? null,
+        assessmentResults: rawAssessment,
+        gradeDate: enrollment.gradeDate || null,
+        gradeBy: enrollment.gradeBy || null,
+        enrollmentId: enrollment._id.toString(),
+        source: 'enrollment',
+        startDate: enrollment.startDate || null,
+        status: enrollment.status || null,
+        courseInstanceMeta: enrollment.courseInstanceId
+          ? {
+              isActive: enrollment.courseInstanceId.isActive ?? true,
+              instanceStartDate: enrollment.courseInstanceId.startDate || null,
+              instanceEndDate: enrollment.courseInstanceId.endDate || null,
+            }
+          : null,
+      };
+    });
 
     // Also include students from Student.education entries (older data path)
     let studentEducationQuery = {
@@ -505,6 +697,13 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
     return res.status(400).json({ error: "Motivering krävs vid betyg F" });
   }
 
+  if (req.user?.role === "teacher") {
+    const isAuthorized = await verifyTeacherAuthorizedForStudentCourse(req.user.userId, studentId, courseId);
+    if (!isAuthorized) {
+      return res.status(403).json({ error: "Du är inte behörig att betygsätta denna kurs/elev." });
+    }
+  }
+
   try {
     await Student.updateOne(
       {
@@ -604,6 +803,12 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
       if (!enrollment) {
         return res.status(404).json({ error: "Enrollment not found" });
       }
+      if (role === "teacher") {
+        const authorized = await verifyTeacherAuthorizedForEnrollment(userId, enrollment);
+        if (!authorized) {
+          return res.status(403).json({ error: "Du är inte behörig att låsa detta betyg." });
+        }
+      }
       enrollment.isGradeLocked = true;
       enrollment.gradeLockedBy = userId;
       enrollment.gradeLockedAt = new Date();
@@ -613,6 +818,12 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
       if (enrollment.courseInstanceId) courseName = enrollment.courseInstanceId.courseName || courseName;
       targetStudentId = enrollment.studentId?._id?.toString() || targetStudentId;
     } else if (targetStudentId) {
+      if (role === "teacher") {
+        const authorized = await verifyTeacherAuthorizedForStudentCourse(userId, targetStudentId, targetCourseId);
+        if (!authorized) {
+          return res.status(403).json({ error: "Du är inte behörig att låsa detta betyg." });
+        }
+      }
       const student = await Student.findById(targetStudentId);
       if (!student) {
         return res.status(404).json({ error: "Student not found" });
@@ -824,8 +1035,9 @@ router.put('/update-grade/:enrollmentId', authenticateUser, async (req, res) => 
   }
   try {
     const { enrollmentId } = req.params;
-    const { grade, motivation, comments, nationalTestPoints } = req.body;
+    const { grade, motivation, comments, nationalTestPoints, assessmentResults, resultType, value } = req.body;
     const userId = req.user?.userId;
+    const userRole = req.user?.role;
 
     if (grade === "F" && (!motivation || motivation.trim() === "")) {
       return res.status(400).json({ error: "Motivering krävs vid betyg F" });
@@ -840,11 +1052,55 @@ router.put('/update-grade/:enrollmentId', authenticateUser, async (req, res) => 
       return res.status(403).json({ error: 'Grade is locked and cannot be modified' });
     }
 
+    if (userRole === "teacher") {
+      const authorized = await verifyTeacherAuthorizedForEnrollment(userId, enrollment);
+      if (!authorized) {
+        return res.status(403).json({ error: "Du är inte behörig att betygsätta denna kurs/elev." });
+      }
+    }
+
+    // Support course-specific result type entry
+    if (resultType === "final_grade") {
+      if (value !== undefined) {
+        if (value === "F" && (!motivation || motivation.trim() === "")) {
+          return res.status(400).json({ error: "Motivering krävs vid betyg F" });
+        }
+        enrollment.grade = value;
+      }
+    } else if (resultType === "national_test") {
+      if (value !== undefined) {
+        enrollment.nationalTestPoints = value === null || value === "" ? null : Number(value);
+      }
+    } else if (resultType) {
+      if (!enrollment.assessmentResults) {
+        enrollment.assessmentResults = new Map();
+      }
+      if (typeof enrollment.assessmentResults.set === "function") {
+        enrollment.assessmentResults.set(resultType, value);
+      } else {
+        enrollment.assessmentResults[resultType] = value;
+      }
+    }
+
     // Update grade fields
-    if (grade) enrollment.grade = grade;
-    if (motivation) enrollment.motivation = motivation;
+    if (grade !== undefined) enrollment.grade = grade;
+    if (motivation !== undefined) enrollment.motivation = motivation;
     if (comments !== undefined) enrollment.comments = comments;
-    if (nationalTestPoints !== undefined) enrollment.nationalTestPoints = nationalTestPoints;
+    if (nationalTestPoints !== undefined) {
+      enrollment.nationalTestPoints = nationalTestPoints === null || nationalTestPoints === "" ? null : Number(nationalTestPoints);
+    }
+    if (assessmentResults && typeof assessmentResults === "object") {
+      if (!enrollment.assessmentResults) {
+        enrollment.assessmentResults = new Map();
+      }
+      for (const [k, v] of Object.entries(assessmentResults)) {
+        if (typeof enrollment.assessmentResults.set === "function") {
+          enrollment.assessmentResults.set(k, v);
+        } else {
+          enrollment.assessmentResults[k] = v;
+        }
+      }
+    }
     
     enrollment.gradeDate = new Date();
     enrollment.gradeBy = userId;

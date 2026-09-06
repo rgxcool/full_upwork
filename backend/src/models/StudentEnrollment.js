@@ -108,6 +108,11 @@ const studentEnrollmentSchema = new mongoose.Schema(
         motivation: { type: String, default: '' }, // Grade motivation/reason
         comments: { type: String, default: '' }, // Grade comments
         nationalTestPoints: { type: Number, default: null }, // National test points
+        assessmentResults: {
+            type: Map,
+            of: mongoose.Schema.Types.Mixed,
+            default: () => new Map(),
+        },
         isGradeLocked: { type: Boolean, default: false }, // Lock grade from editing
         gradeLockedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         gradeLockedAt: { type: Date, default: null },

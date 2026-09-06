@@ -325,6 +325,49 @@ describe("GET /grades/students-to-grade", () => {
     expect(res.body.find((row) => row.source === "enrollment").npScore).toBe(87);
   });
 
+  it("maps batch fields (status, startDate, courseInstanceMeta) onto enrollment rows", async () => {
+    const now = new Date();
+    const enrollmentData = [
+      {
+        _id: "en-batch",
+        studentId: { _id: "stu1" },
+        courseInstanceId: {
+          _id: "ci-batch",
+          isActive: false,
+          startDate: new Date(now.getTime() - 1209600000),
+          endDate: new Date(now.getTime() - 86400000),
+          mainCourseId: { _id: "course-batch", courseName: "Engelska", courseCode: "ENX" },
+        },
+        mainCourseId: { _id: "course-batch" },
+        endDate: new Date(now.getTime() - 86400000),
+        startDate: new Date(now.getTime() - 1209600000),
+        status: "completed",
+        grade: "C",
+        motivation: "ok",
+        comments: "",
+        isGradeLocked: false,
+        nationalTestPoints: null,
+      },
+    ];
+    StudentEnrollment.find.mockReturnValueOnce(createQueryChain(enrollmentData));
+    Student.find.mockReturnValueOnce(createLeanResult([]));
+
+    const res = await request(app)
+      .get("/grades/students-to-grade")
+      .query({ includeGraded: "true" })
+      .set("x-user-role", "admin");
+
+    expect(res.status).toBe(200);
+    const row = res.body.find((r) => r.source === "enrollment");
+    expect(row.status).toBe("completed");
+    expect(row.startDate).toBeTruthy();
+    expect(row.courseInstanceMeta).toEqual({
+      isActive: false,
+      instanceStartDate: enrollmentData[0].courseInstanceId.startDate.toISOString(),
+      instanceEndDate: enrollmentData[0].courseInstanceId.endDate.toISOString(),
+    });
+  });
+
   it("passes through npScore for legacy education entries", async () => {
     const now = new Date();
     StudentEnrollment.find.mockReturnValueOnce(createQueryChain([]));
@@ -616,6 +659,60 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
     expect(enrollment.save).toHaveBeenCalled();
     expect(res.body.success).toBe(true);
     expect(enrollment.nationalTestPoints).toBe(0);
+  });
+
+  it("returns 403 when teacher is not authorized for the course instance", async () => {
+    const enrollment = createEnrollmentRecord({
+      courseInstanceId: {
+        _id: "ci1",
+        responsibleTeacher: "other-teacher-id",
+      },
+    });
+    StudentEnrollment.findById.mockResolvedValueOnce(enrollment);
+    const res = await request(app)
+      .put("/grades/update-grade/en1")
+      .set("x-user-role", "teacher")
+      .send({ grade: "C" });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("inte behörig");
+  });
+
+  it("allows authorized teacher when responsibleTeacher matches", async () => {
+    const enrollment = createEnrollmentRecord({
+      courseInstanceId: {
+        _id: "ci1",
+        responsibleTeacher: "teacher-1",
+      },
+    });
+    StudentEnrollment.findById.mockResolvedValueOnce(enrollment);
+    const res = await request(app)
+      .put("/grades/update-grade/en1")
+      .set("x-user-role", "teacher")
+      .send({ grade: "B" });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  it("saves custom assessment resultType (e.g. speaking)", async () => {
+    const enrollment = createEnrollmentRecord({
+      assessmentResults: new Map(),
+    });
+    StudentEnrollment.findById.mockResolvedValueOnce(enrollment);
+    const res = await request(app)
+      .put("/grades/update-grade/en1")
+      .set("x-user-role", "teacher")
+      .send({ resultType: "speaking", value: "B" });
+    expect(res.status).toBe(200);
+    expect(enrollment.assessmentResults.get("speaking")).toBe("B");
+  });
+
+  it("requires motivation for grade F", async () => {
+    const res = await request(app)
+      .put("/grades/update-grade/en1")
+      .set("x-user-role", "teacher")
+      .send({ grade: "F", motivation: "" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("Motivering krävs");
   });
 });
 
