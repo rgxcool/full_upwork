@@ -108,10 +108,29 @@ const studentEnrollmentSchema = new mongoose.Schema(
         motivation: { type: String, default: '' }, // Grade motivation/reason
         comments: { type: String, default: '' }, // Grade comments
         nationalTestPoints: { type: Number, default: null }, // National test points
+        assessmentResults: {
+            type: Map,
+            of: mongoose.Schema.Types.Mixed,
+            default: () => new Map(),
+        },
         isGradeLocked: { type: Boolean, default: false }, // Lock grade from editing
+        gradeLockedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        gradeLockedAt: { type: Date, default: null },
         
         // Slutprov (final exam) date
         slutprovDate: { type: Date, default: null },
+
+        // Exam configuration (per-enrollment overrides)
+        examMunicipality: { type: String, default: null },
+        examLocation: { type: String, default: null },
+        examTime: { type: String, default: null },
+
+        // Certificate for internship (APL)
+        certificateDocId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Document",
+            default: null,
+        },
 
         // Attendance tracking
         attendancePercentage: { type: Number, min: 0, max: 100, default: null },
@@ -123,6 +142,9 @@ const studentEnrollmentSchema = new mongoose.Schema(
             enum: ["pending", "paid", "partial", "overdue", "waived"],
             default: "pending",
         },
+        // Course price snapshot at the time of enrollment, for historical
+        // revenue accuracy. Null when the course had no price set.
+        enrollmentPrice: { type: Number, default: null, min: 0 },
 
         // Metadata
         teacherId: {
@@ -136,6 +158,14 @@ const studentEnrollmentSchema = new mongoose.Schema(
         // Completion tracking
         completedAt: { type: Date, default: null },
         completionCertificate: { type: String, default: null },
+
+        // Per-component completion tracking
+        // completedComponents: moduleNumber -> completed status ("✓" or "✗")
+        completedComponents: {
+            type: Map,
+            of: String,
+            default: new Map(),
+        },
 
         // Dropout information
         dropoutReason: String,
@@ -157,6 +187,7 @@ const studentEnrollmentSchema = new mongoose.Schema(
             { courseInstanceId: 1, status: 1 },
             { startDate: 1, endDate: 1 },
             { status: 1, startDate: 1 },
+            { status: 1, endDate: 1 },
         ],
     }
 );
@@ -263,6 +294,11 @@ studentEnrollmentSchema.methods.changeStatus = function (
     // Set specific dates based on status
     if (newStatus === "completed") {
         this.completedAt = new Date();
+        if (!this.completionCertificate) {
+            const year = this.completedAt.getFullYear();
+            const suffix = String(this._id || "").slice(-8).toUpperCase() || "NEW";
+            this.completionCertificate = `CERT-${year}-${suffix}`;
+        }
     } else if (newStatus === "dropped") {
         this.dropoutDate = new Date();
         this.dropoutBy = changedBy;
@@ -290,6 +326,7 @@ studentEnrollmentSchema.index({ teacherId: 1 });
 studentEnrollmentSchema.index({ status: 1 });
 studentEnrollmentSchema.index({ gradeDate: 1 });
 studentEnrollmentSchema.index({ endDate: 1 });
+studentEnrollmentSchema.index({ startDate: 1, endDate: 1 });
 
 export default mongoose.model(
     "StudentEnrollment",

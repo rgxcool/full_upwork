@@ -7,9 +7,14 @@ import { createOrFindTeacher } from "../utils/teacherService.js";
 import { createGlobalNotification } from "../controllers/notificationController.js";
 import { normalizeMunicipalityName } from "./studentController.js";
 import Course from "../models/Course.js";
+import CourseTemplate from "../models/CourseTemplate.js";
+import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
 import { distance } from "fastest-levenshtein";
+import { cloneModules } from "../models/courseModuleSchema.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
+import * as enrollmentService from "../services/enrollmentService.js";
+import { recordAudit } from "../utils/auditLog.js";
 
 /**
  * Course Matching Controller
@@ -124,7 +129,6 @@ export const uploadStudentsForMatching = async (req, res) => {
         }
 
         const fileBuffer = req.file.buffer;
-        const fileName = req.file.originalname;
         // Teacher will be read from the document, so we pass empty string as fallback
         const teacherNameFallback = "";
 
@@ -291,9 +295,13 @@ export const uploadStudentsForMatching = async (req, res) => {
 
                     // Create notification for the user who uploaded the file
                     try {
+                        // NOTE: The temporary password is intentionally NOT included
+                        // here — it is returned to the uploading admin via
+                        // `results.createdTeachers` and must not be persisted in a
+                        // broadcast notification message (credential leak).
                         await createGlobalNotification(
                             "teacher_auto_created",
-                            `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Lösenord: ${teacherResult.password}`
+                            `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Temporärt lösenord finns i uppladdningsresultatet.`
                         );
                     } catch (notificationError) {
                         logger.error({ err: notificationError }, "Error creating notification");
@@ -393,8 +401,6 @@ export const uploadStudentsForMatching = async (req, res) => {
                             .slice(0, 5);
                         logger.debug({ normalized, closest }, "Closest matches");
                     }
-                    const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
-
                     // Check if the normalized name exists in either Course or CoursePackage collections
                     const matchPkg = strictMatch(
                         normalized,
@@ -521,7 +527,11 @@ export const uploadStudentsForMatching = async (req, res) => {
 
                 if (!dbStudent) {
                     // Create new student
-                    logger.debug({ studentData }, "Creating student with data");
+                    // Log only non-sensitive identifiers — never personalNumber or full payload.
+                    logger.debug(
+                        { name: studentData.name || studentData.email, municipality: studentData.municipality },
+                        "Creating student with data"
+                    );
                     logger.debug({ municipality: studentData.municipality }, "Municipality value before creation");
 
                     // Allowed municipality types from schema
@@ -1442,23 +1452,12 @@ export const getStudentEnrollments = async (req, res) => {
         const { studentId } = req.params;
         const { status, startDate, endDate } = req.query;
 
-        const query = { studentId };
-
-        if (status) query.status = status;
-        if (startDate || endDate) {
-            query.$and = [];
-            if (startDate)
-                query.$and.push({ startDate: { $gte: new Date(startDate) } });
-            if (endDate)
-                query.$and.push({ endDate: { $lte: new Date(endDate) } });
-        }
-
-        const enrollments = await StudentEnrollment.find(query)
-            .populate("courseInstanceId")
-            .populate("mainCourseId")
-            .populate("teacherId", "username email")
-            .populate("gradeBy", "username email")
-            .sort({ startDate: -1 });
+        const enrollments = await enrollmentService.fetchStudentEnrollments({
+            studentId,
+            status,
+            startDate,
+            endDate,
+        });
 
         res.json({
             success: true,
@@ -1470,21 +1469,99 @@ export const getStudentEnrollments = async (req, res) => {
     }
 };
 
+
+/**
+ * GET /course-cards/mine
+ * Returns course cards for the currently logged-in student.
+ * The student login account is linked to a Student record by email.
+ */
+export const getMyCourseCards = async (req, res) => {
+    try {
+        const email = req.user?.email;
+        if (!email) {
+            return res.status(400).json({ error: "Konto saknar e-postadress" });
+        }
+
+        const student = await Student.findOne({ email }).select("_id name");
+        if (!student) {
+            return res.status(404).json({ error: "Ingen elevprofil hittades för kontot" });
+        }
+
+        const cards = await enrollmentService.buildCourseCards(student._id);
+        res.json({ success: true, student: { _id: student._id, name: student.name }, cards });
+    } catch (error) {
+        logger.error({ err: error }, "Error fetching my course cards");
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+/**
+ * GET /students/:studentId/course-cards
+ * Returns course cards for a specific student. Staff roles may view any
+ * student; a student role may only view their own cards (matched by the
+ * login account's email → Student record, the same linkage used elsewhere).
+ */
+export const getStudentCourseCards = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        if (!mongoose.isValidObjectId(studentId)) {
+            return res.status(400).json({ error: "Invalid student id" });
+        }
+
+        const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
+        if (userRoles.includes("student")) {
+            const email = req.user?.email;
+            if (!email) {
+                return res
+                    .status(403)
+                    .json({ error: "Forbidden: You can only view your own course cards" });
+            }
+            const ownStudent = await Student.findOne({ email }).select("_id");
+            if (!ownStudent || ownStudent._id.toString() !== studentId) {
+                return res
+                    .status(403)
+                    .json({ error: "Forbidden: You can only view your own course cards" });
+            }
+        }
+
+        const cards = await enrollmentService.buildCourseCards(studentId);
+        res.json({ success: true, cards });
+    } catch (error) {
+        logger.error({ err: error }, "Error fetching student course cards");
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
 export const getCourseInstanceEnrollments = async (req, res) => {
     try {
         const { instanceId } = req.params;
         const { status } = req.query;
 
-        const query = { courseInstanceId: instanceId };
+        if (req.user?.role === "teacher") {
+            const Teacher = mongoose.model("Teacher");
+            const CourseInstance = mongoose.model("CourseInstance");
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            const instance = await CourseInstance.findById(instanceId).lean();
+            if (instance) {
+                const respId = instance.responsibleTeacher?._id?.toString() || instance.responsibleTeacher?.toString();
+                const asstId = instance.assistantTeacher?._id?.toString() || instance.assistantTeacher?.toString();
+                if (respId && asstId) {
+                    if (respId !== teacher._id.toString() && asstId !== teacher._id.toString()) {
+                        return res.status(403).json({ error: "Du är inte behörig för denna kursomgång." });
+                    }
+                } else if (respId && respId !== teacher._id.toString()) {
+                    return res.status(403).json({ error: "Du är inte behörig för denna kursomgång." });
+                }
+            }
+        }
 
-        if (status) query.status = status;
-
-        const enrollments = await StudentEnrollment.find(query)
-            .populate("studentId", "name email dropout")
-            .populate("mainCourseId", "courseName courseCode")
-            .populate("teacherId", "username email")
-            .populate("gradeBy", "username email")
-            .sort({ startDate: -1 });
+        const enrollments = await enrollmentService.fetchCourseInstanceEnrollments({
+            instanceId,
+            status,
+        });
 
         res.json({
             success: true,
@@ -1504,46 +1581,29 @@ export const updateEnrollmentStatus = async (req, res) => {
 
         logger.debug({ enrollmentId, status }, "Updating enrollment status");
 
-        const enrollment = await StudentEnrollment.findById(enrollmentId);
-        if (!enrollment) {
-            return res.status(404).json({ error: "Enrollment not found" });
-        }
-
-        // Validate status
-        const validStatuses = ["enrolled", "active", "completed", "dropped", "inactive", "suspended", "reviderad"];
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({ 
-                error: "Invalid status", 
-                validStatuses 
-            });
-        }
-
-        await enrollment.changeStatus(status, reason, notes, userId);
-
-        // Update course instance statistics (wrap in try-catch to not fail if this errors)
-        try {
-            await CourseMatchingService.updateCourseInstanceStats(
-                enrollment.courseInstanceId
-            );
-        } catch (statsError) {
-            logger.error({ err: statsError }, "Error updating course instance stats (non-fatal)");
-        }
-
-        // Reload enrollment to get updated data
-        const updatedEnrollment = await StudentEnrollment.findById(enrollmentId)
-            .populate("teacherId", "name email")
-            .populate("mainCourseId", "courseName courseCode");
+        const enrollment = await enrollmentService.updateEnrollmentStatus({
+            enrollmentId,
+            status,
+            reason,
+            notes,
+            userId,
+        });
 
         res.json({
             success: true,
             message: "Enrollment status updated successfully",
-            enrollment: updatedEnrollment,
+            enrollment,
         });
     } catch (error) {
+        if (error.statusCode) {
+            const body = { error: error.message };
+            if (error.validStatuses) body.validStatuses = error.validStatuses;
+            return res.status(error.statusCode).json(body);
+        }
         logger.error({ err: error }, "Error updating enrollment status");
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Internal server error",
-            message: error.message 
+            message: error.message,
         });
     }
 };
@@ -1556,19 +1616,11 @@ export const updateEnrollmentDates = async (req, res) => {
         const { enrollmentId } = req.params;
         const { startDate, endDate } = req.body;
 
-        const enrollment = await StudentEnrollment.findById(enrollmentId);
-        if (!enrollment) {
-            return res.status(404).json({ error: "Enrollment not found" });
-        }
-
-        if (startDate !== undefined) {
-            enrollment.startDate = new Date(startDate);
-        }
-        if (endDate !== undefined) {
-            enrollment.endDate = new Date(endDate);
-        }
-
-        await enrollment.save();
+        const enrollment = await enrollmentService.updateEnrollmentDates({
+            enrollmentId,
+            startDate,
+            endDate,
+        });
 
         res.json({
             success: true,
@@ -1576,6 +1628,9 @@ export const updateEnrollmentDates = async (req, res) => {
             enrollment,
         });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
         logger.error({ err: error }, "Error updating enrollment dates");
         res.status(500).json({ error: "Internal server error" });
     }
@@ -1589,99 +1644,23 @@ export const deleteEnrollmentAndShift = async (req, res) => {
         const { studentId, enrollmentId } = req.params;
         const userId = req.user?.userId || null;
 
-        const student = await Student.findById(studentId).select("teacherId name");
-        if (!student) {
-            return res.status(404).json({ error: "Student not found" });
-        }
-
-        const enrollments = await StudentEnrollment.find({
-            studentId,
-            mainCourseId: { $exists: true, $ne: null },
-        }).sort({ startDate: 1, createdAt: 1 });
-
-        const targetIndex = enrollments.findIndex(
-            (enrollment) => String(enrollment._id) === String(enrollmentId)
-        );
-        if (targetIndex === -1) {
-            return res.status(404).json({ error: "Enrollment not found for student" });
-        }
-
-        const dateSlots = enrollments.map((enrollment) => ({
-            startDate: enrollment.startDate ? new Date(enrollment.startDate) : null,
-            endDate: enrollment.endDate ? new Date(enrollment.endDate) : null,
-        }));
-
-        const targetEnrollment = enrollments[targetIndex];
-        await StudentEnrollment.findByIdAndDelete(targetEnrollment._id);
-
-        if (targetEnrollment.courseInstanceId) {
-            const remainingForInstance = await StudentEnrollment.countDocuments({
-                courseInstanceId: targetEnrollment.courseInstanceId,
-            });
-            if (remainingForInstance === 0) {
-                await CourseInstance.findByIdAndDelete(targetEnrollment.courseInstanceId);
-            }
-        }
-
-        const remainingEnrollments = enrollments.filter(
-            (enrollment) => String(enrollment._id) !== String(enrollmentId)
-        );
-
-        const updatedEnrollments = [];
-        for (let i = 0; i < remainingEnrollments.length; i += 1) {
-            const enrollment = remainingEnrollments[i];
-            const slot = dateSlots[i];
-            if (!slot?.startDate || !slot?.endDate) continue;
-
-            const sameDates =
-                enrollment.startDate &&
-                enrollment.endDate &&
-                new Date(enrollment.startDate).getTime() === slot.startDate.getTime() &&
-                new Date(enrollment.endDate).getTime() === slot.endDate.getTime();
-
-            if (sameDates) continue;
-
-            const { instance } = await CourseMatchingService.findOrCreateCourseInstance(
-                enrollment.mainCourseId,
-                slot.startDate,
-                slot.endDate,
+        const { deletedEnrollmentId, updatedEnrollmentsCount } =
+            await enrollmentService.deleteEnrollmentAndShift({
+                studentId,
+                enrollmentId,
                 userId,
-                student.teacherId || enrollment.teacherId || null
-            );
-
-            const previousInstanceId = enrollment.courseInstanceId;
-            enrollment.startDate = slot.startDate;
-            enrollment.endDate = slot.endDate;
-            if (instance?._id) {
-                enrollment.courseInstanceId = instance._id;
-            }
-            if (!enrollment.teacherId && student.teacherId) {
-                enrollment.teacherId = student.teacherId;
-            }
-
-            await enrollment.save();
-            updatedEnrollments.push(enrollment);
-
-            if (
-                previousInstanceId &&
-                String(previousInstanceId) !== String(enrollment.courseInstanceId)
-            ) {
-                const remainingForPrevious = await StudentEnrollment.countDocuments({
-                    courseInstanceId: previousInstanceId,
-                });
-                if (remainingForPrevious === 0) {
-                    await CourseInstance.findByIdAndDelete(previousInstanceId);
-                }
-            }
-        }
+            });
 
         res.json({
             success: true,
             message: "Enrollment deleted and study plan updated",
-            deletedEnrollmentId: enrollmentId,
-            updatedEnrollmentsCount: updatedEnrollments.length,
+            deletedEnrollmentId,
+            updatedEnrollmentsCount,
         });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
         logger.error({ err: error }, "Error deleting enrollment and shifting dates");
         res.status(500).json({ error: "Internal server error" });
     }
@@ -1696,87 +1675,11 @@ export const updateStudyplanTempo = async (req, res) => {
         const { tempoWeeks } = req.body;
         const userId = req.user?.userId || null;
 
-        const validTempoWeeks = [5, 10, 20];
-        if (!validTempoWeeks.includes(Number(tempoWeeks))) {
-            return res.status(400).json({ error: "Invalid tempoWeeks" });
-        }
-
-        const student = await Student.findById(studentId).select("teacherId name");
-        if (!student) {
-            return res.status(404).json({ error: "Student not found" });
-        }
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const enrollments = await StudentEnrollment.find({
+        const { updatedCount } = await enrollmentService.updateStudyplanTempo({
             studentId,
-            mainCourseId: { $exists: true, $ne: null },
-        }).sort({ startDate: 1, createdAt: 1 });
-
-        const futureEnrollments = enrollments.filter((enrollment) => {
-            if (!enrollment.startDate) return false;
-            const startDate = new Date(enrollment.startDate);
-            return startDate.getTime() > today.getTime();
+            tempoWeeks,
+            userId,
         });
-
-        if (futureEnrollments.length === 0) {
-            return res.json({
-                success: true,
-                message: "Study plan tempo updated",
-                updatedCount: 0,
-            });
-        }
-
-        let nextStartDate = new Date(futureEnrollments[0].startDate);
-        let updatedCount = 0;
-        for (const enrollment of futureEnrollments) {
-            const startDate = new Date(nextStartDate);
-            const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + Number(tempoWeeks) * 7);
-
-            const { instance } = await CourseMatchingService.findOrCreateCourseInstance(
-                enrollment.mainCourseId,
-                startDate,
-                endDate,
-                userId,
-                student.teacherId || enrollment.teacherId || null
-            );
-
-            const previousInstanceId = enrollment.courseInstanceId;
-            const previousEnrollmentId = enrollment._id;
-
-            const newEnrollment = new StudentEnrollment({
-                studentId,
-                courseInstanceId: instance._id,
-                mainCourseId: enrollment.mainCourseId,
-                startDate,
-                endDate,
-                status: enrollment.status || "enrolled",
-                teacherId: enrollment.teacherId || student.teacherId || null,
-                notes: enrollment.notes || null,
-                needsSupport: enrollment.needsSupport || false,
-                examMode: enrollment.examMode || "on-site",
-                isReEnrollment: true,
-                previousEnrollmentId: previousEnrollmentId,
-            });
-
-            await newEnrollment.save();
-
-            await StudentEnrollment.findByIdAndDelete(previousEnrollmentId);
-
-            if (previousInstanceId) {
-                const remainingForPrevious = await StudentEnrollment.countDocuments({
-                    courseInstanceId: previousInstanceId,
-                });
-                if (remainingForPrevious === 0) {
-                    await CourseInstance.findByIdAndDelete(previousInstanceId);
-                }
-            }
-
-            updatedCount += 1;
-            nextStartDate = new Date(endDate);
-        }
 
         res.json({
             success: true,
@@ -1784,6 +1687,9 @@ export const updateStudyplanTempo = async (req, res) => {
             updatedCount,
         });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
         logger.error({ err: error }, "Error updating study plan tempo");
         res.status(500).json({ error: "Internal server error" });
     }
@@ -1829,6 +1735,7 @@ export const createCourseInstance = async (req, res) => {
             slutprovDate,
             responsibleTeacher,
             assistantTeacher,
+            templateId,
         } = req.body;
         const userId = req.user?.userId;
 
@@ -1903,6 +1810,68 @@ export const createCourseInstance = async (req, res) => {
             });
         }
 
+        // Duplicate the template's module structure into the new course card/instance.
+        // Explicit templateId (manual admin flow) ALWAYS wins over auto-resolution;
+        // auto-resolution (item #31 Part B) only applies when no templateId is given,
+        // which is the admission-time scenario. Both paths copy via cloneModules.
+        let duplicatedModules = [];
+        if (templateId) {
+            const template = await CourseTemplate.findById(templateId);
+            if (template) {
+                duplicatedModules = cloneModules(template.modules);
+            } else {
+                logger.warn({ templateId }, "Course template not found for provided templateId — creating instance with empty modules");
+            }
+        } else {
+            const template = await CourseMatchingService.resolveCourseTemplate(mainCourseId);
+            if (template) {
+                duplicatedModules = cloneModules(template.modules);
+                logger.info({ courseName: finalCourseName, templateId: template._id, moduleCount: duplicatedModules.length }, "Auto-generated course card content from course template (no explicit templateId)");
+            } else {
+                logger.info({ courseName: finalCourseName, mainCourseId }, "course has no template — card created without content");
+            }
+        }
+
+        // Auto-apply teacher schedule parameters to section dates
+        let sectionDates = [];
+        if (responsibleTeacherId && parsedStartDate && duplicatedModules.length > 0) {
+            try {
+                const startMs = new Date(parsedStartDate).getTime();
+                const endMs = new Date(parsedEndDate).getTime();
+                const courseWeeks = Math.round((endMs - startMs) / (7 * 24 * 60 * 60 * 1000));
+                const lengthWeeks = [5, 10, 20].reduce((prev, curr) =>
+                    Math.abs(curr - courseWeeks) < Math.abs(prev - courseWeeks) ? curr : prev
+                );
+
+                const teacherRecord = await createOrFindTeacher(responsibleTeacherId).catch(() => null);
+                const teacherId = teacherRecord?._id || responsibleTeacherId;
+
+                const params = await TeacherScheduleParameters.findOne({
+                    teacherId,
+                    courseId: String(mainCourseId),
+                    lengthWeeks,
+                }).catch(() => null);
+
+                const offsets = params?.sectionOffsets?.length === 5
+                    ? params.sectionOffsets
+                    : { 5: [0, 1, 2, 3, 4], 10: [0, 2, 4, 6, 8], 20: [0, 4, 8, 12, 16] }[lengthWeeks] || [0, 1, 2, 3, 4];
+
+                const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                sectionDates = offsets.map((weekOffset) => new Date(startMs + weekOffset * msPerWeek));
+
+                duplicatedModules.forEach((mod, i) => {
+                    if (i < sectionDates.length) {
+                        mod.startDate = sectionDates[i];
+                        mod.endDate = i < sectionDates.length - 1 ? sectionDates[i + 1] : new Date(parsedEndDate);
+                    }
+                });
+
+                logger.info({ courseName: finalCourseName, lengthWeeks, offsets, sectionCount: sectionDates.length }, "Auto-applied teacher schedule parameters to course card");
+            } catch (err) {
+                logger.warn({ err, courseName: finalCourseName }, "Failed to auto-apply schedule parameters — continuing without dates");
+            }
+        }
+
         // Create the course instance
         const newInstance = new CourseInstance({
             mainCourseId,
@@ -1918,6 +1887,8 @@ export const createCourseInstance = async (req, res) => {
             slutprovDate: parseDate(slutprovDate),
             notes: notes || '',
             isActive: true,
+            modules: duplicatedModules,
+            sectionDates,
         });
 
         await newInstance.save();
@@ -2202,7 +2173,6 @@ export const updateCourseInstance = async (req, res) => {
         if (slutprovDateExplicitlySet && finalSlutprovDate) {
             try {
                 const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
-                const { syncCalendarEventFromEnrollment } = await import("../utils/calendarEventSync.js");
                 
                 // Find all enrollments for this course instance
                 const enrollments = await StudentEnrollment.find({
@@ -2238,80 +2208,11 @@ export const addStudentsToInstance = async (req, res) => {
     try {
         const { instanceId } = req.params;
         const { studentIds } = req.body;
-        const userId = req.user?.userId;
 
-        if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
-            return res.status(400).json({ error: "Student IDs array is required" });
-        }
-
-        // Find the course instance
-        const instance = await CourseInstance.findById(instanceId);
-        if (!instance) {
-            return res.status(404).json({ error: "Course instance not found" });
-        }
-
-        // Get the main course to get course details
-        const mainCourse = await Course.findById(instance.mainCourseId);
-        if (!mainCourse) {
-            return res.status(404).json({ error: "Main course not found" });
-        }
-
-        const enrollments = [];
-        const errors = [];
-
-        for (const studentId of studentIds) {
-            try {
-                // Check if enrollment already exists
-                const existingEnrollment = await StudentEnrollment.findOne({
-                    studentId,
-                    courseInstanceId: instanceId,
-                });
-
-                if (existingEnrollment) {
-                    logger.debug({ studentId, instanceId }, "Enrollment already exists, skipping");
-                    continue;
-                }
-
-                // Get student to find teacherId
-                const student = await Student.findById(studentId);
-                if (!student) {
-                    errors.push(`Student ${studentId} not found`);
-                    continue;
-                }
-
-                // Create enrollment
-                const enrollment = new StudentEnrollment({
-                    studentId,
-                    courseInstanceId: instanceId,
-                    mainCourseId: instance.mainCourseId,
-                    startDate: instance.startDate,
-                    endDate: instance.endDate,
-                    status: "enrolled",
-                    teacherId: student.teacherId || instance.responsibleTeacher || null,
-                    // Copy slutprovDate from course instance if it exists
-                    slutprovDate: instance.slutprovDate || null,
-                });
-
-                await enrollment.save();
-                enrollments.push(enrollment);
-
-                logger.info({ studentName: student.name, courseName: instance.courseName }, "Created enrollment for student in course instance");
-
-                // Sync calendar event if enrollment has a slutprovDate
-                if (enrollment.slutprovDate) {
-                    try {
-                        const { syncCalendarEventFromEnrollment } = await import("../utils/calendarEventSync.js");
-                        await syncCalendarEventFromEnrollment(enrollment._id);
-                    } catch (calendarError) {
-                        logger.error({ err: calendarError, enrollmentId: enrollment._id }, "Error syncing calendar event for enrollment");
-                        // Don't fail the enrollment creation if calendar sync fails
-                    }
-                }
-            } catch (error) {
-                logger.error({ err: error, studentId }, "Error creating enrollment for student");
-                errors.push(`Failed to enroll student ${studentId}: ${error.message}`);
-            }
-        }
+        const { enrollments, errors } = await enrollmentService.addStudentsToInstance({
+            instanceId,
+            studentIds,
+        });
 
         res.json({
             success: true,
@@ -2320,6 +2221,9 @@ export const addStudentsToInstance = async (req, res) => {
             errors: errors.length > 0 ? errors : undefined,
         });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
         logger.error({ err: error }, "Error adding students to course instance");
         res.status(500).json({ error: "Internal server error" });
     }
@@ -2345,13 +2249,242 @@ export const deleteCourseInstance = async (req, res) => {
     }
 };
 
+// GET /api/course-instances/:instanceId/content - get content for a course instance
+// Admins/systemadmin and responsible teacher can see all content;
+// students see content that is not hidden.
+export const getCourseInstanceContent = async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+        const { userId: callerId, roles } = req.user;
+        const isAdmin = roles.includes("systemadmin") || roles.includes("admin");
+
+        const instance = await CourseInstance.findById(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Course instance not found" });
+        }
+
+        // Check permissions
+        const isResponsibleTeacher = instance.responsibleTeacher &&
+            instance.responsibleTeacher.toString() === callerId;
+
+        if (!isAdmin && !isResponsibleTeacher) {
+            return res.status(403).json({ error: "Saknar behörighet" });
+        }
+
+        // Build visible content for the caller
+        const visibleContent = new Map();
+        for (const [moduleNumber, moduleContent] of instance.content.entries()) {
+            const entry = {
+                title: moduleContent.title || `Modul ${moduleNumber}`,
+                instructions: moduleContent.instructions || '',
+            };
+            // If the caller is a student and the content is hidden,
+            // replace with placeholder
+            if (!isAdmin && !isResponsibleTeacher && moduleContent.isHiddenFromStudent) {
+                entry.title = 'Innehåll dolt';
+                entry.instructions = 'Detta innehåll döljs för studenter.';
+            }
+            visibleContent.set(Number(moduleNumber), entry);
+        }
+
+        res.json({
+            success: true,
+            content: visibleContent,
+            canEdit: isAdmin || isResponsibleTeacher,
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error fetching course instance content");
+        res.status(500).json({ error: "Intern servererror" });
+    }
+};
+
+// PUT /api/course-instances/:instanceId/content - update content
+// Admins/systemadmin and responsible teacher can update all content.
+export const updateCourseInstanceContent = async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+        const { userId: callerId, roles } = req.user;
+        const isAdmin = roles.includes("systemadmin") || roles.includes("admin");
+
+        const instance = await CourseInstance.findById(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Course instance not found" });
+        }
+
+        // Check permissions
+        let isResponsibleTeacher = false;
+        if (instance.responsibleTeacher) {
+            const Teacher = (await import("../models/Teacher.js")).default;
+            const teacher = await Teacher.findById(instance.responsibleTeacher).select("userId").lean();
+            isResponsibleTeacher = Boolean(teacher && String(teacher.userId) === String(callerId));
+        }
+
+        if (!isAdmin && !isResponsibleTeacher) {
+            return res.status(403).json({ error: "Saknar behörighet" });
+        }
+
+        const { content } = req.body;
+        if (!content || typeof content !== 'object') {
+            return res.status(400).json({ error: "Ogiltig innehållsdata" });
+        }
+
+        // Update content map
+        if (instance.content) {
+            instance.content.clear();
+        } else {
+            instance.content = new Map();
+        }
+
+        for (const [moduleNumber, moduleContent] of Object.entries(content)) {
+            const mn = Number(moduleNumber);
+            if (!instance.content.has(mn)) {
+                instance.content.set(mn, {
+                    title: '',
+                    instructions: '',
+                    isHiddenFromStudent: false,
+                });
+            }
+            instance.content.set(mn, {
+                title: moduleContent.title !== undefined ? moduleContent.title : '',
+                instructions: moduleContent.instructions !== undefined ? moduleContent.instructions : '',
+                isHiddenFromStudent: moduleContent.isHiddenFromStudent !== undefined ? moduleContent.isHiddenFromStudent : false,
+            });
+        }
+
+        await instance.save();
+        res.json({
+            success: true,
+            message: "Innehåll uppdaterat",
+            canEdit: isAdmin || isResponsibleTeacher,
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error updating course instance content");
+        res.status(500).json({ error: "Intern servererror" });
+    }
+};
+
+
+
+/**
+ * GET /course-instances/:instanceId/activity-feed
+ * Get the activity feed / notice board for a course instance.
+ * Students can read all items; staff can also post.
+ * Only shows items for the current course instance.
+ */
+export const getCourseInstanceActivityFeed = async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+
+        if (!mongoose.isValidObjectId(instanceId)) {
+            return res.status(400).json({ error: "Ogiltigt kursinstans-id" });
+        }
+
+        const instance = await CourseInstance.findById(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Kursinstans hittades inte" });
+        }
+
+        // Return the activity feed (students can read all, staff can post)
+        res.json({
+            success: true,
+            activityFeed: instance.activityFeed || [],
+            instanceId,
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error fetching activity feed");
+        res.status(500).json({ error: "Intern servererror" });
+    }
+};
+
+/**
+ * PUT /course-instances/:instanceId/activity-feed
+ * Post a new item to the activity feed / notice board.
+ * Only staff (admin/systemadmin/responsible teacher) can post.
+ * Students receive 403 Forbidden.
+ * Item structure: { text: String, by: UserId }
+ */
+export const postCourseInstanceActivityFeed = async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+        const { text } = req.body || {};
+
+        if (!text || text.trim().length === 0) {
+            return res.status(400).json({ error: "Aktivitetstext får inte vara tom." });
+        }
+
+        if (!mongoose.isValidObjectId(instanceId)) {
+            return res.status(400).json({ error: "Ogiltigt kursinstans-id" });
+        }
+
+        const user = req.user;
+
+        // Check that the user is connected to this course instance
+        const instance = await CourseInstance.findById(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Kursinstans hittades inte" });
+        }
+
+        // Verify staff access: admin, systemadmin, or responsible teacher
+        const isAdmin = user.roles && user.roles.includes("systemadmin");
+        const isStaff = user.roles && user.roles.includes("admin");
+        const isTeacher = user.role === "teacher";
+
+        let isResponsibleTeacher = false;
+        if (isTeacher && instance.responsibleTeacher) {
+            isResponsibleTeacher = String(instance.responsibleTeacher) === String(user.userId);
+        } else if (isStaff || isAdmin) {
+            isResponsibleTeacher = true;
+        }
+
+        if (!isAdmin && !isStaff && !isResponsibleTeacher) {
+            return res.status(403).json({ error: "Endast ansvarig lärare, admin eller systemadmin kan posta meddelanden." });
+        }
+
+        // Create new activity feed item
+        const newItem = {
+            id: new mongoose.Types.ObjectId(),
+            text: String(text),
+            by: user.userId,
+            at: new Date(),
+            courseInstanceId: instance._id,
+        };
+
+        // Add to activity feed array
+        instance.activityFeed = (instance.activityFeed || []).concat(newItem);
+        await instance.save();
+
+        res.json({
+            success: true,
+            activityFeed: instance.activityFeed,
+            message: "Meddelande publicerat i aktivitetsbrädden",
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error posting to activity feed");
+        res.status(500).json({ error: "Intern servererror" });
+    }
+};
+
 // Bulk delete all course instances and related enrollments
+const DELETE_ALL_CONFIRMATION = "DELETE_ALL_COURSE_INSTANCES";
+
 export const deleteAllCourseInstances = async (req, res) => {
     try {
+        // Server-side destroy confirmation — never trust the frontend dialog.
+        if (req.body?.confirmation !== DELETE_ALL_CONFIRMATION) {
+            logger.warn("DELETE /course-instances/all rejected: missing confirmation token");
+            return res
+                .status(400)
+                .json({ error: "Missing confirmation token. This destructive action requires explicit server-side confirmation." });
+        }
         logger.info("DELETE /course-instances/all called");
         const courseResult = await CourseInstance.deleteMany({});
         const enrollmentResult = await StudentEnrollment.deleteMany({});
         logger.info({ courseInstancesDeleted: courseResult.deletedCount, enrollmentsDeleted: enrollmentResult.deletedCount }, "Deleted course instances and enrollments");
+        await recordAudit(req, {
+            entityType: "CourseInstance",
+            action: "delete_all",
+            description: `Deleted all course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount})`,
+        });
         res.json({
             success: true,
             message: `All course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount}) deleted`,

@@ -1,11 +1,15 @@
 const roles = {
     teacher: [
+        "inactivity:read",
         "assignments:create",
         "assignments:read:own",
         "assignments:update:own",
         "assignments:grade",
         "students:view_list:assigned",
         "students:view_grades:assigned",
+        "courseTemplates:create",
+        "courseTemplates:read",
+        "courseTemplates:update",
     ],
     admin: [
         "users:create",
@@ -18,6 +22,11 @@ const roles = {
         "teachers:delete",
         "teachers:unassign",
         "analytics:read",
+        "inactivity:read",
+        "courseTemplates:create",
+        "courseTemplates:read",
+        "courseTemplates:update",
+        "courseTemplates:delete",
     ],
     systemadmin: [
         "users:create",
@@ -36,8 +45,37 @@ const roles = {
         "students:view_list:assigned",
         "students:view_grades:assigned",
         "analytics:read",
+        "inactivity:read",
+        "courseTemplates:create",
+        "courseTemplates:read",
+        "courseTemplates:update",
+        "courseTemplates:delete",
     ],
-    // ... other roles
+    student: [
+        "viewOwnGrades",
+        "viewOwnSchedule",
+        "viewOwnProfile",
+        "viewCourseInfo",
+        "viewNotifications",
+    ],
+    coordinator: [
+        "students:view_list:assigned",
+        "students:view_grades:assigned",
+        "analytics:read",
+        "inactivity:read",
+    ],
+    syv: [
+        "students:view_list:assigned",
+        "students:view_grades:assigned",
+        "analytics:read",
+        "inactivity:read",
+    ],
+    specped: [
+        "students:view_list:assigned",
+        "students:view_grades:assigned",
+        "analytics:read",
+        "inactivity:read",
+    ],
 };
 
 export default roles;

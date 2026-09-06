@@ -15,6 +15,7 @@ import {
 } from "../utils/parseStudentExcel.js";
 import { distance } from "fastest-levenshtein";
 import logger from "../utils/logger.js";
+import { maybeSendLarteametEmail, SOLLENTUNA_MUNICIPALITY } from "../services/emailService.js";
 
 logger.debug("studentController.js loaded");
 
@@ -42,6 +43,7 @@ function normalize(value) {
  * @param {number} [maxRatio=0.3] - Maximum allowed ratio for a match
  * @returns {string|null} The best match or null if none found
  */
+ 
 function getBestFuzzyMatch(target, candidates, maxRatio = 0.3) {
     let best = null;
     let minDistance = Infinity;
@@ -155,7 +157,6 @@ async function uploadXlsx(req, res) {
 
     try {
         const fileBuffer = req.file.buffer;
-        const fileName = req.file.originalname;
         // Teacher will be read from the document, so we pass empty string as fallback
         const teacherNameFallback = "";
         const parsedStudents = await parseStudentExcel(
@@ -355,6 +356,7 @@ async function uploadXlsx(req, res) {
         })();
 
         const warnings = [];
+        const larteametCandidates = [];
         const bulkOps = await Promise.all(
             mergedStudents.map(async (student) => {
                 const existing = existingMap.get(student.email);
@@ -372,6 +374,15 @@ async function uploadXlsx(req, res) {
                         `❌ Could not match municipality: "${rawMunicipality}"`
                     );
                 }
+
+                // Remember the resolved municipality per student so the
+                // Lärteamet trigger (#26) can fire for NEWLY created records
+                // after the bulk write, without extra DB reads.
+                larteametCandidates.push({
+                    email: student.email,
+                    name: student.name,
+                    municipality: correctedMunicipality,
+                });
 
                 // Convert education entries → { refId, type, ... }
                 const studentWarnings = [];
@@ -547,6 +558,28 @@ async function uploadXlsx(req, res) {
         );
 
         await Student.bulkWrite(bulkOps);
+
+        // Requirement #26: every NEWLY created Sollentuna student gets the
+        // Lärteamet admission email. Pre-existing students (matched by email in
+        // existingMap) are updated, never re-triggered. One failed send is
+        // logged and must not abort the rest of the import.
+        const newlyCreated = larteametCandidates.filter(
+            (candidate) => !existingMap.has(candidate.email)
+        );
+        await Promise.all(
+            newlyCreated.map(async (candidate) => {
+                if (candidate.municipality !== SOLLENTUNA_MUNICIPALITY) return;
+                try {
+                    await maybeSendLarteametEmail({
+                        student: candidate,
+                        studentName: candidate.name,
+                        email: candidate.email,
+                    });
+                } catch (emailError) {
+                    logger.error({ err: emailError }, "Lärteamet email trigger failed (non-fatal)");
+                }
+            })
+        );
 
         const sample = await Student.findOne({
             email: mergedStudents[0].email,

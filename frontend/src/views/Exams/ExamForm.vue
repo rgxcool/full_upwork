@@ -2,7 +2,13 @@
   <div class="scrollable-view">
     <v-container class="my-5">
       <h2 class="mb-4">Anmälan till prövning</h2>
-      <v-form @submit.prevent="submitForm" class="pa-4" elevation="1">
+      <v-alert v-if="isLoading" type="info" variant="tonal" class="mb-4">
+        Hämtar elever och lärare…
+      </v-alert>
+      <v-alert v-if="loadError" type="error" variant="tonal" class="mb-4">
+        {{ loadError }}
+      </v-alert>
+      <v-form class="pa-4" elevation="1" @submit.prevent="submitForm">
         <v-row dense>
           <!-- Elev -->
           <v-col cols="12">
@@ -42,7 +48,6 @@
               item-value="value"
               label="Kurs"
               outlined
-              disabled
             />
           </v-col>
 
@@ -58,7 +63,6 @@
               item-value="_id"
               label="Ansvarig lärare"
               outlined
-              disabled
             />
           </v-col>
 
@@ -76,7 +80,7 @@
           </v-col>
 
           <!-- Material checkbox -->
-          <v-col cols="12" v-if="showMaterialCheckbox">
+          <v-col v-if="showMaterialCheckbox" cols="12">
             <v-checkbox
               v-model="form.materialReceived.status"
               label="Material hämtat (SVE 1 eller 3)"
@@ -85,7 +89,7 @@
 
           <!-- Submit -->
           <v-col cols="12" class="text-end mt-4">
-            <v-btn type="submit" color="primary">Registrera</v-btn>
+            <v-btn type="submit" color="primary" :loading="isSubmitting" :disabled="!canSubmit">Registrera</v-btn>
           </v-col>
         </v-row>
       </v-form>
@@ -103,9 +107,12 @@
   const students = ref([])
   const teachers = ref([])
   const isLoading = ref(false)
+  const isSubmitting = ref(false)
   const selectedStudent = ref(null)
   const searchQuery = ref('')
   const selectedCourse = ref(null)
+  const fetchState = ref(false)
+  const loadError = ref('')
 
   const form = ref({
     name: '',
@@ -117,6 +124,7 @@
     requestedMonth: '',
     municipality: '',
     teacherId: '',
+    studentId: '',
     materialReceived: { status: false, receivedDate: null },
     paymentDate: '',
   })
@@ -142,6 +150,10 @@
     return title.includes('sve')
   })
 
+  const canSubmit = computed(() => {
+    return selectedStudent.value && form.value.requestedMonth && form.value.teacherId
+  })
+
   const filteredStudents = computed(() => {
     if (!searchQuery.value) return students.value
     return students.value.filter((student) =>
@@ -152,46 +164,43 @@
   const fetchInitialData = async () => {
     if (fetchState.value) return
     fetchState.value = true
+    isLoading.value = true
 
+    loadError.value = ''
     try {
-      console.log('🔍 Fetching all students to filter them for autocomplete ...')
-      const [studentsResponse] = await Promise.all([
-        await client.get('/students'),
+      const [studentsResponse, teachersResponse] = await Promise.all([
+        client.get('/students'),
+        client.get('/teachers'),
       ])
-
-      students.value = studentsResponse.data
-
-      console.log('✅ Students loaded:', students.value)
-    } catch (error) {
-      console.error('❌ Error fetching initial data:', error)
+      students.value = Array.isArray(studentsResponse.data) ? studentsResponse.data : []
+      teachers.value = Array.isArray(teachersResponse.data)
+        ? teachersResponse.data.filter((teacher) => teacher.userId?.username)
+        : []
+    } catch {
+      loadError.value = 'Kunde inte hämta elever och lärare. Försök igen.'
+      toast.error(loadError.value)
     } finally {
       isLoading.value = false
     }
   }
 
-  const fetchState = ref(false) // Prevent multiple fetches
-
   watch(selectedStudent, (newStudent) => {
-    console.log('👤 Selected student:', newStudent)
-
-    // 🧹 Clear related fields when deselected
     if (!newStudent) {
       selectedCourse.value = null
       form.value.course = ''
       form.value.teacherId = ''
+      form.value.studentId = ''
       return
     }
 
-    // Grundläggande info
     form.value.name = newStudent.name || ''
     form.value.personalNumber = newStudent.personalNumber || ''
     form.value.phone = newStudent.phone || ''
     form.value.email = newStudent.email || ''
     form.value.municipality = newStudent.municipality?.type || ''
-
+    form.value.studentId = newStudent._id || ''
     form.value.teacherId = newStudent.teacherId || ''
 
-    // Försök välja första utbildning
     const edu = (newStudent.education || []).find(
       (e) => !e.removedAt && ['Course', 'CoursePackage', 'Program'].includes(e.type)
     )
@@ -240,7 +249,7 @@
     try {
       const res = await client.get('/teachers')
       teachers.value = res.data
-        .filter((t) => t.userId && t.userId.username) // skip malformed ones
+        .filter((t) => t.userId && t.userId.username)
         .map((t) => ({
           ...t,
           userId: {
@@ -248,54 +257,57 @@
           },
           _id: t._id,
         }))
-
-      console.log('👨‍🏫 Teachers fetched:', teachers.value)
-    } catch (err) {
-      console.error('Kunde inte hämta lärare:', err)
+    } catch {
+      toast.error('Kunde inte hämta lärare')
     }
   }
-
-  watch(
-    teachers,
-    (newVal) => {
-      console.log('👨‍🏫 Teachers in frontend:', newVal)
-    },
-    { deep: true, immediate: true }
-  )
 
   const submitForm = async () => {
+    if (!canSubmit.value) return
+
+    isSubmitting.value = true
     try {
-      if (form.value.materialReceived?.status) {
-        form.value.materialReceived.receivedDate = new Date()
+      const payload = { ...form.value }
+
+      if (payload.materialReceived?.status) {
+        payload.materialReceived.receivedDate = new Date()
       } else {
-        form.value.materialReceived = { status: false, receivedDate: null }
+        payload.materialReceived = { status: false, receivedDate: null }
       }
 
-      // Clean up the form data before sending
-      const formData = { ...form.value }
+      if (payload.teacherId === '') delete payload.teacherId
+      if (payload.studentId === '') delete payload.studentId
+      if (payload.paymentDate === '') delete payload.paymentDate
 
-      // Handle empty teacherId - convert empty string to null/undefined
-      if (formData.teacherId === '') {
-        delete formData.teacherId
-      }
-
-      // Handle empty paymentDate
-      if (formData.paymentDate === '') {
-        delete formData.paymentDate
-      }
-
-      console.log('Skickar:', formData)
-      await client.post('/exams', formData)
+      await client.post('/exams', payload)
       toast.success('Registreringen lyckades!')
-      Object.keys(form.value).forEach(
-        (key) => (form.value[key] = typeof form.value[key] === 'boolean' ? false : '')
-      )
+
+      selectedStudent.value = null
+      selectedCourse.value = null
+      form.value = {
+        name: '',
+        personalNumber: '',
+        phone: '',
+        email: '',
+        address: '',
+        course: '',
+        requestedMonth: '',
+        municipality: '',
+        teacherId: '',
+        studentId: '',
+        materialReceived: { status: false, receivedDate: null },
+        paymentDate: '',
+      }
     } catch (err) {
-      console.error(err)
-      toast.error('Fel vid registrering.')
+      const msg = err.response?.data?.error || 'Fel vid registrering.'
+      toast.error(msg)
+    } finally {
+      isSubmitting.value = false
     }
   }
 
-  onMounted(fetchTeachers)
-  onMounted(fetchInitialData)
+  onMounted(() => {
+    fetchTeachers()
+    fetchInitialData()
+  })
 </script>

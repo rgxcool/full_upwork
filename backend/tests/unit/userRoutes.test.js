@@ -33,6 +33,8 @@ vi.mock("../../src/models/User.js", () => {
     constructor.findById = vi.fn();
     constructor.findOne = vi.fn();
     constructor.findByIdAndUpdate = vi.fn();
+    constructor.find = vi.fn();
+    constructor.countDocuments = vi.fn().mockResolvedValue(0);
 
     return {
         __esModule: true,
@@ -47,9 +49,19 @@ vi.mock("../../src/models/Student.js", () => ({
     },
 }));
 
+vi.mock("../../src/services/emailService.js", () => ({
+    __esModule: true,
+    sendEmail: vi.fn().mockResolvedValue({ success: true }),
+    renderTempPasswordEmail: vi.fn().mockReturnValue({
+        subject: "Välkommen till Mindful Learning — inloggningsuppgifter",
+        text: "temp password email body",
+    }),
+}));
+
 import bcrypt from "bcrypt";
 import User from "../../src/models/User.js";
 import Student from "../../src/models/Student.js";
+import { sendEmail, renderTempPasswordEmail } from "../../src/services/emailService.js";
 import userRoutes from "../../src/router/userRoutes.js";
 
 const buildApp = () => {
@@ -80,6 +92,24 @@ describe("userRoutes", () => {
                 .expect(400);
 
             expect(res.body).toEqual({ message: "Roles must be an array." });
+        });
+
+        it("returns 400 when roles contain invalid values", async () => {
+            const res = await request(app)
+                .put("/api/users/user-1/roles")
+                .send({ roles: ["admin", "fake_role"] })
+                .expect(400);
+
+            expect(res.body.message).toMatch(/Invalid role/);
+        });
+
+        it("returns 400 when roles array is empty", async () => {
+            const res = await request(app)
+                .put("/api/users/user-1/roles")
+                .send({ roles: [] })
+                .expect(400);
+
+            expect(res.body.message).toMatch(/At least one role/);
         });
 
         it("returns 404 when user does not exist", async () => {
@@ -134,12 +164,21 @@ describe("userRoutes", () => {
             });
         });
 
+        it("returns 400 when permission keys are invalid", async () => {
+            const res = await request(app)
+                .put("/api/users/user-1/permissions")
+                .send({ permissions: { "students:read": true } })
+                .expect(400);
+
+            expect(res.body.message).toMatch(/Invalid permission key/);
+        });
+
         it("returns 404 when user does not exist", async () => {
             User.findById.mockResolvedValueOnce(null);
 
             const res = await request(app)
                 .put("/api/users/user-1/permissions")
-                .send({ permissions: { "students:read": true } })
+                .send({ permissions: { statistics: true } })
                 .expect(404);
 
             expect(res.body).toEqual({ message: "User not found." });
@@ -155,10 +194,10 @@ describe("userRoutes", () => {
 
             const res = await request(app)
                 .put("/api/users/user-1/permissions")
-                .send({ permissions: { "students:read": true } })
+                .send({ permissions: { statistics: true } })
                 .expect(200);
 
-            expect(user.permissions).toEqual({ "students:read": true });
+            expect(user.permissions).toEqual({ statistics: true });
             expect(user.save).toHaveBeenCalled();
             expect(res.body.message).toBe(
                 "User permissions updated successfully."
@@ -170,7 +209,7 @@ describe("userRoutes", () => {
 
             const res = await request(app)
                 .put("/api/users/user-1/permissions")
-                .send({ permissions: { "students:read": true } })
+                .send({ permissions: { statistics: true } })
                 .expect(500);
 
             expect(res.body.message).toBe(
@@ -205,6 +244,7 @@ describe("userRoutes", () => {
             expect(res.body.tempPassword).toBeTruthy();
             expect(bcrypt.hash).toHaveBeenCalled();
             expect(user.password).toBe("hashed-password");
+            expect(user.mustChangePassword).toBe(true);
             expect(user.save).toHaveBeenCalled();
         });
 
@@ -218,6 +258,176 @@ describe("userRoutes", () => {
             expect(res.body.message).toBe(
                 "An error occurred while resetting password."
             );
+        });
+    });
+
+    describe("PUT /api/users/:userId/municipalities", () => {
+        it("returns 400 when municipalities are not an array", async () => {
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: "Stockholm" })
+                .expect(400);
+
+            expect(res.body).toEqual({
+                message: "Municipalities must be an array.",
+            });
+        });
+
+        it("returns 400 when municipalities contain invalid values", async () => {
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: ["Stockholm", "Fakeort"] })
+                .expect(400);
+
+            expect(res.body.message).toMatch(/Invalid municipality/);
+        });
+
+        it("returns 404 when user does not exist", async () => {
+            User.findById.mockResolvedValueOnce(null);
+
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: ["Stockholm"] })
+                .expect(404);
+
+            expect(res.body).toEqual({ message: "User not found." });
+        });
+
+        it("updates municipality scope and dedupes values", async () => {
+            const user = {
+                _id: "user-1",
+                name: "Alice",
+                email: "alice@test.com",
+                municipalities: [],
+                save: vi.fn().mockResolvedValue(true),
+            };
+            User.findById.mockResolvedValueOnce(user);
+
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: ["Stockholm", "Solna", "Stockholm"] })
+                .expect(200);
+
+            expect(user.municipalities).toEqual(["Stockholm", "Solna"]);
+            expect(user.save).toHaveBeenCalled();
+            expect(res.body.message).toBe(
+                "User municipality scope updated successfully."
+            );
+        });
+
+        it("allows an empty array to set global access", async () => {
+            const user = {
+                _id: "user-1",
+                municipalities: ["Stockholm"],
+                save: vi.fn().mockResolvedValue(true),
+            };
+            User.findById.mockResolvedValueOnce(user);
+
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: [] })
+                .expect(200);
+
+            expect(user.municipalities).toEqual([]);
+            expect(res.body.user.municipalities).toEqual([]);
+        });
+
+        it("returns 500 when update throws", async () => {
+            User.findById.mockRejectedValueOnce(new Error("boom"));
+
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: ["Stockholm"] })
+                .expect(500);
+
+            expect(res.body.message).toBe(
+                "An error occurred while updating user municipality scope."
+            );
+        });
+    });
+
+    describe("GET /api/users", () => {
+        it("returns paginated user list", async () => {
+            const mockUsers = [
+                { _id: "507f1f77bcf86cd799439011", name: "Alice", email: "alice@test.com", roles: ["admin"] },
+                { _id: "507f1f77bcf86cd799439012", name: "Bob", email: "bob@test.com", roles: ["teacher"] },
+            ];
+            User.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    sort: vi.fn().mockReturnValue({
+                        skip: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockReturnValue({
+                                lean: vi.fn().mockResolvedValue(mockUsers),
+                            }),
+                        }),
+                    }),
+                }),
+            });
+            User.countDocuments.mockResolvedValue(2);
+
+            const res = await request(app)
+                .get("/api/users")
+                .expect(200);
+
+            expect(res.body.users).toHaveLength(2);
+            expect(res.body.total).toBe(2);
+        });
+
+        it("filters users by role", async () => {
+            User.find.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    sort: vi.fn().mockReturnValue({
+                        skip: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockReturnValue({
+                                lean: vi.fn().mockResolvedValue([]),
+                            }),
+                        }),
+                    }),
+                }),
+            });
+            User.countDocuments.mockResolvedValue(0);
+
+            await request(app)
+                .get("/api/users?role=teacher")
+                .expect(200);
+
+            expect(User.find).toHaveBeenCalledWith(
+                expect.objectContaining({ roles: { $in: ["teacher"] } })
+            );
+        });
+    });
+
+    describe("GET /api/users/:userId", () => {
+        it("returns a single user without password", async () => {
+            const userId = "507f1f77bcf86cd799439011";
+            User.findById.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue({
+                        _id: userId, name: "Alice", email: "alice@test.com", roles: ["admin"],
+                    }),
+                }),
+            });
+
+            const res = await request(app)
+                .get(`/api/users/${userId}`)
+                .expect(200);
+
+            expect(res.body._id).toBe(userId);
+        });
+
+        it("returns 404 when user not found", async () => {
+            const userId = "507f1f77bcf86cd799439011";
+            User.findById.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue(null),
+                }),
+            });
+
+            const res = await request(app)
+                .get(`/api/users/${userId}`)
+                .expect(404);
+
+            expect(res.body).toEqual({ message: "User not found." });
         });
     });
 
@@ -277,6 +487,51 @@ describe("userRoutes", () => {
                 username: "Student User",
                 roles: ["student"],
             });
+            expect(res.body.tempPassword).toBeTruthy();
+        });
+
+        it("emails the temporary password to the student", async () => {
+            Student.findById.mockResolvedValueOnce({ _id: "stu-1", name: "Stu" });
+            User.findOne.mockResolvedValueOnce(null);
+            vi.spyOn(Math, "random").mockReturnValue(0.4242424242);
+
+            const res = await request(app)
+                .post("/api/users/create-for-student")
+                .send({
+                    studentId: "stu-1",
+                    email: "student@example.com",
+                    name: "Student User",
+                })
+                .expect(201);
+
+            expect(res.body.tempPassword).toBeTruthy();
+            expect(renderTempPasswordEmail).toHaveBeenCalledWith({
+                studentName: "Student User",
+                email: "student@example.com",
+                tempPassword: res.body.tempPassword,
+            });
+            expect(sendEmail).toHaveBeenCalledWith({
+                to: "student@example.com",
+                subject: "Välkommen till Mindful Learning — inloggningsuppgifter",
+                text: "temp password email body",
+            });
+        });
+
+        it("still creates the user when the email send fails", async () => {
+            Student.findById.mockResolvedValueOnce({ _id: "stu-1", name: "Stu" });
+            User.findOne.mockResolvedValueOnce(null);
+            sendEmail.mockRejectedValueOnce(new Error("smtp down"));
+
+            const res = await request(app)
+                .post("/api/users/create-for-student")
+                .send({
+                    studentId: "stu-1",
+                    email: "student@example.com",
+                    name: "Student User",
+                })
+                .expect(201);
+
+            expect(res.body.message).toBe("User created successfully for student.");
             expect(res.body.tempPassword).toBeTruthy();
         });
 

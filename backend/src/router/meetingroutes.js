@@ -1,10 +1,34 @@
 import express from "express";
 import { authenticateUser } from '../controllers/authController.js'; // om du har detta
 import Meeting from "../models/Meeting.js";
+import Student from "../models/Student.js";
 import logger from "../utils/logger.js";
 
 
 const router = express.Router();
+
+// Sanitize exam-accommodation payloads before persisting. Accepts
+// strings/form-data values (e.g. "on", "true") as well as booleans/numbers,
+// and clamps extraTime to a non-negative integer of minutes.
+function sanitizeExtraTime(value) {
+    if (value === undefined || value === null || value === "") return 0;
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) return 0;
+    return Math.round(num);
+}
+
+function sanitizeBoolean(value) {
+    if (value === undefined || value === null) return false;
+    if (typeof value === "boolean") return value;
+    if (value === "on" || value === "true" || value === "1" || Number(value) > 0)
+        return true;
+    return false;
+}
+
+function sanitizeNotes(value) {
+    if (value === undefined || value === null) return "";
+    return String(value).trim().slice(0, 2000);
+}
 
 // GET: Alla möten
 router.get('/meetings', authenticateUser, async (req, res) => {
@@ -171,6 +195,46 @@ router.put('/meetings/:id', authenticateUser, async (req, res) => {
     } catch (err) {
         logger.error({ err }, "Failed to update meeting")
         res.status(500).json({ error: 'Serverfel vid uppdatering av möte' });
+    }
+});
+
+// PUT: Uppdatera elevens examenackommodationer (specped/admin)
+router.put('/students/:id/exam-accommodations', authenticateUser, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { extraTime, computer, separateRoom, notes } = req.body;
+
+        // Validate that the user has permission
+        const { role } = req.user;
+        const isAdmin = ['admin', 'systemadmin'].includes(role);
+        const isSpecped = role === 'specped';
+
+        if (!isAdmin && !isSpecped) {
+            return res.status(403).json({ error: "Behörighet saknas för att uppdatera examenackommodationer" });
+        }
+
+        const student = await Student.findByIdAndUpdate(
+            id,
+            {
+                examAccommodations: {
+                    extraTime: sanitizeExtraTime(extraTime),
+                    computer: sanitizeBoolean(computer),
+                    separateRoom: sanitizeBoolean(separateRoom),
+                    notes: sanitizeNotes(notes),
+                },
+            },
+            { new: true }
+        );
+
+        if (!student) {
+            return res.status(404).json({ error: "Elev hittades inte" });
+        }
+
+        logger.info({ studentId: student._id, role, extraTime, computer, separateRoom, notes }, "Exam accommodations updated");
+        res.json(student);
+    } catch (err) {
+        logger.error({ err }, "Failed to update exam accommodations");
+        res.status(500).json({ error: 'Serverfel vid uppdatering av examenackommodationer' });
     }
 });
 

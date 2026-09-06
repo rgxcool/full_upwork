@@ -17,12 +17,19 @@ const NOTIFICATION_TYPES = {
   
     // 🛑 Avbrott
     DROPOUT: "dropout", // Elev har avbrutit kurs eller paket
+
+    // 📵 Inaktivitet
+    INACTIVITY_ACTION: "inactivity_action", // Lärare/admin hanterar en inaktiv elev
   
     // 📆 Slutprov
     FINAL_EXAM_SOON: "final_exam_soon", // Elev har slutprov inom 14 dagar
   
     // ✍️ Signering
     SIGNING_REQUIRED: "signing_required", // Läraren behöver signera betygskatalog
+
+    // 🔒 Betyg lås/upplås
+    GRADE_LOCKED: "grade_locked", // Betyg låst — admin meddelas så de kan betygsätta i kommunernas system
+    GRADE_UNLOCKED: "grade_unlocked", // Betyg upplåst (admin/systemadmin)
   
     // 🗓️ Möten
     MEETING_BOOKED: "meeting_booked", // SYV/specped bokat möte med elev
@@ -30,6 +37,9 @@ const NOTIFICATION_TYPES = {
     // 👷 APL-status
     APL_WARNING: "apl_warning", // T.ex. röd varning – praktik snart slut
     APL_COMPLETE: "apl_complete", // Praktik avslutad
+
+    // 🎓 Diploma
+    DIPLOMA_READY: "diploma_ready", // Alla kurser + APL klara — diplom kan genereras
   
     // 🧹 Annat/metodiskt
     SYSTEM_ALERT: "system_alert", // För generella systemmeddelanden

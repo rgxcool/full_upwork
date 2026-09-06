@@ -4,13 +4,20 @@ import CoursePackage from "../models/CoursePackage.js";
 import Program from "../models/Program.js";
 import User from "../models/User.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
-import CourseInstance from "../models/CourseInstance.js";
-import ExamAttendance from "../models/ExamAttendance.js";
-import Provning from "../models/Provning.js";
-import Teacher from "../models/Teacher.js";
-import Notification from "../models/Notification.js";
+import Deviation from "../models/Deviation.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
+import { municipalityInScope } from "../utils/tenantScope.js";
+import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
+import {
+    performStudentDropout,
+    removeStudentDropoutRecord,
+} from "../services/dropoutService.js";
+import {
+    performStudyplanRevision,
+    getRevisionHistory,
+    REVISION_REASONS,
+} from "../services/revisionService.js";
 
 /**
  * Student Details Controller
@@ -34,6 +41,11 @@ export const getStudentDetails = async (req, res) => {
 
         if (!student) {
             return res.status(404).json({ error: "Student not found" });
+        }
+
+        // Backend-enforced tenant (kommun) scope.
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
         }
 
         const user = await User.findOne({ email: student.email });
@@ -99,6 +111,8 @@ export const getStudentDetails = async (req, res) => {
             teacherId: enrollment.teacherId, // Include teacherId for display
             addedAt: enrollment.createdAt,
             addedBy: enrollment.teacherId?.name || "System",
+            completedAt: enrollment.completedAt,
+            completionCertificate: enrollment.completionCertificate,
             isEnrollment: true, // Flag to identify this came from enrollment system
         }));
 
@@ -122,6 +136,20 @@ export const getStudentDetails = async (req, res) => {
                 (e) => e.status === "dropped"
             ).length,
         };
+
+        // APL auto-status: derive the APL period and the effective (date-driven)
+        // status the same way as GET /students, so the APL-flik matches the board.
+        const aplPeriod = computeAplPeriod(populatedStudent.education);
+        const aplEffective = computeAplEffectiveStatus(
+            populatedStudent.aplStatus,
+            aplPeriod.aplEndDate
+        );
+        populatedStudent.aplStatus = aplEffective.aplStatus;
+        populatedStudent.aplStatusStored = aplEffective.aplStatusStored;
+        populatedStudent.aplStatusAuto = aplEffective.aplAutoRed;
+        populatedStudent.aplWeeksRemaining = aplEffective.aplWeeksRemaining;
+        populatedStudent.aplStartDate = aplPeriod.aplStartDate;
+        populatedStudent.aplEndDate = aplPeriod.aplEndDate;
 
         res.json(populatedStudent);
     } catch (error) {
@@ -485,7 +513,7 @@ export const getChangeHistory = async (req, res) => {
 export const setStudentDropout = async (req, res) => {
     try {
         const { id } = req.params;
-        const { role, userId, name } = req.user;
+        const { role, userId } = req.user;
 
         // Check permissions - admin+ only
         if (!["admin", "systemadmin"].includes(role)) {
@@ -494,299 +522,30 @@ export const setStudentDropout = async (req, res) => {
             });
         }
 
-        const student = await Student.findById(id).populate({
-            path: "teacherId",
-            populate: { path: "userId", select: "_id username email" }
+        const result = await performStudentDropout({
+            studentId: id,
+            userId,
+            role,
+            reason: "Student marked as dropout (Avbrott)",
         });
-        if (!student) {
-            return res.status(404).json({ error: "Student not found" });
-        }
-        
-        logger.debug({ name: student.name, id }, "Student fetched");
-        logger.debug({ teacherId: student.teacherId }, "Student teacherId");
-        logger.debug({ teacher: student.teacher }, "Student teacher string");
-
-        // If already dropout, we still need to ensure notification exists
-        // (in case it was deleted or teacher changed)
-        const wasAlreadyDropout = student.dropout;
-        if (wasAlreadyDropout) {
-            logger.info({ name: student.name }, "Student already marked as dropout, checking notification");
-        }
-
-        // Set dropout flag (only if not already set)
-        if (!student.dropout) {
-            student.dropout = true;
-        }
-
-        // Log the change (only if dropout was actually changed)
-        if (!wasAlreadyDropout) {
-            const changeLog = {
-                timestamp: new Date(),
-                changedBy: userId,
-                changedByRole: role,
-                changes: ["dropout"],
-                previousValues: { dropout: false },
-                newValues: { dropout: true },
-            };
-
-            if (!student.changeHistory) {
-                student.changeHistory = [];
-            }
-            student.changeHistory.push(changeLog);
-        }
-
-        // Save student (even if already dropout, to ensure data is fresh)
-        await student.save();
-
-        // Remove from APL lists (by excluding from APL queries - handled automatically)
-        // The APL board already filters by excluding dropout students
-
-        // Find all ExamAttendance records for this student (all dates, not just future)
-        // Convert id to ObjectId to ensure proper matching
-        const studentObjectId = mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id;
-        const allExamAttendance = await ExamAttendance.find({ studentId: studentObjectId });
-        logger.debug({ count: allExamAttendance.length, name: student.name, id }, "Found exam attendance records");
-        if (allExamAttendance.length > 0) {
-            logger.debug({ records: allExamAttendance.map(a => ({
-                _id: a._id,
-                examDate: a.examDate,
-                teacherId: a.teacherId,
-                courseId: a.courseId,
-                studentId: a.studentId
-            })) }, "Exam attendance records details");
-        }
-
-        // Group exams by examDate (normalized to start of day) + teacherId + courseId to identify which exams they belong to
-        const examGroups = new Map();
-        for (const attendance of allExamAttendance) {
-            // Normalize examDate to start of day for proper grouping
-            const examDateStart = new Date(attendance.examDate);
-            examDateStart.setHours(0, 0, 0, 0);
-            const examDateEnd = new Date(examDateStart);
-            examDateEnd.setHours(23, 59, 59, 999);
-            
-            const examKey = `${examDateStart.toISOString()}_${attendance.teacherId}_${attendance.courseId || 'null'}`;
-            if (!examGroups.has(examKey)) {
-                examGroups.set(examKey, {
-                    examDateStart,
-                    examDateEnd,
-                    teacherId: attendance.teacherId,
-                    courseId: attendance.courseId,
-                    attendanceRecords: []
-                });
-            }
-            examGroups.get(examKey).attendanceRecords.push(attendance._id);
-        }
-
-        // Delete all ExamAttendance records for this student
-        const deletedExamAttendance = await ExamAttendance.deleteMany({
-            studentId: studentObjectId,
-        });
-        logger.info({ count: deletedExamAttendance.deletedCount, name: student.name, id }, "Deleted exam attendance records");
-        // Verify deletion by checking if any records remain
-        const remainingRecords = await ExamAttendance.countDocuments({ studentId: studentObjectId });
-        if (remainingRecords > 0) {
-            logger.warn({ remainingRecords, name: student.name }, "Exam attendance records still exist after deletion");
-        } else {
-            logger.info({ name: student.name }, "Verified: No exam attendance records remain");
-        }
-
-        // Check each exam group - if no students remain, delete the entire exam
-        let deletedEmptyExams = 0;
-        for (const [examKey, examGroup] of examGroups.entries()) {
-            // Build query for this exam group (using date range to match all records on the same day)
-            const examQuery = {
-                $and: [
-                    {
-                        examDate: {
-                            $gte: examGroup.examDateStart,
-                            $lte: examGroup.examDateEnd
-                        }
-                    },
-                    { teacherId: examGroup.teacherId }
-                ]
-            };
-            
-            // Handle courseId - if it's null/undefined, match records where courseId is null or doesn't exist
-            if (examGroup.courseId) {
-                examQuery.$and.push({ courseId: examGroup.courseId });
-            } else {
-                examQuery.$and.push({
-                    $or: [
-                        { courseId: null },
-                        { courseId: { $exists: false } }
-                    ]
-                });
-            }
-
-            // Check if there are any remaining students in this exam
-            const remainingStudents = await ExamAttendance.countDocuments(examQuery);
-
-            if (remainingStudents === 0) {
-                // No students left in this exam, delete all records (should already be deleted, but double-check)
-                const deleted = await ExamAttendance.deleteMany(examQuery);
-                deletedEmptyExams++;
-                logger.info({ examKey, count: deleted.deletedCount }, "Deleted empty exam group");
-            }
-        }
-
-        // Remove from Provning (exam registrations) - delete ALL records regardless of status
-        const deletedProvning = await Provning.deleteMany({
-            studentId: studentObjectId,
-        });
-        logger.info({ count: deletedProvning.deletedCount, name: student.name }, "Deleted exam registrations (Provning)");
-
-        // Send notification to responsible teacher
-        let teacherRecord = null;
-        let teacherUserId = null;
-        
-        logger.debug({ name: student.name, id }, "Looking for teacher for student");
-        logger.debug({ teacherId: student.teacherId }, "Student teacherId");
-        logger.debug({ teacher: student.teacher }, "Student teacher string");
-        
-        if (student.teacherId) {
-            // If teacherId is populated (as object), use it directly
-            if (student.teacherId._id) {
-                teacherRecord = student.teacherId;
-                logger.debug({ teacherRecordId: teacherRecord._id }, "Found populated teacherId");
-            } else {
-                // If teacherId is just an ObjectId, fetch the teacher
-                teacherRecord = await Teacher.findById(student.teacherId);
-                logger.debug({ teacherRecordId: teacherRecord ? teacherRecord._id : 'NOT FOUND' }, "Fetched teacher by ID");
-            }
-            
-            if (teacherRecord) {
-                // Get the userId from the teacher record
-                if (teacherRecord.userId) {
-                    // userId might be ObjectId or populated object
-                    teacherUserId = teacherRecord.userId._id || teacherRecord.userId;
-                    logger.debug({ teacherUserId }, "Found userId from teacher record");
-                } else {
-                    // If userId is not populated, fetch it
-                    const populatedTeacher = await Teacher.findById(teacherRecord._id).populate("userId");
-                    if (populatedTeacher && populatedTeacher.userId) {
-                        teacherUserId = populatedTeacher.userId._id || populatedTeacher.userId;
-                        logger.debug({ teacherUserId }, "Found userId after populate");
-                    } else {
-                        logger.warn({ teacherRecordId: teacherRecord._id }, "Could not find userId for teacher");
-                    }
-                }
-            }
-        } else if (student.teacher && typeof student.teacher === "string") {
-            // Try to find teacher by name string
-            logger.debug({ name: student.teacher }, "Looking for teacher by name");
-            const teacherUser = await User.findOne({ name: student.teacher });
-            if (teacherUser) {
-                logger.debug({ userId: teacherUser._id }, "Found user by name");
-                // Find the Teacher record for this user
-                teacherRecord = await Teacher.findOne({ userId: teacherUser._id });
-                if (teacherRecord) {
-                    teacherUserId = teacherUser._id;
-                    logger.debug({ teacherRecordId: teacherRecord._id }, "Found Teacher record for user");
-                } else {
-                    logger.warn({ userId: teacherUser._id }, "No Teacher record found for user");
-                }
-            } else {
-                logger.warn({ name: student.teacher }, "No user found with name");
-            }
-        } else {
-            logger.warn({ name: student.name }, "No teacherId or teacher name found for student");
-        }
-
-        if (teacherRecord && teacherRecord._id) {
-            logger.debug({ teacherRecordId: teacherRecord._id, teacherUserId }, "Creating notification for teacher");
-            logger.debug({
-                teacherRecordId: teacherRecord._id.toString(),
-                teacherUserId: teacherUserId ? teacherUserId.toString() : 'MISSING',
-                studentId: id,
-            }, "Notification details");
-            
-            // Check if notification already exists (regardless of resolution status)
-            // We want to prevent duplicates, not check if it's resolved
-            const existingNotification = await Notification.findOne({
-                type: "dropout",
-                teacher: teacherRecord._id,
-                "meta.studentId": id,
-            });
-
-            logger.debug("Checking for existing notification");
-            logger.debug({
-                teacher: teacherRecord._id.toString(),
-                studentId: id,
-                existingNotificationId: existingNotification ? existingNotification._id : 'NONE',
-            }, "Notification query details");
-
-            if (!existingNotification) {
-                // Ensure teacher._id is properly converted to ObjectId
-                const teacherObjectId = mongoose.Types.ObjectId.isValid(teacherRecord._id)
-                    ? new mongoose.Types.ObjectId(teacherRecord._id)
-                    : teacherRecord._id;
-                
-                const notification = new Notification({
-                    type: "dropout",
-                    teacher: teacherObjectId, // Store Teacher._id for query matching
-                    createdByAdmin: userId, // Store the admin who created this notification
-                    message: `Eleven ${student.name} har markerats som avbrott (inaktiv).`,
-                    meta: {
-                        teacherId: teacherUserId, // Store User._id for reference
-                        studentId: id,
-                        url: `/student/${id}`,
-                    },
-                    resolved: false,
-                    resolvedByUsers: [], // Initialize empty array for per-user resolution
-                });
-                await notification.save();
-                logger.info({ notificationId: notification._id }, "Created dropout notification");
-                logger.debug({
-                    notificationTeacher: notification.teacher ? notification.teacher.toString() : 'MISSING',
-                    notificationMetaTeacherId: notification.meta.teacherId ? notification.meta.teacherId.toString() : 'MISSING',
-                    notificationMetaStudentId: notification.meta.studentId ? notification.meta.studentId.toString() : 'MISSING',
-                    notificationType: notification.type,
-                    notificationResolved: notification.resolved,
-                }, "Notification details");
-                
-                // Verify the notification was saved correctly
-                const verifyNotification = await Notification.findById(notification._id);
-                logger.debug({
-                    _id: verifyNotification._id.toString(),
-                    type: verifyNotification.type,
-                    teacher: verifyNotification.teacher ? verifyNotification.teacher.toString() : 'MISSING',
-                    metaTeacherId: verifyNotification.meta?.teacherId ? verifyNotification.meta.teacherId.toString() : 'MISSING',
-                    metaStudentId: verifyNotification.meta?.studentId ? verifyNotification.meta.studentId.toString() : 'MISSING',
-                    resolved: verifyNotification.resolved,
-                }, "Verification - Saved notification");
-            } else {
-                // Notification already exists - reset resolvedByUsers so all users see it again
-                logger.info({ notificationId: existingNotification._id }, "Dropout notification already exists");
-                logger.debug({
-                    existingTeacher: existingNotification.teacher ? existingNotification.teacher.toString() : 'MISSING',
-                    existingMetaTeacherId: existingNotification.meta?.teacherId ? existingNotification.meta.teacherId.toString() : 'MISSING',
-                    resolvedByUsers: existingNotification.resolvedByUsers ? existingNotification.resolvedByUsers.map(id => id.toString()) : 'MISSING',
-                }, "Existing notification details");
-                
-                // Reset resolvedByUsers so all users see the notification again
-                // Also update createdByAdmin to the current admin
-                existingNotification.resolvedByUsers = [];
-                existingNotification.resolved = false; // Also reset legacy field
-                existingNotification.createdByAdmin = userId; // Update to current admin
-                await existingNotification.save();
-                logger.info({ notificationId: existingNotification._id, userId }, "Reset notification - cleared resolvedByUsers and updated createdByAdmin");
-            }
-        } else {
-            logger.warn({ name: student.name }, "No teacher found for student, skipping notification");
-            logger.debug({ teacherRecord, teacherUserId }, "Teacher lookup details");
-        }
 
         res.json({
-            success: true,
+            success: result.success,
             message: "Student marked as dropout successfully",
-            student,
-            deletedExamAttendance: deletedExamAttendance.deletedCount,
-            deletedProvning: deletedProvning.deletedCount,
-            deletedEmptyExams: deletedEmptyExams,
+            student: result.student,
+            conversationId: result.conversationId,
+            deletedExamAttendance: result.deletedExamAttendance,
+            deletedProvning: result.deletedProvning,
+            deletedEmptyExams: result.deletedEmptyExams,
+            removedFromEvents: result.removedFromEvents,
+            deletedEmptyEvents: result.deletedEmptyEvents,
+            droppedEnrollments: result.droppedEnrollments,
         });
     } catch (error) {
         logger.error({ err: error }, "Error setting student as dropout");
+        if (error.statusCode === 404) {
+            return res.status(404).json({ error: "Student not found" });
+        }
         res.status(500).json({ error: "Failed to set student as dropout" });
     }
 };
@@ -797,7 +556,7 @@ export const setStudentDropout = async (req, res) => {
 export const removeStudentDropout = async (req, res) => {
     try {
         const { id } = req.params;
-        const { role, userId, name } = req.user;
+        const { role, userId } = req.user;
 
         // Check permissions - admin+ only
         if (!["admin", "systemadmin"].includes(role)) {
@@ -806,67 +565,420 @@ export const removeStudentDropout = async (req, res) => {
             });
         }
 
+        const result = await removeStudentDropoutRecord({ studentId: id, userId, role });
+
+        res.json({
+            success: result.success,
+            message: result.wasDropout
+                ? "Dropout status removed successfully"
+                : "Student is not marked as dropout",
+            student: result.student,
+            resolvedNotifications: result.resolvedNotifications,
+            reSyncedEnrollments: result.reSyncedEnrollments,
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error removing dropout status");
+        if (error.statusCode === 404) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+        res.status(500).json({ error: "Failed to remove dropout status" });
+    }
+};
+
+/**
+ * Reactivate a student with optional course re-enrollment (admin+ only).
+ * Returns previous enrollment history for the frontend to display.
+ */
+export const reactivateStudentWithCourses = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role, userId } = req.user;
+        const { reEnrollCourseIds } = req.body;
+
+        if (!["admin", "systemadmin"].includes(role)) {
+            return res.status(403).json({ error: "Insufficient permissions to reactivate student" });
+        }
+
+        const student = await Student.findById(id);
+        if (!student) return res.status(404).json({ error: "Student not found" });
+
+        if (!student.dropout) {
+            return res.status(400).json({ error: "Student is not currently inactive" });
+        }
+
+        // Get previous enrollments before reactivation
+        const previousEnrollments = await StudentEnrollment.find({
+            studentId: id,
+            mainCourseId: { $exists: true, $ne: null },
+        })
+            .populate("mainCourseId", "courseName courseCode courseExtent")
+            .populate("coursePackageId", "coursePackageName coursePackageCode")
+            .sort({ startDate: -1 })
+            .lean();
+
+        // Reactivate via existing service
+        const { reactivateStudent } = await import("../services/dropoutService.js");
+        const updatedStudent = await reactivateStudent({
+            studentDoc: student,
+            userId,
+            role,
+        });
+
+        // Resolve dropout notifications
+        const Notification = (await import("../models/Notification.js")).default;
+        const dropoutNotifications = await Notification.find({
+            type: "dropout",
+            "meta.studentId": id,
+            resolved: false,
+        });
+        for (const notif of dropoutNotifications) {
+            notif.resolved = true;
+            if (!notif.resolvedByUsers) notif.resolvedByUsers = [];
+            notif.resolvedByUsers.push(userId);
+            await notif.save();
+        }
+
+        // Re-enroll in selected courses if requested
+        let newEnrollments = [];
+        if (reEnrollCourseIds?.length > 0) {
+            const CourseMatchingService = (await import("../utils/courseMatchingService.js")).default;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tempoWeeks = student.tempoWeeks || 10;
+
+            // Find the last enrollment end date to continue from
+            const lastEnrollment = previousEnrollments[0];
+            let nextStartDate = lastEnrollment?.endDate
+                ? new Date(lastEnrollment.endDate)
+                : today;
+            if (nextStartDate < today) nextStartDate = today;
+
+            for (const courseId of reEnrollCourseIds) {
+                const startDate = new Date(nextStartDate);
+                const endDate = new Date(startDate);
+                endDate.setDate(endDate.getDate() + tempoWeeks * 7);
+
+                const { instance } = await CourseMatchingService.findOrCreateCourseInstance(
+                    courseId,
+                    startDate,
+                    endDate,
+                    userId,
+                    student.teacherId || null
+                );
+
+                const courseDoc = await Course.findById(courseId).lean();
+
+                const enrollment = new StudentEnrollment({
+                    studentId: id,
+                    courseInstanceId: instance._id,
+                    mainCourseId: courseId,
+                    enrollmentPrice: courseDoc?.price ?? null,
+                    startDate,
+                    endDate,
+                    status: "enrolled",
+                    teacherId: student.teacherId || null,
+                });
+
+                await enrollment.save();
+                newEnrollments.push(enrollment);
+                nextStartDate = new Date(endDate);
+            }
+        }
+
+        // Record audit entry
+        if (!student.changeHistory) student.changeHistory = [];
+        student.changeHistory.push({
+            timestamp: new Date(),
+            changedBy: userId,
+            changedByRole: role,
+            changes: ["reactivation"],
+            previousValues: { dropout: true, reEnrollCourseIds: reEnrollCourseIds || [] },
+            newValues: { dropout: false, newEnrollmentCount: newEnrollments.length },
+        });
+        await student.save();
+
+        res.json({
+            success: true,
+            message: "Student reactivated successfully",
+            student: updatedStudent,
+            previousEnrollments,
+            newEnrollments,
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error reactivating student");
+        if (error.statusCode === 404) return res.status(404).json({ error: "Student not found" });
+        res.status(500).json({ error: "Failed to reactivate student" });
+    }
+};
+
+// ─── Support Info Endpoints ─────────────────────────────────────────────────
+
+/**
+ * Get support contacts for a student
+ */
+export const getSupportInfo = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const student = await Student.findById(id).select("supportInfo name email");
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+
+        res.json({
+            studentId: student._id,
+            studentName: student.name,
+            studentEmail: student.email,
+            supportInfo: student.supportInfo || [],
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error fetching support info");
+        res.status(500).json({ error: "Failed to fetch support info" });
+    }
+};
+
+/**
+ * Update support contacts for a student (admin+ only)
+ */
+export const updateSupportInfo = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role, userId } = req.user;
+        const { supportInfo } = req.body;
+
+        if (!["admin", "systemadmin"].includes(role)) {
+            return res.status(403).json({
+                error: "Insufficient permissions to update support info",
+            });
+        }
+
+        if (!Array.isArray(supportInfo)) {
+            return res.status(400).json({ error: "supportInfo must be an array" });
+        }
+
         const student = await Student.findById(id);
         if (!student) {
             return res.status(404).json({ error: "Student not found" });
         }
 
-        const wasDropout = student.dropout;
-        if (!wasDropout) {
-            return res.json({
-                success: true,
-                message: "Student is not marked as dropout",
-                student,
-            });
-        }
-
-        // Remove dropout flag
-        student.dropout = false;
-
-        // Log the change
-        const changeLog = {
-            timestamp: new Date(),
-            changedBy: userId,
-            changedByRole: role,
-            changes: ["dropout"],
-            previousValues: { dropout: true },
-            newValues: { dropout: false },
-        };
-
-        if (!student.changeHistory) {
-            student.changeHistory = [];
-        }
-        student.changeHistory.push(changeLog);
+        student.supportInfo = supportInfo.map(contact => ({
+            contactName: contact.contactName,
+            contactRole: contact.contactRole || "",
+            contactPhone: contact.contactPhone || "",
+            contactEmail: contact.contactEmail || "",
+            supportType: contact.supportType || "",
+            notes: contact.notes || "",
+            addedAt: contact.addedAt || new Date(),
+            addedBy: userId,
+        }));
 
         await student.save();
 
-        // Resolve any existing dropout notifications for this student
-        const resolvedNotifications = await Notification.updateMany(
-            {
-                type: "dropout",
-                "meta.studentId": id,
-                resolved: false,
-            },
-            {
-                $set: {
-                    resolved: true,
-                    resolvedBy: userId,
-                    resolvedAt: new Date(),
-                },
-            }
-        );
+        res.json({
+            success: true,
+            message: "Support info updated",
+            supportInfo: student.supportInfo,
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error updating support info");
+        res.status(500).json({ error: "Failed to update support info" });
+    }
+};
 
-        logger.info({ name: student.name }, "Removed dropout status for student");
-        logger.debug({ count: resolvedNotifications.modifiedCount }, "Resolved dropout notifications");
+// ─── Deviation Endpoints ────────────────────────────────────────────────────
+
+/**
+ * Get all deviations for a student (optionally filtered by enrollmentId)
+ */
+export const getDeviations = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { enrollmentId } = req.query;
+
+        const student = await Student.findById(id).select("municipality name");
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+
+        const query = { studentId: id };
+        if (enrollmentId) {
+            query.enrollmentId = enrollmentId;
+        }
+
+        const deviations = await Deviation.find(query)
+            .populate("enrollmentId", "courseInstanceId")
+            .populate("courseId", "courseName courseCode")
+            .populate("courseInstanceId", "courseName courseCode")
+            .sort({ createdAt: -1 });
+
+        res.json(deviations);
+    } catch (error) {
+        logger.error({ err: error }, "Error fetching deviations");
+        res.status(500).json({ error: "Failed to fetch deviations" });
+    }
+};
+
+/**
+ * Create a new deviation (teacher+ only)
+ */
+export const createDeviation = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role, userId, name } = req.user;
+        const { enrollmentId, courseId, courseInstanceId, type, title, description, reason } = req.body;
+
+        if (!["teacher", "admin", "systemadmin"].includes(role)) {
+            return res.status(403).json({ error: "Insufficient permissions to create deviations" });
+        }
+
+        if (!enrollmentId || !type || !title) {
+            return res.status(400).json({ error: "enrollmentId, type, and title are required" });
+        }
+
+        const student = await Student.findById(id);
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        const deviation = new Deviation({
+            studentId: id,
+            enrollmentId,
+            courseId: courseId || undefined,
+            courseInstanceId: courseInstanceId || undefined,
+            type,
+            title,
+            description: description || "",
+            reason: reason || "",
+            status: "pending",
+            requestedBy: userId,
+            requestedByName: name,
+        });
+
+        await deviation.save();
+
+        res.status(201).json({
+            success: true,
+            message: "Deviation created",
+            deviation,
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error creating deviation");
+        res.status(500).json({ error: "Failed to create deviation" });
+    }
+};
+
+/**
+ * Update a deviation status (admin+ only)
+ */
+export const updateDeviation = async (req, res) => {
+    try {
+        const { id, deviationId } = req.params;
+        const { role, userId, name } = req.user;
+        const { status, resolution } = req.body;
+
+        if (!["admin", "systemadmin"].includes(role)) {
+            return res.status(403).json({ error: "Insufficient permissions to update deviations" });
+        }
+
+        const deviation = await Deviation.findOne({ _id: deviationId, studentId: id });
+        if (!deviation) {
+            return res.status(404).json({ error: "Deviation not found" });
+        }
+
+        if (status) {
+            deviation.status = status;
+        }
+        if (resolution) {
+            deviation.resolution = resolution;
+        }
+        if (status === "approved" || status === "rejected") {
+            deviation.resolvedBy = userId;
+            deviation.resolvedByName = name;
+            deviation.resolvedAt = new Date();
+        }
+
+        await deviation.save();
 
         res.json({
             success: true,
-            message: "Dropout status removed successfully",
-            student,
-            resolvedNotifications: resolvedNotifications.modifiedCount,
+            message: "Deviation updated",
+            deviation,
         });
     } catch (error) {
-        logger.error({ err: error }, "Error removing dropout status");
-        res.status(500).json({ error: "Failed to remove dropout status" });
+        logger.error({ err: error }, "Error updating deviation");
+        res.status(500).json({ error: "Failed to update deviation" });
     }
 };
+
+// ─── Study-Plan Revision Endpoints ──────────────────────────────────────────
+
+/**
+ * Get available revision reasons
+ */
+export const getRevisionReasons = async (req, res) => {
+    res.json({ reasons: REVISION_REASONS });
+};
+
+/**
+ * Perform a study-plan revision (admin+ only)
+ */
+export const reviseStudyPlan = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role, userId } = req.user;
+        const { revisionReason, description, changes } = req.body;
+
+        if (!["admin", "systemadmin"].includes(role)) {
+            return res.status(403).json({ error: "Insufficient permissions to revise study plan" });
+        }
+
+        if (!revisionReason || !changes) {
+            return res.status(400).json({ error: "revisionReason and changes are required" });
+        }
+
+        const result = await performStudyplanRevision({
+            studentId: id,
+            revisionReason,
+            description,
+            changes,
+            userId,
+            userRole: role,
+        });
+
+        res.json(result);
+    } catch (error) {
+        logger.error({ err: error }, "Error revising study plan");
+        if (error.statusCode === 404) return res.status(404).json({ error: error.message });
+        if (error.statusCode === 400) return res.status(400).json({ error: error.message });
+        res.status(500).json({ error: "Failed to revise study plan" });
+    }
+};
+
+/**
+ * Get revision history for a student (admin+ only)
+ */
+export const getStudyplanRevisionHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role } = req.user;
+
+        if (!["admin", "systemadmin", "teacher"].includes(role)) {
+            return res.status(403).json({ error: "Insufficient permissions" });
+        }
+
+        const history = await getRevisionHistory(id);
+        res.json({ success: true, history });
+    } catch (error) {
+        logger.error({ err: error }, "Error fetching revision history");
+        if (error.statusCode === 404) return res.status(404).json({ error: error.message });
+        res.status(500).json({ error: "Failed to fetch revision history" });
+    }
+};
+

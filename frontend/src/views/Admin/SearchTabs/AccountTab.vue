@@ -18,9 +18,9 @@
             <h3>Grundläggande Information</h3>
             <button
               v-if="isAdmin"
-              @click="toggleEditMode"
               class="btn btn-sm"
               :class="editMode ? 'btn-secondary' : 'btn-primary'"
+              @click="toggleEditMode"
             >
               {{ editMode ? 'Avbryt' : 'Redigera' }}
             </button>
@@ -77,9 +77,9 @@
                   <code v-if="studentPassword" style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px; font-family: monospace;">{{ studentPassword }}</code>
                   <span v-else class="password-placeholder" style="color: #6c757d;">••••••••</span>
                   <button
-                    @click="resetPassword"
                     class="btn btn-sm btn-outline-primary"
                     :disabled="resettingPassword"
+                    @click="resetPassword"
                   >
                     {{ resettingPassword ? 'Återställer...' : studentPassword ? 'Återställ lösenord' : 'Visa/Återställ lösenord' }}
                   </button>
@@ -107,10 +107,10 @@
             </div>
 
             <div v-if="editMode && isAdmin" class="edit-actions">
-              <button @click="saveChanges" class="btn btn-success" :disabled="saving">
+              <button class="btn btn-success" :disabled="saving" @click="saveChanges">
                 {{ saving ? 'Sparar...' : 'Spara ändringar' }}
               </button>
-              <button @click="cancelEdit" class="btn btn-secondary">Avbryt</button>
+              <button class="btn btn-secondary" @click="cancelEdit">Avbryt</button>
             </div>
           </div>
         </div>
@@ -243,8 +243,8 @@
             <h3>Kommentarer</h3>
             <button
               v-if="canComment"
-              @click="showCommentModal = true"
               class="btn btn-primary btn-sm"
+              @click="showCommentModal = true"
             >
               Lägg till kommentar
             </button>
@@ -255,7 +255,7 @@
               class="comments-list"
             >
               <div
-                v-for="(comment, index) in activeComments"
+                v-for="comment in activeComments"
                 :key="comment._id"
                 class="comment-item"
                 :class="{ deleted: comment.isDeleted }"
@@ -278,15 +278,15 @@
                 <div class="comment-actions">
                   <button
                     v-if="canEditComment(comment)"
-                    @click="editComment(comment)"
                     class="btn btn-sm btn-outline-primary"
+                    @click="editComment(comment)"
                   >
                     Redigera
                   </button>
                   <button
                     v-if="canDeleteComment(comment)"
-                    @click="deleteComment(comment._id)"
                     class="btn btn-sm btn-outline-danger"
+                    @click="deleteComment(comment._id)"
                   >
                     Radera
                   </button>
@@ -345,8 +345,8 @@
             </button>
             <MeetingModal
               v-if="showMeetingModal"
-              :studentId="student._id"
-              :studentName="student.name"
+              :student-id="student._id"
+              :student-name="student.name"
               @close="showMeetingModal = false"
             />
           </div>
@@ -361,12 +361,12 @@
           <h3>Användarinformation</h3>
         </div>
         <div class="card-body">
-          <div class="info-item" v-for="(value, key) in editablePersonalData" :key="key">
+          <div v-for="(value, key) in editablePersonalData" :key="key" class="info-item">
             <strong>{{ fieldPersonalLabels[key] }}:</strong>
             <span v-if="!editFields[key]">{{ value || '-' }}</span>
             <input v-else v-model="editablePersonalData[key]" class="form-control" />
-            <button @click="toggleEdit(key)" class="btn btn-sm" :class="editFields[key] ? 'btn-primary' : 'btn-outline-primary'">
-              <i :class="editFields[key] ? 'fas fa-save' : 'fas fa-edit'"></i>
+            <button class="btn btn-sm" :class="editFields[key] ? 'btn-primary' : 'btn-outline-primary'" @click="toggleEdit(key)">
+              <v-icon size="16" :icon="editFields[key] ? 'mdi-content-save' : 'mdi-pencil'"></v-icon>
             </button>
           </div>
         </div>
@@ -395,9 +395,9 @@
             </div>
             <div class="form-actions">
               <button 
-                @click="saveRoles" 
                 class="btn btn-primary" 
-                :disabled="isSavingRoles || !hasChanges"
+                :disabled="isSavingRoles || !hasChanges" 
+                @click="saveRoles"
               >
                 {{ isSavingRoles ? 'Sparar...' : 'Spara roller' }}
               </button>
@@ -440,24 +440,23 @@
           </div>
           <div class="form-actions mt-3">
             <button 
-              @click="savePermissions" 
               class="btn btn-primary" 
-              :disabled="isSavingPermissions || !hasPermissionChanges"
+              :disabled="isSavingPermissions || !hasPermissionChanges" 
+              @click="savePermissions"
             >
               {{ isSavingPermissions ? 'Sparar...' : 'Spara behörigheter' }}
             </button>
           </div>
         </div>
       </div>
-
-    </section>
+</section>
 
     <!-- Comment Modal -->
     <div v-if="showCommentModal" class="modal-overlay" @click="showCommentModal = false">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>Lägg till kommentar</h3>
-          <button @click="showCommentModal = false" class="close-btn">&times;</button>
+          <button class="close-btn" @click="showCommentModal = false">&times;</button>
         </div>
         <div class="modal-body">
           <textarea
@@ -468,10 +467,10 @@
           ></textarea>
         </div>
         <div class="modal-footer">
-          <button @click="addComment" class="btn btn-primary" :disabled="!newComment.trim()">
+          <button class="btn btn-primary" :disabled="!newComment.trim()" @click="addComment">
             Lägg till
           </button>
-          <button @click="showCommentModal = false" class="btn btn-secondary">Avbryt</button>
+          <button class="btn btn-secondary" @click="showCommentModal = false">Avbryt</button>
         </div>
       </div>
     </div>
@@ -481,14 +480,14 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>Redigera kommentar</h3>
-          <button @click="showEditModal = false" class="close-btn">&times;</button>
+          <button class="close-btn" @click="showEditModal = false">&times;</button>
         </div>
         <div class="modal-body">
           <textarea v-model="editingComment.comment" class="form-control" rows="4"></textarea>
         </div>
         <div class="modal-footer">
-          <button @click="saveEditedComment" class="btn btn-primary">Spara</button>
-          <button @click="showEditModal = false" class="btn btn-secondary">Avbryt</button>
+          <button class="btn btn-primary" @click="saveEditedComment">Spara</button>
+          <button class="btn btn-secondary" @click="showEditModal = false">Avbryt</button>
         </div>
       </div>
     </div>
@@ -503,12 +502,12 @@
   import MeetingModal from '../MeetingModal.vue'
 
   export default {
+    components: {
+      MeetingModal,
+    },
     props: {
       userData: Object,
       userType: String,
-    },
-    components: {
-      MeetingModal,
     },
     setup(props) {
       const store = useStore()
@@ -710,14 +709,6 @@
         
         const hasChanges = current !== original;
         
-        // Debug logging (can be removed later)
-        if (hasChanges) {
-          console.log('Permission changes detected:', {
-            current: currentNormalized,
-            original: originalNormalized
-          });
-        }
-        
         return hasChanges;
       });
 
@@ -732,7 +723,6 @@
           originalPermissions.value = JSON.parse(JSON.stringify(customPermissions.value));
           toast.success('Behörigheterna har uppdaterats!');
         } catch (error) {
-          console.error('Error saving permissions:', error);
           toast.error('Kunde inte spara behörigheter.');
         } finally {
           isSavingPermissions.value = false;
@@ -812,7 +802,6 @@
             await loadChangeHistory()
           }
         } catch (err) {
-          console.error('Error loading student:', err)
           error.value = 'Kunde inte ladda elevinformation'
         } finally {
           loading.value = false
@@ -823,8 +812,8 @@
         try {
           const response = await client.get(`/student-details/${props.userData._id}/history`)
           changeHistory.value = response.data.changeHistory
-        } catch (err) {
-          console.error('Error loading change history:', err)
+        } catch {
+          // change history load is non-critical
         }
       }
 
@@ -848,7 +837,6 @@
             await loadChangeHistory()
           }
         } catch (err) {
-          console.error('Error saving changes:', err)
           toast.error('Kunde inte spara ändringar')
         } finally {
           saving.value = false
@@ -885,7 +873,6 @@
           newComment.value = ''
           showCommentModal.value = false
         } catch (err) {
-          console.error('Error adding comment:', err)
           toast.error('Kunde inte lägga till kommentar')
         }
       }
@@ -915,7 +902,6 @@
           showEditModal.value = false
           editingComment.value = null
         } catch (err) {
-          console.error('Error editing comment:', err)
           toast.error('Kunde inte redigera kommentar')
         }
       }
@@ -933,7 +919,6 @@
             student.value.commentHistory[commentIndex].comment = '[DELETED]'
           }
         } catch (err) {
-          console.error('Error deleting comment:', err)
           toast.error('Kunde inte radera kommentar')
         }
       }
@@ -1067,8 +1052,8 @@
             ? JSON.parse(JSON.stringify(permissions))
             : {}
           originalPermissions.value = JSON.parse(JSON.stringify(customPermissions.value))
-        } catch (error) {
-          console.error('Error loading roles:', error)
+        } catch {
+          // role loading is non-critical
         } finally {
           loadingRoles.value = false
         }
@@ -1099,7 +1084,6 @@
           originalRoles.value = [...selectedRoles.value]
           toast.success('Rollerna har uppdaterats!')
         } catch (error) {
-          console.error('Error saving roles:', error)
           toast.error('Kunde inte spara roller.')
         } finally {
           isSavingRoles.value = false
@@ -1111,16 +1095,11 @@
           try {
             const endpoint = `/update-user/${props.userData._id}`
 
-            const response = await client.put(endpoint, {
+            await client.put(endpoint, {
               [key]: editablePersonalData.value[key],
             })
-
-            console.log('✅ Uppdatering lyckades:', response.data)
-          } catch (error) {
-            console.error(
-              '❌ Fel vid uppdatering av fält:',
-              error.response ? error.response.data : error.message
-            )
+          } catch {
+            // field update error
           }
         }
         editFields.value[key] = !editFields.value[key]
@@ -1142,7 +1121,6 @@
           studentPassword.value = response.data.tempPassword
           toast.success('Lösenordet har återställts! Det nya lösenordet visas nedan.')
         } catch (error) {
-          console.error('Error resetting password:', error)
           toast.error('Kunde inte återställa lösenord.')
         } finally {
           resettingPassword.value = false
@@ -1751,7 +1729,7 @@
   }
 
   .permission-toggle-header {
-    text-align: center !important;
+    text-align: center;
     width: 100px;
   }
 

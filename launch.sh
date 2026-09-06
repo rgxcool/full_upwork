@@ -17,8 +17,18 @@ BACKEND_PORT=5010
 FRONTEND_PORT=5173
 MONGO_PORT=27017
 
-# ── 0. Generate JWT_SECRET if placeholder ───────────
+# Derive the backend port from backend/.env.development so launch.sh and the
+# backend always agree, even if a developer overrides PORT locally.
 ENV_FILE="$ROOT/backend/.env.development"
+if [ -f "$ENV_FILE" ]; then
+  ENV_PORT="$(grep -E '^PORT=[0-9]+' "$ENV_FILE" | tail -n 1 | cut -d= -f2 2>/dev/null || true)"
+  if [ -n "$ENV_PORT" ]; then
+    BACKEND_PORT="$ENV_PORT"
+    log "Using PORT=$BACKEND_PORT from backend/.env.development"
+  fi
+fi
+
+# ── 0. Generate JWT_SECRET if placeholder ───────────
 if [ -f "$ENV_FILE" ]; then
   if grep -q "REPLACE_WITH_GENERATED_SECRET" "$ENV_FILE"; then
     SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
@@ -28,20 +38,18 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # ── 1. Check / start MongoDB ────────────────────────
-if command -v mongod &>/dev/null; then
-  if pgrep -x mongod &>/dev/null; then
-    log "MongoDB already running on port $MONGO_PORT"
-  else
-    warn "Starting MongoDB..."
-    mongod --dbpath /data/db --bind_ip_all --fork --logpath /tmp/mongod.log 2>/dev/null || \
-    mongod --dbpath "$HOME/mongo-data" --bind_ip_all --fork --logpath /tmp/mongod.log 2>/dev/null || \
-    mongod --bind_ip_all --fork --logpath /tmp/mongod.log 2>/dev/null || {
-      err "Failed to start MongoDB. Install mongod or start it manually."
-      exit 1
-    }
-    sleep 2
-    log "MongoDB started on port $MONGO_PORT"
-  fi
+if pgrep -x mongod &>/dev/null || (echo > /dev/tcp/127.0.0.1/27017) 2>/dev/null; then
+  log "MongoDB already running on port $MONGO_PORT"
+elif command -v mongod &>/dev/null; then
+  warn "Starting MongoDB..."
+  mongod --dbpath /data/db --bind_ip_all --fork --logpath /tmp/mongod.log 2>/dev/null || \
+  mongod --dbpath "$HOME/mongo-data" --bind_ip_all --fork --logpath /tmp/mongod.log 2>/dev/null || \
+  mongod --bind_ip_all --fork --logpath /tmp/mongod.log 2>/dev/null || {
+    err "Failed to start MongoDB. Install mongod or start it manually."
+    exit 1
+  }
+  sleep 2
+  log "MongoDB started on port $MONGO_PORT"
 elif docker info &>/dev/null 2>&1; then
   if docker ps --format '{{.Names}}' | grep -q mindful_mongo; then
     log "MongoDB container already running"
@@ -53,7 +61,7 @@ elif docker info &>/dev/null 2>&1; then
   fi
   MONGO_PORT=27018
 else
-  err "No mongod binary or Docker found. Install one and retry."
+  err "No running MongoDB, mongod binary, or Docker found. Start MongoDB manually and retry."
   exit 1
 fi
 
@@ -73,7 +81,23 @@ if [ ! -d "$ROOT/frontend/node_modules" ]; then
 fi
 log "Dependencies ready"
 
-# ── 3. Kill any existing processes on our ports ──────
+# ── 3. Load education data ───────────────────────────
+log "Loading education data (dropData + updateEducation)..."
+(
+  set -a
+  # shellcheck disable=SC1091
+  source "$ENV_FILE"
+  set +a
+  cd "$ROOT/backend"
+  node scripts/dropData.js
+  node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
+) || {
+  err "Failed to load education data. Check the script output above."
+  exit 1
+}
+log "Education data loaded"
+
+# ── 4. Kill any existing processes on our ports ──────
 for port in $BACKEND_PORT $FRONTEND_PORT; do
   pid=$(lsof -ti :"$port" 2>/dev/null || true)
   if [ -n "$pid" ]; then
@@ -83,7 +107,7 @@ for port in $BACKEND_PORT $FRONTEND_PORT; do
   fi
 done
 
-# ── 4. Start backend ────────────────────────────────
+# ── 5. Start backend ────────────────────────────────
 log "Starting backend on port $BACKEND_PORT..."
 (cd "$ROOT/backend" && node index.js &>"$ROOT/backend.log") &
 BACKEND_PID=$!
@@ -101,7 +125,7 @@ else
   exit 1
 fi
 
-# ── 5. Start frontend ───────────────────────────────
+# ── 6. Start frontend ───────────────────────────────
 log "Starting frontend on port $FRONTEND_PORT..."
 (cd "$ROOT/frontend" && npx vite --host &>"$ROOT/frontend.log") &
 FRONTEND_PID=$!
@@ -119,7 +143,7 @@ else
   exit 1
 fi
 
-# ── 6. Print summary ────────────────────────────────
+# ── 7. Print summary ────────────────────────────────
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${CYAN}  Mindful Learning — App is running!${NC}"
@@ -144,7 +168,7 @@ echo ""
 echo -e "  ${YELLOW}Press Ctrl+C to stop all services${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# ── 7. Cleanup on exit ──────────────────────────────
+# ── 8. Cleanup on exit ──────────────────────────────
 cleanup() {
   echo ""
   warn "Shutting down..."

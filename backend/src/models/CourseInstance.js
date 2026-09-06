@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
+import { courseModuleSchema } from "./courseModuleSchema.js";
 
 const courseInstanceSchema = new mongoose.Schema(
     {
@@ -53,6 +54,63 @@ const courseInstanceSchema = new mongoose.Schema(
         },
         notes: String,
         slutprovDate: Date,
+
+        // Copied modules from a course template (course card content)
+        modules: { type: [courseModuleSchema], default: [] },
+
+        // Auto-generated section start dates (weeks from course start, one per module)
+        // Populated at instance creation from teacher's saved schedule parameters,
+        // or evenly-spaced defaults if no parameters exist.
+        sectionDates: [{ type: Date }],
+
+        // Course card content (instructions, assignment descriptions, etc.)
+        // Admins/systemadmin and the responsible teacher can view/edit all content.
+        // Students can view content that is not hidden; hidden content is replaced
+        // with a "blickat ej" placeholder.
+        content: {
+            type: Map,
+        of: {
+                title: String,
+                instructions: String,
+                isHiddenFromStudent: {
+                    type: Boolean,
+                    default: false,
+                },
+            },
+            default: new Map(),
+        },
+
+        // Activity feed / notice board
+        // Staff (admin/systemadmin/responsible teacher) can post; students can read only
+        activityFeed: {
+            type: [
+                {
+                    id: { type: mongoose.Schema.Types.ObjectId, required: true },
+                    text: { type: String, required: true },
+                    by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+                    at: { type: Date, default: Date.now },
+                    // If set, only show to students in this course instance
+                    courseInstanceId: { type: mongoose.Schema.Types.ObjectId, ref: "CourseInstance" },
+                }
+            ],
+            default: [],
+        },
+
+        // Track which assignments each student has submitted (for course card overview)
+        // Populated at read-time from AssignmentSubmission queries
+        submittedAssignments: {
+            type: Map,
+            of: Number, // moduleNumber -> count of submissions
+            default: new Map(),
+        },
+
+        // Which section each student is on (ordinal position in student's sorted course cards)
+        // Computed at read-time based on study period ordering
+        sectionPositions: {
+            type: Map,
+            of: Number, // studentId -> studyPeriod (1-based)
+            default: new Map(),
+        },
 
         // Statistics tracking
         enrollmentCount: {

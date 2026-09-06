@@ -5,20 +5,19 @@
     </div>
     <section class="tab-container">
       <div class="tab-menu">
-
-        <ul>
+<ul>
           <li 
             v-for="tab in tabs" 
             :key="tab" 
-            @click="activeTab = tab" 
-            :class="{ active: activeTab === tab }"
+            :class="{ active: activeTab === tab }" 
+            @click="activeTab = tab"
           >
             {{ tab }}
           </li>
         </ul>
       </div>
       <div class="content">
-        <component :is="currentComponent" :userData="data" :userType="type"></component>
+        <component :is="currentComponent" :user-data="data" :user-type="type"></component>
       </div>
     </section>
   </div>
@@ -38,7 +37,7 @@ import CoursesTab from "@/views/Admin/SearchTabs/CoursesTab.vue";
 
 
 export default {
-  components: { AccountTab, StudyPlan, DocumentSection, StudentsTab, CoursesTab },
+  components: { AccountTab, StudyPlan, DocumentSection, ActionPlanTab, StudentsTab, CoursesTab },
   setup() {
     const route = useRoute();
     const router = useRouter();
@@ -51,12 +50,12 @@ export default {
       
       // For teachers: Användare, Kurser, Dokument, Elever
       if (isTeacher) {
-        const teacherTabs = ["Användare", "Kurser", "Dokument", "Elever"];
+        const teacherTabs = ["Användare", "Kurser", "Filarkiv", "Elever"];
         return teacherTabs;
       }
       
       // For students: Användare, Studieplan, Dokument, Handlingsplan (if needed)
-      const baseTabs = ["Användare", "Studieplan", "Dokument"];
+      const baseTabs = ["Användare", "Studieplan", "Filarkiv"];
       const hasLockedF = data.value?.education?.some(
         edu => edu.grade === 'F' && edu.locked === true
       );

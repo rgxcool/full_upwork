@@ -15,6 +15,7 @@ const StudentSchema = new mongoose.Schema(
         examMunicipality: String,
         examLocation: String,
         examTime: String,
+        examRoom: String,
 
         // Exam history tracking
         examHistory: [
@@ -33,6 +34,7 @@ const StudentSchema = new mongoose.Schema(
                 examTime: String,
                 examMunicipality: String,
                 examLocation: String,
+                examRoom: String,
                 grade: String,
                 notes: String,
                 recordedAt: { type: Date, default: Date.now },
@@ -91,10 +93,28 @@ const StudentSchema = new mongoose.Schema(
         attendedExam: { type: Boolean, default: false },
         paidExamFee: { type: Boolean, default: false },
 
+        // Exam accommodations (Section 19.8, 21.5)
+        examAccommodations: {
+            extraTime: { type: Number, default: 0, min: 0 },
+            computer: { type: Boolean, default: false },
+            separateRoom: { type: Boolean, default: false },
+            notes: { type: String },
+        },
+
         aplStatus: {
             type: String,
             enum: ["GRAY", "BLUE", "YELLOW", "PURPLE", "RED", "GREEN"],
             default: "GRAY",
+        },
+
+        // "Eleven har redan utfört praktik via annan skola" (tidigare praktik)
+        priorAplCompleted: { type: Boolean, default: false },
+
+        // Link to the uploaded intyg document (visible in Dokument-fliken)
+        priorAplIntygDocId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Document",
+            default: null,
         },
 
         aplStatusHistory: [
@@ -131,6 +151,39 @@ const StudentSchema = new mongoose.Schema(
             },
         ],
 
+        // Logbook/kits for APL-only students
+        // Each kit is sent at internship start and contains placement information
+        logbook: [
+            {
+                id: { type: mongoose.Schema.Types.ObjectId, required: true },
+                title: { type: String, required: true }, // e.g. "Introduktionskit"
+                description: String, // Internship description
+                startDate: Date, // When the kit was sent
+                endDate: Date, // When the kit expires/placement ends
+                status: {
+                    type: String,
+                    enum: ["pending", "active", "completed", "archived"],
+                    default: "pending",
+                },
+                placementId: { type: mongoose.Schema.Types.ObjectId, ref: "Placement" },
+                // Optional: link to the student's APL CoursePackage enrollment
+                coursePackageId: { type: mongoose.Schema.Types.ObjectId, ref: "CoursePackage" },
+            }
+        ],
+
+        supportInfo: [
+            {
+                contactName: { type: String, required: true },
+                contactRole: String,
+                contactPhone: String,
+                contactEmail: String,
+                supportType: String,
+                notes: String,
+                addedAt: { type: Date, default: Date.now },
+                addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+            },
+        ],
+
         changeHistory: [
             {
                 timestamp: { type: Date, default: Date.now },
@@ -147,6 +200,10 @@ const StudentSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+StudentSchema.index({ dropout: 1 });
+StudentSchema.index({ name: 1, personalNumber: 1 });
+StudentSchema.index({ name: "text", email: "text" });
 
 const municipalityPath = StudentSchema.path("municipality");
 if (municipalityPath?.set) {

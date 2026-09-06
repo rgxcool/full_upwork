@@ -4,6 +4,7 @@ import store from '@/store/store.js'
 // Public Views
 import Home from '@/views/Home.vue'
 import LoginPage from '@/views/Auth/Login.vue'
+import ChangePasswordPage from '@/views/Auth/ChangePassword.vue'
 import ResetPassword from '@/views/Auth/ResetPassword.vue'
 import Register from '@/views/Auth/Register.vue'
 
@@ -15,22 +16,37 @@ const AddTeacher = () => import('@/views/Admin/AddTeacher.vue')
 const EducationEditor = () => import('@/views/Admin/EducationEditor.vue')
 const ProgramsAndCourses = () => import('@/views/Admin/ProgramsAndCourses.vue')
 const ProgramsAndPackages = () => import('@/views/Admin/ProgramsAndPackages.vue')
+const ScheduleParameters = () => import('@/views/Admin/ScheduleParameters.vue')
+const GradeLookups = () => import('@/views/Admin/GradeLookups.vue')
 const AddUser = () => import('@/views/Admin/AddUser.vue')
 const EditStudent = () => import('@/views/Admin/EditStudent.vue')
 const SearchUser = () => import('@/views/Admin/SearchUser.vue')
+const EditUser = () => import('@/views/Admin/EditUser.vue')
+const PermissionsTab = () => import('@/views/Admin/PermissionsTab.vue')
 const SearchResultDetails = () => import('@/views/Admin/SearchResultDetails.vue')
 const EarningsOverview = () => import('@/views/Admin/EarningsOverview.vue')
 const CoursesStats = () => import('@/views/Admin/CoursesStats.vue')
 const CourseInstances = () => import('@/views/Admin/CourseInstances.vue')
+const CourseTemplates = () => import('@/views/Admin/CourseTemplates.vue')
 const CourseMatching = () => import('@/views/Admin/CourseMatching.vue')
 const StudentEnrollments = () => import('@/views/Admin/StudentEnrollments.vue')
 const TeacherManagement = () => import('@/views/Admin/TeacherManagement.vue')
-const TEST = () => import('@/views/Admin/TEST.vue')
+const ActivityFeedManager = () => import('@/views/Admin/ActivityFeedManager.vue')
+const CourseContentEditor = () => import('@/views/Admin/CourseContentEditor.vue')
+const CourseStatisticsAdmin = () => import('@/views/Admin/CourseStatisticsAdmin.vue')
+const StudentCourseCardsAdmin = () => import('@/views/Admin/StudentCourseCardsAdmin.vue')
+const ActionPlanManager = () => import('@/views/Admin/ActionPlanManager.vue')
+const LearningManagement = () => import('@/views/Admin/LearningManagement.vue')
+const NotificationManager = () => import('@/views/Admin/NotificationManager.vue')
+const CalendarHousekeeping = () => import('@/views/Admin/CalendarHousekeeping.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
 const BetygSattning = () => import('@/views/Teacher/BetygSattning.vue')
+const Submissions = () => import('@/views/Teacher/Submissions.vue')
 const ProfilePage = () => import('@/views/Teacher/ProfilePage.vue')
+const StaffProfile = () => import('@/views/Teacher/StaffProfile.vue')
+const StaffStudentsPage = () => import('@/views/Teacher/StaffStudentsPage.vue')
 const RoleBasedAppointments = () => import('@/views/Appointments/RoleBasedAppointments.vue')
 
 // Student Views
@@ -39,6 +55,11 @@ import APLView from '@/views/APLView.vue'
 import GradeStudent from '../views/Admin/gradeStudent.vue'
 import ExamForm from '../views/Exams/ExamOverview.vue'
 import EducationDetails from '../views/Admin/EducationDetails.vue'
+import CourseCards from '@/views/Student/CourseCards.vue'
+import Dashboard from '@/views/Dashboard.vue'
+const ChatbotView = () => import('@/views/Student/ChatbotView.vue')
+const MessagingView = () => import('@/views/MessagingView.vue')
+
 
 const routes = [
   // Public Routes
@@ -60,6 +81,18 @@ const routes = [
     component: ResetPassword,
     meta: { title: 'Reset Password - Mindful Learning' },
   },
+  {
+    path: '/change-password',
+    name: 'ChangePassword',
+    component: ChangePasswordPage,
+    meta: { title: 'Byt lösenord - Mindful Learning', requiresAuth: true },
+  },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: Dashboard,
+    meta: { title: 'Översikt - Mindful Learning', requiresAuth: true },
+  },
 
   // Admin Dashboard: Move CoursesStats to top
   {
@@ -78,6 +111,8 @@ const routes = [
   },
   { path: '/anvandare', component: SearchUser, meta: { title: 'Search Users', role: 'admin' } },
   { path: '/admin/users', component: SearchUser, meta: { title: 'Admin Users', role: 'admin' } },
+  { path: '/admin/edit-user/:id', component: EditUser, props: true, meta: { title: 'Redigera användare', role: ['admin', 'systemadmin'] } },
+  { path: '/admin/permissions', component: PermissionsTab, meta: { title: 'Behörigheter', role: ['admin', 'systemadmin'] } },
   {
     path: '/addstudent',
     name: 'AddStudent',
@@ -129,6 +164,12 @@ const routes = [
           path: `/education/${to.params.id}`,
           query: { ...to.query, type: 'instance' }
         })
+      } else if (to.params.type === 'Lärare' || to.params.type === 'Teacher') {
+        // Redirect Lärare to staff profile view
+        next({
+          path: `/teacher/${to.params.id}`,
+          query: to.query
+        })
       } else {
         next()
       }
@@ -165,6 +206,18 @@ const routes = [
     meta: { title: 'Programs & Packages', role: 'admin' },
   },
   {
+    path: '/schedule-parameters',
+    name: 'ScheduleParameters',
+    component: ScheduleParameters,
+    meta: { title: 'Schemaparametrar', role: ['admin', 'systemadmin', 'teacher'] },
+  },
+  {
+    path: '/grade-lookups',
+    name: 'GradeLookups',
+    component: GradeLookups,
+    meta: { title: 'Betygsuppföljning', role: 'admin' },
+  },
+  {
     path: '/editstudent',
     name: 'EditStudent',
     component: EditStudent,
@@ -183,6 +236,12 @@ const routes = [
     meta: { title: 'Course Instances', role: 'admin' },
   },
   {
+    path: '/course-templates',
+    name: 'CourseTemplates',
+    component: CourseTemplates,
+    meta: { title: 'Kursmallar', role: ['admin', 'teacher'] },
+  },
+  {
     path: '/course-matching',
     name: 'CourseMatching',
     component: CourseMatching,
@@ -195,16 +254,16 @@ const routes = [
     meta: { title: 'Student Enrollments', role: 'admin' },
   },
   {
+    path: '/inaktiva-elever',
+    name: 'InactiveStudents',
+    component: () => import('@/views/Admin/InactiveStudents.vue'),
+    meta: { title: 'Inaktiva elever', role: ['admin', 'systemadmin'] },
+  },
+  {
     path: '/teacher-management',
     name: 'TeacherManagement',
     component: TeacherManagement,
     meta: { title: 'Teacher Management', role: 'admin' },
-  },
-  {
-    path: '/test',
-    name: 'TestCourseMatching',
-    component: TEST,
-    meta: { title: 'Testa kursmatchning', role: 'admin' },
   },
   {
     path: '/admin/betygsrapporter',
@@ -213,10 +272,34 @@ const routes = [
     meta: { title: 'Betygsrapporter', role: ['admin', 'systemadmin'] },
   },
   {
+    path: '/signering',
+    name: 'TeacherSigning',
+    component: () => import('@/views/Teacher/TeacherSigningView.vue'),
+    meta: { title: 'Betygssignering', role: ['teacher', 'admin', 'systemadmin'] },
+  },
+  {
     path: '/admin/analytics',
     name: 'AnalyticsDashboard',
     component: () => import('@/views/Admin/AnalyticsDashboard.vue'),
     meta: { title: 'Rapporter & Analys', role: ['admin', 'systemadmin'] },
+  },
+  {
+    path: '/admin/inactivity',
+    name: 'InactivityReport',
+    component: () => import('@/views/Admin/InactivityReport.vue'),
+    meta: { title: 'Inaktivitetsrapport', role: ['admin', 'systemadmin', 'teacher'] },
+  },
+  {
+    path: '/admin/reports',
+    name: 'Reports',
+    component: () => import('@/views/Admin/Reports.vue'),
+    meta: { title: 'Kompletionsrapporter', role: ['admin', 'teacher', 'systemadmin'] },
+  },
+  {
+    path: '/admin/betygsskala',
+    name: 'GradingScaleAdmin',
+    component: () => import('@/views/Admin/GradingScaleAdmin.vue'),
+    meta: { title: 'Betygsskalor', role: ['admin', 'systemadmin'] },
   },
 
   {
@@ -224,6 +307,21 @@ const routes = [
     name: 'ProvningarCrud',
     component: () => import('@/views/Provningar/ProvningarCrud.vue'),
     meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin'], requiresAuth: true }
+  },
+
+  // Chatbot FAQ / Knowledge Base management (same view for admin & teacher;
+  // category management is only rendered and authorized for admins)
+  {
+    path: '/admin/chatbot-faq',
+    name: 'AdminChatbotFaq',
+    component: () => import('@/views/Admin/FaqManagement.vue'),
+    meta: { title: 'Vanliga frågor (Chatbot)', role: ['admin', 'systemadmin'] },
+  },
+  {
+    path: '/larare/chatbot-faq',
+    name: 'TeacherChatbotFaq',
+    component: () => import('@/views/Admin/FaqManagement.vue'),
+    meta: { title: 'Vanliga frågor (Chatbot)', role: ['teacher', 'admin', 'systemadmin'] },
   },
 
   // Teacher Routes (Requires "teacher" or higher)
@@ -257,6 +355,26 @@ const routes = [
     component: ProfilePage,
     meta: { title: 'My Profile', requiresAuth: true },
   },
+  {
+    path: '/teacher/:id',
+    name: 'StaffProfile',
+    component: StaffProfile,
+    props: true,
+    meta: {
+      title: 'Personalprofil',
+      role: ['teacher', 'admin', 'systemadmin', 'coordinator', 'syv', 'specped'],
+    },
+  },
+  {
+    path: '/teacher/:id/courses/:courseInstanceId/students',
+    name: 'StaffStudentsPage',
+    component: StaffStudentsPage,
+    props: true,
+    meta: {
+      title: 'Kursansvarig Elever',
+      role: ['teacher', 'admin', 'systemadmin', 'coordinator', 'syv', 'specped'],
+    },
+  },
 
   // Student Routes
   {
@@ -277,6 +395,46 @@ const routes = [
     meta: { title: 'Exam Form', role: 'student' },
   },
 
+  {
+    path: '/larare/fragebank',
+    name: 'QuestionBank',
+    component: () => import('@/views/Admin/QuestionBank/QuestionBank.vue'),
+    meta: { title: 'Frågebank', role: ['admin', 'systemadmin', 'teacher'] },
+  },
+
+  {
+    path: '/larare/generera-exam',
+    name: 'ExamGeneration',
+    component: () => import('@/views/Admin/QuestionBank/ExamGeneration.vue'),
+    meta: { title: 'Generera exam', role: ['admin', 'systemadmin', 'teacher'] },
+  },
+
+  {
+    path: '/course-cards',
+    name: 'CourseCards',
+    component: CourseCards,
+    meta: { title: 'Mina kurser', role: 'student' },
+  },
+  {
+    path: '/student/fragebank',
+    name: 'StudentQuestionBank',
+    component: () => import('@/views/Student/StudentQuestionBank.vue'),
+    meta: { title: 'Frågebank', role: 'student' },
+  },
+  {
+    path: '/chatbot',
+    name: 'Chatbot',
+    component: ChatbotView,
+    meta: { title: 'Studieassistent', role: 'student' },
+  },
+
+  {
+    path: '/submissions',
+    name: 'Submissions',
+    component: Submissions,
+    meta: { title: 'Inlämningar', role: ['teacher', 'admin', 'systemadmin'] },
+  },
+
   // Utility Routes (General Access)
   {
     path: '/apl',
@@ -284,8 +442,74 @@ const routes = [
     component: APLView,
     meta: { title: 'APL List', role: ['admin', 'teacher', 'coordinator'] },
   },
-  // Remove duplicate /betyg route
-  // { path: '/betyg', name: 'Betyg', component: GradeStudent, meta: { title: 'Grade Student', role: 'teacher' } },
+
+  {
+    path: '/messages',
+    name: 'Messaging',
+    component: MessagingView,
+    meta: {
+      title: 'Meddelanden',
+      role: ['student', 'teacher', 'syv', 'specped', 'admin', 'systemadmin', 'coordinator'],
+    },
+  },
+
+// Remove duplicate /betyg route
+  // Admin Category A – Activity Feed
+  {
+    path: '/admin/activity-feed',
+    name: 'ActivityFeedManager',
+    component: ActivityFeedManager,
+    meta: { title: 'Aktivitetsflöde', role: 'admin' },
+  },
+  // Admin Category A – Course Content
+  {
+    path: '/admin/course-content',
+    name: 'CourseContentEditor',
+    component: CourseContentEditor,
+    meta: { title: 'Kursinnehåll', role: ['admin', 'systemadmin', 'teacher'] },
+  },
+  // Admin Category A – Extended Course Statistics
+  {
+    path: '/admin/course-statistics',
+    name: 'CourseStatisticsAdmin',
+    component: CourseStatisticsAdmin,
+    meta: { title: 'Kursstatistik (detalj)', role: 'admin' },
+  },
+  // Admin Category A – Student Course Cards
+  {
+    path: '/admin/student-course-cards',
+    name: 'StudentCourseCardsAdmin',
+    component: StudentCourseCardsAdmin,
+    meta: { title: 'Elevens kurskort', role: 'admin' },
+  },
+  // Admin Category A – Action Plans
+  {
+    path: '/admin/action-plans',
+    name: 'ActionPlanManager',
+    component: ActionPlanManager,
+    meta: { title: 'Handlingsplaner', role: 'admin' },
+  },
+  // Admin Category A – Learning Submissions & Participants
+  {
+    path: '/admin/learning-management',
+    name: 'LearningManagement',
+    component: LearningManagement,
+    meta: { title: 'Inlämningar & Deltagare', role: 'admin' },
+  },
+  // Admin Category A – Notifications
+  {
+    path: '/admin/notifications',
+    name: 'NotificationManager',
+    component: NotificationManager,
+    meta: { title: 'Notifikationer', role: 'admin' },
+  },
+  // Admin Category A – Calendar & Exam Housekeeping
+  {
+    path: '/admin/calendar-housekeeping',
+    name: 'CalendarHousekeeping',
+    component: CalendarHousekeeping,
+    meta: { title: 'Kalender & Prövning Underhåll', role: 'admin' },
+  },
 
   // 404 catch-all — must be last
   {
@@ -326,6 +550,12 @@ router.beforeEach((to, from, next) => {
     next('/login') // Redirect unauthenticated users
   } else if (to.meta.role && !hasPermission(to.meta.role)) {
     next('/unauthorized') // Redirect if role is insufficient
+  } else if (
+    isAuthenticated &&
+    store.getters.requiresPasswordChange &&
+    to.path !== '/change-password'
+  ) {
+    next('/change-password') // Force password change before using the app
   } else {
     next() // Allow access
   }

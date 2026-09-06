@@ -1,16 +1,15 @@
 import mongoose from "mongoose";
 
-const studentSchema = new mongoose.Schema(
+const studentAttendedSchema = new mongoose.Schema(
     {
-        _id: { type: mongoose.Schema.Types.ObjectId, auto: false }, // 👈 ändring
-        name: String,
+      _id: { type: mongoose.Schema.Types.ObjectId, auto: false },
+      name: String,
       personalNumber: String,
-      additionalInfo: String,
       attended: { type: Boolean, default: false },
     },
     { _id: false }
   );
-  
+
   const extendedPropsSchema = new mongoose.Schema(
     {
       teacher: String,
@@ -19,7 +18,13 @@ const studentSchema = new mongoose.Schema(
       examMunicipality: String,
       examLocation: String,
       examTime: String,
-      students: [studentSchema],
+      examRoom: { type: String, default: "" },  // Configurable room
+      students: [studentAttendedSchema],
+      accommodations: {
+        extraTime: { type: Number, default: 0 },   // Extra writing time in minutes
+        computer: { type: Boolean, default: false },
+        separateRoom: { type: Boolean, default: false },
+      },
     },
     { _id: false }
   );

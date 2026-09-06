@@ -39,9 +39,9 @@
             <span class="text-danger">*</span>
           </label>
           <input
-            type="text"
             id="name"
             v-model="studentForm.name"
+            type="text"
             class="form-control"
             required
             placeholder="Förnamn Efternamn"
@@ -55,9 +55,9 @@
             <span class="text-danger">*</span>
           </label>
           <input
-            type="text"
             id="personalNumber"
             v-model="studentForm.personalNumber"
+            type="text"
             class="form-control"
             required
             placeholder="YYYYMMDD-XXXX"
@@ -73,9 +73,9 @@
             <span class="text-danger">*</span>
           </label>
           <input
-            type="email"
             id="email"
             v-model="studentForm.email"
+            type="email"
             class="form-control"
             required
             placeholder="exempel@email.com"
@@ -92,23 +92,23 @@
           >
             <div class="input-group">
               <input
-                type="tel"
                 v-model="phone.number"
+                type="tel"
                 class="form-control"
                 :placeholder="`Telefon ${index + 1}`"
               />
               <button
                 type="button"
                 class="btn btn-outline-danger"
-                @click="removePhoneNumber(index)"
                 :disabled="studentForm.phoneNumbers.length === 1"
+                @click="removePhoneNumber(index)"
               >
-                <i class="fas fa-trash"></i>
+                <v-icon size="16">mdi-delete</v-icon>
               </button>
             </div>
           </div>
           <button type="button" class="btn btn-outline-primary btn-sm mt-2" @click="addPhoneNumber">
-            <i class="fas fa-plus"></i>
+            <v-icon size="16">mdi-plus</v-icon>
             Lägg till telefonnummer
           </button>
         </div>
@@ -118,13 +118,13 @@
       <div class="form-section">
         <h3>Utbildning</h3>
         <div class="alert alert-info mb-3">
-          <i class="fas fa-info-circle me-2"></i>
+          <v-icon size="18" class="me-2">mdi-information-outline</v-icon>
           <strong>Betygssättning:</strong>
           Elever som läggs till här kommer automatiskt att visas i betygsmodulen 1 vecka innan
           kursen slutar för betygsättning.
         </div>
         <div class="alert alert-success mb-3">
-          <i class="fas fa-check-circle me-2"></i>
+          <v-icon size="18" class="me-2">mdi-check-circle-outline</v-icon>
           <strong>APL Integration:</strong>
           Elever med kurspaket kommer automatiskt att visas på APL-listan med status "Ej börjat"
           (GRAY). Enskilda kurser läggs till utan APL-status.
@@ -139,14 +139,14 @@
             item-title="programName"
             item-value="_id"
             placeholder="Välj program"
-            @update:modelValue="onProgramChange"
             class="styled-select"
             :loading="isLoadingPrograms"
+            @update:model-value="onProgramChange"
           />
         </div>
 
         <!-- Course Package Selection -->
-        <div class="mb-3" v-if="selectedProgram">
+        <div v-if="selectedProgram" class="mb-3">
           <label for="coursePackage" class="form-label">Kurspaket:</label>
           <v-select
             v-model="selectedCoursePackage"
@@ -154,9 +154,9 @@
             item-title="coursePackageName"
             item-value="_id"
             placeholder="Välj kurspaket"
-            @update:modelValue="onCoursePackageChange"
             class="styled-select"
             :loading="isLoadingCoursePackages"
+            @update:model-value="onCoursePackageChange"
           />
         </div>
 
@@ -164,8 +164,8 @@
         <div class="mb-3">
           <label for="individualCourse" class="form-label">Enskild kurs:</label>
           <div class="alert alert-light mb-2">
-            <i class="fas fa-info-circle me-2"></i>
-            <small>Du kan välja enskilda kurser utan att välja program eller kurspaket.</small>
+          <v-icon size="18" class="me-2">mdi-information-outline</v-icon>
+          <small>Du kan välja enskilda kurser utan att välja program eller kurspaket.</small>
           </div>
           <div class="course-selection-container">
             <v-select
@@ -180,8 +180,8 @@
             <button
               type="button"
               class="btn btn-primary ms-2"
-              @click="addIndividualCourse"
               :disabled="!selectedIndividualCourse"
+              @click="addIndividualCourse"
             >
               Lägg till
             </button>
@@ -189,7 +189,7 @@
         </div>
 
         <!-- Added Courses Display -->
-        <div class="mb-3" v-if="addedCourses.length > 0">
+        <div v-if="addedCourses.length > 0" class="mb-3">
           <label class="form-label">Tillagda kurser:</label>
           <div class="added-courses-list">
             <!-- Use a composite key to avoid duplicate-key render errors when the same course appears multiple times (e.g., from packages) -->
@@ -207,16 +207,54 @@
                   Från paket
                 </span>
               </span>
-              <button
-                type="button"
-                class="btn btn-sm btn-outline-danger ms-2"
-                @click="removeCourse(course._id)"
-              >
-                <i class="fas fa-times"></i>
-              </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-danger ms-2"
+              @click="removeCourse(course._id)"
+            >
+              <v-icon size="16">mdi-close</v-icon>
+            </button>
+          </div>
+        </div>
+
+        <!-- Package Revision Checklist -->
+        <div
+          v-if="selectedPackageCourses.length > 0"
+          class="mb-3 package-revision"
+        >
+          <label class="form-label">
+            Revidera kurspaket:
+          </label>
+          <div class="alert alert-warning mb-2 py-2">
+          <v-icon size="18" class="me-2">mdi-clipboard-check-outline</v-icon>
+            <small>
+              Bocka ur de kurser som ska tas bort från paketet. De övriga
+              kurserna skapas automatiskt med auto-beräknade datum.
+            </small>
+          </div>
+          <div class="added-courses-list">
+            <div
+              v-for="course in selectedPackageCourses"
+              :key="course._id"
+              class="course-item"
+            >
+              <label class="checkbox-option package-course-check">
+                <input
+                  v-model="course.included"
+                  type="checkbox"
+                  class="form-check-input"
+                />
+                <span
+                  class="course-name"
+                  :class="{ 'excluded-course': !course.included }"
+                >
+                  {{ course.displayText }}
+                </span>
+              </label>
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <!-- Dates Section -->
@@ -231,9 +269,9 @@
           </label>
           <div class="datepicker-container">
             <input
+              v-model="studentForm.startDate"
               type="date"
               class="form-control"
-              v-model="studentForm.startDate"
               @change="() => { handleStartDateChange(studentForm.startDate); calculateEndDate() }"
             />
           </div>
@@ -248,34 +286,34 @@
           <div class="radio-group">
             <label class="radio-option">
               <input
+                v-model="studentForm.studyPace"
                 type="radio"
                 value="5"
-                v-model="studentForm.studyPace"
                 class="form-check-input"
-                @change="calculateEndDate"
                 required
+                @change="calculateEndDate"
               />
               5 v (100%)
             </label>
             <label class="radio-option">
               <input
+                v-model="studentForm.studyPace"
                 type="radio"
                 value="10"
-                v-model="studentForm.studyPace"
                 class="form-check-input"
-                @change="calculateEndDate"
                 required
+                @change="calculateEndDate"
               />
               10 v (50%)
             </label>
             <label class="radio-option">
               <input
+                v-model="studentForm.studyPace"
                 type="radio"
                 value="20"
-                v-model="studentForm.studyPace"
                 class="form-check-input"
-                @change="calculateEndDate"
                 required
+                @change="calculateEndDate"
               />
               20 v (25%)
             </label>
@@ -293,8 +331,7 @@
             }}
           </div>
         </div>
-
-      </div>
+</div>
 
       <!-- Location and Additional Info Section -->
       <div class="form-section">
@@ -309,6 +346,36 @@
             placeholder="Välj kommun"
             class="styled-select"
           />
+        </div>
+
+        <!-- Exam Mode (auto-set from municipality, admin can still override) -->
+        <div class="mb-3">
+          <label class="form-label">
+            Examinationsform:
+          </label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input
+                v-model="studentForm.examMode"
+                type="radio"
+                value="on-site"
+                class="form-check-input"
+              />
+              Plats
+            </label>
+            <label class="radio-option">
+              <input
+                v-model="studentForm.examMode"
+                type="radio"
+                value="remote"
+                class="form-check-input"
+              />
+              Distans
+            </label>
+          </div>
+          <small class="text-muted">
+            Sätts automatiskt till Distans för Upplands Bro, annars Plats. Du kan ändra värdet manuellt om det behövs.
+          </small>
         </div>
 
         <!-- Teacher Selection -->
@@ -342,25 +409,53 @@
           <label class="form-label">Status:</label>
           <div class="checkbox-group">
             <label class="checkbox-option">
-              <input type="checkbox" v-model="studentForm.dropout" class="form-check-input" />
+              <input v-model="studentForm.dropout" type="checkbox" class="form-check-input" />
               Har hoppat av
             </label>
             <label class="checkbox-option">
-              <input type="checkbox" v-model="studentForm.attendedExam" class="form-check-input" />
+              <input v-model="studentForm.attendedExam" type="checkbox" class="form-check-input" />
               Har deltagit i prov
             </label>
             <label class="checkbox-option">
-              <input type="checkbox" v-model="studentForm.paidExamFee" class="form-check-input" />
+              <input v-model="studentForm.paidExamFee" type="checkbox" class="form-check-input" />
               Har betalat provavgift
             </label>
           </div>
         </div>
       </div>
 
+      <!-- Prior APL (tidigare praktik) Section -->
+      <div class="form-section">
+        <h3>Tidigare praktik</h3>
+        <div class="checkbox-group">
+          <label class="checkbox-option">
+            <input
+              v-model="studentForm.priorAplCompleted"
+              type="checkbox"
+              class="form-check-input"
+            />
+            Eleven har redan utfört praktik via annan skola
+          </label>
+        </div>
+        <div v-if="studentForm.priorAplCompleted" class="mt-3">
+          <label class="form-label">Intyg:</label>
+          <input
+            ref="aplIntygInput"
+            type="file"
+            class="form-control"
+            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+            @change="handleAplIntygChange"
+          />
+          <small class="text-muted">
+            Ladda upp intyget. Dokumentet visas i elevens Filarkiv-flik.
+          </small>
+        </div>
+      </div>
+
       <!-- Submit Button -->
       <div class="form-section">
         <button type="submit" class="btn btn-success btn-lg w-100" :disabled="isSubmitting">
-          <i v-if="isSubmitting" class="fas fa-spinner fa-spin me-2"></i>
+          <v-icon v-if="isSubmitting" size="18" class="mdi-spin me-2">mdi-loading</v-icon>
           {{ isSubmitting ? 'Lägger till elev...' : 'Lägg till elev' }}
         </button>
       </div>
@@ -394,6 +489,8 @@
   const errorMessage = ref('')
   const fetchState = ref(false)
   const courseSchedules = ref({})
+  const selectedPackageCourses = ref([])
+  const aplIntygFile = ref(null)
 
   // Form data
   const studentForm = reactive({
@@ -405,10 +502,12 @@
     studyPace: null,
     endDate: '',
     municipality: '',
+    examMode: 'on-site',
     additionalInfo: '',
     dropout: false,
     attendedExam: false,
     paidExamFee: false,
+    priorAplCompleted: false,
   })
 
   // Options
@@ -550,6 +649,7 @@
     selectedCoursePackage.value = null
     selectedIndividualCourse.value = null
     addedCourses.value = []
+    selectedPackageCourses.value = []
 
     if (programId) {
       fetchCoursesForProgram(programId)
@@ -566,6 +666,7 @@
       // Clear individual courses when package is selected
       selectedIndividualCourse.value = null
       addedCourses.value = []
+      selectedPackageCourses.value = []
 
       const selectedPackage = availableCoursePackages.value.find((pkg) => pkg._id === packageId)
       if (selectedPackage) {
@@ -590,6 +691,13 @@
         }))
 
         addedCourses.value.push(...individualCourses)
+
+        // Build the revision checklist (all included by default; admin can uncheck to remove)
+        selectedPackageCourses.value = individualCourses.map((course) => ({
+          _id: course._id,
+          displayText: course.displayText,
+          included: true,
+        }))
 
         successMessage.value = `✅ Kurspaket "${selectedPackage.coursePackageName}" har lagts till med ${selectedPackage.coursePackageCourses.length} individuella kurser.`
         setTimeout(() => {
@@ -661,6 +769,7 @@
       addedCourses.value = addedCourses.value.filter(
         (course) => course._id !== courseId && !packageCourseIds.includes(course._id)
       )
+      selectedPackageCourses.value = []
     } else if (courseToRemove && courseToRemove.parentPackageId) {
       // If removing an individual course that belongs to a package, remove the entire package
       const packageId = courseToRemove.parentPackageId
@@ -672,6 +781,7 @@
       addedCourses.value = addedCourses.value.filter(
         (course) => course._id !== packageId && !packageCourseIds.includes(course._id)
       )
+      selectedPackageCourses.value = []
     } else {
       // If removing an individual course that doesn't belong to a package, just remove that course
       addedCourses.value = addedCourses.value.filter((course) => course._id !== courseId)
@@ -778,6 +888,20 @@
     if (!e.target.closest('.dp__input')) e.preventDefault()
   }
 
+  const handleAplIntygChange = (e) => {
+    aplIntygFile.value = e.target.files?.[0] || null
+  }
+
+  const getDefaultExamMode = (municipality) => {
+    const normalized = municipality
+      ? String(municipality)
+          .trim()
+          .toLowerCase()
+          .replace(/[\s-]+/g, '')
+      : ''
+    return normalized === 'upplandsbro' ? 'remote' : 'on-site'
+  }
+
   const resetForm = () => {
     Object.assign(studentForm, {
       name: '',
@@ -788,10 +912,12 @@
       studyPace: null,
       endDate: '',
       municipality: '',
+      examMode: 'on-site',
       additionalInfo: '',
       dropout: false,
       attendedExam: false,
       paidExamFee: false,
+      priorAplCompleted: false,
     })
 
     selectedProgram.value = null
@@ -799,6 +925,8 @@
     selectedIndividualCourse.value = null
     selectedTeacher.value = null
     addedCourses.value = []
+    selectedPackageCourses.value = []
+    aplIntygFile.value = null
     availableCourses.value = []
     availableCoursePackages.value = []
   }
@@ -870,12 +998,16 @@
         const maxEnd = times.length > 0 ? Math.max(...times) : null
         
         for (const pkg of packageEntries) {
+          const excludedCourseIds = selectedPackageCourses.value
+            .filter((course) => !course.included)
+            .map((course) => course._id)
           education.push({
             type: 'CoursePackage',
             refId: pkg._id,
             name: pkg.coursePackageCode || pkg.coursePackageName || pkg.courseName,
             startDate: isFinite(minStart) ? new Date(minStart).toISOString() : studentForm.startDate,
             endDate: isFinite(maxEnd) ? new Date(maxEnd).toISOString() : studentForm.endDate,
+            excludedCourseIds,
           })
         }
       }
@@ -908,6 +1040,7 @@
         startDate: normalizeDateOnly(studentForm.startDate),
         endDate: normalizeDateOnly(studentForm.endDate),
         municipality: studentForm.municipality ? { type: studentForm.municipality } : undefined,
+        examMode: studentForm.examMode,
         additionalInfo: studentForm.additionalInfo.trim(),
         teacher: selectedTeacher.value
           ? teachers.value.find((t) => t._id === selectedTeacher.value)?.userId?.username
@@ -916,16 +1049,50 @@
         dropout: studentForm.dropout,
         attendedExam: studentForm.attendedExam,
         paidExamFee: studentForm.paidExamFee,
+        priorAplCompleted: studentForm.priorAplCompleted,
         program: selectedProgram.value,
         education: dedupedEducation,
       }
 
       const response = await client.post('/student', payload)
 
-      console.log('✅ Student created successfully:', response.data)
+      // Re-registration: the backend found an existing student (by personalNumber
+      // or email) and auto-filled their record with the submitted details.
+      const reRegistered = response.data.alreadyExists === true
+
+      console.log(
+        reRegistered
+          ? '✅ Student re-registered (existing record auto-filled):'
+          : '✅ Student created successfully:',
+        response.data
+      )
       console.log('📋 Education entries:', response.data.education)
 
-      successMessage.value = '✅ Eleven har lagts till framgångsrikt!'
+      // Upload prior-APL intyg after the student exists, then link it to the
+      // student so the certificate is traceable in the Filarkiv-fliken.
+      if (studentForm.priorAplCompleted && aplIntygFile.value) {
+        try {
+          const formData = new FormData()
+          formData.append('file', aplIntygFile.value)
+          formData.append('studentId', response.data._id)
+          formData.append('type', 'GENERAL')
+          const docResponse = await client.post('/documents/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+          await client.put(`/student/${response.data._id}`, {
+            priorAplIntygDocId: docResponse.data._id,
+          })
+          console.log('📄 Prior-APL intyg uploaded:', docResponse.data)
+        } catch (uploadError) {
+          console.error('❌ Prior-APL intyg upload failed:', uploadError)
+          errorMessage.value =
+            'Eleven skapades, men intyget kunde inte laddas upp. Ladda upp det i Filarkiv-fliken istället.'
+        }
+      }
+
+      successMessage.value = reRegistered
+        ? '✅ Eleven fanns redan — uppgifterna är uppdaterade och nya kurser har registrerats.'
+        : '✅ Eleven har lagts till framgångsrikt!'
 
       // Re-enable button immediately after successful completion
       isSubmitting.value = false
@@ -960,6 +1127,15 @@
   watch(
     () => addedCourses.value.length,
     () => calculateEndDate()
+  )
+
+  // Auto-set exam mode (plats/distans) from the selected municipality;
+  // the admin can still override the value manually afterwards.
+  watch(
+    () => studentForm.municipality,
+    (municipality) => {
+      studentForm.examMode = getDefaultExamMode(municipality)
+    }
   )
 </script>
 
@@ -1074,6 +1250,21 @@
     color: #495057;
   }
 
+  .excluded-course {
+    text-decoration: line-through;
+    color: #dc3545;
+    opacity: 0.7;
+  }
+
+  .package-revision {
+    margin-top: 12px;
+  }
+
+  .package-course-check {
+    width: 100%;
+    cursor: pointer;
+  }
+
   .badge {
     font-size: 0.75em;
     padding: 0.25em 0.5em;
@@ -1081,12 +1272,12 @@
   }
 
   .bg-primary {
-    background-color: #007dc3 !important;
+    background-color: #007dc3;
     color: white;
   }
 
   .bg-secondary {
-    background-color: #6c757d !important;
+    background-color: #6c757d;
     color: white;
   }
 
@@ -1095,7 +1286,7 @@
   }
 
   .text-danger {
-    color: #dc3545 !important;
+    color: #dc3545;
   }
 
   .btn-success {

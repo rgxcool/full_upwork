@@ -1,0 +1,447 @@
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import nodemailer from "nodemailer";
+import fs from "node:fs";
+
+vi.mock("nodemailer", () => ({
+  __esModule: true,
+  default: {
+    createTransport: vi.fn(),
+  },
+}));
+
+const sendMailMock = vi.fn();
+
+const originalEnv = { ...process.env };
+
+import {
+  getTransporter,
+  _resetEmailTransporter,
+  sendEmail,
+  renderLarteametEmail,
+  renderMessageCopyEmail,
+  renderInactivityWarningEmail,
+  sendInactivityWarningEmail,
+  renderDiplomaEmail,
+  sendDiplomaEmail,
+  maybeSendLarteametEmail,
+  getStudentMunicipality,
+  resolveLarteametBrochure,
+  SOLLENTUNA_MUNICIPALITY,
+  LARTEAMET_BROCHURE_FILE,
+  isPlaceholderCredential,
+} from "../../src/services/emailService.js";
+
+const clearEnv = () => {
+  delete process.env.GOOGLE_EMAIL;
+  delete process.env.GOOGLE_PWD;
+  delete process.env.SMTP_HOST;
+  delete process.env.SMTP_USER;
+  delete process.env.SMTP_PASS;
+  delete process.env.SMTP_PORT;
+  delete process.env.SMTP_SECURE;
+  delete process.env.LARTEAMET_PDF_PATH;
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  clearEnv();
+  _resetEmailTransporter();
+  nodemailer.createTransport.mockReset();
+  nodemailer.createTransport.mockReturnValue({ sendMail: sendMailMock });
+  sendMailMock.mockReset();
+  sendMailMock.mockResolvedValue({ messageId: "test-message-id" });
+});
+
+afterAll(() => {
+  process.env = originalEnv;
+});
+
+describe("isPlaceholderCredential", () => {
+  it("flags empty and known placeholders", () => {
+    expect(isPlaceholderCredential("")).toBe(true);
+    expect(isPlaceholderCredential("REPLACE_WITH_GOOGLE_APP_PASSWORD")).toBe(true);
+    expect(isPlaceholderCredential("changeme123")).toBe(true);
+    expect(isPlaceholderCredential("a-real-app-password")).toBe(false);
+  });
+});
+
+describe("getTransporter", () => {
+  it("uses Gmail SMTP when GOOGLE_PWD is a real app password", () => {
+    process.env.GOOGLE_EMAIL = "test@mindful.se";
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+
+    const { transportMode } = getTransporter();
+
+    expect(transportMode).toBe("gmail");
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        service: "Gmail",
+        auth: { user: "test@mindful.se", pass: "real-app-password-1234" },
+      })
+    );
+  });
+
+  it("falls back to stream transport (no real delivery) for placeholder credentials", () => {
+    process.env.GOOGLE_PWD = "REPLACE_WITH_GOOGLE_APP_PASSWORD";
+
+    const { transportMode } = getTransporter();
+
+    expect(transportMode).toBe("stream");
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ streamTransport: true })
+    );
+  });
+
+  it("caches the transporter across calls", () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    getTransporter();
+    getTransporter();
+    expect(nodemailer.createTransport).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("sendEmail", () => {
+  it("sends with correct recipient, subject and content", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+
+    const result = await sendEmail({
+      to: "student@sollentuna.se",
+      subject: "Välkommen till Lärteamet",
+      text: "Hej!",
+    });
+
+    expect(result).toMatchObject({ success: true, messageId: "test-message-id", transportMode: "gmail" });
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "student@sollentuna.se",
+        subject: "Välkommen till Lärteamet",
+        text: "Hej!",
+        from: expect.stringContaining("Mindful Learning"),
+      })
+    );
+  });
+
+  it("returns missing_fields without sending when to/subject absent", async () => {
+    const result = await sendEmail({ to: "", subject: "x" });
+
+    expect(result).toMatchObject({ success: false, reason: "missing_fields" });
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("does NOT throw when the transporter rejects — logs and returns failure", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    sendMailMock.mockRejectedValue(new Error("SMTP connection refused"));
+
+    const result = await sendEmail({ to: "a@b.se", subject: "Hej" });
+
+    expect(result).toMatchObject({ success: false, transportMode: "gmail" });
+    expect(result.error).toContain("SMTP connection refused");
+  });
+
+  it("retries a transient transport failure and succeeds on a later attempt", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    process.env.EMAIL_MAX_ATTEMPTS = "3";
+    process.env.EMAIL_RETRY_DELAY_MS = "0";
+    sendMailMock
+      .mockRejectedValueOnce(new Error("temporary reject"))
+      .mockRejectedValueOnce(new Error("temporary reject"))
+      .mockResolvedValue({ messageId: "retried-id" });
+
+    const result = await sendEmail({ to: "b@c.se", subject: "Retry me" });
+
+    expect(result).toMatchObject({ success: true, messageId: "retried-id" });
+    expect(result.attempt).toBe(3);
+    expect(sendMailMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up after a bounded number of attempts on a persistent failure", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    process.env.EMAIL_MAX_ATTEMPTS = "2";
+    process.env.EMAIL_RETRY_DELAY_MS = "0";
+    sendMailMock.mockRejectedValue(new Error("persistent reject"));
+
+    const result = await sendEmail({ to: "d@e.se", subject: "Give up" });
+
+    expect(result).toMatchObject({ success: false, transportMode: "gmail" });
+    expect(result.attempts).toBe(2);
+    expect(sendMailMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("renderLarteametEmail", () => {
+  it("renders a complete Swedish admission email about Lärteamet", () => {
+    const { subject, text } = renderLarteametEmail({ studentName: "Anna Andersson" });
+
+    expect(subject).toContain("Lärteamet");
+    expect(subject).toContain("Sollentuna");
+    expect(text).toContain("Anna Andersson");
+    expect(text).toContain("Lärteamet");
+    expect(text).toContain("Sollentuna kommun");
+    expect(text).toContain("stöd");
+    expect(text).toContain(LARTEAMET_BROCHURE_FILE);
+    expect(text).not.toContain("PLACEHOLDER");
+  });
+
+  it("greets without a name and uses the default contact address", () => {
+    const { subject, text } = renderLarteametEmail();
+
+    expect(subject).toBeTruthy();
+    expect(text).toContain("Hej!");
+    expect(text).toContain("larteamet@sollentuna.se");
+  });
+
+  it("supports an explicit contact address override", () => {
+    const { text } = renderLarteametEmail({ contactEmail: "stod@sollentuna.se" });
+    expect(text).toContain("stod@sollentuna.se");
+  });
+});
+
+describe("resolveLarteametBrochure", () => {
+  it("returns null when no brochure is present", () => {
+    expect(resolveLarteametBrochure()).toBeNull();
+  });
+
+  it("resolves the brochure via LARTEAMET_PDF_PATH", () => {
+    const file = "/tmp/opencode/folder-om-larteamet.pdf";
+    fs.mkdirSync("/tmp/opencode", { recursive: true });
+    fs.writeFileSync(file, "%PDF-1.4 test");
+    process.env.LARTEAMET_PDF_PATH = file;
+
+    const brochure = resolveLarteametBrochure();
+
+    expect(brochure).toMatchObject({
+      filename: LARTEAMET_BROCHURE_FILE,
+      path: file,
+      contentType: "application/pdf",
+    });
+    fs.unlinkSync(file);
+  });
+});
+
+describe("renderMessageCopyEmail", () => {
+  it("includes sender name and message body", () => {
+    const { subject, text } = renderMessageCopyEmail({
+      senderName: "Eva Nahi",
+      messageBody: "Kom ihåg att lämna in uppgiften!",
+    });
+
+    expect(subject).toBeTruthy();
+    expect(text).toContain("Eva Nahi");
+    expect(text).toContain("Kom ihåg att lämna in uppgiften!");
+  });
+});
+
+describe("getStudentMunicipality", () => {
+  it("handles string, subdocument and missing values", () => {
+    expect(getStudentMunicipality("Sollentuna")).toBe("Sollentuna");
+    expect(getStudentMunicipality({ type: "Sollentuna" })).toBe("Sollentuna");
+    expect(getStudentMunicipality({ type: "Solna" })).toBe("Solna");
+    expect(getStudentMunicipality(null)).toBeNull();
+    expect(getStudentMunicipality(undefined)).toBeNull();
+  });
+});
+
+describe("maybeSendLarteametEmail", () => {
+  it("sends exactly one email for a Sollentuna student", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    const student = { name: "Anna Andersson", email: "anna@sollentuna.se", municipality: { type: SOLLENTUNA_MUNICIPALITY } };
+
+    const result = await maybeSendLarteametEmail({ student });
+
+    expect(result.sent).toBe(true);
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    const call = sendMailMock.mock.calls[0][0];
+    expect(call.to).toBe("anna@sollentuna.se");
+    expect(call.subject).toContain("Lärteamet");
+  });
+
+  it("sends nothing for a non-Sollentuna student", async () => {
+    const student = { name: "Berta Berg", email: "berta@solna.se", municipality: { type: "Solna" } };
+
+    const result = await maybeSendLarteametEmail({ student });
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toBe("not_sollentuna");
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing for a Sollentuna student without an email address", async () => {
+    const student = { name: "Calle", municipality: { type: SOLLENTUNA_MUNICIPALITY } };
+
+    const result = await maybeSendLarteametEmail({ student });
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toBe("no_email");
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts an explicit email/name override (bulk-upload path)", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+
+    const result = await maybeSendLarteametEmail({
+      student: { municipality: SOLLENTUNA_MUNICIPALITY },
+      studentName: "Doris Dahl",
+      email: "doris@sollentuna.se",
+    });
+
+    expect(result.sent).toBe(true);
+    expect(sendMailMock.mock.calls[0][0].to).toBe("doris@sollentuna.se");
+  });
+
+  it("attaches the Lärteamet brochure when it is available", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    const file = "/tmp/opencode/folder-om-larteamet.pdf";
+    fs.mkdirSync("/tmp/opencode", { recursive: true });
+    fs.writeFileSync(file, "%PDF-1.4 test brochure");
+    process.env.LARTEAMET_PDF_PATH = file;
+    const student = { name: "Emma Ek", email: "emma@sollentuna.se", municipality: SOLLENTUNA_MUNICIPALITY };
+
+    const result = await maybeSendLarteametEmail({ student });
+
+    expect(result.sent).toBe(true);
+    expect(result.brochureAttached).toBe(true);
+    expect(sendMailMock.mock.calls[0][0].attachments).toEqual([
+      expect.objectContaining({
+        filename: LARTEAMET_BROCHURE_FILE,
+        path: file,
+        contentType: "application/pdf",
+      }),
+    ]);
+    fs.unlinkSync(file);
+  });
+
+  it("sends without an attachment when the brochure is not present", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    const student = { name: "Filip Frisk", email: "filip@sollentuna.se", municipality: SOLLENTUNA_MUNICIPALITY };
+
+    const result = await maybeSendLarteametEmail({ student });
+
+    expect(result.sent).toBe(true);
+    expect(result.brochureAttached).toBe(false);
+    expect(sendMailMock.mock.calls[0][0].attachments).toBeUndefined();
+  });
+});
+
+describe("renderInactivityWarningEmail", () => {
+  it("states the withdrawal date in Swedish", () => {
+    const { subject, text } = renderInactivityWarningEmail({
+      studentName: "Anna Svensson",
+      withdrawalDate: new Date("2026-09-20"),
+    });
+
+    expect(subject).toContain("aktivitet saknas");
+    expect(text).toContain("Anna Svensson");
+    expect(text).toContain("20 september 2026");
+    expect(text).toContain("kursregistrering att avslutas");
+  });
+
+  it("greets without a name", () => {
+    const { text } = renderInactivityWarningEmail({ withdrawalDate: new Date("2026-09-20") });
+    expect(text).toContain("Hej!");
+  });
+});
+
+describe("sendInactivityWarningEmail", () => {
+  it("sends the warning to the student and reports success", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+
+    const result = await sendInactivityWarningEmail({
+      studentName: "Anna Svensson",
+      email: "anna@elev.se",
+      withdrawalDate: new Date("2026-09-20"),
+    });
+
+    expect(result.sent).toBe(true);
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    const call = sendMailMock.mock.calls[0][0];
+    expect(call.to).toBe("anna@elev.se");
+    expect(call.subject).toContain("aktivitet saknas");
+    expect(call.text).toContain("20 september 2026");
+  });
+
+  it("skips without an email address", async () => {
+    const result = await sendInactivityWarningEmail({
+      studentName: "Anna Svensson",
+      email: "",
+      withdrawalDate: new Date("2026-09-20"),
+    });
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toBe("no_email");
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("renderDiplomaEmail", () => {
+  it("renders a congratulatory diploma email without echoing sensitive data", () => {
+    const { subject, text } = renderDiplomaEmail({ studentName: "Bea Berg" });
+
+    expect(subject).toContain("diplom");
+    expect(text).toContain("Bea Berg");
+    expect(text).toContain("bifogat");
+    // Personal data must never be echoed in the email body.
+    expect(text).not.toContain("1992");
+  });
+
+  it("greets without a name", () => {
+    const { text } = renderDiplomaEmail();
+    expect(text).toContain("Hej!");
+  });
+});
+
+describe("sendDiplomaEmail", () => {
+  it("attaches the PDF and reports real delivery for a real SMTP transport", async () => {
+    process.env.GOOGLE_PWD = "real-app-password-1234";
+    const pdf = Buffer.from("%PDF-1.4 fake diploma");
+
+    const result = await sendDiplomaEmail({
+      studentName: "Bea Berg",
+      email: "bea@elev.se",
+      pdf,
+      filename: "diplom-abc.pdf",
+    });
+
+    expect(result.deliveredForReal).toBe(true);
+    expect(result.sent).toBe(true);
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    const call = sendMailMock.mock.calls[0][0];
+    expect(call.to).toBe("bea@elev.se");
+    expect(call.subject).toContain("diplom");
+    expect(call.attachments).toEqual([
+      expect.objectContaining({
+        filename: "diplom-abc.pdf",
+        contentType: "application/pdf",
+      }),
+    ]);
+  });
+
+  it("reports NOT delivered for a placeholder/stream transport", async () => {
+    // No real GOOGLE_PWD / SMTP creds => stream transport (no real delivery).
+    const pdf = Buffer.from("%PDF-1.4 fake diploma");
+
+    const result = await sendDiplomaEmail({
+      studentName: "Bea Berg",
+      email: "bea@elev.se",
+      pdf,
+    });
+
+    // The send call itself still returns a non-throwing success on stream
+    // transport, but the helper must be honest: NOT delivered for real.
+    expect(result.deliveredForReal).toBe(false);
+    expect(result.sent).toBe(false);
+    expect(result.transportMode).toBe("stream");
+  });
+
+  it("skips without an email address", async () => {
+    const result = await sendDiplomaEmail({
+      studentName: "Bea Berg",
+      email: "",
+      pdf: Buffer.from("%PDF-1.4"),
+    });
+
+    expect(result.sent).toBe(false);
+    expect(result.reason).toBe("no_email");
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+});

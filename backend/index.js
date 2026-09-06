@@ -72,6 +72,7 @@ import {
 } from "./src/utils/errorHandler.js";
 
 import { cacheManager, dbOptimizer, requestOptimizer } from "./src/utils/performance.js";
+import { startInactivityScheduler, stopInactivityScheduler, startTaskReminderScheduler, stopTaskReminderScheduler } from "./src/services/scheduler.js";
 
 // Apply security headers
 app.use(securityHeaders);
@@ -82,6 +83,12 @@ app.use(requestTimeout(30));
 // Apply CORS with enhanced configuration
 import cors from "cors";
 app.use(cors(corsConfig));
+
+// Cookie parsing must run BEFORE the rate limiters: their skip logic
+// (admin/systemadmin exemption) inspects req.cookies[token] via isAdminUser.
+// Mounted here, the admin-skip works; mounted later it silently never fires
+// and admins are rate limited like everyone else.
+app.use(cookieParser());
 
 // Rate limiting
 if (process.env.NODE_ENV !== "test") {
@@ -105,10 +112,9 @@ import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
 import router from "./src/router/router.js";
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5010;
 
 // Middleware setup
-app.use(cookieParser());
 app.use(express.json({ limit: process.env.MAX_FILE_SIZE || "10mb" }));
 app.use(
     express.urlencoded({
@@ -178,6 +184,10 @@ app.get("/metrics", (_req, res) => {
             readyState: mongoose.connection.readyState,
             host: mongoose.connection.host,
             name: mongoose.connection.name,
+            maxPoolSize:
+                parseInt(process.env.MONGODB_POOL_SIZE, 10) ||
+                parseInt(process.env.MAX_CONCURRENT_REQUESTS, 10) ||
+                50,
         },
         system: {
             nodeVersion: process.version,
@@ -222,9 +232,13 @@ dbOptimizer.configurePool();
 // MongoDB Connection with enhanced error handling (skip during tests)
 if (process.env.NODE_ENV !== "test") {
     const mongoUri = process.env.MONGODB_URI;
+    const maxPoolSize =
+        parseInt(process.env.MONGODB_POOL_SIZE, 10) ||
+        parseInt(process.env.MAX_CONCURRENT_REQUESTS, 10) ||
+        50;
     mongoose
         .connect(mongoUri, {
-            maxPoolSize: parseInt(process.env.MAX_CONCURRENT_REQUESTS) || 50,
+            maxPoolSize,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
         })
@@ -278,6 +292,14 @@ async function shutdown(signal) {
         logger.error({ err }, "Error closing database connection");
     }
 
+    try {
+        stopInactivityScheduler();
+        stopTaskReminderScheduler();
+        logger.info("Background scheduler stopped");
+    } catch (err) {
+        logger.error({ err }, "Error stopping background scheduler");
+    }
+
     logger.info({ metrics: errorMonitor.getErrorStats() }, "Final metrics");
     process.exit(0);
 }
@@ -301,12 +323,20 @@ process.on("unhandledRejection", (err) => {
 
 // Start the server unless running tests
 if (process.env.NODE_ENV !== "test") {
-    server = app.listen(PORT, () => {
-        logger.info({ port: PORT }, "Server started");
-        logger.info("Security features active: rate limiting, CORS, helmet, input validation");
-        logger.info("Performance features active: caching, lazy loading, query optimization");
-        logger.info("Monitoring active: error tracking, performance metrics, health checks");
-    });
+        server = app.listen(PORT, () => {
+            logger.info(
+                { port: PORT },
+                `API listening on http://localhost:${PORT} (resolved PORT=${PORT})`
+            );
+            logger.info("Security features active: rate limiting, CORS, helmet, input validation");
+            logger.info("Performance features active: caching, lazy loading, query optimization");
+            logger.info("Monitoring active: error tracking, performance metrics, health checks");
+
+            // Daily inactivity automation (skipped in test mode / when disabled).
+            startInactivityScheduler();
+            // Task-reminder refresh (skipped in test mode).
+            startTaskReminderScheduler();
+        });
 }
 
 export default app;

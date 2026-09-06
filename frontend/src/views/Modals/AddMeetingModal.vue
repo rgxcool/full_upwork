@@ -13,13 +13,14 @@
       />
 
       <label>Från tid:</label>
-      <input type="time" v-model="form.timeFrom" class="time-input"/>
+      <input v-model="form.timeFrom" type="time" class="time-input" />
 
       <label>Till tid:</label>
-      <input type="time" v-model="form.timeTo" class="time-input"/>
+      <input v-model="form.timeTo" type="time" class="time-input" />
 
     <label>Elev:</label>
     <v-autocomplete
+      ref="studentAuto"
       v-model="form.student"
       :items="students"
       item-title="displayName"
@@ -33,8 +34,8 @@
       :custom-filter="filterStudents"
       auto-select-first
     >
-      <template #item="{ props, item }">
-        <v-list-item v-bind="props" :title="item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})`" />
+      <template #item="{ props: itemProps, item }">
+        <v-list-item v-bind="itemProps" :title="item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})`" />
       </template>
       <template #selection="{ item }">
         {{ item.raw.displayName || `${item.raw.name} (${item.raw.personalNumber || ''})` }}
@@ -217,6 +218,7 @@ async function submit() {
   try {
     const response = await client.post('/meetings', payload);
     const savedMeeting = response.data;
+    this.$refs.studentAuto.closeMenu();
     emit('event-added', savedMeeting);
     emit('close');
   } catch (err) {

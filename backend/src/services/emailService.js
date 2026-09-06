@@ -1,0 +1,494 @@
+/**
+ * Shared outbound email service.
+ *
+ * This is the app's single email entry point. It wraps nodemailer behind:
+ *   - a lazily-created, cached transporter (Gmail -> generic SMTP -> stream)
+ *   - a sendEmail() that never throws (an email failure must never break the
+ *     caller, e.g. student creation)
+ *   - per-email-type template literal renderers
+ *   - the Sollentuna "Lärteamet" admission trigger used by the student
+ *     creation paths (POST /student and uploadXlsx)
+ *
+ * The transporter is selected once, on first use:
+ *   1. GOOGLE_EMAIL + GOOGLE_PWD (non-placeholder)  -> Gmail SMTP
+ *   2. SMTP_HOST + SMTP_USER + SMTP_PASS            -> generic SMTP
+ *   3. otherwise                                    -> nodemailer stream
+ *      transport (captures the message in a stream; NO real delivery) and a
+ *      loud warning, so placeholder credentials can never silently pretend to
+ *      deliver mail.
+ */
+import nodemailer from "nodemailer";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import logger from "../utils/logger.js";
+
+export const SOLLENTUNA_MUNICIPALITY = "Sollentuna";
+
+/** Filename of the Lärteamet brochure the school supplies (see #26). */
+export const LARTEAMET_BROCHURE_FILE = "folder-om-larteamet.pdf";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const PLACEHOLDER_RE = /REPLACE_WITH_|changeme|your_?password/i;
+
+export const isPlaceholderCredential = (value) =>
+    !value || PLACEHOLDER_RE.test(value);
+
+const defaultFromEmail = "newmindful.development@gmail.com";
+const EMAIL_FROM =
+    process.env.EMAIL_FROM || `Mindful Learning <${defaultFromEmail}>`;
+
+/**
+ * School email signature used at the end of outgoing emails. Configurable via
+ * EMAIL_SIGNATURE (plain text, may span multiple lines); falls back to the
+ * school name. Kept out of the transporter so tests can override it freely.
+ * @returns {string}
+ */
+export const getEmailSignature = () =>
+    process.env.EMAIL_SIGNATURE || "Mindful Learning";
+
+let transporter = null;
+let transportMode = null;
+
+// Bounded retry for transient SMTP failures. A single send must never throw,
+// but a flaky SMTP connection should get a couple of quick retries before we
+// give up and report the failure (see sendEmail). Read per call so tests and
+// operators can tune via env without restarting module-load semantics.
+const maxEmailAttempts = () => {
+    const raw = parseInt(process.env.EMAIL_MAX_ATTEMPTS, 10);
+    return Number.isFinite(raw) && raw >= 1 ? raw : 3;
+};
+const emailRetryDelayMs = () => {
+    const raw = parseInt(process.env.EMAIL_RETRY_DELAY_MS, 10);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 500;
+};
+
+/**
+ * Select (and cache) the outbound transporter based on configured credentials.
+ * @returns {{ transporter: import("nodemailer").Transporter, transportMode: string }}
+ */
+export const getTransporter = () => {
+    if (transporter) return { transporter, transportMode };
+
+    const gmailUser = process.env.GOOGLE_EMAIL || defaultFromEmail;
+    const gmailPass = process.env.GOOGLE_PWD || "";
+
+    if (!isPlaceholderCredential(gmailPass)) {
+        transporter = nodemailer.createTransport({
+            service: "Gmail",
+            auth: { user: gmailUser, pass: gmailPass },
+        });
+        transportMode = "gmail";
+        logger.info({ from: EMAIL_FROM, to: gmailUser }, "Email transport: Gmail SMTP");
+    } else if (
+        process.env.SMTP_HOST &&
+        process.env.SMTP_USER &&
+        !isPlaceholderCredential(process.env.SMTP_PASS)
+    ) {
+        transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: Number(process.env.SMTP_PORT || 587),
+            secure: process.env.SMTP_SECURE === "true",
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS,
+            },
+        });
+        transportMode = "smtp";
+        logger.info({ host: process.env.SMTP_HOST }, "Email transport: generic SMTP");
+    } else {
+        // nodemailer's test/stream transport: writes the rendered message to a
+        // stream instead of delivering it. This is NOT real delivery and is
+        // loudly logged on every send (see sendEmail).
+        transporter = nodemailer.createTransport({
+            streamTransport: true,
+            buffer: true,
+            newline: "unix",
+        });
+        transportMode = "stream";
+        logger.warn(
+            "Outbound email is NOT configured with real SMTP credentials (GOOGLE_PWD is a placeholder). " +
+                "Using nodemailer streamTransport — NO real email will be delivered. " +
+                "Set GOOGLE_EMAIL + GOOGLE_PWD (or SMTP_HOST/USER/PASS) to enable real sends."
+        );
+    }
+
+    return { transporter, transportMode };
+};
+
+/** Test helper: drop the cached transporter so the next getTransporter() re-evaluates env. */
+export const _resetEmailTransporter = () => {
+    transporter = null;
+    transportMode = null;
+};
+
+/**
+ * Send an email. Never throws — failures are logged and returned in the result
+ * so the caller (student creation, messaging, ...) can continue.
+ * @param {{ to: string, subject: string, text?: string, html?: string, attachments?: Array<{filename: string, path?: string, content?: Buffer, contentType?: string}> }} opts
+ * @returns {Promise<{success: boolean, messageId?: string, transportMode?: string, reason?: string, error?: string}>}
+ */
+export const sendEmail = async ({ to, subject, text, html, attachments }) => {
+    if (!to || !subject) {
+        logger.warn({ to, subject }, "sendEmail called without to/subject; skipping");
+        return { success: false, reason: "missing_fields" };
+    }
+
+    const { transporter: mailer, transportMode: mode } = getTransporter();
+
+    const maxAttempts = maxEmailAttempts();
+    const retryDelayMs = emailRetryDelayMs();
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const info = await mailer.sendMail({
+                from: EMAIL_FROM,
+                to,
+                subject,
+                text,
+                html,
+                ...(Array.isArray(attachments) && attachments.length
+                    ? { attachments }
+                    : {}),
+            });
+
+            if (mode === "stream") {
+                // Real delivery is NOT configured — say so explicitly on every send
+                // instead of pretending the mail went out.
+                logger.warn(
+                    { to, subject, messageId: info?.messageId },
+                    "EMAIL NOT DELIVERED (stream transport — unconfigured SMTP). Would have sent: " +
+                        `"${subject}" to ${to}`
+                );
+            } else {
+                logger.info(
+                    { to, subject, messageId: info?.messageId, transportMode: mode, attempt },
+                    "Email sent"
+                );
+            }
+
+            return { success: true, messageId: info?.messageId, transportMode: mode, attempt };
+        } catch (err) {
+            lastError = err;
+            if (attempt < maxAttempts) {
+                logger.warn(
+                    { err, to, subject, attempt },
+                    `Email send attempt ${attempt} failed; retrying`
+                );
+                await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+            }
+        }
+    }
+
+    logger.error(
+        { err: lastError, to, subject, attempts: maxAttempts },
+        "Email send failed after retries (non-fatal, caller continues)"
+    );
+    return {
+        success: false,
+        error: lastError?.message || "Unknown error",
+        transportMode: mode,
+        attempts: maxAttempts,
+    };
+};
+
+// ── Templates ──────────────────────────────────────────────────────────────
+
+/**
+ * Lärteamet admission email template (requirement #26).
+ *
+ * Sent to every newly registered Sollentuna student after admission. Copy is
+ * written from the Etapp 2 requirement (Sollentuna kommun's Lärteamet study
+ * support). When the school's brochure (folder-om-larteamet.pdf) is dropped
+ * into backend/assets/ (or pointed to via LARTEAMET_PDF_PATH) it is attached
+ * to the email automatically (see maybeSendLarteametEmail).
+ * @param {{ studentName?: string, contactEmail?: string }} ctx
+ */
+export const renderLarteametEmail = ({
+    studentName,
+    contactEmail = "larteamet@sollentuna.se",
+} = {}) => {
+    const greeting = studentName ? `Hej ${studentName}!` : "Hej!";
+    const subject = "Välkommen — information om Lärteamet (Sollentuna kommun)";
+    const text = [
+        greeting,
+        "",
+        "Du är nu registrerad som elev via Sollentuna kommun.",
+        "",
+        "Som elev via Sollentuna kommun har du tillgång till Lärteamet — kommunens stöd för studier.",
+        "Lärteamet kan hjälpa dig med olika insatser för att stödja dina studier, till exempel:",
+        "  • stöd och vägledning i studierna",
+        "  • hjälp med att strukturera och planera din studietid",
+        "  • kontakt och samverkan med din lärare",
+        "",
+        "Läs gärna den bifogade foldern (folder-om-larteamet.pdf) för mer information om Lärteamet.",
+        "",
+        "Har du frågor är du välkommen att höra av dig till:",
+        contactEmail,
+        "",
+        "Vänliga hälsningar",
+        getEmailSignature(),
+    ].join("\n");
+    return { subject, text };
+};
+
+/**
+ * Email copy of an internal message, sent to student recipients (#27 Part B).
+ * @param {{ senderName?: string, messageBody: string, subject?: string }} ctx
+ */
+export const renderMessageCopyEmail = ({
+    senderName,
+    messageBody,
+    subject = "Kurskommunikation",
+}) => {
+    const senderLine = senderName ? `Avsändare: ${senderName}` : "Du har fått ett nytt meddelande från din skola.";
+    const text = [
+        senderLine,
+        "",
+        messageBody || "",
+        "",
+        "Du kan svara direkt i Mindful Learning: logga in på https://localhost:5173 och öppna Meddelanden.",
+        "",
+        "Vänliga hälsningar",
+        getEmailSignature(),
+    ].join("\n");
+    return { subject, text };
+};
+
+/**
+ * Welcome email with the temporary password for a newly created student login
+ * (POST /users/create-for-student). The password is also returned to the admin
+ * caller — this email is the student-facing copy of it.
+ * @param {{ studentName?: string, email: string, tempPassword: string }} ctx
+ */
+export const renderTempPasswordEmail = ({ studentName, email, tempPassword }) => {
+    const greeting = studentName ? `Hej ${studentName}!` : "Hej!";
+    const subject = "Välkommen till Mindful Learning — inloggningsuppgifter";
+    const text = [
+        greeting,
+        "",
+        "Du har fått ett konto i Mindful Learning. Logga in med uppgifterna nedan:",
+        "",
+        `E-post: ${email}`,
+        `Tillfälligt lösenord: ${tempPassword}`,
+        "",
+        "Du måste byta lösenord första gången du loggar in.",
+        "Logga in på: https://localhost:5173",
+        "",
+        "Vänliga hälsningar",
+        getEmailSignature(),
+    ].join("\n");
+    return { subject, text };
+};
+
+/**
+ * Inactivity warning email (Etapp 2, Phase 4B). Sent to a flagged student by an
+ * admin, stating the specific date on which their registration will be withdrawn
+ * if they do not log in or make contact before then.
+ * @param {{ studentName?: string, withdrawalDate: Date|string }} ctx
+ */
+export const renderInactivityWarningEmail = ({ studentName, withdrawalDate }) => {
+    const greeting = studentName ? `Hej ${studentName}!` : "Hej!";
+    const dateLabel = new Date(withdrawalDate).toLocaleDateString("sv-SE", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+    });
+    const subject = "Påminnelse: aktivitet saknas i Mindful Learning";
+    const text = [
+        greeting,
+        "",
+        "Vi har noterat att du inte har loggat in eller varit aktiv i Mindful Learning på ett tag.",
+        "",
+        `Om du inte loggar in eller tar kontakt med din skola före ${dateLabel}, kommer din kursregistrering att avslutas.`,
+        "",
+        "Har du frågor, kontakta din lärare eller skolan.",
+        "",
+        "Vänliga hälsningar",
+        getEmailSignature(),
+    ].join("\n");
+    return { subject, text };
+};
+
+// ── Sollentuna trigger (requirement #26) ───────────────────────────────────
+
+/**
+ * Locate the Lärteamet brochure PDF when it is available so it can be attached
+ * to the admission email. Looked up in order:
+ *   1. LARTEAMET_PDF_PATH env var
+ *   2. <repo>/backend/assets/folder-om-larteamet.pdf
+ * Returns null when the file is not (yet) present — the email is still sent.
+ * @returns {{ filename: string, path: string, contentType: string } | null}
+ */
+export const resolveLarteametBrochure = () => {
+    const candidates = [
+        process.env.LARTEAMET_PDF_PATH,
+        path.join(__dirname, "..", "..", "assets", LARTEAMET_BROCHURE_FILE),
+        path.resolve(process.cwd(), "assets", LARTEAMET_BROCHURE_FILE),
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+        if (candidate && fs.existsSync(candidate)) {
+            return {
+                filename: LARTEAMET_BROCHURE_FILE,
+                path: candidate,
+                contentType: "application/pdf",
+            };
+        }
+    }
+    return null;
+};
+
+/**
+ * Normalize the municipality value as stored on Student:
+ * either a plain string ("Sollentuna") or the schema subdocument { type: "Sollentuna" }.
+ * @param {*} municipality
+ * @returns {string|null}
+ */
+export const getStudentMunicipality = (municipality) => {
+    if (!municipality) return null;
+    if (typeof municipality === "string") return municipality;
+    if (municipality.type) return municipality.type;
+    return null;
+};
+
+/**
+ * If the (newly created) student belongs to Sollentuna municipality, send the
+ * Lärteamet admission email to the student's email address.
+ *
+ * Fires only on creation — callers are responsible for only invoking this for
+ * new students (POST /student new-record branch, uploadXlsx upserted records).
+ * Never throws; a failure is logged by sendEmail and reported in the result.
+ *
+ * @param {{ student?: Object, studentName?: string, email?: string }} args
+ * @returns {Promise<{sent: boolean, reason?: string, result?: Object}>}
+ */
+export const maybeSendLarteametEmail = async ({
+    student,
+    studentName,
+    email,
+} = {}) => {
+    const municipality = getStudentMunicipality(student?.municipality);
+
+    if (municipality !== SOLLENTUNA_MUNICIPALITY) {
+        return { sent: false, reason: "not_sollentuna" };
+    }
+
+    const recipientEmail = email || student?.email;
+    if (!recipientEmail) {
+        logger.warn(
+            { municipality },
+            "Sollentuna student has no email — Lärteamet email skipped"
+        );
+        return { sent: false, reason: "no_email" };
+    }
+
+    const { subject, text } = renderLarteametEmail({
+        studentName: studentName || student?.name,
+    });
+    const brochure = resolveLarteametBrochure();
+    const result = await sendEmail({
+        to: recipientEmail,
+        subject,
+        text,
+        ...(brochure ? { attachments: [brochure] } : {}),
+    });
+    return { sent: result.success, result, brochureAttached: !!brochure };
+};
+
+/**
+ * Diploma delivery email template (P7/P8).
+ *
+ * Sent to a course-package student when their diploma PDF is generated, with
+ * the PDF attached. The copy keeps the wording generic and avoids echoing the
+ * sensitive fields that live inside the PDF (personnummer etc.).
+ * @param {{ studentName?: string }} ctx
+ */
+export const renderDiplomaEmail = ({ studentName } = {}) => {
+    const greeting = studentName ? `Hej ${studentName}!` : "Hej!";
+    const subject = "Ditt diplom från Mindful Learning";
+    const text = [
+        greeting,
+        "",
+        "Grattis! Du har slutfört din utbildning och vi har tagit fram ett diplom åt dig.",
+        "",
+        "Diplomet finns bifogat i detta mail.",
+        "",
+        "Vänliga hälsningar",
+        getEmailSignature(),
+    ].join("\n");
+    return { subject, text };
+};
+
+/**
+ * Send the diploma PDF to the student's email (P8 diploma delivery). Never
+ * throws; failures are logged by sendEmail and reported in the result.
+ *
+ * Delivery is reported honestly: `deliveredForReal` is only true when the
+ * configured transport actually delivers (gmail/smtp). When the transport falls
+ * back to nodemailer's stream transport (unconfigured SMTP) the email is NOT
+ * delivered and `deliveredForReal` is false — the caller must not claim "sent".
+ *
+ * @param {{ studentName: string, email: string, pdf: Buffer, filename?: string }} args
+ * @returns {Promise<{sent: boolean, deliveredForReal: boolean, transportMode?: string, reason?: string, result?: Object}>}
+ */
+export const sendDiplomaEmail = async ({
+    studentName,
+    email,
+    pdf,
+    filename = "diplom.pdf",
+}) => {
+    if (!email) {
+        logger.warn({ studentName }, "Diploma email skipped — no student email");
+        return { sent: false, reason: "no_email" };
+    }
+
+    const { subject, text } = renderDiplomaEmail({ studentName });
+    const result = await sendEmail({
+        to: email,
+        subject,
+        text,
+        attachments: [
+            {
+                filename,
+                content: pdf,
+                contentType: "application/pdf",
+            },
+        ],
+    });
+
+    // Only claim real delivery for a real (non-stream) transport.
+    const deliveredForReal = result.success && result.transportMode !== "stream";
+    return {
+        sent: deliveredForReal,
+        deliveredForReal,
+        transportMode: result.transportMode,
+        result,
+    };
+};
+
+/**
+ * Send the inactivity warning email to a student (Etapp 2, Phase 4B). Never
+ * throws; failures are logged by sendEmail and reported in the result.
+ * @param {{ studentName: string, email: string, withdrawalDate: Date|string }} args
+ * @returns {Promise<{sent: boolean, reason?: string, result?: Object}>}
+ */
+export const sendInactivityWarningEmail = async ({
+    studentName,
+    email,
+    withdrawalDate,
+}) => {
+    if (!email) {
+        logger.warn({ studentName }, "Inactivity warning skipped — no student email");
+        return { sent: false, reason: "no_email" };
+    }
+
+    const { subject, text } = renderInactivityWarningEmail({
+        studentName,
+        withdrawalDate,
+    });
+    const result = await sendEmail({ to: email, subject, text });
+    return { sent: result.success, result };
+};

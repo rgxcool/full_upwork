@@ -16,9 +16,9 @@
         <div class="search-group">
           <label for="studentSearch">Sök student:</label>
           <input
-            type="text"
             id="studentSearch"
             v-model="searchQuery"
+            type="text"
             class="form-control"
             placeholder="Namn eller e-post"
             @input="searchStudents"
@@ -40,9 +40,9 @@
 
         <div class="filter-group">
           <label for="dateFilter">Period:</label>
-          <input type="date" id="startDate" v-model="filters.startDate" @change="loadEnrollments" />
+          <input id="startDate" v-model="filters.startDate" type="date" @change="loadEnrollments" />
           <span>till</span>
-          <input type="date" id="endDate" v-model="filters.endDate" @change="loadEnrollments" />
+          <input id="endDate" v-model="filters.endDate" type="date" @change="loadEnrollments" />
         </div>
       </div>
 
@@ -150,8 +150,8 @@
                 <td>
                   <button
                     class="btn btn-sm btn-outline-primary me-1"
-                    @click="editEnrollment(enrollment)"
                     title="Redigera"
+                    @click="editEnrollment(enrollment)"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -166,9 +166,27 @@
                     </svg>
                   </button>
                   <button
+                    v-if="enrollment.status !== 'dropped'"
+                    class="btn btn-sm btn-outline-danger me-1"
+                    title="Ta bort inskrivning"
+                    @click="deleteEnrollment(enrollment)"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                      />
+                    </svg>
+                  </button>
+                  <button
                     class="btn btn-sm btn-outline-info"
-                    @click="viewHistory(enrollment)"
                     title="Visa historik"
+                    @click="viewHistory(enrollment)"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -190,7 +208,7 @@
       </div>
 
       <!-- Edit Enrollment Modal -->
-      <div class="modal fade" id="enrollmentModal" tabindex="-1" ref="enrollmentModal">
+      <div id="enrollmentModal" ref="enrollmentModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog modal-lg">
           <div class="modal-content">
             <div class="modal-header">
@@ -222,9 +240,9 @@
                     <div class="form-group">
                       <label for="enrollmentGrade">Betyg:</label>
                       <input
-                        type="text"
                         id="enrollmentGrade"
                         v-model="enrollmentForm.grade"
+                        type="text"
                         class="form-control"
                         placeholder="A, B, C, etc."
                       />
@@ -237,9 +255,9 @@
                     <div class="form-group">
                       <label for="enrollmentAttendance">Närvaro (%):</label>
                       <input
-                        type="number"
                         id="enrollmentAttendance"
                         v-model="enrollmentForm.attendancePercentage"
+                        type="number"
                         class="form-control"
                         min="0"
                         max="100"
@@ -277,9 +295,9 @@
                 <div class="form-group">
                   <label for="statusReason">Anledning till statusändring:</label>
                   <input
-                    type="text"
                     id="statusReason"
                     v-model="enrollmentForm.statusChangeReason"
+                    type="text"
                     class="form-control"
                     placeholder="Valfritt"
                   />
@@ -291,8 +309,8 @@
               <button
                 type="button"
                 class="btn btn-primary"
-                @click="saveEnrollment"
                 :disabled="isSaving"
+                @click="saveEnrollment"
               >
                 {{ isSaving ? 'Sparar...' : 'Spara ändringar' }}
               </button>
@@ -302,7 +320,7 @@
       </div>
 
       <!-- History Modal -->
-      <div class="modal fade" id="historyModal" tabindex="-1" ref="historyModal">
+      <div id="historyModal" ref="historyModal" class="modal fade" tabindex="-1">
         <div class="modal-dialog">
           <div class="modal-content">
             <div class="modal-header">
@@ -457,6 +475,20 @@
         }
       }
 
+      const deleteEnrollment = async (enrollment) => {
+        if (!confirm('Är du säker på att du vill ta bort denna inskrivning?')) return
+        try {
+          await client.delete(
+            `/students/${selectedStudent.value._id}/enrollments/${enrollment._id}`
+          )
+          toast.success('Inskrivning borttagen.')
+          await loadEnrollments()
+        } catch (error) {
+          console.error('Error deleting enrollment:', error)
+          toast.error('Kunde inte ta bort inskrivningen.')
+        }
+      }
+
       const viewHistory = (enrollment) => {
         selectedEnrollmentHistory.value = enrollment.statusHistory || []
 
@@ -530,6 +562,7 @@
         selectStudent,
         loadEnrollments,
         editEnrollment,
+        deleteEnrollment,
         saveEnrollment,
         viewHistory,
         formatDate,

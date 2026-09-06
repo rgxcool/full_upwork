@@ -1,14 +1,68 @@
 import express from "express";
+import mongoose from "mongoose";
 import Course from "../models/Course.js";
 import logger from "../utils/logger.js";
+import { isAuthenticated, hasRole } from "../middleware/auth.js";
 import { validate, validateId } from "../middleware/validation.js";
 import { courseDetailRateLimiter } from "../middleware/security.js";
+import { recordAudit } from "../utils/auditLog.js";
 
 const router = express.Router();
+
+const ADMIN_ROLES = ["systemadmin", "admin"];
+
+const objectIdArray = (value) => {
+    if (!Array.isArray(value)) return "måste vara en lista av ID:n";
+    const invalid = value.find(
+        (id) => typeof id !== "string" || !/^[0-9a-fA-F]{24}$/.test(id)
+    );
+    if (invalid) return "innehåller ett ogiltigt ID";
+    return null;
+};
+
+// Accepts a number or a numeric string; rejects negatives and non-numeric
+// values so a course price can never be stored as garbage.
+const nonNegativeNumber = (value) => {
+    const num = typeof value === "number" ? value : Number(value);
+    if (typeof value === "boolean" || !Number.isFinite(num) || num < 0) {
+        return "måste vara ett icke-negativt tal";
+    }
+    return null;
+};
+
+// Normalize whatever the client sent into a number (or null to clear).
+const parsePrice = (value) => {
+    if (value === undefined || value === null || value === "") return null;
+    return Number(value);
+};
+
+const validateResultTypes = (value) => {
+    if (!Array.isArray(value)) return "måste vara en lista av resultattyper";
+    for (const item of value) {
+        if (!item || typeof item !== "object") return "ogiltig resultattyp";
+        if (!item.id || typeof item.id !== "string") return "resultattyp saknar id";
+        if (!item.label || typeof item.label !== "string") return "resultattyp saknar label";
+    }
+    return null;
+};
 
 const createCourseSchema = {
     courseName: { type: "string", required: true, min: 1, max: 200, sanitize: true },
     courseCode: { type: "string", required: true, min: 1, max: 50, sanitize: true },
+    price: { custom: nonNegativeNumber },
+    programs: { custom: objectIdArray },
+    resultTypes: { custom: validateResultTypes },
+};
+
+const updateCourseSchema = {
+    courseName: { type: "string", min: 1, max: 200, sanitize: true },
+    courseCode: { type: "string", min: 1, max: 50, sanitize: true },
+    coursePoints: { type: "string", max: 50, sanitize: true },
+    courseExtent: { type: "string", max: 100, sanitize: true },
+    price: { custom: nonNegativeNumber },
+    programs: { custom: objectIdArray },
+    resultTypes: { custom: validateResultTypes },
+    isActive: { type: "boolean" },
 };
 
 // Fetch all courses
@@ -72,23 +126,129 @@ router.get(
     }
 );
 
-// Create a new course
-router.post("/course", validate(createCourseSchema), async (req, res) => {
-    try {
-        const { courseName, courseCode, coursePoints, courseExtent } = req.body;
+// Create a new course (admin only)
+router.post(
+    "/course",
+    isAuthenticated,
+    hasRole(ADMIN_ROLES),
+    validate(createCourseSchema),
+    async (req, res) => {
+        try {
+            const { courseName, courseCode, coursePoints, courseExtent, programs, isActive, resultTypes } = req.body;
 
-        const created = await Course.create({
-            courseName,
-            courseCode,
-            coursePoints,
-            courseExtent,
-        });
+            const created = await Course.create({
+                courseName,
+                courseCode,
+                coursePoints,
+                courseExtent,
+                price: parsePrice(req.body.price),
+                isActive: isActive === undefined ? true : isActive,
+                resultTypes: Array.isArray(resultTypes) ? resultTypes : undefined,
+                programs: (programs || []).map((id) =>
+                    mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
+                ),
+            });
 
-        res.status(201).json(created);
-    } catch (error) {
-        logger.error({ err: error }, "Error creating course");
-        res.status(500).json({ error: "Internal Server Error" });
+            await recordAudit(req, {
+                entityType: "Course",
+                entityId: created._id,
+                action: "create",
+                description: `Skapade kurs ${created.courseCode} – ${created.courseName}`,
+            });
+
+            res.status(201).json(created);
+        } catch (error) {
+            logger.error({ err: error }, "Error creating course");
+            res.status(500).json({ error: "Internal Server Error" });
+        }
     }
-});
+);
+
+// Update a course (admin only)
+router.put(
+    "/course/:id",
+    isAuthenticated,
+    hasRole(ADMIN_ROLES),
+    validateId(),
+    validate(updateCourseSchema),
+    async (req, res) => {
+        try {
+            const course = await Course.findById(req.params.id);
+            if (!course) {
+                return res.status(404).json({ error: "Course not found" });
+            }
+
+            const updates = {};
+            const changed = [];
+            for (const field of ["courseName", "courseCode", "coursePoints", "courseExtent"]) {
+                if (req.body[field] !== undefined) {
+                    updates[field] = req.body[field];
+                    changed.push(`${field}: ${course[field]} -> ${req.body[field]}`);
+                }
+            }
+            if (req.body.resultTypes !== undefined) {
+                updates.resultTypes = Array.isArray(req.body.resultTypes) ? req.body.resultTypes : undefined;
+                changed.push("resultTypes uppdaterade");
+            }
+            if (req.body.price !== undefined) {
+                updates.price = parsePrice(req.body.price);
+                changed.push(`price: ${course.price ?? 0} -> ${updates.price ?? 0}`);
+            }
+            if (Array.isArray(req.body.programs)) {
+                updates.programs = req.body.programs.map((id) =>
+                    mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
+                );
+                changed.push("programs uppdaterade");
+            }
+            if (req.body.isActive !== undefined) {
+                updates.isActive = req.body.isActive;
+                changed.push(`isActive: ${course.isActive} -> ${req.body.isActive}`);
+            }
+
+            Object.assign(course, updates);
+            await course.save();
+
+            await recordAudit(req, {
+                entityType: "Course",
+                entityId: course._id,
+                action: "update",
+                description: `Uppdaterade kurs ${course.courseCode} (${changed.join(", ")})`,
+            });
+
+            res.json(course);
+        } catch (error) {
+            logger.error({ err: error }, "Error updating course");
+            res.status(500).json({ error: "Internal Server Error" });
+        }
+    }
+);
+
+// Delete a course (admin only)
+router.delete(
+    "/course/:id",
+    isAuthenticated,
+    hasRole(ADMIN_ROLES),
+    validateId(),
+    async (req, res) => {
+        try {
+            const course = await Course.findByIdAndDelete(req.params.id);
+            if (!course) {
+                return res.status(404).json({ error: "Course not found" });
+            }
+
+            await recordAudit(req, {
+                entityType: "Course",
+                entityId: course._id,
+                action: "delete",
+                description: `Tog bort kurs ${course.courseCode} – ${course.courseName}`,
+            });
+
+            res.json({ message: "Course deleted", id: course._id });
+        } catch (error) {
+            logger.error({ err: error }, "Error deleting course");
+            res.status(500).json({ error: "Internal Server Error" });
+        }
+    }
+);
 
 export default router;

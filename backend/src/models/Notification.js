@@ -5,18 +5,41 @@ const notificationSchema = new mongoose.Schema({
   type: { type: String, required: true }, // t.ex. "grades_pending"
   resolved: { type: Boolean, default: false }, // Legacy field - kept for backwards compatibility
   message: String,
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student" },
+  courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
   createdAt: { type: Date, default: Date.now },
   resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Legacy field
   resolvedByUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // Array of user IDs who have resolved this notification
   teacher: { type: mongoose.Schema.Types.ObjectId, ref: "Teacher" }, // Teacher record ID for filtering
   createdByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Admin who created this notification (for dropout notifications)
+  examId: { type: mongoose.Schema.Types.ObjectId, ref: "Exam" }, // Prövning (exam) the notification refers to
     // Nytt fält för flexibel metadata
     meta: {
+      enrollmentId: { type: mongoose.Schema.Types.ObjectId, ref: "StudentEnrollment" },
       studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student" },
       courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
       teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // User ID for reference
+      studentUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // User ID of the student's login account
+      catalogId: { type: mongoose.Schema.Types.ObjectId, ref: "GradeCatalog" }, // Betygskatalog (Scrive)
+      documentId: { type: String }, // Scrive Document ID
       url: { type: String }, // för direktlänk i frontend
+      // Att göra-påminnelser (task_reminder)
+      userId: { type: String }, // Target user for the task reminder
+      taskCount: { type: Number, default: 0 },
+      tasks: [
+        {
+          description: { type: String },
+          dueDate: { type: String },
+          dueTime: { type: String },
+        },
+      ],
     }
 });
+
+// Indexes to bound the cost of the unbounded notification queries used by
+// GET /notifications and the various "unread count" lookups.
+// Sorting is newest-first so cover the sort key and the $nin filter.
+notificationSchema.index({ createdAt: -1, _id: -1 });
+notificationSchema.index({ resolvedByUsers: 1, createdAt: -1 });
 
 export default mongoose.model("Notification", notificationSchema, "notifications");

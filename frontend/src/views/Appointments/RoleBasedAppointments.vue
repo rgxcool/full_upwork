@@ -1,4 +1,4 @@
-<!-- frontend/src/views/Syv/SyvAppointments.vue -->
+<!-- frontend/src/views/Appointments/RoleBasedAppointments.vue -->
 <template>
   <div>
     <h1>{{ pageTitle }}</h1>
@@ -17,7 +17,9 @@
       <tbody>
         <tr v-for="meeting in meetings" :key="meeting._id">
           <td>
-            <router-link :to="`/student/${meeting.student.id}`">{{ meeting.student.name }}</router-link>
+            <button class="student-link" type="button" @click="openStudent(meeting.student)">
+              {{ meeting.student.name }}
+            </button>
           </td>
           <td>{{ formatMeetingTime(meeting) }}</td>
           <td>{{ meeting.info }}</td>
@@ -28,20 +30,138 @@
       </tbody>
     </table>
 
+    <p v-if="meetings.length === 0" class="empty-state">Inga bokade samtal hittades.</p>
+
     <!-- Pagination -->
     <div v-if="pagination.totalPages > 1">
-      <button @click="changePage(pagination.page - 1)" :disabled="pagination.page <= 1">Föregående</button>
+      <button :disabled="pagination.page <= 1" @click="changePage(pagination.page - 1)">Föregående</button>
       <span>Sida {{ pagination.page }} av {{ pagination.totalPages }}</span>
-      <button @click="changePage(pagination.page + 1)" :disabled="pagination.page >= pagination.totalPages">Nästa</button>
+      <button :disabled="pagination.page >= pagination.totalPages" @click="changePage(pagination.page + 1)">Nästa</button>
     </div>
+
+    <!-- Student Profile Section -->
+    <v-card v-if="selectedStudent" class="mt-4">
+      <v-card-title>Studentprofil: {{ selectedStudent.name }}</v-card-title>
+      <v-card-text>
+        <v-row>
+          <v-col cols="12" sm="6">
+            <v-textarea
+              v-model="profileForm.additionalInfo"
+              label="Övrig information"
+              outlined
+              dense
+              hide-details
+              rows="3"
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-select
+              v-model="profileForm.aplStatus"
+              :items="[ 'GRAY', 'BLUE', 'YELLOW', 'PURPLE', 'RED', 'GREEN' ]"
+              label="APL-status"
+              outlined
+              dense
+              hide-details
+            />
+          </v-col>
+        </v-row>
+        <v-row class="mt-3">
+          <v-col cols="12">
+            <v-textarea
+              v-model="profileForm.specialNeeds"
+              label="Särskilda behov"
+              outlined
+              dense
+              hide-details
+              rows="3"
+            />
+          </v-col>
+        </v-row>
+        <v-row class="mt-3">
+          <v-col cols="12" sm="6">
+            <v-text-field
+              v-model="profileForm.supportContactName"
+              label="Kontaktperson namn"
+              outlined
+              dense
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-text-field
+              v-model="profileForm.supportContactPhone"
+              label="Telefon"
+              outlined
+              dense
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-text-field
+              v-model="profileForm.supportContactEmail"
+              label="E-post"
+              outlined
+              dense
+            />
+          </v-col>
+        </v-row>
+      </v-card-text>
+      <v-card-actions>
+        <v-btn color="primary" @click="saveProfile">Spara profil</v-btn>
+        <v-btn text @click="closeProfile">Avbryt</v-btn>
+      </v-card-actions>
+    </v-card>
+
+    <!-- Exam accommodations (only for specped) -->
+    <v-card v-if="selectedStudent && activeRole === 'specped'" class="mt-4">
+      <v-card-title>Examensackommodationer: {{ selectedStudent.name }}</v-card-title>
+      <v-card-text>
+        <v-row>
+          <v-col cols="12" sm="4"><v-text-field v-model.number="examAccommodations.extraTime" type="number" min="0" label="Extra tid (minuter)" /></v-col>
+          <v-col cols="12" sm="4"><v-checkbox v-model="examAccommodations.computer" label="Dator" /></v-col>
+          <v-col cols="12" sm="4"><v-checkbox v-model="examAccommodations.separateRoom" label="Separat rum" /></v-col>
+          <v-col cols="12"><v-textarea v-model="examAccommodations.notes" label="Anteckning" rows="2" /></v-col>
+        </v-row>
+      </v-card-text>
+      <v-card-actions><v-btn color="primary" :loading="savingAccommodations" @click="saveExamAccommodations">Spara ackommodationer</v-btn></v-card-actions>
+    </v-card>
+
+    <!-- Study Plan Revision Section -->
+    <v-card v-if="selectedStudent" class="mt-4">
+      <v-card-title>Studieplanjustering</v-card-title>
+      <v-card-text>
+        <v-row>
+          <v-col cols="12" sm="6">
+            <v-select
+              v-model="studyPlan.aplStatus"
+              :items="[ 'GRAY', 'BLUE', 'YELLOW', 'PURPLE', 'RED', 'GREEN' ]"
+              label="Ny APL-status"
+              outlined
+              dense
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" sm="6">
+            <v-text-field
+              v-model="studyPlan.notes"
+              label="Motivering"
+              outlined
+              dense
+            />
+          </v-col>
+        </v-row>
+      </v-card-text>
+      <v-card-actions>
+        <v-btn color="primary" @click="saveStudyPlan">Spara justering</v-btn>
+        <v-btn text @click="closeStudyPlan">Avbryt</v-btn>
+      </v-card-actions>
+    </v-card>
 
     <!-- Modal -->
     <AddMeetingModal
       v-if="isModalOpen"
-      @close="isModalOpen = false"
-      @event-added="fetchMeetings"
       :title="'Boka nytt ' + activeRole + '-samtal'"
       :booked-by-role="activeRole"
+      @close="isModalOpen = false"
+      @event-added="fetchMeetings"
     />
   </div>
 </template>
@@ -67,6 +187,26 @@ export default {
         total: 0,
         totalPages: 1
       },
+      selectedStudent: null,
+      profileForm: {
+        additionalInfo: '',
+        aplStatus: 'GRAY',
+        specialNeeds: '',
+        supportContactName: '',
+        supportContactPhone: '',
+        supportContactEmail: ''
+      },
+      studyPlan: {
+        aplStatus: 'GRAY',
+        notes: ''
+      },
+      savingAccommodations: false,
+      examAccommodations: {
+        extraTime: 0,
+        computer: false,
+        separateRoom: false,
+        notes: ''
+      }
     };
   },
   computed: {
@@ -85,22 +225,81 @@ export default {
       return this.$route.meta.title || 'Samtal';
     }
   },
-  created() {
-    this.fetchMeetings();
-  },
   watch: {
     // Refetch when route changes (e.g., navigating between syv and specped)
     '$route'(to, from) {
       if (to.path !== from.path) {
         this.fetchMeetings();
+        this.selectedStudent = null;
+        this.profileForm = {
+          additionalInfo: '',
+          aplStatus: 'GRAY',
+          specialNeeds: '',
+          supportContactName: '',
+          supportContactPhone: '',
+          supportContactEmail: ''
+        };
+        this.examAccommodations = {
+          extraTime: 0,
+          computer: false,
+          separateRoom: false,
+          notes: ''
+        };
+        this.studyPlan = {
+          aplStatus: 'GRAY',
+          notes: ''
+        };
       }
     },
     // Also watch activeRole in case route meta changes
     activeRole() {
       this.fetchMeetings();
+      this.selectedStudent = null;
+      this.profileForm = {
+        additionalInfo: '',
+        aplStatus: 'GRAY',
+        specialNeeds: '',
+        supportContactName: '',
+        supportContactPhone: '',
+        supportContactEmail: ''
+      };
+      this.examAccommodations = {
+        extraTime: 0,
+        computer: false,
+        separateRoom: false,
+        notes: ''
+      };
+      this.studyPlan = {
+        aplStatus: 'GRAY',
+        notes: ''
+      };
     }
   },
+  created() {
+    this.fetchMeetings();
+  },
   methods: {
+    async openStudent(student) {
+      const id = student?._id || student?.id
+      if (!id) return
+      try {
+        const { data } = await client.get(`/students/${id}`)
+        this.selectedStudent = data.student || data
+        const accommodations = this.selectedStudent.examAccommodations || this.selectedStudent.accommodations || {}
+        this.examAccommodations = {
+          extraTime: accommodations.extraTime || 0,
+          computer: Boolean(accommodations.computer),
+          separateRoom: Boolean(accommodations.separateRoom),
+          notes: accommodations.notes || ''
+        }
+      } catch {
+        toast.error('Kunde inte hämta elevens information.')
+      }
+    },
+    changePage(page) {
+      this.pagination.page = page;
+      this.fetchMeetings();
+    },
     formatMeetingTime(meeting) {
       if (!meeting?.start) return '';
       const start = new Date(meeting.start);
@@ -122,9 +321,6 @@ export default {
         
         const { page, limit } = this.pagination;
         const url = `/meetings?bookedBy=${this.activeRole}&sort=start:desc&page=${page}&limit=${limit}`;
-        
-        console.log(`🔍 Fetching ${this.activeRole} appointments from:`, url);
-        console.log(`📍 Current route:`, this.$route.path, '| Active role:', this.activeRole);
         
         // Explicitly filter by bookedBy to ensure separate lists for syv and specped
         const response = await client.get(url);
@@ -155,18 +351,90 @@ export default {
       if (confirm('Är du säker på att du vill radera detta möte?')) {
         try {
           await client.delete(`/meetings/${id}`);
-          this.fetchMeetings(); // Refresh list
+          this.fetchMeetings();
         } catch (error) {
           console.error("Kunde inte radera mötet:", error);
           toast.error('Kunde inte radera mötet.');
         }
       }
     },
-    changePage(newPage) {
-      if (newPage > 0 && newPage <= this.pagination.totalPages) {
-        this.pagination.page = newPage;
+    async saveProfile() {
+      if (!this.selectedStudent) return;
+      
+      try {
+        await client.put(`/students/${this.selectedStudent._id}/profile`, {
+          additionalInfo: this.profileForm.additionalInfo,
+          specialNeeds: this.profileForm.specialNeeds,
+          supportContactName: this.profileForm.supportContactName,
+          supportContactPhone: this.profileForm.supportContactPhone,
+          supportContactEmail: this.profileForm.supportContactEmail
+        });
+        
+        toast.success('Profil uppdaterad.');
         this.fetchMeetings();
+        this.closeProfile();
+      } catch (error) {
+        console.error('Kunde inte spara profil:', error);
+        toast.error('Kunde inte spara profil, försök igen.');
       }
+    },
+    closeProfile() {
+      this.selectedStudent = null;
+      this.profileForm = {
+        additionalInfo: '',
+        aplStatus: 'GRAY',
+        specialNeeds: '',
+        supportContactName: '',
+        supportContactPhone: '',
+        supportContactEmail: ''
+      };
+    },
+    async saveStudyPlan() {
+      if (!this.selectedStudent) return;
+      
+      try {
+        await client.put(`/students/${this.selectedStudent._id}/study-plan`, {
+          aplStatus: this.studyPlan.aplStatus,
+          notes: this.studyPlan.notes
+        });
+        
+        toast.success('Studieplan justerad.');
+        this.fetchMeetings();
+        this.closeStudyPlan();
+      } catch (error) {
+        console.error('Kunde inte spara studieplan:', error);
+        toast.error('Kunde inte spara studieplan, försök igen.');
+      }
+    },
+    closeStudyPlan() {
+      this.studyPlan = {
+        aplStatus: 'GRAY',
+        notes: ''
+      };
+    },
+    async saveExamAccommodations() {
+      if (!this.selectedStudent) return;
+      this.savingAccommodations = true;
+
+      try {
+        await client.put(`/meetings/students/${this.selectedStudent._id}/exam-accommodations`, this.examAccommodations);
+
+        toast.success('Examensackommodationer sparade.');
+      } catch (error) {
+        console.error('Kunde inte spara examenackommodationer:', error);
+        toast.error('Kunde inte spara examenackommodationer, försök igen.');
+      } finally {
+        this.savingAccommodations = false;
+      }
+    },
+    closeExamAccommodations() {
+      this.selectedStudent = null;
+      this.examAccommodations = {
+        extraTime: 0,
+        computer: false,
+        separateRoom: false,
+        notes: ''
+      };
     }
   }
 };
@@ -191,5 +459,16 @@ td a, td button {
 }
 button {
   cursor: pointer;
+}
+.student-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #1976d2;
+  text-decoration: underline;
+}
+.empty-state {
+  margin-top: 1rem;
+  color: #777;
 }
 </style>

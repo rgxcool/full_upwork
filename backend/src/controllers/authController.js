@@ -13,7 +13,7 @@ export const register = async (req, res) => {
     try {
         const { name, email, password, role } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
-        const allowedRoles = ["admin", "user", "moderator"];
+        const allowedRoles = ["student", "user"];
         const primaryRole = role && allowedRoles.includes(role) ? role : "user";
         const roles = [primaryRole];
 
@@ -78,12 +78,26 @@ export const login = async (req, res) => {
             return res.status(401).json({ error: "Fel email eller lösenord" });
         }
 
+        // Record last login time (best-effort; failure must not block login).
+        try {
+            await User.updateOne(
+                { _id: user._id },
+                { $set: { lastLoginAt: new Date() } }
+            );
+        } catch (loginError) {
+            logger.error({ err: loginError }, "Failed to record last login time");
+        }
+
+        const userPermissions =
+            user.permissions && typeof user.permissions === "object" ? user.permissions : {};
+
         const tokenPayload = {
             userId: user._id,
             roles: user.roles,
             role: user.role,
             name: user.name,
             email: user.email,
+            permissions: userPermissions,
         };
 
         const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
@@ -97,12 +111,14 @@ export const login = async (req, res) => {
         
         res.json({
             message: "Login successful",
+            requiresPasswordChange: !!user.mustChangePassword,
             user: {
                 userId: user._id, // ✅ Standard key
                 name: user.name || user.username || "",
                 email: user.email,
                 role: primaryRole,
                 roles: user.roles || [],
+                permissions: userPermissions,
             },
         });
     } catch (error) {
@@ -164,6 +180,51 @@ export const authenticateUser = (req, res, next) => {
 };
 
 /**
+ * Changes the authenticated user's own password.
+ * Requires the current password; on success clears the forced
+ * mustChangePassword flag so the user is no longer blocked.
+ * @async
+ * @param {import('express').Request} req - Express request object (req.userId set by authenticateUser)
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ error: "Nuvarande och nytt lösenord krävs." });
+        }
+
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ error: "Användaren hittades inte." });
+        }
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            logger.warn({ userId: user._id }, "Password change failed: wrong current password");
+            return res.status(401).json({ error: "Nuvarande lösenord är felaktigt." });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
+        user.password = hashedPassword;
+        user.mustChangePassword = false;
+        await user.save();
+
+        logger.info({ userId: user._id }, "Password changed");
+
+        res.json({
+            message: "Lösenordet har ändrats.",
+            requiresPasswordChange: false,
+        });
+    } catch (error) {
+        logger.error({ err: error }, "Error changing password");
+        res.status(500).json({ error: "Server error" });
+    }
+};
+
+/**
  * Logs out the user by clearing the token cookie.
  * @async
  * @param {import('express').Request} req - Express request object
@@ -208,6 +269,7 @@ export const getSession = async (req, res) => {
         const primaryRole = user.roles && user.roles.length > 0 ? user.roles[0] : (user.role || 'guest');
         
         res.json({
+            requiresPasswordChange: !!user.mustChangePassword,
             user: {
                 userId: user._id, // ✅ Match login response
                 name: user.name,

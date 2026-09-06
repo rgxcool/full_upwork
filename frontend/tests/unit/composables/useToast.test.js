@@ -38,39 +38,47 @@ describe('useToast', () => {
     expect(toast.state.type).toBe('info')
   })
 
-  it('auto-dismisses success after 4000ms', () => {
+  it('auto-dismisses success after 10s (unified default)', () => {
     const toast = useToast()
     toast.success('Done')
     expect(toast.state.show).toBe(true)
-    vi.advanceTimersByTime(4000)
+    vi.advanceTimersByTime(9999)
+    expect(toast.state.show).toBe(true)
+    vi.advanceTimersByTime(1)
     expect(toast.state.show).toBe(false)
   })
 
-  it('auto-dismisses error after 7000ms', () => {
+  it('auto-dismisses error after 10s (unified default)', () => {
     const toast = useToast()
     toast.error('Oops')
-    vi.advanceTimersByTime(7000)
+    vi.advanceTimersByTime(9999)
+    expect(toast.state.show).toBe(true)
+    vi.advanceTimersByTime(1)
     expect(toast.state.show).toBe(false)
   })
 
-  it('auto-dismisses warning after 6000ms', () => {
+  it('auto-dismisses warning after 10s (unified default)', () => {
     const toast = useToast()
     toast.warning('Watch out')
-    vi.advanceTimersByTime(6000)
+    vi.advanceTimersByTime(9999)
+    expect(toast.state.show).toBe(true)
+    vi.advanceTimersByTime(1)
     expect(toast.state.show).toBe(false)
   })
 
-  it('auto-dismisses info after 5000ms', () => {
+  it('auto-dismisses info after 10s (unified default)', () => {
     const toast = useToast()
     toast.info('Heads up')
-    vi.advanceTimersByTime(5000)
+    vi.advanceTimersByTime(9999)
+    expect(toast.state.show).toBe(true)
+    vi.advanceTimersByTime(1)
     expect(toast.state.show).toBe(false)
   })
 
   it('does not dismiss before timeout', () => {
     const toast = useToast()
     toast.success('Not yet')
-    vi.advanceTimersByTime(3999)
+    vi.advanceTimersByTime(9999)
     expect(toast.state.show).toBe(true)
   })
 
@@ -89,8 +97,8 @@ describe('useToast', () => {
     toast.error('Second')
     expect(toast.state.message).toBe('Second')
     expect(toast.state.type).toBe('error')
-    // The first timer should be cleared; the second toast should still show at 2000+7000-1
-    vi.advanceTimersByTime(6999)
+    // The first timer should be cleared; the second toast still uses the 10s default.
+    vi.advanceTimersByTime(9999)
     expect(toast.state.show).toBe(true)
     vi.advanceTimersByTime(1)
     expect(toast.state.show).toBe(false)
