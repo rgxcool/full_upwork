@@ -2,6 +2,9 @@ import express from "express";
 const router = express.Router();
 import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
+import Student from "../models/Student.js";
+import StudentEnrollment from "../models/StudentEnrollment.js";
+import CourseInstance from "../models/CourseInstance.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { isAuthenticated } from "../middleware/auth.js";
@@ -191,6 +194,7 @@ router.post(
                 email,
                 password: hashedPassword,
                 roles: ["teacher"],
+                mustChangePassword: !generatePassword,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
@@ -246,7 +250,7 @@ router.post("/teacher", isAuthenticated, can("teachers:create"), async (req, res
     logger.info({ payloadKeys: req.body ? Object.keys(req.body) : [] }, "Incoming teacher POST")
 
     try {
-            const { username, email, colorCode, subject, phoneNumbers } = req.body;
+            const { username, email, colorCode, subject, phoneNumbers, generatePassword } = req.body;
 
         if (!username || !email) {
             return res
@@ -262,11 +266,17 @@ router.post("/teacher", isAuthenticated, can("teachers:create"), async (req, res
                 .json({ error: "A user with this email already exists." });
         }
 
-        // Create new User (without password for backward compatibility)
+        // Generate a password so the User satisfies its required field
+        const plainPassword = generateStrongPassword();
+        const hashedPassword = await bcrypt.hash(plainPassword, 12);
+
+        // Create new User
         const user = new User({
             username,
             email,
+            password: hashedPassword,
             roles: ["teacher"],
+            mustChangePassword: !generatePassword,
         });
         const savedUser = await user.save();
 
@@ -288,6 +298,7 @@ router.post("/teacher", isAuthenticated, can("teachers:create"), async (req, res
                 user: savedUser,
                 teacher: savedTeacher,
             },
+            password: plainPassword,
         });
     } catch (error) {
         logger.error({ err: error.message }, "Error in POST /teacher")
@@ -388,6 +399,34 @@ router.put(
     }
 );
 
+// Unassign a teacher from all students, enrollments and course instances.
+// Returns counts keyed by model so callers can surface how many records were affected.
+async function unassignTeacherFromAll(id) {
+    const studentResult = await Student.updateMany(
+        { teacherId: id },
+        { $set: { teacherId: null } }
+    );
+    const enrollmentResult = await StudentEnrollment.updateMany(
+        { teacherId: id },
+        { $set: { teacherId: null } }
+    );
+    const responsibleResult = await CourseInstance.updateMany(
+        { responsibleTeacher: id },
+        { $set: { responsibleTeacher: null } }
+    );
+    const assistantResult = await CourseInstance.updateMany(
+        { assistantTeacher: id },
+        { $set: { assistantTeacher: null } }
+    );
+
+    return {
+        students: studentResult.modifiedCount || 0,
+        enrollments: enrollmentResult.modifiedCount || 0,
+        responsibleCourses: responsibleResult.modifiedCount || 0,
+        assistantCourses: assistantResult.modifiedCount || 0,
+    };
+}
+
 // DELETE /teachers/:id - Delete teacher
 router.delete(
     "/teachers/:id",
@@ -403,16 +442,9 @@ router.delete(
                 return res.status(404).json({ error: "Teacher not found." });
             }
 
-            // Check if teacher has assigned students
-            const Student = (await import("../models/Student.js")).default;
-            const studentCount = await Student.countDocuments({
-                teacherId: id,
-            });
-            if (studentCount > 0) {
-                return res.status(400).json({
-                    error: `Cannot delete teacher. ${studentCount} student(s) are assigned to this teacher.`,
-                });
-            }
+            // Cascade: unassign the departing teacher from all students,
+            // enrollments and course instances before deleting the account.
+            const unassigned = await unassignTeacherFromAll(id);
 
             // Delete teacher and user
             await Teacher.findByIdAndDelete(id);
@@ -421,6 +453,7 @@ router.delete(
             res.json({
                 success: true,
                 message: "Teacher deleted successfully",
+                unassigned,
             });
         } catch (error) {
             logger.error({ err: error.message }, "Error deleting teacher")
@@ -437,11 +470,256 @@ router.put(
     async (req, res) => {
         try {
             const { id } = req.params;
-            const Student = (await import("../models/Student.js")).default;
-            const result = await Student.updateMany({ teacherId: id }, { $set: { teacherId: null } });
-            res.json({ success: true, message: `Unassigned ${result.modifiedCount} students from teacher.` });
+            const unassigned = await unassignTeacherFromAll(id);
+            res.json({
+                success: true,
+                message: `Unassigned ${unassigned.students} students from teacher.`,
+                unassigned,
+            });
         } catch (error) {
             logger.error({ err: error }, "Error unassigning students from teacher")
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
+// ─── Staff Profile Endpoints ────────────────────────────────────────────────
+
+// GET /teachers/:id/profile — full teacher profile with active/completed courses and student counts
+router.get(
+    "/teachers/:id/profile",
+    isAuthenticated,
+    can("teachers:read"),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            const teacher = await Teacher.findById(id)
+                .populate("userId", "username email roles onVacation vacationStart vacationEnd vacationNote");
+            if (!teacher) {
+                return res.status(404).json({ error: "Teacher not found." });
+            }
+
+            const now = new Date();
+
+            // Fetch all course instances where this teacher is responsible or assistant
+            const courseInstances = await CourseInstance.find({
+                $or: [
+                    { responsibleTeacher: id },
+                    { assistantTeacher: id },
+                ],
+            })
+                .populate("mainCourseId", "courseName courseCode coursePoints")
+                .sort({ startDate: -1 });
+
+            // For each course instance, count enrolled students
+            const activeCourses = [];
+            const completedCourses = [];
+
+            for (const instance of courseInstances) {
+                const studentCount = await StudentEnrollment.countDocuments({
+                    courseInstanceId: instance._id,
+                    status: { $nin: ["dropped"] },
+                });
+
+                const courseData = {
+                    instanceId: instance._id,
+                    courseName: instance.courseName,
+                    courseCode: instance.courseCode,
+                    coursePoints: instance.coursePoints || instance.mainCourseId?.coursePoints,
+                    startDate: instance.startDate,
+                    endDate: instance.endDate,
+                    slutprovDate: instance.slutprovDate,
+                    studentCount,
+                    isResponsible: instance.responsibleTeacher?.toString() === id,
+                };
+
+                if (instance.endDate >= now) {
+                    activeCourses.push(courseData);
+                } else {
+                    completedCourses.push(courseData);
+                }
+            }
+
+            // Count total unique students across all active courses
+            const activeInstanceIds = activeCourses.map(c => c.instanceId);
+            const totalStudents = activeInstanceIds.length > 0
+                ? await StudentEnrollment.distinct("studentId", {
+                    courseInstanceId: { $in: activeInstanceIds },
+                    status: { $nin: ["dropped"] },
+                }).then(ids => ids.length)
+                : 0;
+
+            res.json({
+                teacher: {
+                    _id: teacher._id,
+                    subject: teacher.subject,
+                    colorCode: teacher.colorCode,
+                    phoneNumbers: teacher.phoneNumbers,
+                    user: teacher.userId,
+                },
+                activeCourses,
+                completedCourses,
+                totalStudents,
+            });
+        } catch (error) {
+            logger.error({ err: error }, "Error fetching teacher profile")
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
+// GET /teachers/:id/courses/:courseInstanceId/students — students in a specific course instance
+router.get(
+    "/teachers/:id/courses/:courseInstanceId/students",
+    isAuthenticated,
+    can("teachers:read"),
+    async (req, res) => {
+        try {
+            const { id, courseInstanceId } = req.params;
+
+            // Verify the teacher is assigned to this course instance (or user is admin)
+            const userRoles = req.user.roles || (req.user.role ? [req.user.role] : []);
+            const isAdmin = userRoles.some(r => ["admin", "systemadmin", "tester"].includes(r));
+
+            if (!isAdmin) {
+                const instance = await CourseInstance.findById(courseInstanceId);
+                if (!instance) {
+                    return res.status(404).json({ error: "Course instance not found." });
+                }
+                const isAssigned =
+                    instance.responsibleTeacher?.toString() === id ||
+                    instance.assistantTeacher?.toString() === id;
+                if (!isAssigned) {
+                    return res.status(403).json({ error: "You are not assigned to this course instance." });
+                }
+            }
+
+            const enrollments = await StudentEnrollment.find({ courseInstanceId })
+                .populate("studentId", "name email personalNumber phone dropout")
+                .sort({ "studentId.name": 1 });
+
+            const students = enrollments
+                .filter(e => e.studentId)
+                .map(e => ({
+                    enrollmentId: e._id,
+                    studentId: e.studentId._id,
+                    name: e.studentId.name,
+                    email: e.studentId.email,
+                    personalNumber: e.studentId.personalNumber,
+                    phone: e.studentId.phone,
+                    dropout: e.studentId.dropout,
+                    status: e.status,
+                    grade: e.grade,
+                    enrollmentDate: e.enrollmentDate,
+                    startDate: e.startDate,
+                    endDate: e.endDate,
+                }));
+
+            res.json(students);
+        } catch (error) {
+            logger.error({ err: error }, "Error fetching course students")
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
+// PUT /teachers/:id/vacation — set or clear vacation on the linked User
+router.put(
+    "/teachers/:id/vacation",
+    isAuthenticated,
+    can("teachers:update"),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { onVacation, vacationStart, vacationEnd, vacationNote } = req.body;
+
+            const teacher = await Teacher.findById(id).populate("userId");
+            if (!teacher) {
+                return res.status(404).json({ error: "Teacher not found." });
+            }
+
+            // Only admin or the teacher themselves can update vacation
+            const userRoles = req.user.roles || (req.user.role ? [req.user.role] : []);
+            const isAdmin = userRoles.some(r => ["admin", "systemadmin", "tester"].includes(r));
+            const isSelf = req.user.userId?.toString() === teacher.userId._id.toString();
+
+            if (!isAdmin && !isSelf) {
+                return res.status(403).json({ error: "You can only update your own vacation." });
+            }
+
+            const updateData = {};
+            if (typeof onVacation === "boolean") {
+                updateData.onVacation = onVacation;
+            }
+            if (vacationStart !== undefined) {
+                updateData.vacationStart = vacationStart ? new Date(vacationStart) : null;
+            }
+            if (vacationEnd !== undefined) {
+                updateData.vacationEnd = vacationEnd ? new Date(vacationEnd) : null;
+            }
+            if (vacationNote !== undefined) {
+                updateData.vacationNote = vacationNote || "";
+            }
+
+            // If clearing vacation, reset all fields
+            if (onVacation === false) {
+                updateData.onVacation = false;
+                updateData.vacationStart = null;
+                updateData.vacationEnd = null;
+                updateData.vacationNote = "";
+            }
+
+            await User.findByIdAndUpdate(teacher.userId._id, { $set: updateData });
+
+            const updatedUser = await User.findById(teacher.userId._id)
+                .select("username email roles onVacation vacationStart vacationEnd vacationNote");
+
+            res.json({
+                success: true,
+                message: onVacation === false ? "Vacation cleared." : "Vacation updated.",
+                user: updatedUser,
+            });
+        } catch (error) {
+            logger.error({ err: error }, "Error updating vacation")
+            res.status(500).json({ error: "Internal server error." });
+        }
+    }
+);
+
+// PUT /teachers/:id — update teacher profile info (subject, phoneNumbers)
+router.put(
+    "/teachers/:id/profile",
+    isAuthenticated,
+    can("teachers:update"),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { subject, phoneNumbers } = req.body;
+
+            const teacher = await Teacher.findById(id).populate("userId");
+            if (!teacher) {
+                return res.status(404).json({ error: "Teacher not found." });
+            }
+
+            const updateData = {};
+            if (subject !== undefined) updateData.subject = subject;
+            if (Array.isArray(phoneNumbers)) {
+                updateData.phoneNumbers = phoneNumbers
+                    .filter(p => typeof p === "string" && p.trim() !== "")
+                    .map(p => p.trim());
+            }
+
+            const updatedTeacher = await Teacher.findByIdAndUpdate(id, updateData, { new: true })
+                .populate("userId", "username email roles onVacation vacationStart vacationEnd vacationNote");
+
+            res.json({
+                success: true,
+                message: "Profile updated.",
+                teacher: updatedTeacher,
+            });
+        } catch (error) {
+            logger.error({ err: error }, "Error updating teacher profile")
             res.status(500).json({ error: "Internal server error." });
         }
     }

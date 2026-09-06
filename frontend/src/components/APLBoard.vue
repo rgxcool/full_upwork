@@ -1,13 +1,13 @@
 <template>
   <div class="summary centered">
     <div class="summary-header">
-      <h2>📊 APL Statusöversikt</h2>
+      <h2>APL Statusöversikt</h2>
       <div class="header-actions">
-        <button @click="summaryExpanded = !summaryExpanded" class="toggle-btn" title="Visa/dölj statusöversikt">
-          <i :class="summaryExpanded ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+        <button class="toggle-btn" title="Visa/dölj statusöversikt" @click="summaryExpanded = !summaryExpanded">
+          <v-icon size="20">{{ summaryExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
         </button>
-        <button @click="fetchStudents" class="refresh-btn" title="Uppdatera data">
-          <i class="fas fa-sync-alt"></i>
+        <button class="refresh-btn" title="Uppdatera data" @click="fetchStudents">
+          <v-icon size="20">mdi-refresh</v-icon>
         </button>
       </div>
     </div>
@@ -15,27 +15,38 @@
       <div style="margin-bottom: 10px">
         <v-btn color="primary" small @click="openAddStudentDialog">Lägg till elev till APL</v-btn>
       </div>
-      <table>
+      <table class="table">
         <tbody>
           <tr v-for="status in statusMap" :key="status.key">
-            <td>{{ status.label }}:</td>
             <td>
-              <strong>{{ statusCounts[status.key] }}</strong>
+              <StatusBadge :hue="status.hue" :label="status.label" />
+            </td>
+            <td>
+              <strong class="tnum">{{ statusCounts[status.key] }}</strong>
             </td>
           </tr>
           <tr>
             <td colspan="2" style="padding-top: 6px">
               Totalt antal studenter:
-              <strong>{{ totalStudents }}</strong>
+              <strong class="tnum">{{ totalStudents }}</strong>
             </td>
           </tr>
         </tbody>
       </table>
       <div class="comment-order-toggle">
         <label>
-          <input type="checkbox" v-model="commentAscOrder" />
+          <input v-model="commentAscOrder" type="checkbox" />
           Visa senaste kommentar längst ner
         </label>
+      </div>
+      <div class="color-filter-section">
+        <label for="apl-student-filter">Filtrera elever:</label>
+        <input id="apl-student-filter" v-model="studentFilter" type="search" class="student-filter-input" placeholder="Namn eller e-post" />
+        <label for="apl-color-filter">Filtrera efter färg:</label>
+        <select id="apl-color-filter" v-model="colorFilter" class="color-filter-select">
+          <option value="">Alla</option>
+          <option v-for="status in allStatusMap" :key="status.key" :value="status.key">{{ status.label }}</option>
+        </select>
       </div>
     </div>
   </div>
@@ -51,20 +62,44 @@
       v-for="status in statusMap"
       :key="status.key"
       class="column"
-      :class="status.key.toLowerCase()"
+      :data-hue="status.hue"
       @dragover.prevent
       @drop="handleDrop($event, status.key)"
     >
-      <h3>{{ status.label }} ({{ (studentsByStatus[status.key] || []).length }})</h3>
+      <h3 class="tnum">{{ status.label }} ({{ (studentsByStatus[status.key] || []).length }})</h3>
       <div
         v-for="student in studentsByStatus[status.key] || []"
         :key="student._id"
         class="student-card"
+        :class="{ 'is-auto-red': student.aplStatusAuto }"
         draggable="true"
         @dragstart="handleDragStart($event, student)"
         @click="openComments(student)"
       >
         <router-link :to="`/student/${student._id}`" @click.stop>{{ student.name }}</router-link>
+        <span class="student-context">{{ student.coursePackageName || student.coursePackage?.name || 'Kurspaket' }}</span>
+        <span v-if="student.aplEndDate" class="student-context">Slut: {{ formatDateOnly(student.aplEndDate) }}</span>
+        <span
+          v-if="student.aplStatusAuto"
+          class="auto-red-badge"
+          title="Auto-röd – APL-perioden slutar snart"
+        >AUTO</span>
+        <!-- Behind-schedule badge -->
+        <span
+          v-if="isBehindSchedule(student)"
+          class="auto-behind-schedule-badge"
+          title="Bak i schema – påbörjad för minst 14 dagar sedan"
+        >BAK i schema</span>
+        <!-- File uploaded badge -->
+        <v-icon
+          v-if="hasFiles(student._id)"
+          size="16"
+          color="green"
+          class="ml-1"
+          title="Filer uppladdade"
+        >
+mdi-paperclip
+</v-icon>
         <v-icon
           v-if="commentStatus(student)"
           :class="['comment-icon', { pulse: commentStatus(student) === 'unseen' }]"
@@ -77,7 +112,7 @@
       </div>
       <div
         v-if="(studentsByStatus[status.key] || []).length === 0"
-        style="color: #666; font-style: italic; text-align: center; padding: 20px"
+        class="empty-column"
       >
         Inga studenter i denna kolumn
       </div>
@@ -125,16 +160,23 @@
               <span class="dot-sep">•</span>
               <span>Slut: {{ latestEndDisplay || '–' }}</span>
             </div>
+            <div v-if="selectedStudent.aplEndDate" class="education-row">
+              <strong>APL-period:</strong>
+              <span>{{ formatDateOnly(selectedStudent.aplStartDate) || '–' }} – {{ formatDateOnly(selectedStudent.aplEndDate) || '–' }}</span>
+              <span v-if="selectedStudent.aplStatusAuto" class="auto-red-hint">
+                Auto-röd ({{ selectedStudent.aplWeeksRemaining }} v kvar)
+              </span>
+            </div>
           </div>
         </v-card-text>
 
         <FileUploaderDownloader
           v-if="selectedStudent"
-          :studentId="selectedStudent._id"
-          :studentName="selectedStudent.name"
+          :student-id="selectedStudent._id"
+          :student-name="selectedStudent.name"
         />
 
-        <div class="comment-history-scroll" ref="commentContainerRef">
+        <div ref="commentContainerRef" class="comment-history-scroll">
           <template v-for="(entry, index) in getSortedComments" :key="index">
             <div class="comment-entry">
               <div class="comment-header">
@@ -145,7 +187,7 @@
                   <span>{{ formatDate(entry.date) }}</span>
                 </div>
               </div>
-              <div class="comment-box" v-if="editingIndex !== index">
+              <div v-if="editingIndex !== index" class="comment-box">
                 {{ entry.comment }}
               </div>
               <v-textarea
@@ -181,12 +223,12 @@
                   <v-icon size="12">mdi-comment-edit</v-icon>
                 </v-btn>
                 <v-btn
+                  v-if="canDelete(entry)"
                   color="red"
                   class="mr-1 mb-2"
                   size="22"
                   icon
                   @click="confirmDelete(index)"
-                  v-if="canDelete(entry)"
                 >
                   <v-icon size="16">mdi-delete</v-icon>
                 </v-btn>
@@ -220,8 +262,8 @@
             clearable
             @input="onSearchInput"
           />
-          <div v-if="isSearching" style="font-size: 0.9rem; color: #666">Söker...</div>
-          <div v-if="searchError" style="font-size: 0.9rem; color: #d32f2f; margin-top: 8px">
+          <div v-if="isSearching" class="board-search-status">Söker...</div>
+          <div v-if="searchError" class="board-search-error">
             {{ searchError }}
           </div>
           <v-list v-if="showSuggestions && suggestions.length">
@@ -230,7 +272,7 @@
               <v-list-item-subtitle>{{ s.extra }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
-          <div v-else-if="showSuggestions && !isSearching && !searchError" style="font-size: 0.9rem; color: #666">
+          <div v-else-if="showSuggestions && !isSearching && !searchError" class="board-search-status">
             Inga träffar
           </div>
         </v-card-text>
@@ -240,6 +282,25 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <ConfirmDialog
+      v-model="removeFromAplDialog"
+      title="Ta bort från APL"
+      :message="`Ta bort ${selectedStudent?.name || 'eleven'} från APL?`"
+      confirm-label="Ta bort"
+      cancel-label="Avbryt"
+      danger
+      @confirm="doRemoveFromApl"
+    />
+    <ConfirmDialog
+      v-model="deleteCommentIndex"
+      title="Ta bort kommentar"
+      message="Är du säker på att du vill ta bort denna kommentar?"
+      confirm-label="Ta bort"
+      cancel-label="Avbryt"
+      danger
+      @confirm="doDeleteComment"
+    />
   </div>
 </template>
 
@@ -249,6 +310,9 @@
   import { useStore } from 'vuex'
   import { useToast } from '@/composables/useToast.js'
   import FileUploaderDownloader from '../components/FileUploaderDownloader.vue'
+  import ConfirmDialog from './base/ConfirmDialog.vue'
+  import StatusBadge from './base/StatusBadge.vue'
+  import { APL_STATUS, APL_STATUS_ORDER } from '@/utils/statusSystem.js'
 
   const toast = useToast()
   const props = defineProps({
@@ -268,9 +332,34 @@
   const currentUser = computed(() => store.state.user)
   const currentUserId = computed(() => store.state.user?.userId?.toString() || '')
   const totalStudents = computed(() => filteredStudents.value.length)
+  const fileCounts = ref({})
+
+  const fetchFileCounts = async () => {
+    const studentIds = (props.students || []).map(s => s._id).join(',')
+    if (!studentIds) return
+    try {
+      const { data } = await client.get('/uploads/file-counts', { params: { studentIds } })
+      fileCounts.value = data
+    } catch {}
+  }
+
+  const hasFiles = (studentId) => {
+    return (fileCounts.value[studentId] || 0) > 0
+  }
+// Behind-schedule detection: computes whether student's APL period has been active
+// for at least 14 days based on the APL start date from education entries
+const isBehindSchedule = (student) => {
+  if (!student.aplStartDate) return false
+  const startDate = new Date(student.aplStartDate)
+  const now = new Date()
+  const daysSinceStart = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+  return daysSinceStart >= 14
+}
 
   const commentAscOrder = ref(true)
   const summaryExpanded = ref(false)
+  const colorFilter = ref('')
+  const studentFilter = ref('')
   const copied = ref(false)
   const blinkedField = ref('')
   const copiedPosition = ref({ x: 0, y: 0 })
@@ -290,6 +379,8 @@
   const searchError = ref('')
   const manualAplIds = ref(new Set())
   const excludedAplIds = ref(new Set())
+  const removeFromAplDialog = ref(false)
+  const deleteCommentIndex = ref(null)
 
   const loadManualAplIds = () => {
     try {
@@ -321,20 +412,18 @@
     } catch {}
   }
 
+  const allStatusMap = computed(() => {
+    return APL_STATUS_ORDER.map((key) => ({ key, ...APL_STATUS[key] }))
+  })
+
   const statusMap = computed(() => {
-    const allStatuses = [
-      { key: 'GRAY', label: 'Ny Elev' },
-      { key: 'BLUE', label: 'Kontaktad' },
-      { key: 'YELLOW', label: 'APL på gång' },
-      { key: 'PURPLE', label: 'Behöver uppföljning' },
-      { key: 'RED', label: 'Snart slut' },
-      { key: 'GREEN', label: 'Klar praktik' },
-    ]
+    const allStatuses = allStatusMap.value
     if (props.filterType === 'completed') {
-      // In "Avslutad" tab, only show GREEN
       return allStatuses.filter((s) => s.key === 'GREEN')
     }
-    // In "Pågående" tab, show all statuses including GREEN (as redundancy)
+    if (colorFilter.value) {
+      return allStatuses.filter((s) => s.key === colorFilter.value)
+    }
     return allStatuses
   })
 
@@ -348,12 +437,15 @@
       return student.education.some((edu) => edu.type === 'CoursePackage')
     })
 
-    if (props.filterType === 'completed') {
-      // In "Avslutad" tab, only show GREEN students
-      return baseFiltered.filter((s) => s.aplStatus === 'GREEN')
-    }
+    const scopedStudents = props.filterType === 'completed'
+      ? baseFiltered.filter((s) => s.aplStatus === 'GREEN')
+      : baseFiltered
     // In "Pågående" tab, show all students including GREEN (as redundancy)
-    return baseFiltered
+    const query = studentFilter.value.trim().toLowerCase()
+    if (!query) return scopedStudents
+    return scopedStudents.filter((student) => [student.name, student.email, student.coursePackageName]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query)))
   })
 
   const studentsByStatus = computed(() => {
@@ -418,7 +510,12 @@
   onMounted(() => {
     loadManualAplIds()
     loadExcludedAplIds()
+    fetchFileCounts()
   })
+
+  watch(() => props.students, () => {
+    fetchFileCounts()
+  }, { deep: true })
 
   watch(manualAplIds, saveManualAplIds, { deep: false })
   watch(excludedAplIds, saveExcludedAplIds, { deep: false })
@@ -542,7 +639,12 @@
 
   const removeFromApl = (student) => {
     if (!student?._id) return
-    if (!confirm(`Ta bort ${student.name} från APL?`)) return
+    removeFromAplDialog.value = true
+  }
+
+  const doRemoveFromApl = () => {
+    const student = selectedStudent.value
+    if (!student?._id) return
     const studentId = String(student._id)
     if (manualAplIds.value.has(studentId)) {
       manualAplIds.value.delete(studentId)
@@ -550,6 +652,7 @@
     }
     excludedAplIds.value.add(studentId)
     saveExcludedAplIds()
+    removeFromAplDialog.value = false
     dialog.value = false
   }
 
@@ -661,9 +764,14 @@
   }
 
   const confirmDelete = (index) => {
-    if (confirm('Är du säker på att du vill ta bort denna kommentar?')) {
-      deleteComment(index)
-    }
+    deleteCommentIndex.value = index
+  }
+
+  const doDeleteComment = async () => {
+    const index = deleteCommentIndex.value
+    if (index === null || index === false) return
+    await deleteComment(index)
+    deleteCommentIndex.value = null
   }
   const editComment = (index) => {
     editingIndex.value = index
@@ -707,41 +815,37 @@
     padding: 20px;
   }
 
+  /* Board columns use the shared status hue families (tokens.css) */
+  .column[data-hue='neutral'] { --hue: var(--status-neutral); --hue-tint: var(--status-neutral-tint); --hue-ink: var(--status-neutral-ink); }
+  .column[data-hue='info']    { --hue: var(--status-info);    --hue-tint: var(--status-info-tint);    --hue-ink: var(--status-info-ink); }
+  .column[data-hue='warning'] { --hue: var(--status-warning); --hue-tint: var(--status-warning-tint); --hue-ink: var(--status-warning-ink); }
+  .column[data-hue='danger']  { --hue: var(--status-danger);  --hue-tint: var(--status-danger-tint);  --hue-ink: var(--status-danger-ink); }
+  .column[data-hue='success'] { --hue: var(--status-success); --hue-tint: var(--status-success-tint); --hue-ink: var(--status-success-ink); }
+  .column[data-hue='violet']  { --hue: var(--status-violet);  --hue-tint: var(--status-violet-tint);  --hue-ink: var(--status-violet-ink); }
+
   .column {
     min-width: 300px;
     flex: 1 1 0;
     overflow-y: auto;
     max-height: 80vh;
-    padding: 15px;
-    border-radius: 8px;
+    padding: 12px;
+    border-radius: var(--radius-card);
     min-height: 400px;
-    background-color: #f1f1f1;
-    border: 1px solid #ddd;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-top: 3px solid var(--hue);
+    box-shadow: none;
   }
 
-  .column.gray {
-    background-color: #d3d3d3;
-  }
-
-  .column.red {
-    background-color: #f28b82;
-  }
-
-  .column.blue {
-    background-color: #aecbfa;
-  }
-
-  .column.yellow {
-    background-color: #fdd663;
-  }
-
-  .column.green {
-    background-color: #ccff90;
-  }
-
-  .column.purple {
-    background-color: #ce93d8;
+  .column h3 {
+    background: var(--hue-tint);
+    color: var(--hue-ink);
+    margin: -12px -12px 10px;
+    padding: 10px 15px;
+    font-family: var(--font-heading);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .tight-title {
@@ -753,35 +857,78 @@
   .student-card {
     position: relative;
     /* ✅ required for absolute positioning of icon */
-    background: white;
+    background: var(--color-surface);
     padding: 8px;
     margin: 6px 0;
-    border-radius: 3px;
+    border-radius: var(--radius-card);
+    border: 1px solid transparent;
     cursor: grab;
+  }
+
+  .student-card.is-auto-red {
+    border: 1px dashed var(--color-danger);
+  }
+
+  .auto-red-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: var(--color-danger);
+    color: var(--color-surface);
+    border-radius: var(--radius-pill);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+  }
+
+  .auto-behind-schedule-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: var(--color-warning);
+    color: var(--color-surface);
+    border-radius: var(--radius-pill);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+  }
+
+  .auto-red-hint {
+    margin-left: 8px;
+    color: var(--color-danger);
+    font-weight: 600;
+  }
+
+  .empty-column {
+    color: var(--color-ink-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
   }
 
   .comment-entry {
     margin-bottom: 16px;
-    border: 1px solid rgb(194, 187, 187);
+    border: 1px solid var(--color-border);
     overflow: hidden;
-    background-color: #fafafa;
+    background-color: var(--color-surface);
   }
 
   .comment-header {
-    background: #f0f0f0;
+    background: var(--color-bg-secondary);
     padding: 8px 12px;
-    font-size: 0.95rem;
-    border-style: 1px solid white;
-    border-bottom: 1px solid white;
+    font-size: var(--font-size-sm);
+    border-bottom: 1px solid var(--color-border);
     display: flex;
     justify-content: space-between;
-    color: #333;
+    color: var(--color-ink-secondary);
   }
 
   .comment-box {
-    border: 1px solid;
+    border: 1px solid var(--color-border);
     padding: 10px 12px;
-    font-size: 0.95rem;
+    font-size: var(--font-size-sm);
   }
 
   .comment-actions {
@@ -804,7 +951,7 @@
     position: absolute;
     top: 8px;
     right: 10px;
-    transition: transform 0.3s ease;
+    transition: transform var(--motion-duration) var(--motion-ease);
   }
 
   .pulse {
@@ -828,14 +975,14 @@
   .copied-floating {
     position: fixed;
     z-index: 9999;
-    background: #4caf50;
+    background: var(--color-success);
     font-weight: bold;
     padding: 4px 10px;
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     pointer-events: none;
     font-size: 13px;
-    color: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    color: var(--color-surface);
+    box-shadow: var(--shadow-md);
     animation: fadeAway 1s;
   }
 
@@ -859,13 +1006,12 @@
   .clickable {
     cursor: pointer;
     text-decoration: underline;
-    color: #1976d2;
-    transition: all 0.3s ease;
+    color: var(--color-primary);
+    transition: all var(--motion-duration) var(--motion-ease);
   }
 
   .clickable:hover {
-    color: #0fce19;
-    /* Strong green */
+    color: var(--color-success);
   }
 
   .blinkGreen {
@@ -926,7 +1072,7 @@
   }
 
   .btn .no-margin-title {
-    margin-bottom: 0 !important;
+    margin-bottom: 0;
     display: inline-block;
   }
 
@@ -953,19 +1099,19 @@
     right: 8px;
     z-index: 10;
     background-color: transparent;
-    color: #666;
+    color: var(--color-ink-muted);
   }
 
   .dialog-close-btn:hover {
-    color: #000;
+    color: var(--color-text);
   }
 
   .education-summary {
     margin: 8px 0 4px;
     padding: 10px 12px;
-    background: #f7f9fb;
-    border: 1px solid #e1e7ef;
-    border-radius: 6px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
   }
   .education-row {
     display: flex;
@@ -996,14 +1142,14 @@
   }
 
   .comment-history-scroll::-webkit-scrollbar-thumb {
-    background-color: #ccc;
+    background-color: var(--color-border-strong);
     border-radius: 3px;
   }
   .date-separator {
     text-align: center;
     font-size: 0.9rem;
     font-weight: bold;
-    color: #555;
+    color: var(--color-ink-secondary);
     margin: 10px 0 4px;
   }
   .jump-button {
@@ -1014,6 +1160,17 @@
   .comment-order-toggle {
     margin: 10px 16px;
     font-size: 0.95rem;
+  }
+
+  .board-search-status {
+    font-size: 0.9rem;
+    color: var(--color-ink-muted);
+  }
+
+  .board-search-error {
+    font-size: 0.9rem;
+    color: var(--color-error);
+    margin-top: 8px;
   }
   .centered {
     display: flex;
@@ -1039,25 +1196,25 @@
   }
 
   .toggle-btn {
-    background: #6c757d;
-    color: white;
+    background: var(--color-neutral);
+    color: var(--color-surface);
     border: none;
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
+    width: var(--control-height);
+    height: var(--control-height);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.2s;
+    transition: background-color var(--motion-duration) var(--motion-ease);
   }
 
   .toggle-btn:hover {
-    background: #5a6268;
+    background: var(--status-neutral-ink);
   }
 
   .summary-content {
-    animation: slideDown 0.3s ease-out;
+    animation: slideDown var(--motion-duration) var(--motion-ease);
   }
 
   @keyframes slideDown {
@@ -1072,24 +1229,44 @@
   }
 
   .refresh-btn {
-    background: #007dc3;
-    color: white;
+    background: var(--color-primary);
+    color: var(--color-surface);
     border: none;
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
+    width: var(--control-height);
+    height: var(--control-height);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.2s;
+    transition: background-color var(--motion-duration) var(--motion-ease);
   }
 
   .refresh-btn:hover {
-    background: #005a8b;
+    background: var(--color-primary-hover);
   }
 
   .refresh-btn i {
     font-size: 16px;
+  }
+
+  .color-filter-section {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .color-filter-section label {
+    font-weight: 500;
+    color: var(--color-ink-secondary);
+  }
+
+  .color-filter-select {
+    padding: 4px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 13px;
   }
 </style>

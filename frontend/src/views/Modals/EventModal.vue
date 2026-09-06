@@ -28,6 +28,10 @@
             {{ examMunicipality }}
             <strong>Plats:</strong>
             {{ examLocation }}
+            <span v-if="examRoom">
+              <strong>Rum:</strong>
+              {{ examRoom }}
+            </span>
           </div>
           <div v-else class="text-muted">
             <em>
@@ -49,8 +53,9 @@
             <thead class="table-light">
               <tr>
                 <th>Namn</th>
-                <th>Personnummer</th>
-                <th>Info</th>
+                <th>Kurs</th>
+                <th>Information</th>
+                <th>Ackommodationer</th>
                 <th>Närvaro</th>
               </tr>
             </thead>
@@ -59,7 +64,7 @@
                 <td>
                   <router-link :to="`/student/${student._id}`">{{ student.name }}</router-link>
                 </td>
-                <td>{{ student.personalNumber }}</td>
+                <td>{{ student.courseName || student.courseInstanceCode || '–' }}</td>
                 <td>
                   <v-textarea
                     v-if="canEdit"
@@ -75,9 +80,14 @@
                   <span v-else style="white-space: pre-wrap;">{{ student.additionalInfo || '-' }}</span>
                 </td>
                 <td>
+                  <span class="accommodation-summary">
+                    {{ formatAccommodations(student.examAccommodations || student.accommodations) }}
+                  </span>
+                </td>
+                <td>
                   <input
-                    type="checkbox"
                     v-model="student.attended"
+                    type="checkbox"
                     :disabled="!canEdit"
                     class="form-check-input"
                     @change="saveAttendance(student)"
@@ -91,8 +101,8 @@
         <!-- Form för admin/lärare -->
         <form
           v-if="canEdit"
-          @submit.prevent="submitExam"
           class="d-flex flex-wrap align-items-center gap-3"
+          @submit.prevent="submitExam"
         >
           <div class="d-flex align-items-center gap-2">
             <label class="mb-0 fw-semibold">Provtid:</label>
@@ -160,6 +170,37 @@
             </select>
           </div>
 
+          <div v-if="canEdit" class="mb-3">
+            <h6>🏫 Rum</h6>
+            <select v-model="examRoom" class="form-select">
+              <option value="">— Välj rum —</option>
+              <optgroup v-for="(locations, municipality) in examMunicipalities" :key="municipality" :label="municipality">
+                <option v-for="location in locations" :key="location" :value="location">
+                  {{ location }}
+                </option>
+              </optgroup>
+            </select>
+          </div>
+
+          <!-- Ackommodationer -->
+          <div v-if="canEdit" class="mb-3">
+            <h6>🎯 Ackommodationer</h6>
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label>Extra skrivtid (minuter)</label>
+                <input v-model="examAccommodations.extraTime" type="number" class="form-control form-control-sm" min="0" />
+              </div>
+              <div class="col-md-4">
+                <label>Dator</label>
+                <v-checkbox v-model="examAccommodations.computer" :disabled="!canEdit" />
+              </div>
+              <div class="col-md-4">
+                <label>Separate rum</label>
+                <v-checkbox v-model="examAccommodations.separateRoom" :disabled="!canEdit" />
+              </div>
+            </div>
+          </div>
+
           <button type="submit" class="btn btn-primary ms-auto" :disabled="isSaving">
             {{ isSaving ? 'Sparar...' : 'Spara prov' }}
           </button>
@@ -195,6 +236,12 @@
         examTime: '',
         examMunicipality: '',
         examLocation: '',
+        examRoom: '',
+        examAccommodations: {
+          extraTime: 0,
+          computer: false,
+          separateRoom: false,
+        },
       }
     },
     computed: {
@@ -238,6 +285,12 @@
           if (!newEvent) return
 
           const exProps = newEvent.extendedProps || {}
+          this.examRoom = exProps.examRoom || newEvent.examRoom || ''
+          this.examAccommodations = {
+            extraTime: exProps.examAccommodations?.extraTime || 0,
+            computer: Boolean(exProps.examAccommodations?.computer),
+            separateRoom: Boolean(exProps.examAccommodations?.separateRoom),
+          }
 
           if (exProps.students && Array.isArray(exProps.students) && exProps.students.length > 0) {
             await this.setStudentsFromProps(exProps)
@@ -263,6 +316,12 @@
       },
     },
     async mounted() {
+      // Fetch exam rooms from backend
+      try {
+        const { data } = await client.get('/exam-rooms')
+        this.examMunicipalities = data
+      } catch {}
+
       // Get current teacher ID if user is a teacher (for permission checks)
       const currentUser = this.$store?.state?.user
       if (currentUser && currentUser.role === 'teacher') {
@@ -403,6 +462,14 @@
         // Save the updated info field
         this.saveEventStudents();
       },
+      formatAccommodations(accommodations) {
+        if (!accommodations) return 'Inga registrerade'
+        const items = []
+        if (Number(accommodations.extraTime) > 0) items.push(`Extra tid: ${accommodations.extraTime} min`)
+        if (accommodations.computer) items.push('Dator')
+        if (accommodations.separateRoom) items.push('Separat rum')
+        return items.length ? items.join(', ') : 'Inga registrerade'
+      },
       async saveEventStudents() {
         if (!this.event.id) return;
         
@@ -413,7 +480,6 @@
             return {
               _id: s._id,
               name: s.name,
-              personalNumber: s.personalNumber,
               additionalInfo: s.additionalInfo || "",
               attended: s.attended ?? false,
               courseInstanceCode: selectedInstance?.courseInstanceCode || s.courseInstanceCode || '',
@@ -432,6 +498,7 @@
           });
 
           // Update local event
+          // eslint-disable-next-line vue/no-mutating-props
           this.event.extendedProps.students = formattedStudents;
         } catch (error) {
           console.error("Kunde inte spara studenter:", error);
@@ -452,6 +519,7 @@
           examTime: s.examTime || '',
           examMunicipality: s.examMunicipality || '',
           examLocation: s.examLocation || '',
+          examRoom: s.examRoom || '',
           finalExamDate: s.finalExamDate || null,
           availableCourseInstances: [],
           selectedCourseInstance: null
@@ -486,6 +554,7 @@
                   examTime: attendance.examTime || student.examTime,
                   examMunicipality: attendance.examMunicipality || student.examMunicipality,
                   examLocation: attendance.examLocation || student.examLocation,
+                  examRoom: attendance.examRoom || student.examRoom,
                   finalExamDate: student.finalExamDate, // Preserve the finalExamDate
                 }
               }
@@ -510,17 +579,21 @@
           ''
         this.examLocation =
           exProps.examLocation || this.studentsData.find((s) => s.examLocation)?.examLocation || ''
+        this.examRoom =
+          exProps.examRoom || this.studentsData.find((s) => s.examRoom)?.examRoom || ''
 
         // Debug logging
         console.log('🔍 Frontend - ExtendedProps exam info:', {
           examTime: exProps.examTime,
           examMunicipality: exProps.examMunicipality,
           examLocation: exProps.examLocation,
+          examRoom: exProps.examRoom,
         })
         console.log('🔍 Frontend - Final exam info:', {
           examTime: this.examTime,
           examMunicipality: this.examMunicipality,
           examLocation: this.examLocation,
+          examRoom: this.examRoom,
         })
 
         // Debug logging for students and finalExamDate
@@ -597,11 +670,13 @@
                   examTime: student.examTime || this.examTime || '',
                   examMunicipality: student.examMunicipality || this.examMunicipality || '',
                   examLocation: student.examLocation || this.examLocation || '',
+                  examRoom: student.examRoom || this.examRoom || '',
                 },
               ],
               examTime: this.examTime,
               examMunicipality: this.examMunicipality,
               examLocation: this.examLocation,
+              examRoom: this.examRoom,
             }
           )
           // Refresh the event data to show the updated information
@@ -662,10 +737,12 @@
                 examTime: this.examTime,
                 examMunicipality: this.examMunicipality,
                 examLocation: this.examLocation,
+                examRoom: this.examRoom,
               })),
               examTime: this.examTime,
               examMunicipality: this.examMunicipality,
               examLocation: this.examLocation,
+              examRoom: this.examRoom,
             }
           )
 
@@ -676,11 +753,17 @@
               examTime: this.examTime,
               examMunicipality: this.examMunicipality,
               examLocation: this.examLocation,
+              examRoom: this.examRoom,
             }
           )
+          // eslint-disable-next-line vue/no-mutating-props
           this.event.extendedProps.examTime = this.examTime
+          // eslint-disable-next-line vue/no-mutating-props
           this.event.extendedProps.examMunicipality = this.examMunicipality
+          // eslint-disable-next-line vue/no-mutating-props
           this.event.extendedProps.examLocation = this.examLocation
+          // eslint-disable-next-line vue/no-mutating-props
+          this.event.extendedProps.examRoom = this.examRoom
 
           this.showSuccessMessage = true
           await this.refreshEventData()

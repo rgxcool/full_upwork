@@ -20,6 +20,12 @@ import {
     deleteAllCourseInstances,
     getMyCourseInstances,
     addStudentsToInstance,
+    getMyCourseCards,
+    getStudentCourseCards,
+    getCourseInstanceContent,
+    updateCourseInstanceContent,
+    getCourseInstanceActivityFeed,
+    postCourseInstanceActivityFeed,
 } from "../controllers/courseMatchingController.js";
 import logger from "../utils/logger.js";
 
@@ -60,7 +66,7 @@ router.get(
     hasRole(["teacher", "admin", "systemadmin"]),
     asyncHandler(getMyCourseInstances)
 );
-router.get("/course-instances", isAuthenticated, asyncHandler(getCourseInstances));
+router.get("/course-instances", isAuthenticated, hasRole(["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"]), asyncHandler(getCourseInstances));
 router.post(
     "/course-instances",
     isAuthenticated,
@@ -93,6 +99,7 @@ router.delete(
 router.get(
     "/students/:studentId/enrollments",
     isAuthenticated,
+    hasRole(["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"]),
     asyncHandler(getStudentEnrollments)
 );
 
@@ -100,6 +107,7 @@ router.get(
 router.get(
     "/course-instances/:instanceId/enrollments",
     isAuthenticated,
+    hasRole(["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"]),
     asyncHandler(getCourseInstanceEnrollments)
 );
 router.post(
@@ -133,12 +141,52 @@ router.put(
     asyncHandler(updateStudyplanTempo)
 );
 
+// Course cards routes
+router.get(
+    "/course-cards/mine",
+    isAuthenticated,
+    hasRole(["student"]),
+    asyncHandler(getMyCourseCards)
+);
+router.get(
+    "/students/:studentId/course-cards",
+    isAuthenticated,
+    asyncHandler(getStudentCourseCards)
+);
+router.get(
+    "/course-instances/:instanceId/content",
+    isAuthenticated,
+    asyncHandler(getCourseInstanceContent)
+);
+router.put(
+    "/course-instances/:instanceId/content",
+    isAuthenticated,
+    asyncHandler(updateCourseInstanceContent)
+);
+
 // Statistics routes
 router.get(
     "/course-statistics",
     isAuthenticated,
     hasRole(["admin", "systemadmin"]),
     asyncHandler(getCourseStatistics)
+);
+
+// Activity feed / notice board routes
+// GET /course-instances/:instanceId/activity-feed - Get activity feed for a course instance
+// Students can read, staff can also post
+router.get(
+    "/course-instances/:instanceId/activity-feed",
+    isAuthenticated,
+    asyncHandler(getCourseInstanceActivityFeed)
+);
+// PUT /course-instances/:instanceId/activity-feed - Post new activity item
+// Staff (admin/systemadmin/responsible teacher) can post; students can only read
+router.put(
+    "/course-instances/:instanceId/activity-feed",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin", "teacher"]),
+    asyncHandler(postCourseInstanceActivityFeed)
 );
 
 export default router;

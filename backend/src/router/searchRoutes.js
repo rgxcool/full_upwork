@@ -3,22 +3,35 @@ import mongoose from "mongoose";
 import User from "../models/User.js";
 import Course from "../models/Course.js";
 import CourseInstance from "../models/CourseInstance.js";
-import CoursePackage from "../models/CoursePackage.js";
-import Program from "../models/Program.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Teacher from "../models/Teacher.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
+import { canFeature } from "../middleware/authorization.js";
+import { PERMISSION_FEATURES } from "../config/permissions.js";
 import logger from "../utils/logger.js";
 import { escapeRegExp } from '../utils/escapeRegExp.js';
+import { studentScopeFilter } from "../utils/tenantScope.js";
 
 const router = express.Router();
 
 const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"];
-const ALLOWED_ADMIN_ROLES = ["systemadmin", "admin", "tester"];
 
-router.get("/courses", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+const dedupeById = (docs) => Array.from(new Map(docs.map(d => [d._id.toString(), d])).values());
+
+const buildTextSearchClause = (q) => {
+    const tokens = String(q)
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((t) => `"${t.replace(/"/g, "")}"`)
+        .join(" ");
+    if (!tokens) return null;
+    return { $text: { $search: tokens, $language: "none" } };
+};
+
+router.get("/course-enrollments", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_USERS), async (req, res) => {
     try {
         let query = {
             "education.type": "Course",
@@ -90,12 +103,16 @@ router.get("/courses", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (re
     }
 });
 
-router.get("/search", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/search", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_USERS), async (req, res) => {
     const { q, date, type } = req.query;
 
     try {
         const results = [];
         let studentQuery = {};
+
+        // Backend-enforced tenant (kommun) scope for students. Scoped users only
+        // discover students in their allowed municipalities; global users get {}.
+        Object.assign(studentQuery, studentScopeFilter(req.user));
 
         // If user is a teacher, filter students by their teacherId
         if (req.user.role === "teacher") {
@@ -152,18 +169,36 @@ router.get("/search", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req
             ["Kurs", "Alla"].includes(type) && q && q.length >= 3;
 
         if (shouldSearchUsers) {
+            const textClause = buildTextSearchClause(q);
+            const regexQuery = escapeRegExp(q);
+            const regexOptions = { $regex: regexQuery, $options: "i" };
+
+            const studentRegex = Student.find({
+                ...studentQuery,
+                name: regexOptions,
+            }).select("_id name email");
+            const userRegex = User.find({
+                $or: [
+                    { username: regexOptions },
+                    { email: regexOptions },
+                    { name: regexOptions },
+                ],
+            }).select("_id username name email role roles");
+
+            const studentText = textClause
+                ? Student.find({ ...studentQuery, ...textClause }).select("_id name email")
+                : Promise.resolve([]);
+            const userText = textClause
+                ? User.find(textClause).select("_id username name email role roles")
+                : Promise.resolve([]);
+
             const [students, users] = await Promise.all([
-                Student.find({
-                    ...studentQuery,
-                    name: { $regex: escapeRegExp(q), $options: "i" },
-                }).select("_id name email"),
-                User.find({
-                    $or: [
-                        { username: { $regex: escapeRegExp(q), $options: "i" } },
-                        { email: { $regex: escapeRegExp(q), $options: "i" } },
-                        { name: { $regex: escapeRegExp(q), $options: "i" } },
-                    ],
-                }).select("_id username name email role roles"),
+                studentText.then((textHits) =>
+                    studentRegex.then((regexHits) => dedupeById([...textHits, ...regexHits]))
+                ),
+                userText.then((textHits) =>
+                    userRegex.then((regexHits) => dedupeById([...textHits, ...regexHits]))
+                ),
             ]);
 
             const studentEmails = new Set(students.map(s => s.email?.toLowerCase()).filter(Boolean));
@@ -288,7 +323,7 @@ router.get("/search", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req
     }
 });
 
-router.get("/details/:type/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_USERS), async (req, res) => {
     const { type, id } = req.params;
 
     try {
@@ -625,8 +660,26 @@ router.put("/update-student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES)
     }
 });
 
-router.put("/update-user/:id", authenticateUser, hasRole(ALLOWED_ADMIN_ROLES), async (req, res) => {
+router.put("/update-user/:id", authenticateUser, hasRole(["admin", "systemadmin"]), canFeature(PERMISSION_FEATURES.MANAGE_USERS_PERMISSIONS), async (req, res) => {
     try {
+        const VALID_USER_ROLES = [
+            "guest", "user", "student", "coordinator", "specped",
+            "syv", "teacher", "admin", "systemadmin",
+        ];
+
+        if (req.body.role !== undefined && !VALID_USER_ROLES.includes(req.body.role)) {
+            return res.status(400).json({ message: `Invalid role: ${req.body.role}` });
+        }
+        if (req.body.roles !== undefined) {
+            if (!Array.isArray(req.body.roles)) {
+                return res.status(400).json({ message: "roles must be an array" });
+            }
+            const invalidRoles = req.body.roles.filter((r) => !VALID_USER_ROLES.includes(r));
+            if (invalidRoles.length > 0) {
+                return res.status(400).json({ message: `Invalid role(s): ${invalidRoles.join(", ")}` });
+            }
+        }
+
         const allowedUserFields = ['name', 'email', 'role', 'roles', 'username'];
         const updates = {};
         for (const field of allowedUserFields) {

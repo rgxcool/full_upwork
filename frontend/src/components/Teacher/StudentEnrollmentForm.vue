@@ -11,9 +11,9 @@
         return-object
         :loading="loadingStudents"
         :search="studentSearchQuery"
-        @update:search="searchStudents"
         :no-data-text="studentSearchQuery.length < 2 ? 'Skriv minst 2 tecken för att söka' : 'Inga elever hittades'"
         clearable
+        @update:search="searchStudents"
       ></v-autocomplete>
 
       <!-- Course Selection -->
@@ -25,10 +25,10 @@
         label="Välj kursinstans"
         :loading="loadingCourseInstances"
         :search="courseInstanceSearchQuery"
-        @update:search="courseInstanceSearchQuery = $event"
         return-object
         clearable
         :no-data-text="'Inga kursinstanser hittades'"
+        @update:search="courseInstanceSearchQuery = $event"
       ></v-autocomplete>
 
       <!-- Dates -->
@@ -37,7 +37,7 @@
         v-model="studyLength"
         :items="[5, 10, 20]"
         label="Studielängd (veckor)"
-        @update:modelValue="calculateEndDate"
+        @update:model-value="calculateEndDate"
       ></v-select>
       <v-text-field :model-value="endDate" label="Beräknat slutdatum" readonly></v-text-field>
       <v-text-field v-model="finalExamDate" label="Slutprovsdatum" type="date"></v-text-field>
@@ -263,11 +263,15 @@ const submitForm = async () => {
   };
 
   try {
-      await client.post('/course-matching/process-education', payload);
+      await client.post('/process-education', payload);
       // Handle success
       toast.success('Eleven har anmälts till kursen framgångsrikt!');
       
-      // Reset form
+      // Save APL status before reset (if changed from default)
+      const previousAplStatus = aplStatus.value;
+      const previousStudentId = selectedStudent.value?._id;
+
+      // Reset form only after the request has completed successfully
       selectedStudent.value = null;
       selectedCourseInstance.value = null;
       startDate.value = '';
@@ -278,9 +282,9 @@ const submitForm = async () => {
       aplStatus.value = 'GRAY';
       studentSearchQuery.value = '';
       courseInstanceSearchQuery.value = '';
-      
-      if (aplStatus.value !== 'GRAY') {
-        await client.patch(`/students/${selectedStudent.value._id}`, { aplStatus: aplStatus.value });
+
+      if (previousAplStatus !== 'GRAY' && previousStudentId) {
+        await client.patch(`/students/${previousStudentId}`, { aplStatus: previousAplStatus });
       }
 
   } catch (error) {

@@ -25,6 +25,20 @@
           <strong>{{ student.enrollmentStats.activeEnrollments }}</strong>
           aktiva
         </span>
+        <button
+          v-if="canEditStatus"
+          class="btn btn-sm btn-primary placement-button"
+          @click="showPlacementWizard = true"
+        >
+          + Placera kurs
+        </button>
+        <button
+          v-if="canEditStatus"
+          class="btn btn-sm btn-warning revision-button"
+          @click="showRevisionModal = true"
+        >
+          Revidera plan
+        </button>
       </div>
     </div>
     <div class="card-body">
@@ -34,9 +48,9 @@
             v-model="sortedEducation"
             :animation="200"
             handle=".drag-handle"
-            @end="handleEducationReorder"
             item-key="_id"
             class="education-list"
+            @end="handleEducationReorder"
           >
             <template #item="{ element }">
               <div
@@ -81,10 +95,23 @@
                   </div>
                 </div>
 
-                <div class="education-details">
+                  <div class="education-details">
+                  <div class="study-plan-dates" v-if="element.startDate || element.endDate || element.slutprovDate">
+                    <span><strong>Start:</strong> {{ formatDate(element.startDate) || '–' }}</span>
+                    <span><strong>Slut:</strong> {{ formatDate(element.endDate) || '–' }}</span>
+                    <span v-if="element.slutprovDate"><strong>Slutprov:</strong> {{ formatDate(element.slutprovDate) }}</span>
+                  </div>
                   <!-- Teacher Information -->
                   <div v-if="getTeacherName(element)" class="education-teacher">
-                    <strong>Lärare:</strong> {{ getTeacherName(element) }}
+                    <strong>Lärare:</strong>
+                    <router-link
+                      v-if="getTeacherId(element)"
+                      :to="`/teacher/${getTeacherId(element)}`"
+                      class="teacher-link"
+                    >
+                      {{ getTeacherName(element) }}
+                    </router-link>
+                    <span v-else>{{ getTeacherName(element) }}</span>
                   </div>
 
                   <!-- Status Dropdown (only for enrollments) -->
@@ -93,10 +120,10 @@
                     <select
                       v-if="element.enrollmentId && canEditStatus"
                       v-model="element.status"
-                      @change="updateStatus(element)"
                       class="status-select"
                       :class="'status-' + (element.status || 'enrolled')"
                       :disabled="updatingStatus[element.enrollmentId]"
+                      @change="updateStatus(element)"
                     >
                       <option value="enrolled">Antagen</option>
                       <option value="completed">Betygsatt</option>
@@ -134,21 +161,118 @@
         </div>
         <div v-else class="no-education">Ingen utbildning registrerad</div>
       </div>
+
+      <div v-if="completedCourses.length" class="completed-courses-section">
+        <h4 class="completed-title">Lästa kurser</h4>
+        <p class="completed-hint">
+          Klicka på "Ny antagning" för att anmäla eleven till kursen igen.
+        </p>
+        <div class="completed-course-list">
+          <div
+            v-for="course in completedCourses"
+            :key="course._id || course.enrollmentId"
+            class="completed-course-item"
+          >
+            <div class="completed-course-info">
+              <span class="completed-course-name">{{ getEducationName(course) }}</span>
+              <span v-if="course.startDate && course.endDate" class="completed-course-period">
+                {{ formatDateISO(course.startDate) }} - {{ formatDateISO(course.endDate) }}
+              </span>
+              <span v-if="course.grade" class="completed-course-grade">Betyg: {{ course.grade }}</span>
+              <span v-if="course.completionCertificate" class="completed-course-certificate">
+                Intyg: {{ course.completionCertificate }}
+              </span>
+            </div>
+            <div class="completed-course-actions">
+              <button
+                class="certificate-button"
+                :disabled="downloadingCertificate[course.enrollmentId || course._id]"
+                @click="handleDownloadCertificate(course)"
+              >
+                {{
+                  downloadingCertificate[course.enrollmentId || course._id]
+                    ? 'LADDAR NER...'
+                    : 'Ladda ner studieintyg'
+                }}
+              </button>
+              <button
+                v-if="canEditStatus"
+                class="reenroll-button"
+                :disabled="reEnrolling[course.enrollmentId || course._id]"
+                @click="handleReEnroll(course)"
+              >
+                {{ reEnrolling[course.enrollmentId || course._id] ? 'ANMÄLER...' : 'Ny antagning' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Revision History -->
+      <div v-if="revisionHistory.length > 0" class="revision-history-section">
+        <h4
+          class="revision-history-title"
+          @click="showRevisionHistory = !showRevisionHistory"
+        >
+          Revideringshistorik
+          <span class="revision-history-toggle">{{ showRevisionHistory ? '▲' : '▼' }}</span>
+        </h4>
+        <div v-if="showRevisionHistory" class="revision-history-list">
+          <div
+            v-for="(rev, idx) in revisionHistory"
+            :key="idx"
+            class="revision-history-item"
+          >
+            <div class="revision-history-header">
+              <span class="revision-history-reason">{{ getRevisionReasonLabel(rev.reason) }}</span>
+              <span class="revision-history-date">{{ formatDate(rev.timestamp) }}</span>
+            </div>
+            <div v-if="rev.description" class="revision-history-desc">{{ rev.description }}</div>
+            <div class="revision-history-changes">
+              <span v-if="rev.previousValues?.tempoWeeks">
+                Tempo: {{ rev.previousValues.tempoWeeks }}v → {{ rev.newValues?.tempoWeeks }}v
+              </span>
+              <span v-if="rev.previousValues?.removedEnrollmentIds">
+                Borttagna kurser: {{ rev.previousValues.removedEnrollmentIds.length }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
+
+  <CoursePlacementWizard
+    v-if="showPlacementWizard"
+    :student="student"
+    @close="showPlacementWizard = false"
+    @placed="handlePlacementComplete"
+  />
+
+  <StudyPlanRevisionModal
+    v-model="showRevisionModal"
+    :student="student"
+    :active-enrollments="activeEnrollments"
+    :current-tempo="selectedTempo"
+    @revised="handleRevisionComplete"
+  />
 </template>
 
 <script>
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
 import draggable from 'vuedraggable';
+import CoursePlacementWizard from '../CoursePlacementWizard.vue';
+import StudyPlanRevisionModal from '../StudyPlanRevisionModal.vue';
 
 export default {
   name: 'StudyPlanTab',
   components: {
     draggable,
+    CoursePlacementWizard,
+    StudyPlanRevisionModal,
   },
   props: {
     student: {
@@ -156,6 +280,7 @@ export default {
       required: true,
     },
   },
+  emits: ['student-updated'],
   setup(props, { emit }) {
     const store = useStore();
     const toast = useToast();
@@ -364,6 +489,24 @@ export default {
       return null;
     };
 
+    const getTeacherId = (edu) => {
+      // Check enrollment teacherId (may be populated or just an id)
+      if (edu.teacherId) {
+        if (typeof edu.teacherId === 'object') {
+          return edu.teacherId._id || null;
+        }
+        return edu.teacherId;
+      }
+      // Check courseInstance teacherId
+      if (edu.courseInstance?.teacherId) {
+        if (typeof edu.courseInstance.teacherId === 'object') {
+          return edu.courseInstance.teacherId._id || null;
+        }
+        return edu.courseInstance.teacherId;
+      }
+      return null;
+    };
+
     const getStatusLabel = (status) => {
       const statusMap = {
         'enrolled': 'Antagen',
@@ -491,6 +634,160 @@ export default {
       }
     };
 
+    // Completed courses ("Lästa kurser") eligible for re-registration
+    const completedCourses = computed(() => {
+      return (sortedEducation.value || []).filter(
+        (edu) =>
+          edu.isEnrollment &&
+          edu.type === 'Course' &&
+          edu.status === 'completed'
+      );
+    });
+
+    const reEnrolling = ref({});
+
+    const downloadingCertificate = ref({});
+
+    const showPlacementWizard = ref(false);
+    const showRevisionModal = ref(false);
+    const revisionHistory = ref([]);
+    const showRevisionHistory = ref(false);
+
+    const activeEnrollments = computed(() => {
+      return sortedEducation.value.filter(
+        (edu) => edu.isEnrollment && edu.type === 'Course' && !['completed', 'dropped', 'cancelled'].includes(edu.status)
+      );
+    });
+
+    const handlePlacementComplete = async () => {
+      showPlacementWizard.value = false;
+      try {
+        const refreshed = await client.get(`/student-details/${props.student._id}`);
+        emit('student-updated', refreshed.data);
+        toast.success('Kursen har placerats!');
+      } catch (err) {
+        console.error('Error refreshing student:', err);
+      }
+    };
+
+    const handleRevisionComplete = async () => {
+      try {
+        const refreshed = await client.get(`/student-details/${props.student._id}`);
+        emit('student-updated', refreshed.data);
+        toast.success('Studieplanen har reviderats!');
+        await loadRevisionHistory();
+      } catch (err) {
+        console.error('Error refreshing student after revision:', err);
+      }
+    };
+
+    const loadRevisionHistory = async () => {
+      if (!props.student?._id) return;
+      try {
+        const response = await client.get(`/student-details/${props.student._id}/revision-history`);
+        revisionHistory.value = response.data.history || [];
+      } catch (err) {
+        // Silently fail — revision history is non-critical
+      }
+    };
+
+    const getRevisionReasonLabel = (reason) => {
+      const labels = {
+        pace_change: 'Tempoändring',
+        course_added: 'Kurs tillagd',
+        course_removed: 'Kurs borttagen',
+        date_adjustment: 'Datumjustering',
+        package_swap: 'Paketbyte',
+        other: 'Övrigt',
+      };
+      return labels[reason] || reason;
+    };
+
+    onMounted(loadRevisionHistory);
+
+    const handleDownloadCertificate = async (course) => {
+      if (!course?.enrollmentId || !props.student?._id) return;
+      const key = course.enrollmentId;
+      downloadingCertificate.value[key] = true;
+      try {
+        const response = await client.get(`/study-certificate/${key}/pdf`, {
+          responseType: 'blob',
+        });
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `studieintyg-${getEducationName(course).replace(/\s+/g, '-')}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error('Error downloading certificate:', err);
+        const errorMessage =
+          err.message || err.response?.data?.message || 'Något gick fel';
+        toast.error(`Kunde inte ladda ner studieintyg: ${errorMessage}`);
+      } finally {
+        downloadingCertificate.value[key] = false;
+      }
+    };
+
+    const handleReEnroll = async (course) => {
+      if (!course || !props.student?._id) return;
+
+      const courseName = getEducationName(course);
+      const confirmed = window.confirm(
+        `Är du säker på att du vill anmäla eleven till kursen "${courseName}" igen?`
+      );
+      if (!confirmed) return;
+
+      const key = course.enrollmentId || course._id;
+      reEnrolling.value[key] = true;
+      try {
+        // Start one day after the last scheduled course, or today if none
+        const lastEnd = sortedEducation.value
+          .map((edu) => (edu.endDate ? new Date(edu.endDate).getTime() : 0))
+          .filter((time) => !isNaN(time))
+          .reduce((max, time) => Math.max(max, time), 0);
+        const start = lastEnd > 0 ? new Date(lastEnd) : new Date();
+        start.setDate(start.getDate() + 1);
+        const startDate = start.toISOString().slice(0, 10);
+
+        const tempoWeeks = Number(selectedTempo.value) || 5;
+        const end = new Date(start);
+        end.setDate(end.getDate() + tempoWeeks * 7);
+        const endDate = end.toISOString().slice(0, 10);
+
+        await client.post('/process-education', {
+          studentId: props.student._id,
+          educationEntries: [
+            {
+              type: 'Course',
+              refId: course.refId?._id || course.refId,
+              name: courseName,
+              startDate,
+              endDate,
+            },
+          ],
+          needsSupport: false,
+          examMode: 'on-site',
+        });
+
+        const refreshed = await client.get(`/student-details/${props.student._id}`);
+        emit('student-updated', refreshed.data);
+        toast.success(`Eleven har anmälts till kursen "${courseName}" igen.`);
+      } catch (err) {
+        console.error('Error re-enrolling student in course:', err);
+        const errorMessage =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          'Kunde inte anmäla eleven till kursen igen';
+        toast.error(`Kunde inte anmäla eleven till kursen igen: ${errorMessage}`);
+      } finally {
+        reEnrolling.value[key] = false;
+      }
+    };
+
     return {
       sortedEducation,
       handleEducationReorder,
@@ -500,6 +797,7 @@ export default {
       getCourseInstanceCode,
       getCourseLink,
       getTeacherName,
+      getTeacherId,
       getStatusLabel,
       updateStatus,
       canEditStatus,
@@ -509,6 +807,19 @@ export default {
       selectedTempo,
       updatingTempo,
       handleTempoChange,
+      completedCourses,
+      reEnrolling,
+      handleReEnroll,
+      downloadingCertificate,
+      handleDownloadCertificate,
+      showPlacementWizard,
+      handlePlacementComplete,
+      showRevisionModal,
+      activeEnrollments,
+      handleRevisionComplete,
+      revisionHistory,
+      showRevisionHistory,
+      getRevisionReasonLabel,
     };
   },
 };
@@ -764,6 +1075,14 @@ export default {
   color: #ffc107;
   font-weight: 500;
 }
+.teacher-link {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
+}
+.teacher-link:hover {
+  text-decoration: underline;
+}
 .course-instance-info {
   margin-top: 5px;
   font-size: 12px;
@@ -803,5 +1122,186 @@ export default {
   color: #6c757d;
   font-style: italic;
   margin-left: 10px;
+}
+.completed-courses-section {
+  margin-top: 24px;
+  padding: 10px;
+  border-top: 1px solid #dee2e6;
+}
+.completed-title {
+  margin: 0 0 4px 0;
+  color: #2c3e50;
+  font-size: 16px;
+}
+.completed-hint {
+  margin: 0 0 12px 0;
+  color: #6c757d;
+  font-size: 13px;
+}
+.completed-course-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.completed-course-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid #dee2e6;
+  border-left: 4px solid #6c757d;
+  border-radius: 4px;
+  background: #fafafa;
+}
+.completed-course-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.completed-course-name {
+  font-weight: 600;
+  color: #2c3e50;
+}
+.completed-course-period {
+  color: #6c757d;
+  font-size: 13px;
+}
+.completed-course-grade {
+  color: #6c757d;
+  font-size: 13px;
+}
+.reenroll-button {
+  background: #28a745;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.reenroll-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.reenroll-button:hover:not(:disabled) {
+  background: #218838;
+}
+.certificate-button {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.certificate-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.certificate-button:hover:not(:disabled) {
+  background: #0056b3;
+}
+.completed-course-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.completed-course-certificate {
+  color: #6c757d;
+  font-size: 13px;
+}
+.placement-button {
+  margin-left: 12px;
+  white-space: nowrap;
+}
+.revision-button {
+  margin-left: 8px;
+  white-space: nowrap;
+  background-color: #ffc107;
+  color: #212529;
+  border: none;
+}
+.revision-button:hover {
+  background-color: #e0a800;
+}
+
+.revision-history-section {
+  margin-top: 24px;
+  padding: 10px;
+  border-top: 1px solid #dee2e6;
+}
+.revision-history-title {
+  margin: 0 0 8px 0;
+  color: #2c3e50;
+  font-size: 16px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.revision-history-title:hover {
+  color: #007bff;
+}
+.revision-history-toggle {
+  font-size: 12px;
+  color: #6c757d;
+}
+.revision-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.revision-history-item {
+  padding: 10px 12px;
+  border: 1px solid #dee2e6;
+  border-left: 4px solid #ffc107;
+  border-radius: 4px;
+  background: #fffaf0;
+}
+.revision-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.revision-history-reason {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 14px;
+}
+.revision-history-date {
+  color: #6c757d;
+  font-size: 13px;
+}
+.revision-history-desc {
+  margin-top: 4px;
+  color: #495057;
+  font-size: 13px;
+}
+.revision-history-changes {
+  margin-top: 4px;
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #6c757d;
+}
+.study-plan-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #475467;
+  font-size: 13px;
 }
 </style>

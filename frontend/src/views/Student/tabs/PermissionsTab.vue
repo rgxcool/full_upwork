@@ -10,16 +10,28 @@
           <p>Ingen användare hittades för denna elev. En användare måste skapas innan behörigheter kan tilldelas.</p>
         </div>
         <button 
-          @click="createUserForStudent" 
-          class="btn btn-primary"
+          class="btn btn-primary" 
           :disabled="isCreatingUser"
+          @click="createUserForStudent"
         >
           {{ isCreatingUser ? 'Skapar...' : 'Skapa användare för elev' }}
         </button>
         <div v-if="createdUserPassword" class="alert alert-info mt-3">
           <p><strong>Användare skapad!</strong></p>
-          <p>Lösenord: <code>{{ createdUserPassword }}</code></p>
-          <p class="small">Spara detta lösenord säkert. Användaren kan byta lösenord vid första inloggningen.</p>
+          <label for="temporary-password">Tillfälligt lösenord</label>
+          <div class="temporary-password">
+            <input
+              id="temporary-password"
+              :type="showCreatedPassword ? 'text' : 'password'"
+              :value="createdUserPassword"
+              readonly
+              autocomplete="off"
+            />
+            <button type="button" class="btn btn-secondary" @click="showCreatedPassword = !showCreatedPassword">
+              {{ showCreatedPassword ? 'Dölj' : 'Visa' }}
+            </button>
+          </div>
+          <p class="small">Spara lösenordet säkert. Användaren kan byta lösenord vid första inloggningen.</p>
         </div>
       </div>
     </div>
@@ -58,12 +70,46 @@
         </div>
         <div class="form-actions mt-3">
           <button 
-            @click="savePermissions" 
             class="btn btn-primary" 
-            :disabled="isSavingPermissions || !hasPermissionChanges"
+            :disabled="isSavingPermissions || !hasPermissionChanges" 
+            @click="savePermissions"
           >
             {{ isSavingPermissions ? 'Sparar...' : 'Spara behörigheter' }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Password Reset Section -->
+    <div v-if="hasUser" class="card mt-3">
+      <div class="card-header">
+        <h3>Lösenord</h3>
+        <p class="small text-muted">Återställ elevens lösenord och visa det nya lösenordet</p>
+      </div>
+      <div class="card-body">
+        <button
+          class="btn btn-primary"
+          :disabled="isResettingPassword"
+          @click="resetStudentPassword"
+        >
+          {{ isResettingPassword ? 'Återställer...' : newTempPassword ? 'Återställ lösenord igen' : 'Återställ lösenord' }}
+        </button>
+        <div v-if="newTempPassword" class="alert alert-info mt-3">
+          <p><strong>Nytt tillfälligt lösenord!</strong></p>
+          <label for="temp-password-display">Tillfälligt lösenord</label>
+          <div class="temporary-password">
+            <input
+              id="temp-password-display"
+              :type="showTempPassword ? 'text' : 'password'"
+              :value="newTempPassword"
+              readonly
+              autocomplete="off"
+            />
+            <button type="button" class="btn btn-secondary" @click="showTempPassword = !showTempPassword">
+              {{ showTempPassword ? 'Dölj' : 'Visa' }}
+            </button>
+          </div>
+          <p class="small">Spara lösenordet säkert och berätta det för eleven. Eleven måste byta lösenord vid nästa inloggning.</p>
         </div>
       </div>
     </div>
@@ -78,7 +124,6 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from 'vuex';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
-import { useRoute } from 'vue-router';
 
 // Permission matrix based on requirements
 const PERMISSION_MATRIX = {
@@ -175,13 +220,17 @@ export default {
       required: true,
     },
   },
-  setup(props) {
+  emits: ['user-created'],
+  setup(props, { emit }) {
     const store = useStore();
-    const route = useRoute();
     const toast = useToast();
     const isSavingPermissions = ref(false);
     const isCreatingUser = ref(false);
     const createdUserPassword = ref(null);
+    const showCreatedPassword = ref(false);
+    const isResettingPassword = ref(false);
+    const newTempPassword = ref(null);
+    const showTempPassword = ref(false);
     const features = ref(FEATURES);
     
     // Custom permissions state
@@ -283,15 +332,30 @@ export default {
         });
         
         createdUserPassword.value = response.data.tempPassword;
-        
-        // Reload student data to get the new user
-        // Emit event to parent to reload
-        window.location.reload(); // Simple reload for now
+
+        emit('user-created');
       } catch (error) {
-        console.error('Error creating user:', error);
         toast.error('Kunde inte skapa användare. ' + error.message);
       } finally {
         isCreatingUser.value = false;
+      }
+    };
+
+    const resetStudentPassword = async () => {
+      if (!props.student?.user?._id) {
+        toast.error('Ingen användare hittades för denna elev.');
+        return;
+      }
+      isResettingPassword.value = true;
+      newTempPassword.value = null;
+      try {
+        const response = await client.post(`/users/${props.student.user._id}/reset-password`);
+        newTempPassword.value = response.data.tempPassword;
+        toast.success('Lösenordet har återställts! Det nya lösenordet visas nedan.');
+      } catch (error) {
+        toast.error('Kunde inte återställa lösenord. ' + error.message);
+      } finally {
+        isResettingPassword.value = false;
       }
     };
 
@@ -320,13 +384,18 @@ export default {
       hasUser,
       isSavingPermissions,
       isCreatingUser,
-      createdUserPassword,
-      features,
+  createdUserPassword,
+  showCreatedPassword,
+  features,
       hasPermission,
       togglePermission,
       savePermissions,
       createUserForStudent,
       hasPermissionChanges,
+      isResettingPassword,
+      newTempPassword,
+      showTempPassword,
+      resetStudentPassword,
     };
   },
 };
@@ -508,7 +577,7 @@ export default {
 }
 
 .permission-toggle-header {
-  text-align: center !important;
+  text-align: center;
   width: 100px;
 }
 

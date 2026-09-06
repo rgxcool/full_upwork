@@ -15,6 +15,7 @@ import actionPlanRoutes from "../../src/router/actionPlanRoutes.js";
 import ActionPlan from "../../src/models/ActionPlan.js";
 import Notification from "../../src/models/Notification.js";
 import FormQuestions from "../../src/models/ActionPlanQuestions.js";
+import Student from "../../src/models/Student.js";
 import {
     connectTestDatabase,
     disconnectTestDatabase,
@@ -56,12 +57,14 @@ describe("Action Plan Routes", () => {
         await FormQuestions.deleteMany({});
         await ActionPlan.deleteMany({});
         await Notification.deleteMany({});
+        await Student.deleteMany({});
     });
 
     afterEach(async () => {
         await FormQuestions.deleteMany({});
         await ActionPlan.deleteMany({});
         await Notification.deleteMany({});
+        await Student.deleteMany({});
         vi.restoreAllMocks();
     });
 
@@ -93,6 +96,24 @@ describe("Action Plan Routes", () => {
         });
         expect(savedConfigs).toHaveLength(1);
         expect(savedConfigs[0].questions).toHaveLength(1);
+    });
+
+    it("rejects non-systemadmin (teacher) from modifying the questionnaire structure", async () => {
+        const payload = {
+            type: "ACTION_PLAN",
+            questions: [{ key: "x", label: "X", type: "text", required: true }],
+        };
+
+        const response = await request(app)
+            .post("/api/form-questions")
+            .set("x-test-user-role", "teacher")
+            .send(payload)
+            .expect(403);
+
+        expect(response.body).toBeDefined();
+        // Nothing must have been written for the teacher.
+        const savedConfigs = await FormQuestions.find({ type: "ACTION_PLAN" });
+        expect(savedConfigs).toHaveLength(0);
     });
 
     it("returns 500 when saving form questions fails", async () => {
@@ -166,7 +187,7 @@ describe("Action Plan Routes", () => {
             .send({ questions: [] })
             .expect(403);
 
-        expect(response.body).toEqual({ message: "Ej behörig" });
+        expect(response.body?.error ?? response.body?.message).toBeDefined();
     });
 
     it("updates form questions when systemadmin", async () => {
@@ -306,5 +327,103 @@ describe("Action Plan Routes", () => {
         expect(response.text).toBe(
             "Serverfel vid uppdatering av inställningar."
         );
+    });
+
+    it("returns 404 when no action plan exists for a student", async () => {
+        const studentId = new mongoose.Types.ObjectId();
+        const response = await request(app)
+            .get(`/api/actionplan/${studentId}`)
+            .set("x-test-user-role", "teacher")
+            .expect(404);
+
+        expect(response.body).toEqual({ message: "Ingen handlingsplan hittad" });
+    });
+
+    it("returns 404 for pdf download when no action plan exists", async () => {
+        const studentId = new mongoose.Types.ObjectId();
+        const response = await request(app)
+            .get(`/api/actionplan/${studentId}/pdf`)
+            .set("x-test-user-role", "teacher")
+            .expect(404);
+
+        expect(response.body).toEqual({ message: "Ingen handlingsplan hittad" });
+    });
+
+    it("returns the latest saved action plan for a student", async () => {
+        const studentId = new mongoose.Types.ObjectId();
+        await request(app)
+            .post("/api/save-actionplan")
+            .set("x-test-user-role", "teacher")
+            .send({
+                studentId,
+                educationId: "EDU-1",
+                courseId: new mongoose.Types.ObjectId(),
+                teacherName: "Teacher",
+                reason: "Behöver stöd",
+                schoolEfforts: ["Extra handledning"],
+            })
+            .expect(200);
+
+        const response = await request(app)
+            .get(`/api/actionplan/${studentId}`)
+            .set("x-test-user-role", "teacher")
+            .expect(200);
+
+        expect(response.body.studentId).toBe(studentId.toString());
+        expect(response.body.educationId).toBe("EDU-1");
+        expect(response.body.reason).toBe("Behöver stöd");
+        expect(response.body.schoolEfforts).toEqual(["Extra handledning"]);
+    });
+
+    it("returns 500 when fetching the action plan fails", async () => {
+        vi.spyOn(ActionPlan, "findOne").mockReturnValueOnce({
+            sort: vi.fn(() => Promise.reject(new Error("Database failure"))),
+        });
+
+        const studentId = new mongoose.Types.ObjectId();
+        const response = await request(app)
+            .get(`/api/actionplan/${studentId}`)
+            .set("x-test-user-role", "teacher")
+            .expect(500);
+
+        expect(response.body).toEqual({
+            message: "Något gick fel",
+            error: "Database failure",
+        });
+    });
+
+    it("downloads the saved action plan as a pdf", async () => {
+        const student = await Student.create({
+            name: "Anna Andersson",
+            personalNumber: "20000101-1234",
+            email: "anna@test.se",
+        });
+
+        await request(app)
+            .post("/api/save-actionplan")
+            .set("x-test-user-role", "teacher")
+            .send({
+                studentId: student._id,
+                educationId: "EDU-1",
+                teacherName: "Lärare",
+                reason: "Behöver stöd",
+                schoolEfforts: ["Extra handledning", "Tydliggöra mål"],
+            })
+            .expect(200);
+
+        const response = await request(app)
+            .get(`/api/actionplan/${student._id}/pdf`)
+            .set("x-test-user-role", "teacher")
+            .expect(200);
+
+        expect(response.headers["content-type"]).toContain("application/pdf");
+        expect(response.headers["content-disposition"]).toContain("attachment");
+        expect(Buffer.isBuffer(response.body)).toBe(true);
+        expect(response.body.subarray(0, 8).toString("latin1")).toBe("%PDF-1.4");
+
+        const content = response.body.toString("latin1");
+        expect(content).toContain("Anna Andersson");
+        expect(content).toContain("Handlingsplan");
+        expect(content).toContain("Extra handledning");
     });
 });

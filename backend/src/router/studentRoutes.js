@@ -12,15 +12,21 @@ import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
-import Notification from "../models/Notification.js";
 import CoursePackage from "../models/CoursePackage.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasCommentPermission } from "../utils/roles.js";
-import User from "../models/User.js";
 import { sendDropoutNotification } from "../controllers/notificationController.js";
 import { hasRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validation.js";
 import logger from "../utils/logger.js";
+import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
+import { maybeSendLarteametEmail, getStudentMunicipality, SOLLENTUNA_MUNICIPALITY } from "../services/emailService.js";
+import {
+    performStudentDropout,
+    removeStudentDropoutRecord,
+} from "../services/dropoutService.js";
+import { studentScopeFilter, municipalityInScope } from "../utils/tenantScope.js";
+import { getRevenueReport } from "../services/analyticsService.js";
 
 const router = Router();
 
@@ -133,6 +139,10 @@ router.put(
 router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
         let query = {};
+
+        // Backend-enforced tenant (kommun) scope. For scoped users the query is
+        // restricted to their allowed municipalities; global users get {}.
+        Object.assign(query, studentScopeFilter(req.user));
 
         const userRoles = req.user.roles || (req.user.role ? [req.user.role] : []);
         const hasCoordinatorRole = userRoles.includes("coordinator") || userRoles.includes("specped") || userRoles.includes("syv") || userRoles.includes("admin") || userRoles.includes("systemadmin") || userRoles.includes("tester");
@@ -342,15 +352,16 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
                 }));
 
             const mergedEducation = [...enrollmentEducation];
+            // Dedicated APL rule: CoursePackage entries are always derived from the
+            // student's current enrollments (single source of truth). Stored legacy
+            // CoursePackage entries must not be merged when a package enrollment
+            // already exists, otherwise stale start/end dates (e.g. after a study
+            // plan revision) would inflate the APL period shown in the APL board.
             for (const pkg of packageEntries) {
                 const exists = mergedEducation.some(
                     (x) =>
                         x.type === "CoursePackage" &&
-                        String(x.refId?._id || x.refId) === String(pkg.refId) &&
-                        String(new Date(x.startDate).getTime() || "") ===
-                            String(new Date(pkg.startDate).getTime() || "") &&
-                        String(new Date(x.endDate).getTime() || "") ===
-                            String(new Date(pkg.endDate).getTime() || "")
+                        String(x.refId?._id || x.refId) === String(pkg.refId)
                 );
                 if (!exists) mergedEducation.push(pkg);
             }
@@ -404,6 +415,22 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
             }
 
             student.education = mergedEducation;
+
+            // APL auto-status: derive the APL period from the merged education
+            // entries and compute the effective (date-driven) status. When the
+            // APL period ends within APL_AUTO_RED_WEEKS weeks the effective
+            // status becomes RED ("Snart slut") without touching stored data.
+            const aplPeriod = computeAplPeriod(student.education);
+            const aplEffective = computeAplEffectiveStatus(
+                student.aplStatus,
+                aplPeriod.aplEndDate
+            );
+            student.aplStatus = aplEffective.aplStatus;
+            student.aplStatusStored = aplEffective.aplStatusStored;
+            student.aplStatusAuto = aplEffective.aplAutoRed;
+            student.aplWeeksRemaining = aplEffective.aplWeeksRemaining;
+            student.aplStartDate = aplPeriod.aplStartDate;
+            student.aplEndDate = aplPeriod.aplEndDate;
         }
         res.status(200).json(students);
     } catch (error) {
@@ -411,6 +438,63 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
         res.status(500).json({ error: "Server error" });
     }
 });
+
+/**
+ * @route   GET /students/dropouts
+ * @desc    Fetch inactive (dropout) students for the "Inaktiva elever" list.
+ * @access  Protected (Admin+ only)
+ */
+router.get(
+    "/students/dropouts",
+    authenticateUser,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const students = await Student.find({ dropout: true })
+                .populate("teacherId", "name email")
+                .sort({ updatedAt: -1 })
+                .lean();
+
+            // Enrich with previous enrollment data for reactivation display
+            const studentIds = students.map((s) => s._id);
+            const StudentEnrollment = (await import("../models/StudentEnrollment.js")).default;
+            const enrollments = await StudentEnrollment.find({
+                studentId: { $in: studentIds },
+            })
+                .populate("mainCourseId", "courseName courseCode courseExtent")
+                .populate("coursePackageId", "coursePackageName coursePackageCode")
+                .sort({ startDate: -1 })
+                .lean();
+
+            const enrollmentsByStudent = {};
+            for (const e of enrollments) {
+                const sid = String(e.studentId);
+                if (!enrollmentsByStudent[sid]) enrollmentsByStudent[sid] = [];
+                enrollmentsByStudent[sid].push(e);
+            }
+
+            const enriched = students.map((s) => ({
+                ...s,
+                previousEnrollments: enrollmentsByStudent[String(s._id)] || [],
+                dropoutReason: s.changeHistory
+                    ? [...s.changeHistory]
+                        .reverse()
+                        .find((h) => h.changes?.includes("dropout"))?.reason || null
+                    : null,
+                dropoutDate: s.changeHistory
+                    ? [...s.changeHistory]
+                        .reverse()
+                        .find((h) => h.changes?.includes("dropout"))?.timestamp || s.updatedAt
+                    : s.updatedAt,
+            }));
+
+            res.status(200).json(enriched);
+        } catch (error) {
+            logger.error({ err: error }, "Error fetching inactive students");
+            res.status(500).json({ error: "Failed to fetch inactive students" });
+        }
+    }
+);
 
 /**
  * @route   POST /student
@@ -431,15 +515,64 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        const allowedStudentCreateFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses', 'education', 'createdBy', 'specialNeeds', 'teacherId', 'aplStatus', 'exam', 'attendedExam', 'paidExamFee'];
+        const allowedStudentCreateFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses', 'education', 'createdBy', 'specialNeeds', 'teacherId', 'aplStatus', 'exam', 'attendedExam', 'paidExamFee', 'priorAplCompleted', 'priorAplIntygDocId'];
         const studentData = {};
         for (const field of allowedStudentCreateFields) {
             if (req.body[field] !== undefined) studentData[field] = req.body[field];
         }
-        const student = new Student(studentData);
-        const savedStudent = await student.save();
+        // The Student model stores municipality as { type: "..." }. The API also
+        // accepts a plain string; normalize it here so it survives mongoose
+        // casting (a raw string would otherwise be silently dropped as {} and
+        // break the Sollentuna Lärteamet email trigger below).
+        if (typeof studentData.municipality === "string") {
+            studentData.municipality = { type: studentData.municipality };
+        }
 
-        logger.info({ id: savedStudent._id, name: savedStudent.name, email: savedStudent.email, aplStatus: savedStudent.aplStatus, education: savedStudent.education }, "Student saved");
+        // Backend-enforced tenant write guard: a scoped user may only create /
+        // re-register students within their own municipality scope. A global
+        // (unscoped) user is unaffected.
+        const targetMunicipality = studentData.municipality?.type;
+        if (!municipalityInScope(req.user, targetMunicipality)) {
+            logger.warn(
+                { email: req.user.email, targetMunicipality },
+                "Tenant scope DENIED: municipality outside caller's scope on student create"
+            );
+            return res.status(403).json({
+                error: "Du saknar behörighet för denna kommun (municipality).",
+            });
+        }
+        // Re-registration (returning student): if a student with the same
+        // personalNumber or email already exists, auto-fill their record with
+        // the submitted details and register the new courses instead of
+        // creating a duplicate student.
+        const existingStudent = await Student.findOne({
+            $or: [
+                { personalNumber: studentData.personalNumber },
+                { email: studentData.email },
+            ],
+        });
+
+        let savedStudent;
+        let alreadyExists = false;
+        if (existingStudent) {
+            alreadyExists = true;
+            for (const field of Object.keys(studentData)) {
+                if (field === "education") continue;
+                if (studentData[field] !== undefined) {
+                    existingStudent[field] = studentData[field];
+                }
+            }
+            if (existingStudent.dropout) {
+                existingStudent.dropout = false;
+            }
+            savedStudent = await existingStudent.save();
+            logger.info({ id: savedStudent._id, name: savedStudent.name }, "Re-registered existing student with auto-filled details");
+        } else {
+            const student = new Student(studentData);
+            savedStudent = await student.save();
+
+            logger.info({ id: savedStudent._id, name: savedStudent.name, email: savedStudent.email, aplStatus: savedStudent.aplStatus, educationCount: savedStudent.education?.length || 0 }, "Student saved");
+        }
 
         if (req.body.education && req.body.education.length > 0) {
             const CourseMatchingService = await import(
@@ -451,7 +584,11 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
                     await CourseMatchingService.default.processStudentEducation(
                         savedStudent._id,
                         req.body.education,
-                        req.body.createdBy || null
+                        req.body.createdBy || null,
+                        {
+                            needsSupport: req.body.needsSupport,
+                            examMode: req.body.examMode,
+                        }
                     );
 
                 logger.info({ count: enrollmentResult?.enrollments?.length || 0, studentName: savedStudent.name }, "Created enrollments for student");
@@ -469,6 +606,36 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
             } catch (calendarError) {
                 logger.error({ err: calendarError }, "Error syncing calendar event");
             }
+        }
+
+        if (alreadyExists) {
+            const existingPayload = savedStudent.toObject
+                ? savedStudent.toObject()
+                : savedStudent;
+            return res.status(200).json({ ...existingPayload, alreadyExists: true });
+        }
+
+        // Requirement #26: a newly created Sollentuna student triggers the
+        // Lärteamet admission email. Deliberately NOT fired on the
+        // alreadyExists/re-registration branch — once per student, on creation.
+        // Email failures must never break student creation, so this is fire-and-log.
+        if (getStudentMunicipality(savedStudent.municipality) === SOLLENTUNA_MUNICIPALITY) {
+            try {
+                await maybeSendLarteametEmail({ student: savedStudent });
+            } catch (emailError) {
+                logger.error({ err: emailError }, "Lärteamet email trigger failed (non-fatal)");
+            }
+        }
+
+        // Automatic course card grouping:
+        // If students have the same course + same start date + same end date,
+        // they should connect to the same course card (shared enrollment group).
+        // This is best-effort and runs after student creation so it never blocks
+        // the student save flow.
+        try {
+            await groupStudentsByCourseDates(savedStudent);
+        } catch (groupError) {
+            logger.error({ err: groupError }, "Automatic course card grouping failed (non-fatal)");
         }
 
         res.status(201).json(savedStudent);
@@ -611,6 +778,12 @@ router.get("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async
         if (!student)
             return res.status(404).json({ error: "Student not found" });
 
+        // Backend-enforced tenant (kommun) scope: scoped users may only read
+        // students in their allowed municipalities.
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+
         res.json(student);
     } catch (error) {
         logger.error({ err: error }, "Error fetching student");
@@ -633,6 +806,10 @@ router.get("/student/:id/basic", authenticateUser, hasRole(ALLOWED_STAFF_ROLES),
 
         if (!student)
             return res.status(404).json({ error: "Student not found" });
+
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
 
         res.json(student);
     } catch (error) {
@@ -752,28 +929,51 @@ router.delete("/student/:id", authenticateUser, hasRole(ALLOWED_ADMIN_ROLES), as
 
 /**
  * @route   DELETE /students
- * @desc    Deletes all student records and their associated files.
- * @access  Protected (Admin only)
+ * @desc    Deletes ALL student records and their associated files.
+ * @access  Protected — systemadmin/admin ONLY, with explicit confirmation.
+ *
+ * This is an intentionally dangerous bulk-operation endpoint. It must never be
+ * triggerable by a normal user, must require an explicit confirmation token,
+ * and must be fully audited. Soft deletion is preferred elsewhere; here the
+ * endpoint exists for test/environment reset and is hard-guarded.
  */
-router.delete("/students", authenticateUser, hasRole(ALLOWED_ADMIN_ROLES), async (req, res) => {
+router.delete("/students", authenticateUser, hasRole(["systemadmin", "admin", "tester"]), async (req, res) => {
     try {
-        // Manual role check inside handler to support unit tests that bypass middleware
-        if (!req.user || !["admin", "systemadmin", "tester"].includes(req.user.role)) {
+        // Manual role check inside handler to support unit tests that bypass middleware.
+        if (!req.user || !["systemadmin", "admin", "tester"].includes(req.user.role)) {
             return res.status(403).json({ error: "Insufficient permissions to delete all students." });
+        }
+
+        // Defense in depth: require an explicit confirmation token so an
+        // accidental or cross-site request can never wipe the student table.
+        const confirmToken = req.body?.confirm ?? req.query?.confirm;
+        if (confirmToken !== "DELETE ALL STUDENTS") {
+            return res.status(400).json({
+                error: "Mass deletion requires body { \"confirm\": \"DELETE ALL STUDENTS\" }.",
+            });
         }
 
         // Get all student IDs before deletion
         const allStudents = await Student.find({}, { _id: 1 }).lean();
         const studentIds = allStudents.map(s => s._id.toString());
-        
+
+        // Log the destructive action BEFORE performing it (append-only).
+        import("../utils/auditLog.js").then(({ recordAudit }) => recordAudit(req, {
+            entityType: "Student",
+            entityId: allStudents[0]?._id,
+            action: "students_mass_delete",
+            description: `Mass deletion of ${studentIds.length} student records (confirm token supplied)`,
+        }));
+
         const totalDeletedFiles = await deleteAllStudentFiles(studentIds);
-        
+
         await Student.deleteMany({});
-        
-        logger.info({ totalDeletedFiles }, "Deleted all students and associated file(s)");
-        res.json({ 
+
+        logger.info({ totalDeletedFiles, count: studentIds.length }, "Deleted ALL students (confirmed)");
+        res.json({
             message: "All students deleted successfully",
-            deletedFilesCount: totalDeletedFiles
+            deletedStudents: studentIds.length,
+            deletedFilesCount: totalDeletedFiles,
         });
     } catch (error) {
         logger.error({ err: error }, "Error deleting all students");
@@ -920,7 +1120,6 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
         "exam",
         "teacher",
         "teacherId",
-        "dropout",
         "attendedExam",
         "paidExamFee",
         "startDate",
@@ -930,6 +1129,8 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
         "examLocation",
         "examTime",
         "education",
+        "priorAplCompleted",
+        "priorAplIntygDocId",
     ];
 
     const updates = {};
@@ -939,6 +1140,11 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
             updates[field] = req.body[field];
         }
     }
+
+    // dropout is handled explicitly below through the avbrott cascade so the
+    // flag is never written in isolation (bypassing enrollment/calendar/APL
+    // side effects). Removing it from `updates` keeps findByIdAndUpdate clean.
+    const dropoutRequested = req.body.dropout !== undefined ? !!req.body.dropout : null;
 
     if (
         req.body.municipality &&
@@ -1032,8 +1238,7 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
                                 refId: courseId,
                             };
 
-                            const enrollmentResult =
-                                await CourseMatchingService.default.processStudentEducation(
+                            await CourseMatchingService.default.processStudentEducation(
                                     student._id,
                                     [eduDataForService],
                                     req.user?.userId || null
@@ -1059,6 +1264,29 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
                 logger.info({ studentName: student.name, teacherId: foundTeacher._id }, "Linked student to TeacherId");
             } else {
                 logger.warn({ teacherName: student.teacher }, "No matching teacher found for name");
+            }
+        }
+
+        // Handle dropout toggle through the shared avbrott cascade so that
+        // enrollments, slutprovslista, APL visibility, notifications and the
+        // discussion thread stay consistent (see dropoutService.js).
+        let dropoutActionResult = null;
+        if (dropoutRequested !== null) {
+            if (dropoutRequested && !student.dropout) {
+                dropoutActionResult = await performStudentDropout({
+                    studentId: student._id,
+                    userId: req.user?.userId || null,
+                    role: req.user?.role || "system",
+                    reason: "Avbrott via elevkort (redigering)",
+                });
+                student.dropout = true;
+            } else if (!dropoutRequested && student.dropout) {
+                dropoutActionResult = await removeStudentDropoutRecord({
+                    studentId: student._id,
+                    userId: req.user?.userId || null,
+                    role: req.user?.role || "system",
+                });
+                student.dropout = false;
             }
         }
 
@@ -1117,6 +1345,12 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
         const responseData = {
             ...updatedStudent.toObject(),
             education: enrollmentEducation,
+            ...(dropoutActionResult ? { dropoutAction: {
+                performed: true,
+                droppedEnrollments: dropoutActionResult.droppedEnrollments ?? 0,
+                conversationId: dropoutActionResult.conversationId ?? null,
+                wasDropout: dropoutActionResult.wasDropout,
+            } } : {}),
         };
 
         res.status(200).json(responseData);
@@ -1308,23 +1542,137 @@ router.put("/student/:id/education/:courseId/grade", authenticateUser, hasRole(A
 
 /**
  * @route   GET /students/earnings
- * @desc    Returns students with non-null education grades (for analytics).
+ * @desc    Earnings report computed server-side from real StudentEnrollment
+ *          data (realized = graded enrollments, forecasted = active/enrolled).
+ *          Reuses the same revenue logic as the analytics revenue report.
  * @access  Protected (Staff only)
  */
 router.get("/students/earnings", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
-        const students = await Student.find(
-            { "education.grade": { $ne: null } },
-            {
-                municipality: 1,
-                education: 1,
-            }
-        );
-        res.json(students);
+        const { startDate, endDate, municipality } = req.query;
+        const report = await getRevenueReport({
+            startDate: startDate ? String(startDate) : undefined,
+            endDate: endDate ? String(endDate) : undefined,
+            municipality: municipality ? String(municipality) : undefined,
+        });
+
+        res.json({
+            totalEarnings: report.totalRealized,
+            totalRevenue: report.totalRevenue,
+            totalForecasted: report.totalForecasted,
+            byMunicipality: report.byMunicipality,
+            byCourse: report.byCourse,
+            generatedAt: new Date().toISOString(),
+        });
     } catch (err) {
-        logger.error({ err }, "Failed to fetch earnings students");
+        logger.error({ err }, "Failed to fetch earnings report");
         res.status(500).json({ error: "Server error" });
     }
 });
 
 export default router;
+
+/**
+ * Group students by course dates - automatic course card sharing.
+ * When students have the same course (mainCourseId) + same start date + same end date,
+ * they should connect to the same course card / shared enrollment group.
+ *
+ * This function:
+ * 1. Finds the new student's course instance and date range
+ * 2. Searches for other active students enrolled in the same course instance
+ * 3. If found, ensures the new student is connected to the shared group
+ * 4. If not found, creates a new grouping (the enrollment already handles this)
+ *
+ * This is deliberately best-effort and non-blocking - it never throws to avoid
+ * breaking student creation or admission flows.
+ *
+ * @param {Object} newStudent - The newly created/saved Student document
+ * @returns {Promise<void>}
+ */
+async function groupStudentsByCourseDates(newStudent) {
+    try {
+        if (!newStudent || !newStudent._id) return;
+
+        // Find the student's active enrollments with course instances
+        const enrollments = await StudentEnrollment.find({
+            studentId: newStudent._id,
+            status: { $in: ["enrolled", "active"] },
+        })
+            .populate("courseInstanceId")
+            .lean();
+
+        if (!enrollments || enrollments.length === 0) return;
+
+        // Get the first relevant course instance (prefer one with both startDate and endDate)
+        let newCourseInstance = null;
+        let newStartDate = null;
+        let newEndDate = null;
+
+        for (const enrollment of enrollments) {
+            const ci = enrollment.courseInstanceId;
+            if (ci && ci.startDate && ci.endDate) {
+                newCourseInstance = ci._id.toString();
+                newStartDate = ci.startDate;
+                newEndDate = ci.endDate;
+                break;
+            }
+        }
+
+        if (!newCourseInstance) return;
+
+        // Find other students enrolled in the SAME course instance with the SAME date range
+        const sameCourseStudents = await StudentEnrollment.find({
+            courseInstanceId: newCourseInstance,
+            status: { $in: ["enrolled", "active"] },
+        })
+            .populate("studentId", "name email personalNumber")
+            .lean();
+
+        // Build map: studentId -> { startDate, endDate }
+        const studentDateMap = new Map();
+        for (const env of sameCourseStudents) {
+            const sid = env.studentId._id.toString();
+            if (sid === newStudent._id.toString()) continue; // Skip the new student
+
+            // Only group if dates match exactly
+            if (env.startDate && env.endDate) {
+                const startMatch =
+                    newStartDate && newStartDate.getTime() === env.startDate.getTime();
+                const endMatch =
+                    newEndDate && newEndDate.getTime() === env.endDate.getTime();
+
+                if (startMatch && endMatch) {
+                    studentDateMap.set(sid, {
+                        startDate: env.startDate,
+                        endDate: env.endDate,
+                    });
+                }
+            }
+        }
+
+        // If no other students share the exact dates, nothing to do
+        if (studentDateMap.size === 0) return;
+
+        // The grouping already happens at the enrollment level - all students in the
+        // same CourseInstance are inherently in the same course card group.
+        // This function's purpose is primarily documentation of the intent and
+        // future extensibility (e.g., custom course card objects, separate progress tracking).
+        //
+        // Current behavior: All students enrolled in the same CourseInstance with
+        // matching date ranges share the same course card automatically via the
+        // enrollment system. No additional action required beyond what's already
+        // implemented in the enrollment model.
+
+        logger.debug(
+            {
+                newStudentId: newStudent._id.toString(),
+                sameCourseStudentCount: studentDateMap.size,
+                courseInstance: newCourseInstance,
+            },
+            "Course card grouping check completed - students share enrollment group"
+        );
+    } catch (error) {
+        // Never throw - this is best-effort grouping that must not block student flows
+        logger.warn({ err: error }, "Course card grouping check failed (non-fatal)");
+    }
+}

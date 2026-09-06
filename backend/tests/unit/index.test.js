@@ -113,8 +113,51 @@ vi.mock("../../src/router/router.js", () => ({
   default: routerMock,
 }));
 
+const virtualChain = {
+  get: vi.fn(() => virtualChain),
+  set: vi.fn(() => virtualChain),
+};
+
+const SchemaConstructorMock = vi.fn(function () {
+  return {
+    methods: {},
+    statics: {},
+    index: vi.fn(),
+    plugin: vi.fn(),
+    path: vi.fn(),
+    virtual: vi.fn(() => virtualChain),
+    pre: vi.fn(),
+    post: vi.fn(),
+  };
+});
+SchemaConstructorMock.Types = {
+  ObjectId: class ObjectId extends String {},
+  Mixed: class Mixed {},
+  String: String,
+  Number: Number,
+  Boolean: Boolean,
+  Date: Date,
+  Buffer: Buffer,
+  Array: Array,
+  Map: Map,
+};
+
 const mongooseMock = {
   connect: vi.fn(),
+  model: vi.fn((name) => {
+    const ModelMock = vi.fn();
+    ModelMock.find = vi.fn().mockReturnThis();
+    ModelMock.findOne = vi.fn().mockReturnThis();
+    ModelMock.findById = vi.fn().mockReturnThis();
+    ModelMock.populate = vi.fn().mockReturnThis();
+    ModelMock.sort = vi.fn().mockReturnThis();
+    ModelMock.lean = vi.fn().mockResolvedValue([]);
+    return ModelMock;
+  }),
+  Schema: SchemaConstructorMock,
+  Types: {
+    ObjectId: class ObjectId extends String {},
+  },
   connection: {
     readyState: 1,
     host: "localhost",

@@ -10,25 +10,25 @@
           class="elevation-1 course-table"
           item-value="_id"
         >
-          <template v-slot:item.courseCode="{ item }">
+          <template #item.courseCode="{ item }">
             <a 
               href="#" 
-              @click.prevent="handleCourseCodeClick(item)"
               class="course-code-link"
+              @click.prevent="handleCourseCodeClick(item)"
             >
               {{ item.courseCode }}
             </a>
           </template>
-          <template v-slot:item.startDate="{ item }">
+          <template #item.startDate="{ item }">
             {{ formatDate(item.startDate) }}
           </template>
-          <template v-slot:item.endDate="{ item }">
+          <template #item.endDate="{ item }">
             {{ formatDate(item.endDate) }}
           </template>
-          <template v-slot:item.slutprovDate="{ item }">
+          <template #item.slutprovDate="{ item }">
             {{ formatDate(item.slutprovDate) }}
           </template>
-          <template v-slot:item.responsibleTeacher="{ item }">
+          <template #item.responsibleTeacher="{ item }">
             {{ getResponsibleTeacher(item) }}
           </template>
         </v-data-table>
@@ -65,14 +65,14 @@
               <div class="teacher-info mb-4">
                 <div v-if="courseDetails.teacher && courseDetails.teacher._id">
                   <strong>Ansvarig lärare:</strong>
-                  <a href="#" @click.prevent="viewTeacher(courseDetails.teacher._id)" class="teacher-link">
+                  <a href="#" class="teacher-link" @click.prevent="viewTeacher(courseDetails.teacher._id)">
                     {{ courseDetails.teacher.username }}
                   </a>
                 </div>
                 <div v-else-if="courseDetails.teachers && courseDetails.teachers.length > 0">
                   <strong>Lärare:</strong>
                   <span v-for="(teacher, index) in courseDetails.teachers" :key="teacher._id">
-                    <a href="#" @click.prevent="viewTeacher(teacher._id)" class="teacher-link">
+                    <a href="#" class="teacher-link" @click.prevent="viewTeacher(teacher._id)">
                       {{ teacher.username }}
                     </a>
                     <span v-if="index < courseDetails.teachers.length - 1">, </span>
@@ -87,7 +87,7 @@
               <div v-if="courseDetails.students && courseDetails.students.length > 0" class="students-list">
                 <ul class="students-ul">
                   <li v-for="student in courseDetails.students" :key="student._id" class="student-item">
-                    <a href="#" @click.prevent="viewStudent(student._id)" class="student-link">
+                    <a href="#" class="student-link" @click.prevent="viewStudent(student._id)">
                       {{ student.name }}
                     </a>
                     <span v-if="student.email" class="student-email"> ({{ student.email }})</span>
@@ -147,12 +147,6 @@
           const response = await client.get('/course-instances/mine');
           const instances = response.data.instances || [];
           
-          // Debug: Log first instance to see data structure
-          if (instances.length > 0) {
-            console.log('Sample course instance:', instances[0]);
-            console.log('Responsible teacher data:', instances[0].responsibleTeacher);
-          }
-          
           // Deduplicate by _id to prevent duplicate entries
           const seen = new Map();
           this.courses = instances.filter(instance => {
@@ -198,14 +192,6 @@
         if (teacher.username) {
           return teacher.username;
         }
-        
-        // Debug: Log what we actually have
-        console.log('Teacher data structure:', {
-          teacher,
-          hasUserId: !!teacher.userId,
-          userIdType: typeof teacher.userId,
-          userIdValue: teacher.userId
-        });
         
         return 'Ej tilldelad';
       },

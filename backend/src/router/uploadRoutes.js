@@ -22,7 +22,6 @@ const DANGEROUS_EXTENSIONS = [
   '.jsp', '.asp', '.aspx', '.vbs', '.cmd', '.pl', '.cgi', '.msi', '.jar', '.scr'
 ];
 
-const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"];
 const ALLOWED_ADMIN_ROLES = ["systemadmin", "admin", "tester"];
 
 const sanitizeFilename = (filename) => {
@@ -41,6 +40,15 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE }
 })
+// Resolve the logged-in user's own Student profile (student self-access),
+// linked by email the same way the rest of the app links student accounts.
+async function findSelfStudent(user) {
+  const roles = user.roles || (user.role ? [user.role] : []);
+  if (!roles.includes("student")) return null;
+  const Student = mongoose.model("Student");
+  return Student.findOne({ email: user.email });
+}
+
 // Middleware to authorize student-specific file access
 async function checkStudentAccess(req, res, next) {
   try {
@@ -54,6 +62,17 @@ async function checkStudentAccess(req, res, next) {
     const userRoles = user.roles || (user.role ? [user.role] : []);
     const isStaff = userRoles.some(r => ["systemadmin", "admin", "coordinator", "syv", "specped", "tester"].includes(r));
     const isTeacher = userRoles.includes("teacher");
+    const isStudent = userRoles.includes("student");
+
+    // A student may manage files for their own student profile (self-access),
+    // e.g. upload assignment files before submitting them.
+    if (isStudent && !isStaff && !isTeacher) {
+      const student = await findSelfStudent(user);
+      if (!student || student._id.toString() !== studentId) {
+        return res.status(403).json({ error: "Forbidden: You can only manage files for your own student profile." });
+      }
+      return next();
+    }
 
     if (!isStaff && !isTeacher) {
       return res.status(403).json({ error: "Forbidden: Access denied." });
@@ -102,8 +121,9 @@ async function checkFileAccess(req, res, next) {
     const userRoles = user.roles || (user.role ? [user.role] : []);
     const isStaff = userRoles.some(r => ["systemadmin", "admin", "coordinator", "syv", "specped", "tester"].includes(r));
     const isTeacher = userRoles.includes("teacher");
+    const isStudent = userRoles.includes("student");
 
-    if (!isStaff && !isTeacher) {
+    if (!isStaff && !isTeacher && !isStudent) {
       return res.status(403).json({ error: "Forbidden: Access denied." });
     }
 
@@ -117,6 +137,19 @@ async function checkFileAccess(req, res, next) {
     if (!studentId) {
       if (!userRoles.some(r => ["systemadmin", "admin", "tester"].includes(r))) {
         return res.status(403).json({ error: "Forbidden: Only administrators can access orphan files." });
+      }
+      req.fileRecord = file;
+      return next();
+    }
+
+    // A student may only download (GET) files belonging to their own profile.
+    if (isStudent && !isStaff && !isTeacher) {
+      if (req.method !== "GET") {
+        return res.status(403).json({ error: "Forbidden: Students can only download their own files." });
+      }
+      const student = await findSelfStudent(user);
+      if (!student || student._id.toString() !== String(studentId)) {
+        return res.status(403).json({ error: "Forbidden: You can only download your own files." });
       }
       req.fileRecord = file;
       return next();
@@ -432,6 +465,45 @@ router.delete('/cleanup/orphaned', authenticateUser, hasRole(ALLOWED_ADMIN_ROLES
   } catch (err) {
     logger.error({ err }, "Failed to cleanup orphaned files")
     res.status(500).json({ error: 'Failed to cleanup orphaned files' })
+  }
+})
+
+// Bulk endpoint: get file counts for a list of student IDs (for APL board badges)
+router.get('/file-counts', authenticateUser, async (req, res) => {
+  try {
+    const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
+    const isStaff = userRoles.some(r => ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"].includes(r));
+    if (!isStaff) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { studentIds } = req.query;
+    if (!studentIds) {
+      return res.status(400).json({ error: "studentIds query param required" });
+    }
+
+    const ids = studentIds.split(',').filter(Boolean);
+    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'fs' });
+
+    const counts = {};
+    for (const id of ids) {
+      try {
+        const files = await bucket.find({ 'metadata.studentId': id }).toArray();
+        counts[id] = files.length;
+      } catch {
+        counts[id] = 0;
+      }
+    }
+
+    // Always return counts for every requested id, even after a partial failure.
+    for (const id of ids) {
+      if (!(id in counts)) counts[id] = 0;
+    }
+
+    res.json(counts);
+  } catch (err) {
+    logger.error({ err }, "Failed to get file counts")
+    res.status(500).json({ error: 'Failed to get file counts' })
   }
 })
 

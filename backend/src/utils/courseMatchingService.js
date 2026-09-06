@@ -1,5 +1,8 @@
 import { normalizeCodeForMatching } from "./parseStudentExcel.js";
+import { cloneModules } from "../models/courseModuleSchema.js";
 import logger from "./logger.js";
+import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
+import CourseInstance from "../models/CourseInstance.js";
 
 class CourseMatchingService {
     /**
@@ -35,6 +38,26 @@ class CourseMatchingService {
     }
 
     /**
+     * Default exam mode derived from the student's municipality.
+     * Spec: all municipalities except Upplands Bro default to on-site exams;
+     * Upplands Bro defaults to remote (distans).
+     * Handles the municipality being stored as a string or as { type: "Upplands Bro" },
+     * and tolerates casing/hyphen/space variants ("Upplands-Bro", "upplands bro").
+     */
+    static getDefaultExamMode(municipality) {
+        const raw =
+            typeof municipality === "string"
+                ? municipality
+                : municipality?.type || "";
+        if (!raw) return "on-site";
+        const normalized = String(raw)
+            .trim()
+            .toLowerCase()
+            .replace(/[\s-]+/g, "");
+        return normalized === "upplandsbro" ? "remote" : "on-site";
+    }
+
+    /**
      * Clean course name for better matching
      */
     static cleanCourseName(name) {
@@ -50,6 +73,7 @@ class CourseMatchingService {
     /**
      * Find the best matching course using strict exact code matching only
      */
+     
     static async findBestCourseMatch(courseCodeOrName, threshold = 0.7) {
         const { default: Course } = await import("../models/Course.js");
         // Normalize input: treat as code using the same function as database codes
@@ -77,6 +101,26 @@ class CourseMatchingService {
         // No match found - return null (strict matching only)
         logger.debug({ normalizedInput }, "No exact code match found");
         return null;
+    }
+
+    /**
+     * Resolve the course template to auto-generate card content from at
+     * admission time (MILESTONE-3 #31 Part B).
+     *
+     * Rule: the template tied to this course via `courseId` wins. Among
+     * several candidates the most recently updated ACTIVE template is chosen
+     * (sort: isActive desc, then updatedAt desc). Returns null when the
+     * course has no template — callers then create the card with empty
+     * modules and log the gap explicitly.
+     */
+    static async resolveCourseTemplate(mainCourseId) {
+        const { default: CourseTemplate } = await import(
+            "../models/CourseTemplate.js"
+        );
+        return CourseTemplate.findOne({ courseId: mainCourseId }).sort({
+            isActive: -1,
+            updatedAt: -1,
+        });
     }
 
     /**
@@ -160,6 +204,67 @@ class CourseMatchingService {
         const month = String(startDateObj.getMonth() + 1).padStart(2, '0'); // Month (01-12)
         const uniqueCourseCode = `${mainCourse.courseCode}${year}${month}`;
 
+        // Auto-generate card content from the course's own template (item #31
+        // Part B). Only applies to NEW instances created at admission time —
+        // existing instances are never rewritten, so the "same course + dates
+        // share one card" behavior is unaffected. The admin flow's explicit
+        // templateId is resolved by the controller and always wins.
+        const template = await this.resolveCourseTemplate(mainCourseId);
+        let templateModules = [];
+        if (template) {
+            templateModules = cloneModules(template.modules);
+            logger.info({ courseName: mainCourse.courseName, templateId: template._id, moduleCount: templateModules.length }, "Auto-generated course card content from course template");
+        } else {
+            logger.info({ courseName: mainCourse.courseName, mainCourseId }, "course has no template — card created without content");
+        }
+
+        // --- Schedule parameters wiring ---
+        // 1. Determine length weeks from the course duration
+        const courseStart = new Date(startDate);
+        const courseEnd = new Date(endDate);
+        const lengthWeeks = Math.round((courseEnd - courseStart) / (7 * 24 * 60 * 60 * 1000));
+
+        // 2. Look up the responsible teacher's saved schedule parameters
+        let sectionDates = [];
+        if (responsibleTeacherId) {
+            const params = await TeacherScheduleParameters.findOne({
+                teacherId: responsibleTeacherId,
+                courseId: String(mainCourse._id),
+                lengthWeeks,
+            }).lean();
+
+            if (params && params.sectionOffsets && params.sectionOffsets.length === 5) {
+                // Use the teacher's saved offsets
+                sectionDates = params.sectionOffsets.map((offsetWeeks) => {
+                    const date = new Date(courseStart);
+                    date.setDate(date.getDate() + offsetWeeks * 7);
+                    return date;
+                });
+                logger.info({ courseName: mainCourse.courseName, teacherId: responsibleTeacherId, sectionDates }, "Using teacher's saved schedule parameters for section dates");
+            } else {
+                // Parameters exist but offsets are invalid/empty → fall back to defaults
+                logger.info({ courseName: mainCourse.courseName, teacherId: responsibleTeacherId }, "Teacher schedule parameters found but offsets invalid; using defaults");
+            }
+        }
+
+        // 3. If no saved parameters (or no teacher), use evenly-spaced defaults
+        if (sectionDates.length === 0) {
+            const defaultOffsets = {
+                5: [0, 1, 2, 3, 4],
+                10: [0, 2, 4, 6, 8],
+                20: [0, 4, 8, 12, 16],
+            };
+            const offsets = defaultOffsets[lengthWeeks] || [0, 1, 2, 3, 4];
+            sectionDates = offsets.map((offsetWeeks) => {
+                const date = new Date(courseStart);
+                date.setDate(date.getDate() + offsetWeeks * 7);
+                return date;
+            });
+            if (responsibleTeacherId) {
+                logger.info({ courseName: mainCourse.courseName, teacherId: responsibleTeacherId, lengthWeeks }, "No saved schedule parameters; using evenly-spaced defaults for section dates");
+            }
+        }
+
         const newInstance = new CourseInstance({
             mainCourseId,
             startDate,
@@ -173,6 +278,8 @@ class CourseMatchingService {
             notes: `Auto-created for student enrollment (${startDate.toDateString()} - ${endDate.toDateString()})`,
             // Only set slutprovDate if explicitly provided and no teacher (let pre-save hook calculate for teachers)
             slutprovDate: shouldSetSlutprovDate ? slutprovDate : undefined,
+            modules: templateModules,
+            sectionDates, // auto-generated section start dates
         });
 
         await newInstance.save();
@@ -200,9 +307,34 @@ class CourseMatchingService {
             errors: [],
         };
 
+        // Re-registration revival (Etapp 1): a dropout student who is given new
+        // education entries is active again. Clear the dropout flag and reset
+        // the inactivity warning markers so the new period starts fresh and the
+        // student reappears on active lists. See dropoutService.reactivateStudent.
+        try {
+            const { default: Student } = await import("../models/Student.js");
+            const { reactivateStudent } = await import(
+                "../services/dropoutService.js"
+            );
+            const studentDoc = await Student.findById(studentId);
+            if (studentDoc) {
+                await reactivateStudent({
+                    studentDoc,
+                    userId,
+                    role: userId ? "system" : "system",
+                });
+            }
+        } catch (reactivateError) {
+            logger.error(
+                { err: reactivateError, studentId },
+                "Failed to reactivate student during education processing"
+            );
+        }
+
         logger.debug({ educationCount: educationEntries.length, studentId }, "Processing education entries for student");
 
         // Deduplicate missing package errors
+         
         const missingPackages = new Set();
         for (const entry of educationEntries) {
             try {
@@ -320,6 +452,7 @@ class CourseMatchingService {
                         studentId,
                         courseInstanceId: instance._id,
                         mainCourseId: match.course._id,
+                        enrollmentPrice: match.course.price ?? null,
                         startDate: new Date(entry.startDate),
                         endDate: new Date(entry.endDate),
                         status: "enrolled",
@@ -327,14 +460,57 @@ class CourseMatchingService {
                             studentDocA?.teacherId || entry.teacherId || null,
                         notes: entry.notes || null,
                         needsSupport: options.needsSupport || false,
-                        examMode: options.examMode || 'on-site',
+                        examMode: options.examMode || this.getDefaultExamMode(studentDocA?.municipality),
                     });
                     logger.debug({ teacherId: enrollment.teacherId || "null", studentDocTeacherId: studentDocA?.teacherId || "null", entryTeacherId: entry.teacherId || "null" }, "Creating individual course enrollment");
 
                     await enrollment.save();
 
-                    // Calculate and set slutprov date BEFORE adding to results
-                    const courseStart = new Date(entry.startDate);
+    // Create learning kit (logbook entry) when student starts a course
+    try {
+        const { default: Student } = await import("../models/Student.js");
+
+        const studentDoc = await Student.findById(studentId);
+        if (!studentDoc) {
+            logger.debug({ studentId }, "Student not found when creating learning kit (skipped)");
+        } else {
+            // Check if a learning kit already exists for this course
+            const existingKit = studentDoc.logbook?.find(
+                kit => kit.title && kit.title.includes("Introduktionskit")
+            );
+
+            if (existingKit) {
+                logger.debug({ kitId: existingKit._id }, "Learning kit already exists for student");
+            } else {
+                // Create a new learning kit for the student
+                const newKitId = new mongoose.Types.ObjectId();
+
+                const learningKit = {
+                    id: newKitId,
+                    title: "Introduktionskit",
+                    description: `Introduktionskit för ${entry.name || "kursen"}`,
+                    startDate: new Date(), // Today - when the kit was sent
+                    endDate: null, // Will be set when placement ends
+                    status: "pending", // Initially pending, becomes "active" when student starts
+                    placementId: null,
+                    coursePackageId: null,
+                };
+
+                // Add to logbook
+                if (!studentDoc.logbook) studentDoc.logbook = [];
+                studentDoc.logbook.unshift(learningKit);
+                await studentDoc.save();
+
+                logger.info({ studentId, kitTitle: learningKit.title }, "Created learning kit in student logbook");
+            }
+        }
+    } catch (kitError) {
+        logger.error({ err: kitError, studentId }, "Error creating learning kit");
+        // Non-fatal - learning kit creation failure should not break the enrollment flow
+    }
+
+    // Calculate and set slutprov date BEFORE adding to results
+    const courseStart = new Date(entry.startDate);
                     let slutprovDate;
                     if (entry.slutprovDate) {
                         // Use explicit slutprovDate if provided
@@ -456,6 +632,33 @@ class CourseMatchingService {
                         continue;
                     }
 
+                    // Package revision: admin may have unchecked courses ("revidera bort
+                    // vissa kurser genom att bocka av dem i en lista"). Skip them.
+                    const excludedCourseIds = new Set(
+                        (entry.excludedCourseIds || []).map((id) => String(id))
+                    );
+                    const packageCourses = (packageDoc.coursePackageCourses || []).filter(
+                        (course) => {
+                            const courseId =
+                                typeof course === "object"
+                                    ? course?._id
+                                    : course;
+                            return !excludedCourseIds.has(String(courseId));
+                        }
+                    );
+                    if (
+                        excludedCourseIds.size > 0 &&
+                        packageCourses.length < (packageDoc.coursePackageCourses || []).length
+                    ) {
+                        results.warnings.push({
+                            type: "package_revised",
+                            packageName: packageDoc.coursePackageName,
+                            studentId,
+                            message: `Kurspaketet "${packageDoc.coursePackageName}" har reviderats: ${excludedCourseIds.size} kurs(er) borttagna (${excludedCourseIds.size} st avbokade i listan).`,
+                        });
+                        logger.info({ studentId, packageName: packageDoc.coursePackageName, excluded: [...excludedCourseIds] }, "CoursePackage revised by excluding courses");
+                    }
+
                     // Get student first to find teacherId for course instances
                     let studentDocPackage;
                     if (!global._StudentModel) {
@@ -477,9 +680,9 @@ class CourseMatchingService {
                     );
                     let i = 0;
 
-                    while (i < packageDoc.coursePackageCourses.length) {
+                    while (i < packageCourses.length) {
                         // Get current course details
-                        const courseId = packageDoc.coursePackageCourses[i];
+                        const courseId = packageCourses[i];
                         const course =
                             typeof courseId === "object"
                                 ? courseId
@@ -496,10 +699,10 @@ class CourseMatchingService {
 
                         if (
                             extentWeeks === 2.5 &&
-                            i + 1 < packageDoc.coursePackageCourses.length
+                            i + 1 < packageCourses.length
                         ) {
                             const nextCourseId =
-                                packageDoc.coursePackageCourses[i + 1];
+                                packageCourses[i + 1];
                             nextCourse =
                                 typeof nextCourseId === "object"
                                     ? nextCourseId
@@ -525,7 +728,7 @@ class CourseMatchingService {
                         }
 
                         // Process current course - use student's teacher as responsibleTeacher
-                        const { instance: courseInstance, wasCreated } =
+                        const { instance: courseInstance } =
                             await this.findOrCreateCourseInstance(
                                 course._id,
                                 courseStart,
@@ -574,6 +777,7 @@ class CourseMatchingService {
                             courseInstanceId: courseInstance._id,
                             mainCourseId: course._id,
                             coursePackageId: packageDoc._id,
+                            enrollmentPrice: course.price ?? null,
                             startDate: courseStart,
                             endDate: courseEnd,
                             status: "enrolled",
@@ -582,10 +786,8 @@ class CourseMatchingService {
                                 entry.teacherId ||
                                 null,
                             notes: entry.notes || null,
-                            needsSupport: options.needsSupport,
-                            examMode: options.examMode,
                             needsSupport: options.needsSupport || false,
-                            examMode: options.examMode || 'on-site',
+                            examMode: options.examMode || this.getDefaultExamMode(studentDocB?.municipality),
                         });
                         logger.debug({ teacherId: enrollment.teacherId || "null", studentDocTeacherId: studentDocB?.teacherId || "null", entryTeacherId: entry.teacherId || "null" }, "Creating enrollment");
                         logger.debug({ enrollment: enrollment.toObject() }, "StudentEnrollment to be created");
@@ -680,7 +882,6 @@ class CourseMatchingService {
                             // Use student's teacher as responsibleTeacher
                             const {
                                 instance: nextCourseInstance,
-                                wasCreated: nextWasCreated,
                             } = await this.findOrCreateCourseInstance(
                                 nextCourse._id,
                                 courseStart,
@@ -712,6 +913,7 @@ class CourseMatchingService {
                                     courseInstanceId: nextCourseInstance._id,
                                     mainCourseId: nextCourse._id,
                                     coursePackageId: packageDoc._id,
+                                    enrollmentPrice: nextCourse.price ?? null,
                                     startDate: courseStart,
                                     endDate: courseEnd,
                                     status: "enrolled",
@@ -721,7 +923,7 @@ class CourseMatchingService {
                                         null,
                                     notes: entry.notes || null,
                                     needsSupport: options.needsSupport,
-                                    examMode: options.examMode,
+                                    examMode: options.examMode || this.getDefaultExamMode(studentDocB?.municipality),
                                 });
 
                                 await nextEnrollment.save();
@@ -834,12 +1036,15 @@ class CourseMatchingService {
                             await studentDocD.save();
                             // Surface a non-blocking note so the uploader can see that a package was added
                             const studentName = studentDocD?.name || studentDocD?.email || "Okänd elev";
+                            const includedCount = packageCourses.length;
+                            const excludedCount = (packageDoc.coursePackageCourses?.length || 0) - includedCount;
+                            const revisionNote = excludedCount > 0 ? ` (${excludedCount} kurser borttagna via revidering)` : "";
                             results.warnings.push({
                                 type: "package_added",
                                 packageName: packageDoc.coursePackageName,
                                 studentId,
                                 studentName,
-                                message: `Kurspaket "${packageDoc.coursePackageName}" har lagts till för elev ${studentName}. Paketet innehåller ${packageDoc.coursePackageCourses?.length || 0} kurser som kommer att skapas automatiskt.`,
+                                message: `Kurspaket "${packageDoc.coursePackageName}" har lagts till för elev ${studentName}. Paketet innehåller ${includedCount} kurser som kommer att skapas automatiskt${revisionNote}.`,
                             });
                             logger.info({ studentName: studentDocD.name || studentDocD.email, packageName: packageDoc.coursePackageName }, "Added CoursePackage education entry for student");
                         }
@@ -911,7 +1116,7 @@ class CourseMatchingService {
                     const individualResponsibleTeacherId = studentDocIndividual?.teacherId || entry.teacherId || null;
 
                     // Find or create CourseInstance - use student's teacher as responsibleTeacher
-                    const { instance: courseInstance, wasCreated } =
+                    const { instance: courseInstance } =
                         await this.findOrCreateCourseInstance(
                             course._id,
                             courseStart,
@@ -955,6 +1160,7 @@ class CourseMatchingService {
                         studentId,
                         courseInstanceId: courseInstance._id,
                         mainCourseId: course._id,
+                        enrollmentPrice: course.price ?? null,
                         startDate: courseStart,
                         endDate: courseEnd,
                         status: "enrolled",
@@ -962,7 +1168,7 @@ class CourseMatchingService {
                             studentDoc?.teacherId || entry.teacherId || null,
                         notes: entry.notes || null,
                         needsSupport: options.needsSupport,
-                        examMode: options.examMode,
+                        examMode: options.examMode || this.getDefaultExamMode(studentDoc?.municipality),
                     });
 
                     logger.debug({ enrollment: enrollment.toObject() }, "Individual course StudentEnrollment to be created");
@@ -1058,7 +1264,7 @@ class CourseMatchingService {
                         teacherId: entry.teacherId || null,
                         notes: entry.notes || null,
                         needsSupport: options.needsSupport,
-                        examMode: options.examMode,
+                        examMode: options.examMode || this.getDefaultExamMode(studentDocE?.municipality),
                     });
                     await programEnrollment.save();
                     results.enrollments.push({
@@ -1116,6 +1322,70 @@ class CourseMatchingService {
         });
 
         return results;
+    }
+
+    /**
+     * Aggregate course statistics for a date range (optionally a single course).
+     * Counts course instances that OVERLAP the range, so a period filter shows
+     * the courses running at that time.
+     *
+     * @param {Date} startDate
+     * @param {Date} endDate
+     * @param {string} [courseId]  optional mainCourseId filter
+     * @returns {Promise<object>}
+     */
+    static async getCourseStatistics(startDate, endDate, courseId) {
+        const query = {
+            startDate: { $lt: endDate },
+            endDate: { $gt: startDate },
+        };
+        if (courseId) {
+            query.mainCourseId = courseId;
+        }
+
+        const instances = await CourseInstance.find(query)
+            .select(
+                "courseName courseCode isActive enrollmentCount completionCount dropoutCount"
+            )
+            .lean();
+
+        const totalInstances = instances.length;
+        const activeInstances = instances.filter((i) => i.isActive).length;
+        const totalEnrollments = instances.reduce(
+            (sum, i) => sum + (Number(i.enrollmentCount) || 0),
+            0
+        );
+        const completions = instances.reduce(
+            (sum, i) => sum + (Number(i.completionCount) || 0),
+            0
+        );
+        const dropouts = instances.reduce(
+            (sum, i) => sum + (Number(i.dropoutCount) || 0),
+            0
+        );
+        const averageEnrollments =
+            totalInstances > 0
+                ? Number((totalEnrollments / totalInstances).toFixed(1))
+                : 0;
+
+        return {
+            totalInstances,
+            activeInstances,
+            totalEnrollments,
+            completions,
+            dropouts,
+            averageEnrollments,
+            byCourse: instances.reduce((acc, i) => {
+                const key = i.courseCode || i.courseName || "Okänd kurs";
+                if (!acc[key]) {
+                    acc[key] = { total: 0, active: 0, enrollments: 0 };
+                }
+                acc[key].total += 1;
+                if (i.isActive) acc[key].active += 1;
+                acc[key].enrollments += Number(i.enrollmentCount) || 0;
+                return acc;
+            }, {}),
+        };
     }
 }
 

@@ -1,44 +1,185 @@
 
 import rolesConfig from '../config/roles.js';
+import { PERMISSION_FEATURES, hasPermission as roleHasPermission } from '../config/permissions.js';
 import { logger } from '../utils/errorHandler.js';
+import User from '../models/User.js';
+
+const SUPERUSER_ROLES = ['systemadmin', 'admin', 'tester'];
+
+const getUserRoles = (user) => {
+    const roles = Array.isArray(user?.roles) && user.roles.length > 0 ? user.roles : user?.role ? [user.role] : [];
+    return roles;
+};
+
+const getOverrideObject = (user) =>
+    user?.permissions && typeof user.permissions === 'object' && user.permissions !== null ? user.permissions : {};
+
+const hasExplicitOverride = (overrides, feature) =>
+    Object.prototype.hasOwnProperty.call(overrides, feature) && overrides[feature] !== undefined && overrides[feature] !== null;
+
+const normalizePermissions = (permissions) => {
+    if (Array.isArray(permissions)) return permissions;
+    if (permissions && typeof permissions === 'object') {
+        return Object.entries(permissions)
+            .filter(([, enabled]) => enabled === true)
+            .map(([feature]) => feature);
+    }
+    return [];
+};
 
 // This function can be used to compute permissions on the user object at login
 export const getEffectivePermissions = (user) => {
-  const permissions = new Set(user.permissions);
-  const roles = Array.isArray(user.roles) ? user.roles : [];
-  roles.forEach(role => {
-    const rolePermissions = rolesConfig[role] || [];
-    rolePermissions.forEach(p => permissions.add(p));
-  });
-  return [...permissions];
+    const permissions = new Set(normalizePermissions(user.permissions));
+    const roles = Array.isArray(user.roles) ? user.roles : [];
+    roles.forEach(role => {
+        const rolePermissions = rolesConfig[role] || [];
+        rolePermissions.forEach(p => permissions.add(p));
+    });
+    return [...permissions];
 };
 
-// Middleware to check for a specific permission
+// Maps a role-based permission string to its per-user feature flag so
+// overrides configured in the admin PermissionsTab can grant or revoke it.
+const PERMISSION_TO_FEATURE = {
+    'courseTemplates:read': PERMISSION_FEATURES.COURSE_TEMPLATES,
+    'courseTemplates:create': PERMISSION_FEATURES.COURSE_TEMPLATES,
+    'courseTemplates:update': PERMISSION_FEATURES.COURSE_TEMPLATES,
+    'courseTemplates:delete': PERMISSION_FEATURES.COURSE_TEMPLATES,
+    'analytics:read': PERMISSION_FEATURES.STATISTICS,
+};
+
+// Effective feature access for a user: an explicit per-user override wins,
+// otherwise the role default from the permission matrix is used.
+export const hasFeaturePermission = (user, feature) => {
+    if (!user) return false;
+
+    const overrides = getOverrideObject(user);
+    if (hasExplicitOverride(overrides, feature)) {
+        return overrides[feature] === true;
+    }
+
+    const roles = getUserRoles(user);
+    if (roles.some((r) => SUPERUSER_ROLES.includes(r))) return true;
+    return roles.some((r) => roleHasPermission(r, feature));
+};
+
+/**
+ * Refresh the caller's authorization state (roles/permissions) from the
+ * database before performing a role/permission check.
+ *
+ * JWT payloads are long-lived (7d), so the roles/permissions embedded in
+ * `req.user` can be stale: an admin may have revoked a role or permission but
+ * the old token would still grant it. On every sensitive operation guarded by
+ * `can`/`canFeature`/`hasRole` we re-load the user and overwrite the JWT copy
+ * with the current DB values so revocations take effect immediately.
+ *
+ * Failure handling:
+ *  - User not found in DB -> the account was deleted/disabled; the check below
+ *    will see no assigned roles/permissions and deny sensitive access.
+ *  - DB unreachable  -> fall back to the JWT state so a transient DB error does
+ *    not hard-fail the whole request (the JWT is still cryptographically valid).
+ */
+export async function refreshUserAuthorization(req) {
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    if (!userId) return;
+    try {
+        const fresh = await User.findById(userId)
+            .select('roles permissions active municipalities')
+            .lean();
+        if (!fresh) {
+            // Account gone (deleted/disabled). Leave a marker so checks below
+            // can deny instead of trusting stale JWT roles. Reject hard only
+            // for stateful requests; pure authorization denial is safer.
+            req.user.roles = req.user.roles || [];
+            req.user.permissions = req.user.permissions || {};
+            return;
+        }
+        req.user.roles = fresh.roles && fresh.roles.length ? fresh.roles : (req.user.roles || []);
+        req.user.role = fresh.roles && fresh.roles[0] ? fresh.roles[0] : (req.user.role || null);
+        req.user.permissions = fresh.permissions || {};
+        req.user.active = fresh.active;
+        req.user.municipalities = Array.isArray(fresh.municipalities) ? fresh.municipalities : [];
+
+        // A disabled/deactivated account must lose all authorization, even
+        // though the JWT is still cryptographically valid. Clearing roles here
+        // makes every downstream can/canFeature/hasRole check deny access.
+        if (fresh.active === false) {
+            req.user.roles = [];
+            req.user.role = null;
+            req.user.permissions = {};
+            req.user.municipalities = [];
+        }
+    } catch (err) {
+        // DB unavailable — rely on the (still-valid) JWT rather than block.
+        logger.warn({ userId }, 'Failed to refresh user authorization state; using JWT state');
+    }
+}
+
+// Middleware to check for a specific feature flag (with per-user override support)
+export const canFeature = (feature) => {
+    return async (req, res, next) => {
+        if (!req.user) {
+            logger.warn(`Authentication required for access to ${req.originalUrl}`);
+            return res.status(401).json({ message: 'Authentication required.' });
+        }
+
+        await refreshUserAuthorization(req);
+
+        if (hasFeaturePermission(req.user, feature)) {
+            return next();
+        }
+
+        logger.warn(
+            ` Authorization DENIED for user ${req.user.userId || req.user.email || 'unknown'} (${getUserRoles(req.user).join(', ')}) attempting ${req.method} ${req.originalUrl} - Missing feature: "${feature}"`
+        );
+
+        return res.status(403).json({ message: 'Forbidden: You do not have the required permission.' });
+    };
+};
+
+// Middleware to check for a specific permission (role-based, with per-user override support)
 export const can = (permission) => {
-  return (req, res, next) => {
-    // Assuming user object is attached to req by a previous auth middleware
-    if (!req.user) {
-      logger.warn(`🚫 Authentication required for access to ${req.originalUrl}`);
-      return res.status(401).json({ message: 'Authentication required.' });
-    }
+    return async (req, res, next) => {
+        // Assuming user object is attached to req by a previous auth middleware
+        if (!req.user) {
+            logger.warn(`Authentication required for access to ${req.originalUrl}`);
+            return res.status(401).json({ message: 'Authentication required.' });
+        }
 
-    const roles = Array.isArray(req.user.roles) ? req.user.roles : [];
-    const userForPerms = { roles, permissions: req.user.permissions || [] };
-    const effectivePermissions = getEffectivePermissions(userForPerms);
+        await refreshUserAuthorization(req);
 
-    if (effectivePermissions.includes(permission)) {
-      return next();
-    }
-    
-    // Also check for admin role as a superuser
-    if (roles.includes('systemadmin') || roles.includes('admin')) {
-      return next();
-    }
+        const roles = Array.isArray(req.user.roles) ? req.user.roles : [];
 
-    logger.warn(
-      `🚫 Authorization DENIED for user ${req.user.userId || req.user.email || 'unknown'} (${roles.join(', ')}) attempting ${req.method} ${req.originalUrl} - Missing permission: "${permission}"`
-    );
+        const feature = PERMISSION_TO_FEATURE[permission];
+        if (feature) {
+            const overrides = getOverrideObject(req.user);
+            if (hasExplicitOverride(overrides, feature)) {
+                if (overrides[feature] === true) {
+                    return next();
+                }
+                logger.warn(
+                    ` Authorization DENIED for user ${req.user.userId || req.user.email || 'unknown'} (${roles.join(', ')}) attempting ${req.method} ${req.originalUrl} - Feature revoked: "${feature}"`
+                );
+                return res.status(403).json({ message: 'Forbidden: You do not have the required permission.' });
+            }
+        }
 
-    return res.status(403).json({ message: 'Forbidden: You do not have the required permission.' });
-  };
+        const userForPerms = { roles, permissions: req.user.permissions || [] };
+        const effectivePermissions = getEffectivePermissions(userForPerms);
+
+        if (effectivePermissions.includes(permission)) {
+            return next();
+        }
+
+        // Also check for admin role as a superuser
+        if (roles.includes('systemadmin') || roles.includes('admin')) {
+            return next();
+        }
+
+        logger.warn(
+            ` Authorization DENIED for user ${req.user.userId || req.user.email || 'unknown'} (${roles.join(', ')}) attempting ${req.method} ${req.originalUrl} - Missing permission: "${permission}"`
+        );
+
+        return res.status(403).json({ message: 'Forbidden: You do not have the required permission.' });
+    };
 };

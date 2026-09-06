@@ -1,5 +1,5 @@
 import express from "express";
-import Student from "../models/Student.js";
+import mongoose from "mongoose";
 import Notification from "../models/Notification.js";
 import Teacher from "../models/Teacher.js";
 import { authenticateUser } from "../controllers/authController.js";
@@ -11,10 +11,57 @@ const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "
 
 import { evaluateActionPlanStatusAndNotify } from "../controllers/notificationController.js";
 
+// Determine whether the acting user is allowed to see/act on a given
+// notification, mirroring the scoping rules applied by GET /notifications.
+// Prevents one user from resolving/resetting notifications belonging to
+// another role/tenant (IDOR on the per-user resolve/reset endpoints).
+async function isUserAuthorizedForNotification(req, note) {
+  if (!note) return false;
+  const role = req.user?.role;
+  const userId = req.user?.userId;
+  if (!userId) return false;
+
+  const objectId = (v) =>
+    mongoose.Types.ObjectId.isValid(v) ? new mongoose.Types.ObjectId(v) : v;
+  const userIdStr = String(objectId(userId));
+
+  if (role === "student") {
+    return String(note.meta?.studentUserId || "") === userIdStr;
+  }
+
+  if (role === "teacher") {
+    const teacher = await Teacher.findOne({ userId });
+    if (!teacher) return false;
+    return String(note.teacher || "") === String(objectId(teacher._id));
+  }
+
+  if (role === "admin" || role === "systemadmin") {
+    if (note.type === "dropout") {
+      return String(note.createdByAdmin || "") === userIdStr;
+    }
+    return true;
+  }
+
+  // coordinator / syv / specped / tester: GET exposes all non-resolved notes
+  return true;
+}
+
+
 
 
 router.get("/notifications", authenticateUser, async (req, res) => {
   try {
+    // Pagination: sensible default page size, hard max, newest-first ordering.
+    const DEFAULT_LIMIT = 100;
+    const MAX_LIMIT = 200;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(rawLimit, MAX_LIMIT)
+      : DEFAULT_LIMIT;
+    const rawPage = parseInt(req.query.page, 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const skip = (page - 1) * limit;
+
     // Exclude notifications that this user has already resolved
     // Use $nin (not in) to exclude notifications where current user is in resolvedByUsers array
     const mongoose = (await import("mongoose")).default;
@@ -27,6 +74,15 @@ router.get("/notifications", authenticateUser, async (req, res) => {
     let query = { 
       resolvedByUsers: { $nin: [userId] }
     };
+    
+    // If user is a student, only show study plan notifications addressed to them
+    if (req.user.role === "student") {
+      query = { 
+        "meta.studentUserId": userId,
+        resolvedByUsers: { $nin: [userId] }
+      };
+      logger.debug({ userId: req.user.userId, name: req.user.name || req.user.username }, "Student fetching their notifications")
+    }
     
     // If user is an admin, only show notifications they created (for dropout notifications)
     if (["admin", "systemadmin"].includes(req.user.role)) {
@@ -66,6 +122,11 @@ router.get("/notifications", authenticateUser, async (req, res) => {
       logger.debug({ queryTeacher: query.teacher.toString(), queryTeacherType: query.teacher.constructor.name, query }, "Query teacher details")
       
       // Debug: Check all dropout notifications to see what teacher IDs they have
+      // Debug-only diagnostic queries. These exist solely to log cross-checks
+      // between the query's teacher field and stored notifications; they run
+      // extra full-collection finds (and a per-dropout findOne = N+1) on every
+      // teacher request, so they MUST be skipped unless LOG_LEVEL=debug.
+      if (logger.level === "debug") {
       const allDropoutNotifications = await Notification.find({ 
         type: "dropout", 
         resolvedByUsers: { $nin: [userId] } // Not resolved by this user
@@ -91,11 +152,12 @@ router.get("/notifications", authenticateUser, async (req, res) => {
           }
         }
       }
+      }
     }
     
     // Execute query with explicit ObjectId casting for teacher field if present
-    if (query.teacher) {
-      // Try query with explicit ObjectId comparison
+    if (query.teacher && logger.level === "debug") {
+      // Debug-only: verify the explicit-ObjectId and string-match variants
       const mongoose = (await import("mongoose")).default;
       const notesWithExplicitId = await Notification.find({
         ...query,
@@ -113,9 +175,21 @@ router.get("/notifications", authenticateUser, async (req, res) => {
       logger.debug({ count: notesWithStringMatch.length }, "Query with string match found notifications")
     }
     
-    const notes = await Notification.find(query);
-    logger.debug({ count: notes.length, query }, "Found notifications matching query")
-    notes.forEach((note, idx) => {
+    const notes = await Notification.find(query).sort({ createdAt: -1, _id: -1 });
+
+    // Filter task_reminder notifications: only the user they belong to may
+    // see them (they are stored with a non-ObjectId meta.userId so the Mongo
+    // query above cannot scope them per role).
+    const filteredNotes = notes.filter((note) => {
+        if (note.type === "task_reminder") {
+            return String(note.meta?.userId || "") === String(req.user.userId);
+        }
+        return true;
+    });
+
+    logger.debug({ count: filteredNotes.length, query }, "Found notifications matching query")
+    if (logger.level === "debug") {
+    filteredNotes.forEach((note, idx) => {
       logger.debug({ index: idx + 1, type: note.type, teacher: note.teacher ? note.teacher.toString() : 'MISSING', student: note.meta?.studentId ? note.meta.studentId.toString() : 'MISSING', resolved: note.resolved }, "Notification detail")
       if (query.teacher && note.teacher) {
         const noteTeacherId = note.teacher.toString();
@@ -124,12 +198,13 @@ router.get("/notifications", authenticateUser, async (req, res) => {
         logger.debug({ noteTeacherId, queryTeacherId, match }, "Teacher ID match check")
       }
     });
+    }
 
     const uniqueNotes = [];
     const seenTypes = new Set();
     const seenDropouts = new Set();
 
-    for (const note of notes) {
+    for (const note of filteredNotes) {
       if (['action_plan_required', 'grades_pending'].includes(note.type)) {
         if (!seenTypes.has(note.type)) {
           uniqueNotes.push(note);
@@ -150,37 +225,43 @@ router.get("/notifications", authenticateUser, async (req, res) => {
     
     logger.info({ count: uniqueNotes.length }, "After deduplication: unique notifications");
 
-    res.json(uniqueNotes);
+    // Server-side bounding/pagination applied AFTER deduplication so the result
+    // array stays bounded while preserving the dedup invariants. Newest-first
+    // ordering is guaranteed by the sort on the Mongo query. `limit` is capped
+    // at the top of the handler so the endpoint stays bounded regardless.
+    const responseNotes = uniqueNotes.slice(skip, skip + limit);
+
+    res.json(responseNotes);
   } catch (err) {
     logger.error({ err }, "Error fetching notifications");
     res.status(500).json({ message: 'Server error' });
   }
 });
-/*
-
-  
-router.put("/notifications/:id/resolve", async (req, res) => {
-  const note = await Notification.findById(req.params.id);
-  if (!note) return res.status(404).send("Notis hittades inte");
-
-  note.resolved = true;
-  note.resolvedBy = req.body.userId; // valfritt
-  await note.save();
-
-  // Uppdatera globalnotis-status
-  await evaluateActionPlanStatusAndNotify();
-
-  res.json({ message: "Notis markerad som hanterad", note });
-});
-*/
 
 router.put('/notifications/resolve/:studentId', authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
   try {
-    const studentId = req.params.studentId;
-    await Notification.updateMany(
-      { studentId: studentId, type: 'action_plan_required', resolved: false },
-      { $set: { resolved: true } }
-    );
+    const rawId = req.params.studentId;
+    const filter = {
+      $or: [
+        { studentId: rawId },
+      ],
+      type: 'action_plan_required',
+      resolved: false,
+    };
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      filter.$or.push({ studentId: new mongoose.Types.ObjectId(rawId) });
+      filter.$or.push({ "meta.studentId": new mongoose.Types.ObjectId(rawId) });
+    }
+    await Notification.updateMany(filter, { $set: { resolved: true } });
+    // Also resolve on raw collection in case documents were inserted bypass Mongoose
+    try {
+      await Notification.collection.updateMany(
+        { studentId: rawId, type: 'action_plan_required', resolved: false },
+        { $set: { resolved: true } }
+      );
+    } catch {
+      // Ignore raw collection error if not supported
+    }
     res.status(200).json({ message: 'Notification resolved' });
   } catch (error) {
     res.status(500).json({ message: 'Error resolving notification', error });
@@ -194,6 +275,10 @@ router.put("/notifications/:id/resolve", authenticateUser, async (req, res) => {
     
     if (!note) {
       return res.status(404).send("Notis hittades inte");
+    }
+
+    if (!(await isUserAuthorizedForNotification(req, note))) {
+      return res.status(403).send("Du har inte behörighet att hantera denna notis");
     }
 
     // Add current user to resolvedByUsers array (per-user resolution)
@@ -253,11 +338,14 @@ router.put("/notifications/:id/resolve", authenticateUser, async (req, res) => {
 
 
 
-router.put("/notifications/:id/reset", authenticateUser, async (req, res) => {
+    router.put("/notifications/:id/reset", authenticateUser, async (req, res) => {
     try {
       const note = await Notification.findById(req.params.id);
       if (!note) return res.status(404).send("Notis hittades inte");
   
+      if (!(await isUserAuthorizedForNotification(req, note))) {
+        return res.status(403).send("Du har inte behörighet att hantera denna notis");
+      }
       // Remove current user from resolvedByUsers array (per-user reset)
       const mongoose = (await import("mongoose")).default;
       const userId = mongoose.Types.ObjectId.isValid(req.user.userId) 
@@ -282,6 +370,27 @@ router.put("/notifications/:id/reset", authenticateUser, async (req, res) => {
   
   
   
+  router.put("/notifications/reset-all", authenticateUser, async (req, res) => {
+    try {
+      const mongoose = (await import("mongoose")).default;
+      const userId = mongoose.Types.ObjectId.isValid(req.user.userId)
+        ? new mongoose.Types.ObjectId(req.user.userId)
+        : req.user.userId;
+      const userIdString = userId.toString();
+
+      const result = await Notification.updateMany(
+        { resolvedByUsers: userId },
+        { $pull: { resolvedByUsers: userId } }
+      );
+
+      logger.info({ userId: userIdString, count: result.modifiedCount }, "User reset all notifications");
+      res.json({ message: "Alla notifikationer återställda", count: result.modifiedCount });
+    } catch (err) {
+      logger.error({ err }, "Error resetting all notifications");
+      res.status(500).send("Serverfel");
+    }
+  });
+
   export default router;
   
 

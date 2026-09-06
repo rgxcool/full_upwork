@@ -10,9 +10,9 @@
     <div class="mb-3 position-relative">
       <label class="form-label">Välj elev</label>
       <input
+        v-model="searchQuery"
         type="text"
         class="form-control"
-        v-model="searchQuery"
         placeholder="Sök namn eller personnummer"
         @input="onSearch"
         @focus="onSearch"
@@ -27,7 +27,22 @@
           class="list-group-item list-group-item-action"
           @click="selectStudent(s)"
         >
-          {{ s.name }} ({{ s.personalNumber }})
+          <span class="apl-status-chip"
+                :class="{
+                  'status-GRAY': s.aplStatus === 'GRAY',
+                  'status-BLUE': s.aplStatus === 'BLUE',
+                  'status-YELLOW': s.aplStatus === 'YELLOW',
+                  'status-PURPLE': s.aplStatus === 'PURPLE',
+                  'status-RED': s.aplStatus === 'RED',
+                  'status-GREEN': s.aplStatus === 'GREEN',
+                }"
+                title="Klicka för att se elevens APL-detaljer"
+                @click="selectStudent(s)"
+              >
+                <span v-if="s.aplStatus">{{ getStatusLabel(s.aplStatus) }}</span>
+                <span v-else class="text-muted">–</span>
+              </span>
+              <span class="student-name">{{ s.name || s.namn || '' }} ({{ s.personalNumber }})</span>
         </li>
       </ul>
     </div>
@@ -36,16 +51,16 @@
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label">Namn</label>
-          <input class="form-control" v-model="form.name" />
+          <input v-model="form.name" class="form-control" />
         </div>
         <div class="col-md-6">
           <label class="form-label">Personnummer</label>
-          <input class="form-control" v-model="form.personalNumber" />
+          <input v-model="form.personalNumber" class="form-control" />
         </div>
 
         <div class="col-md-6">
           <label class="form-label">Lärare</label>
-          <select class="form-select" v-model="form.teacherId">
+          <select v-model="form.teacherId" class="form-select">
             <option :value="null">— Ingen —</option>
             <option v-for="t in teachers" :key="t._id || t.id" :value="t._id || t.id">
               {{ (t.userId && t.userId.username) || t.name || t.subject || 'Teacher' }}
@@ -55,7 +70,7 @@
 
         <div class="col-md-6">
           <label class="form-label">APL status</label>
-          <select class="form-select" v-model="form.aplStatus">
+          <select v-model="form.aplStatus" class="form-select">
             <option value="GRAY">GRAY - Ny Elev</option>
             <option value="BLUE">BLUE - Kontaktad</option>
             <option value="YELLOW">YELLOW - APL på gång</option>
@@ -67,35 +82,35 @@
 
         <div class="col-md-4">
           <label class="form-label">Startdatum</label>
-          <input class="form-control" type="date" v-model="dateFields.startDate" />
+          <input v-model="dateFields.startDate" class="form-control" type="date" />
         </div>
         <div class="col-md-4">
           <label class="form-label">Slutdatum</label>
-          <input class="form-control" type="date" v-model="dateFields.endDate" />
+          <input v-model="dateFields.endDate" class="form-control" type="date" />
         </div>
         <div class="col-md-4">
           <label class="form-label">Slutprov (datum)</label>
-          <input class="form-control" type="date" v-model="dateFields.finalExamDate" />
+          <input v-model="dateFields.finalExamDate" class="form-control" type="date" />
         </div>
 
         <div class="col-md-4">
           <label class="form-label">Provtid (24h)</label>
-          <select class="form-select" v-model="form.examTime">
+          <select v-model="form.examTime" class="form-select">
             <option v-for="h in hours" :key="h" :value="h + ':00'">{{ h }}:00</option>
             <option v-for="h in hours" :key="h + '-30'" :value="h + ':30'">{{ h }}:30</option>
           </select>
         </div>
         <div class="col-md-4">
           <label class="form-label">Prov kommun</label>
-          <input class="form-control" v-model="form.examMunicipality" />
+          <input v-model="form.examMunicipality" class="form-control" />
         </div>
         <div class="col-md-4">
           <label class="form-label">Provlokal</label>
-          <input class="form-control" v-model="form.examLocation" />
+          <input v-model="form.examLocation" class="form-control" />
         </div>
 
         <div class="col-md-4 form-check mt-4">
-          <input id="dropout" class="form-check-input" type="checkbox" v-model="form.dropout" />
+          <input id="dropout" v-model="form.dropout" class="form-check-input" type="checkbox" />
           <label class="form-check-label" for="dropout">Avbrott</label>
         </div>
       </div>
@@ -318,6 +333,18 @@
         return dt.toISOString().slice(0, 10)
       }
 
+      function getStatusLabel(status) {
+        const labels = {
+          GRAY: 'Ej påbörjat',
+          BLUE: 'Registrerad',
+          YELLOW: 'Pågående',
+          PURPLE: 'After schedule',
+          RED: 'Auto-RED',
+          GREEN: 'Godkänd',
+        }
+        return labels[status] || status
+      }
+
       return {
         students,
         teachers,
@@ -338,6 +365,7 @@
         save,
         reload,
         formatDate,
+        getStatusLabel,
       }
     },
   }
@@ -351,5 +379,47 @@
     z-index: 1050;
     max-height: 260px;
     overflow-y: auto;
+  }
+
+  .apl-status-chip {
+    position: relative;
+    top: 1px;
+    margin-left: 2px;
+    padding: 2px 6px;
+    padding-right: 22px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .apl-status-chip status-GRAY {
+    background: #e9ecef;
+    color: #6c757d;
+  }
+
+  .apl-status-chip status-BLUE {
+    background: #cfe2f3;
+    color: #31708f;
+  }
+
+  .apl-status-chip status-YELLOW {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .apl-status-chip status-PURPLE {
+    background: #d6d8ec;
+    color: #6f42c1;
+  }
+
+  .apl-status-chip status-RED {
+    background: #f8d7da;
+    color: #721c1e;
+  }
+
+  .apl-status-chip status-GREEN {
+    background: #d4edda;
+    color: #155724;
   }
 </style>

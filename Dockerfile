@@ -99,8 +99,10 @@ COPY backend ./backend
 COPY --from=build $APP_HOME/frontend/dist ./frontend/dist
 COPY frontend/package.json ./frontend/
 
-# Prune devDependencies to slim the image
-RUN pnpm prune --prod
+# Prune devDependencies to slim the image.
+# CI=true suppresses pnpm's interactive "confirm purge" prompt
+# (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY) in headless builds.
+RUN CI=true pnpm prune --prod
 
 RUN mkdir -p logs public/uploads
 

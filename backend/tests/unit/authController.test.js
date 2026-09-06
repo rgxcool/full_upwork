@@ -91,9 +91,12 @@ describe("authController", () => {
             role: "teacher",
             roles: ["teacher"],
             password: "hashed",
+            mustChangePassword: false,
+            permissions: {},
         };
         vi.spyOn(User, "findOne").mockResolvedValueOnce(user);
         vi.spyOn(bcrypt, "compare").mockResolvedValueOnce(true);
+        vi.spyOn(User, "updateOne").mockResolvedValueOnce({ modifiedCount: 1 });
         const token = "jwt-token";
         vi.spyOn(jwt, "sign").mockReturnValueOnce(token);
 
@@ -102,17 +105,83 @@ describe("authController", () => {
 
         await authController.login(req, res);
 
+        expect(User.updateOne).toHaveBeenCalledWith(
+            { _id: user._id },
+            expect.objectContaining({ $set: expect.objectContaining({ lastLoginAt: expect.any(Date) }) })
+        );
+
+        expect(jwt.sign).toHaveBeenCalledWith(
+            expect.objectContaining({ permissions: {} }),
+            expect.any(String),
+            expect.objectContaining({ expiresIn: "7d" })
+        );
+
         expect(res.cookies[AUTH_COOKIE_NAME].value).toBe(token);
         expect(res.body).toEqual({
             message: "Login successful",
+            requiresPasswordChange: false,
             user: {
                 userId: user._id,
                 name: user.name,
                 email: user.email,
                 role: user.role,
                 roles: user.roles,
+                permissions: {},
             },
         });
+    });
+
+    it("carries per-user permissions into the JWT payload", async () => {
+        const user = {
+            _id: "u2",
+            name: "Coordinator",
+            email: "c@example.com",
+            role: "coordinator",
+            roles: ["coordinator"],
+            password: "hashed",
+            mustChangePassword: false,
+            permissions: { statistics: true, search_users: false },
+        };
+        vi.spyOn(User, "findOne").mockResolvedValueOnce(user);
+        vi.spyOn(bcrypt, "compare").mockResolvedValueOnce(true);
+        vi.spyOn(User, "updateOne").mockResolvedValueOnce({ modifiedCount: 1 });
+        vi.spyOn(jwt, "sign").mockReturnValueOnce("jwt-token");
+
+        const req = { body: { email: "c@example.com", password: "secret" } };
+        const res = buildRes();
+
+        await authController.login(req, res);
+
+        expect(jwt.sign).toHaveBeenCalledWith(
+            expect.objectContaining({ permissions: { statistics: true, search_users: false } }),
+            expect.any(String),
+            expect.any(Object)
+        );
+        expect(res.body.user.permissions).toEqual({ statistics: true, search_users: false });
+    });
+
+    it("logs in with requiresPasswordChange true when mustChangePassword is set", async () => {
+        const user = {
+            _id: "u1",
+            name: "Admin",
+            email: "admin@example.com",
+            role: "systemadmin",
+            roles: ["systemadmin"],
+            password: "hashed",
+            mustChangePassword: true,
+        };
+        vi.spyOn(User, "findOne").mockResolvedValueOnce(user);
+        vi.spyOn(bcrypt, "compare").mockResolvedValueOnce(true);
+        vi.spyOn(User, "updateOne").mockResolvedValueOnce({ modifiedCount: 1 });
+        vi.spyOn(jwt, "sign").mockReturnValueOnce("jwt-token");
+
+        const req = { body: { email: "admin@example.com", password: "mindful" } };
+        const res = buildRes();
+
+        await authController.login(req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.requiresPasswordChange).toBe(true);
     });
 
     it("returns 401 when login user not found", async () => {
@@ -226,6 +295,7 @@ describe("authController", () => {
             email: "email",
             role: "role",
             roles: ["role"],
+            mustChangePassword: false,
         };
         vi.spyOn(User, "findById").mockReturnValueOnce({
             select: vi.fn().mockResolvedValueOnce(user),
@@ -237,6 +307,7 @@ describe("authController", () => {
         await authController.getSession(req, res);
 
         expect(res.body).toEqual({
+            requiresPasswordChange: false,
             user: {
                 userId: user._id,
                 name: user.name,
@@ -245,6 +316,30 @@ describe("authController", () => {
                 roles: user.roles,
             },
         });
+    });
+
+    it("returns requiresPasswordChange true from session when flag is set", async () => {
+        const decoded = { userId: "u" };
+        vi.spyOn(jwt, "verify").mockReturnValueOnce(decoded);
+        const user = {
+            _id: "u",
+            name: "Name",
+            email: "email",
+            role: "systemadmin",
+            roles: ["systemadmin"],
+            mustChangePassword: true,
+        };
+        vi.spyOn(User, "findById").mockReturnValueOnce({
+            select: vi.fn().mockResolvedValueOnce(user),
+        });
+
+        const req = { cookies: { [AUTH_COOKIE_NAME]: "t" } };
+        const res = buildRes();
+
+        await authController.getSession(req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.requiresPasswordChange).toBe(true);
     });
 
     it("returns 401 when session token missing", async () => {
@@ -284,5 +379,99 @@ describe("authController", () => {
 
         expect(res.statusCode).toBe(403);
         expect(res.body).toEqual({ error: "Invalid session" });
+    });
+
+    it("changes password and clears mustChangePassword", async () => {
+        const user = {
+            _id: "u1",
+            email: "admin@example.com",
+            password: "old-hash",
+            mustChangePassword: true,
+            save: vi.fn().mockResolvedValue(true),
+        };
+        vi.spyOn(User, "findById").mockResolvedValueOnce(user);
+        vi.spyOn(bcrypt, "compare").mockResolvedValueOnce(true);
+        vi.spyOn(bcrypt, "hash").mockResolvedValueOnce("new-hash");
+
+        const req = {
+            userId: "u1",
+            body: { currentPassword: "mindful", newPassword: "NewPassword123!" },
+        };
+        const res = buildRes();
+
+        await authController.changePassword(req, res);
+
+        expect(user.password).toBe("new-hash");
+        expect(user.mustChangePassword).toBe(false);
+        expect(user.save).toHaveBeenCalled();
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({
+            message: "Lösenordet har ändrats.",
+            requiresPasswordChange: false,
+        });
+    });
+
+    it("returns 401 when current password is wrong", async () => {
+        const user = {
+            _id: "u1",
+            password: "old-hash",
+            mustChangePassword: true,
+        };
+        vi.spyOn(User, "findById").mockResolvedValueOnce(user);
+        vi.spyOn(bcrypt, "compare").mockResolvedValueOnce(false);
+
+        const req = {
+            userId: "u1",
+            body: { currentPassword: "wrong", newPassword: "NewPassword123!" },
+        };
+        const res = buildRes();
+
+        await authController.changePassword(req, res);
+
+        expect(res.statusCode).toBe(401);
+        expect(res.body).toEqual({ error: "Nuvarande lösenord är felaktigt." });
+        expect(user.mustChangePassword).toBe(true);
+    });
+
+    it("returns 400 when fields are missing", async () => {
+        const req = { userId: "u1", body: { newPassword: "NewPassword123!" } };
+        const res = buildRes();
+
+        await authController.changePassword(req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body).toEqual({
+            error: "Nuvarande och nytt lösenord krävs.",
+        });
+    });
+
+    it("returns 404 when user not found", async () => {
+        vi.spyOn(User, "findById").mockResolvedValueOnce(null);
+
+        const req = {
+            userId: "missing",
+            body: { currentPassword: "x", newPassword: "NewPassword123!" },
+        };
+        const res = buildRes();
+
+        await authController.changePassword(req, res);
+
+        expect(res.statusCode).toBe(404);
+        expect(res.body).toEqual({ error: "Användaren hittades inte." });
+    });
+
+    it("returns 500 when changePassword throws", async () => {
+        vi.spyOn(User, "findById").mockRejectedValueOnce(new Error("boom"));
+
+        const req = {
+            userId: "u1",
+            body: { currentPassword: "x", newPassword: "NewPassword123!" },
+        };
+        const res = buildRes();
+
+        await authController.changePassword(req, res);
+
+        expect(res.statusCode).toBe(500);
+        expect(res.body).toEqual({ error: "Server error" });
     });
 });

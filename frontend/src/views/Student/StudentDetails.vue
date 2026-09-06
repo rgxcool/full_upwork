@@ -1,6 +1,15 @@
 <template>
   <div class="scrollable-view">
     <div class="student-details-container">
+      <ConfirmDialog
+        v-model="showDeleteDialog"
+        title="Radera elev"
+        message="Är du säker på att du vill radera eleven? Detta går inte att ångra."
+        confirm-label="Radera elev"
+        :loading="deletingStudent"
+        danger
+        @confirm="confirmDeleteStudent"
+      />
       <div class="header-section">
         <h1 class="page-title">{{ student ? student.name : 'Elevdetaljer' }}</h1>
         <button
@@ -26,13 +35,67 @@
           <h2>INAKTIV</h2>
           <p>Denna elev har markerats som avbrott (inaktiv).</p>
         </div>
+
+        <!-- Certificate & Diploma Generation Section -->
+        <div v-if="canGenerateCertificates" class="certificate-generation-section">
+          <div class="card">
+            <div class="card-header">
+              <h3>Studieintyg och diplom</h3>
+            </div>
+            <div class="card-body">
+              <div v-if="student.enrollments && student.enrollments.length > 0" class="generation-options">
+                <!-- Study Certificate -->
+                <div v-for="enrollment in student.enrollments" :key="enrollment._id" class="generation-option">
+                  <div v-if="enrollment.status === 'completed'" class="option eligible">
+                    <v-icon left>mdi-file-document</v-icon>
+                    <span>Studieintyg tillgängligt</span>
+                    <button
+                      type="button"
+                      class="document-action"
+                      :disabled="downloadingDocument === `${enrollment._id}-certificate`"
+                      @click="downloadDocument(enrollment, 'certificate')"
+                    >
+                      {{ downloadingDocument === `${enrollment._id}-certificate` ? 'Förbereder...' : 'Ladda ner' }}
+                    </button>
+                  </div>
+                  <div v-else class="option disabled">
+                    <v-icon left>mdi-file-document-outline</v-icon>
+                    <span>Kursen måste vara slutförd</span>
+                  </div>
+                </div>
+
+                <!-- Diploma -->
+                  <div v-if="student.coursePackageId && student.aplStatus === 'GREEN'" class="generation-option eligible">
+                  <v-icon left>mdi-medal</v-icon>
+                  <span>Diplom tillgängligt</span>
+                  <button
+                    v-for="enrollment in completedEnrollments"
+                    :key="`diploma-${enrollment._id}`"
+                    type="button"
+                    class="document-action"
+                    :disabled="downloadingDocument === `${enrollment._id}-diploma`"
+                    @click="downloadDocument(enrollment, 'diploma')"
+                  >
+                    {{ downloadingDocument === `${enrollment._id}-diploma` ? 'Förbereder...' : 'Ladda ner' }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="!Array.isArray(student.enrollments) || student.enrollments.length === 0" class="no-enrollments">
+                Inga kurser inlagda ännu
+              </div>
+            </div>
+          </div>
+        </div>
+
         <ul class="nav nav-tabs">
-          <li class="nav-item" v-for="tab in tabs" :key="tab.name">
+          <li v-for="tab in tabs" :key="tab.name" class="nav-item">
             <a
               class="nav-link"
               :class="{ active: activeTab === tab.component }"
-              @click.prevent="activeTab = tab.component"
               href="#"
+              :title="tab.description || tab.name"
+              @click.prevent="activeTab = tab.component"
             >
               {{ tab.name }}
             </a>
@@ -44,7 +107,8 @@
             <component
               :is="activeTab"
               :student="student"
-              :changeHistory="changeHistory"
+              :user-data="student"
+              :change-history="changeHistory"
               @student-updated="handleStudentUpdate"
             />
           </keep-alive>
@@ -60,6 +124,7 @@ import { useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
+import ConfirmDialog from '@/components/base/ConfirmDialog.vue'
 
 import GeneralTab from './tabs/GeneralTab.vue';
 import StudyPlanTab from './tabs/StudyPlanTab.vue';
@@ -67,6 +132,8 @@ import PermissionsTab from './tabs/PermissionsTab.vue';
 import DocumentsTab from './tabs/DocumentsTab.vue';
 import CourseArchiveTab from './tabs/CourseArchiveTab.vue';
 import AplTab from './tabs/AplTab.vue';
+import LogbookTab from './tabs/LogbookTab.vue';
+import ActionPlanTab from '../Admin/SearchTabs/ActionPlanTab.vue';
 
 export default {
   name: 'StudentDetails',
@@ -77,6 +144,9 @@ export default {
     DocumentsTab,
     CourseArchiveTab,
     AplTab,
+    LogbookTab,
+    ActionPlanTab,
+    ConfirmDialog,
   },
   setup() {
     const route = useRoute();
@@ -88,6 +158,16 @@ export default {
     const changeHistory = ref([]);
     const activeTab = shallowRef(GeneralTab);
     const manualAplIds = ref(new Set());
+    const downloadingDocument = ref('');
+    const showDeleteDialog = ref(false);
+    const deletingStudent = ref(false);
+
+    const completedEnrollments = computed(() =>
+      Array.isArray(student.value?.enrollments)
+        ? student.value.enrollments.filter((enrollment) => enrollment.status === 'completed')
+        : []
+    );
+    const canGenerateCertificates = computed(() => completedEnrollments.value.length > 0);
 
     const isAdmin = computed(() => store.getters.isAdmin);
     const isSystemAdmin = computed(
@@ -118,151 +198,96 @@ export default {
     };
 
     const tabs = computed(() => {
+      const studentId = String(student.value?._id || '');
+
       const allTabs = [
-        { name: 'Allmänt', component: GeneralTab },
-        { name: 'Studieplan', component: StudyPlanTab },
-        { name: 'Dokument', component: DocumentsTab },
-        { name: 'Kursarkiv', component: CourseArchiveTab },
+        { name: 'Allmänt', component: GeneralTab, alwaysShow: true, description: 'Elevens grundinformation och kontaktuppgifter' },
+        { name: 'Studieplan', component: StudyPlanTab, alwaysShow: true, description: 'Kurser, perioder och studieuppehåll' },
+        { name: 'Kursarkiv', component: CourseArchiveTab, alwaysShow: true, description: 'Historik över genomförda kurser' },
       ];
 
-      // Conditionally add APL tab
-      // Show APL tab if student has CoursePackage in education OR is manually added to APL
-      // OR has an aplStatusHistory (indicating they've been in APL system)
-      if (student.value) {
-        const studentId = String(student.value._id);
-        
-        // Check if student has CoursePackage in education
-        // Check both direct type and nested structures
+      // Conditionally show APL tab - work placement. Staff profiles never expose student APL tabs.
+      const isStaffProfile = ['teacher', 'staff', 'admin', 'systemadmin'].includes(
+        String(student.value?.role || student.value?.userRole || '').toLowerCase()
+      )
+      if (student.value && !isStaffProfile) {
         const hasCoursePackage = student.value.education && 
           Array.isArray(student.value.education) &&
-          student.value.education.some(e => {
-            // Check direct type
-            if (e.type === 'CoursePackage') return true;
-            // Check if refId is a CoursePackage (populated)
-            if (e.refId && (e.refId.coursePackageName || e.refId.coursePackageCode)) return true;
-            // Check if there's a coursePackageId field
-            if (e.coursePackageId) return true;
-            return false;
-          });
-        
-        // Check if student is manually added to APL (using reactive ref)
-        // Normalize all IDs to strings for comparison
-        const normalizedManualIds = new Set(Array.from(manualAplIds.value).map(id => String(id)));
-        const isManuallyAdded = normalizedManualIds.has(studentId);
-        
-        // Also check localStorage directly as a fallback (in case reactive ref hasn't updated)
-        let isManuallyAddedDirect = false;
-        try {
-          const raw = localStorage.getItem('manualAplIds');
-          if (raw) {
-            const arr = JSON.parse(raw);
-            const ids = Array.isArray(arr) ? arr.map(String) : [];
-            isManuallyAddedDirect = ids.includes(studentId);
-          }
-        } catch (e) {
-          // Ignore errors
-        }
-        
-        // Use either check
-        const isManuallyAddedFinal = isManuallyAdded || isManuallyAddedDirect;
-        
-        // Check if student has APL status history (indicates they've been in APL system)
+          student.value.education.some(e => 
+            e.type === 'CoursePackage' || 
+            (e.refId && (e.refId.coursePackageName || e.refId.coursePackageCode)) || 
+            e.coursePackageId
+          );
+
+        const hasActiveApplStatus = student.value.aplStatus && 
+          student.value.aplStatus !== 'GRAY' && 
+          !student.value.dropout;
+
         const hasAplHistory = student.value.aplStatusHistory && 
           Array.isArray(student.value.aplStatusHistory) && 
           student.value.aplStatusHistory.length > 0;
-        
-        // Check if student has a non-default APL status (not just the default GRAY)
-        // If they have status history, they've been actively managed in APL
-        const hasActiveAplStatus = hasAplHistory || 
-          (student.value.aplStatus && student.value.aplStatus !== 'GRAY');
-        
-        // Debug logging with detailed education structure
-        const educationDetails = student.value.education?.map(e => ({
-          type: e.type,
-          hasRefId: !!e.refId,
-          refIdType: e.refId?.constructor?.name,
-          refIdKeys: e.refId ? Object.keys(e.refId) : [],
-          coursePackageId: e.coursePackageId,
-          allKeys: Object.keys(e || {}),
-        })) || [];
-        
-        console.log('[APL Tab Check]', {
-          studentName: student.value.name,
-          studentId: studentId,
-          studentIdType: typeof studentId,
-          hasCoursePackage,
-          isManuallyAdded,
-          isManuallyAddedDirect,
-          isManuallyAddedFinal,
-          hasAplHistory,
-          aplStatus: student.value.aplStatus,
-          manualAplIdsRaw: Array.from(manualAplIds.value),
-          manualAplIdsNormalized: Array.from(normalizedManualIds),
-          educationCount: student.value.education?.length || 0,
-          educationDetails,
-          fullEducation: JSON.stringify(student.value.education, null, 2),
-        });
 
-        // Show APL tab if any condition is met:
-        // 1. Has CoursePackage in education
-        // 2. Is manually added to APL (check both reactive ref and direct localStorage)
-        // 3. Has APL status history (been actively managed in APL)
-        // 4. Has an aplStatus set AND is not a dropout
-        //    Note: If student appears in APL board, they should have the tab.
-        //    Since all students have default GRAY status, we use this as a fallback
-        //    to ensure students visible in APL board have the tab.
-        const hasAplStatusSet = student.value.aplStatus && 
-          student.value.aplStatus !== null && 
-          student.value.aplStatus !== undefined &&
-          !student.value.dropout;
-        
-        const shouldShowAplTab = hasCoursePackage || 
-          isManuallyAddedFinal || 
-          hasAplHistory ||
-          hasAplStatusSet;
-        
-        if (shouldShowAplTab) {
-          const reason = hasCoursePackage ? 'has CoursePackage' : 
-                        isManuallyAddedFinal ? 'manually added' : 
-                        hasAplHistory ? 'has APL history' :
-                        'has APL status set';
-          console.log(`[APL Tab] ✅ Showing APL tab for ${student.value.name}`, { reason });
-          allTabs.push({ name: 'APL', component: AplTab });
-        } else {
-          // Expanded logging to help debug why tab isn't showing
-          console.log(`[APL Tab] ❌ NOT showing APL tab for ${student.value.name}`);
-          console.log(`[APL Tab Debug] Full check details:`, {
-            studentId,
-            hasCoursePackage,
-            isManuallyAdded,
-            isManuallyAddedDirect,
-            isManuallyAddedFinal,
-            hasAplHistory,
-            aplStatus: student.value.aplStatus,
-            dropout: student.value.dropout,
-            manualAplIdsCount: manualAplIds.value.size,
-            manualAplIdsList: Array.from(manualAplIds.value),
-            normalizedManualIdsList: Array.from(normalizedManualIds),
-            localStorageCheck: (() => {
-              try {
-                const raw = localStorage.getItem('manualAplIds');
-                if (raw) {
-                  const arr = JSON.parse(raw);
-                  return Array.isArray(arr) ? arr.map(String) : [];
-                }
-                return [];
-              } catch {
-                return [];
-              }
-            })(),
-            educationArray: JSON.stringify(student.value.education, null, 2),
+        const isManuallyAdded = manualAplIds.value.has(studentId);
+
+        // Show APL tab if any condition is met
+        const showAplTab = hasCoursePackage || isManuallyAdded || hasAplHistory || hasActiveApplStatus;
+
+        if (showAplTab) {
+          let apReason = '';
+          if (hasCoursePackage) apReason = 'har CoursePackage i utbildningen';
+          else if (isManuallyAdded) apReason = 'är manuellt kopplad till APL';
+          else if (hasAplHistory) apReason = 'har APL-historia';
+          else if (hasActiveApplStatus) apReason = 'har aktiv APL-status';
+
+          allTabs.push({
+            name: 'APL',
+            component: AplTab,
+            alwaysShow: false,
+            description: apReason,
           });
         }
       }
 
-      if (isAdmin.value) {
-        allTabs.push({ name: 'Behörigheter', component: PermissionsTab });
+      // Conditionally show Action Plan tab
+      if (student.value) {
+        const hasApCoursePackage = student.value.education && 
+          Array.isArray(student.value.education) &&
+          student.value.education.some(e => 
+            e.type === 'CoursePackage' || 
+            (e.refId && (e.refId.coursePackageName || e.refId.coursePackageCode)) || 
+            e.coursePackageId
+          );
+
+        if (hasApCoursePackage) {
+          allTabs.push({
+            name: 'Handlingsplan',
+            component: ActionPlanTab,
+            alwaysShow: false,
+            description: 'APL-åtgärdsplan och mål',
+          });
+        }
       }
+
+      // Conditionally show Documents tab
+      if (student.value && student.value.enrollments && student.value.enrollments.length > 0) {
+        const hasCompleted = student.value.enrollments.some(e => e.status === 'completed');
+        if (hasCompleted) {
+          allTabs.push({
+            name: 'Filarkiv',
+            component: DocumentsTab,
+            alwaysShow: false,
+            description: 'Genererade intygg och diplom',
+          });
+        }
+      }
+
+      // Show the Logbook tab for APL-managed students or when logbook entries already exist
+      if (student.value) {
+        const hasLogbookEntries = Array.isArray(student.value.logbook) && student.value.logbook.length > 0;
+        if (hasLogbookEntries) allTabs.push({ name: 'Loggbok', component: LogbookTab });
+      }
+
+      if (isAdmin.value) allTabs.push({ name: 'Behörigheter', component: PermissionsTab });
 
       return allTabs;
     });
@@ -293,21 +318,35 @@ export default {
       }
     };
 
+    const downloadDocument = async (enrollment, type) => {
+      if (!enrollment?._id) return;
+      const key = `${enrollment._id}-${type}`;
+      downloadingDocument.value = key;
+      try {
+        const endpoint = type === 'certificate' ? 'study-certificate' : 'diploma';
+        const response = await client.get(`/${endpoint}/${enrollment._id}/pdf`, { responseType: 'blob' });
+        const url = URL.createObjectURL(response.data);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${type === 'certificate' ? 'studieintyg' : 'diplom'}-${enrollment._id}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Kunde inte skapa dokumentet.');
+      } finally {
+        downloadingDocument.value = '';
+      }
+    };
+
     const handleStudentUpdate = async (updatedStudent) => {
-      console.log('🔄 Updating student data:', updatedStudent);
-      console.log('🔄 updatedStudent.dropout:', updatedStudent.dropout);
-      console.log('🔄 student.value.dropout before update:', student.value?.dropout);
-      
       // Ensure dropout is explicitly set
       student.value = { 
         ...student.value, 
         ...updatedStudent,
         dropout: updatedStudent.dropout === true || updatedStudent.dropout === 'true'
       };
-      
-      console.log('✅ Updated student.value.dropout:', student.value.dropout);
-      console.log('✅ student.value.dropout type:', typeof student.value.dropout);
-      console.log('✅ Will show banner?', student.value.dropout === true);
       
       if (isAdmin.value) {
         await loadChangeHistory();
@@ -324,25 +363,38 @@ export default {
       loadManualAplIds();
     });
 
-    const handleDeleteStudent = async () => {
-      if (!student.value?._id) return;
-      const confirmed = window.confirm(
-        'Är du säker på att du vill radera eleven? Detta går inte att ångra.'
-      );
-      if (!confirmed) return;
+    watch(() => route.query.showActionPlan, (val) => {
+      if (val === 'true') {
+        activeTab.value = ActionPlanTab;
+      }
+    });
 
+    const handleDeleteStudent = () => {
+      if (student.value?._id) showDeleteDialog.value = true;
+    };
+
+    const confirmDeleteStudent = async () => {
+      if (!student.value?._id) return;
+      deletingStudent.value = true;
       try {
         await client.delete(`/student/${student.value._id}`);
+        showDeleteDialog.value = false;
         window.history.back();
       } catch (err) {
         console.error('Error deleting student:', err);
         toast.error('Kunde inte radera elev.');
+      } finally {
+        deletingStudent.value = false;
       }
     };
 
     onMounted(() => {
       loadManualAplIds();
-      loadStudent();
+      loadStudent().then(() => {
+        if (route.query.showActionPlan === 'true') {
+          activeTab.value = ActionPlanTab;
+        }
+      });
       // Listen for storage changes (cross-tab)
       window.addEventListener('storage', handleStorageChange);
       
@@ -366,6 +418,13 @@ export default {
       handleStudentUpdate,
       isSystemAdmin,
       handleDeleteStudent,
+      confirmDeleteStudent,
+      showDeleteDialog,
+      deletingStudent,
+      canGenerateCertificates,
+      completedEnrollments,
+      downloadingDocument,
+      downloadDocument,
     };
   },
 };

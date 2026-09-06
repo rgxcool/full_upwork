@@ -28,6 +28,7 @@ vi.mock("../../src/models/Student.js", () => {
         findByIdAndDelete: vi.fn(),
         deleteMany: vi.fn(),
         countDocuments: vi.fn(),
+        findOne: vi.fn(),
     });
 
     return {
@@ -79,6 +80,24 @@ vi.mock("../../src/controllers/authController.js", () => {
     };
 });
 
+vi.mock("../../src/services/emailService.js", () => ({
+    __esModule: true,
+    maybeSendLarteametEmail: vi.fn(),
+    getStudentMunicipality: vi.fn((municipality) =>
+        typeof municipality === "string"
+            ? municipality
+            : municipality?.type || null
+    ),
+    SOLLENTUNA_MUNICIPALITY: "Sollentuna",
+}));
+
+const { getRevenueReportMock } = vi.hoisted(() => ({
+    getRevenueReportMock: vi.fn(),
+}));
+vi.mock("../../src/services/analyticsService.js", () => ({
+    getRevenueReport: getRevenueReportMock,
+}));
+
 const loggerMock = vi.hoisted(() => ({
     info: vi.fn(),
     warn: vi.fn(),
@@ -90,9 +109,11 @@ vi.mock("../../src/utils/logger.js", () => ({
     default: loggerMock,
 }));
 
-const TeacherMock = {
-    findOne: vi.fn(),
-};
+const { TeacherMock } = vi.hoisted(() => ({
+    TeacherMock: {
+        findOne: vi.fn(),
+    },
+}));
 
 let StudentEnrollmentQuery;
 var StudentEnrollmentMock;
@@ -105,7 +126,7 @@ vi.mock("mongoose", () => {
         this._value = value;
     }
     ObjectIdFactory.prototype.equals = function (other) {
-        if (other == null) {
+        if (other === null || other === undefined) {
             return false;
         }
         return (
@@ -169,6 +190,7 @@ import Course from "../../src/models/Course.js";
 import Program from "../../src/models/Program.js";
 import { sendDropoutNotification } from "../../src/controllers/notificationController.js";
 import { authenticateUser } from "../../src/controllers/authController.js";
+import { maybeSendLarteametEmail } from "../../src/services/emailService.js";
 import router from "../../src/router/studentRoutes.js";
 
 const findRouteHandler = (path, method) => {
@@ -218,20 +240,25 @@ beforeEach(() => {
     Student.deleteMany.mockReset();
     Student.countDocuments.mockReset();
     Student.countDocuments.mockResolvedValue(0);
+    Student.findOne.mockReset();
+    Student.findOne.mockResolvedValue(null);
     sendDropoutNotification.mockReset();
     CourseMatchingServiceMock.default.processStudentEducation.mockReset();
     calendarEventSyncMock.syncCalendarEventsForStudent.mockReset();
+    maybeSendLarteametEmail.mockReset();
+    maybeSendLarteametEmail.mockResolvedValue({ sent: true });
     TeacherMock.findOne.mockReset();
     StudentEnrollmentQuery = {
         populate: vi.fn().mockReturnThis(),
+        sort: vi.fn().mockReturnThis(),
         lean: vi.fn().mockResolvedValue([]),
-        sort: vi.fn().mockResolvedValue([]),
     };
     StudentEnrollmentMock.find.mockReset();
     StudentEnrollmentMock.find.mockImplementation(() => StudentEnrollmentQuery);
     StudentEnrollmentMock.findOne.mockReset();
     StudentEnrollmentMock.findById.mockReset();
     StudentEnrollmentMock.findByIdAndDelete.mockReset();
+    getRevenueReportMock.mockReset();
     CoursePackage.find.mockReset();
     CoursePackage.findById.mockReset();
     CoursePackage.findById.mockResolvedValue(null);
@@ -290,6 +317,59 @@ describe("studentRoutes router", () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ message: "Server error" });
+    });
+
+    it("GET /students/dropouts returns inactive students with teacher populated", async () => {
+        const handler = findRouteHandler("/students/dropouts", "GET");
+        Student.find.mockReturnValue(
+            createPopulateChain([
+                {
+                    _id: "student-1",
+                    name: "Avbruten Elev",
+                    dropout: true,
+                    teacherId: { _id: "teacher-1", name: "Läraren", email: "t@x.se" },
+                },
+            ])
+        );
+        const req = {};
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(Student.find).toHaveBeenCalledWith({ dropout: true });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith([
+            {
+                _id: "student-1",
+                name: "Avbruten Elev",
+                dropout: true,
+                teacherId: { _id: "teacher-1", name: "Läraren", email: "t@x.se" },
+                previousEnrollments: [],
+                dropoutReason: null,
+                dropoutDate: undefined,
+            },
+        ]);
+    });
+
+    it("GET /students/dropouts handles failures", async () => {
+        const handler = findRouteHandler("/students/dropouts", "GET");
+        Student.find.mockReturnValue(
+            createPopulateChain({ __rejected: true })
+        );
+        Student.find.mockImplementationOnce(() => {
+            const chain = createPopulateChain([]);
+            chain.lean.mockRejectedValue(new Error("boom"));
+            return chain;
+        });
+        const req = {};
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+            error: "Failed to fetch inactive students",
+        });
     });
 
     it("PUT /students/:studentId/education/:educationId/status sends notification when status is Avbrott", async () => {
@@ -613,7 +693,7 @@ describe("studentRoutes router", () => {
         expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
     });
 
-    it("synthesizes a course package when enrollments reference packages but no package entries exist yet", async () => {
+        it("synthesizes a course package when enrollments reference packages but no package entries exist yet", async () => {
         const handler = findRouteHandler("/students", "GET");
         TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
         const studentDoc = { _id: "student-synth", education: [] };
@@ -655,9 +735,125 @@ describe("studentRoutes router", () => {
         expect(packageEntries[0].name).toBe("Synth Package");
     });
 
-});
+    it("dedupes CoursePackage entries by refId so APL dates follow enrollment dates", async () => {
+        const handler = findRouteHandler("/students", "GET");
+        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+        const studentDoc = {
+            _id: "student-apl",
+            education: [
+                {
+                    _id: "pkg-edu-stale",
+                    type: "CoursePackage",
+                    refId: "pkg-apl",
+                    name: "APL Package",
+                    startDate: new Date("2025-04-01"),
+                    endDate: new Date("2025-06-01"),
+                    finalExamDate: new Date("2025-06-01"),
+                    status: "active",
+                },
+            ],
+        };
+        Student.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([studentDoc]),
+        });
+        const packageEnrollment = {
+            _id: "enroll-apl",
+            studentId: studentDoc._id,
+            coursePackageId: { _id: "pkg-apl", coursePackageName: "APL Package" },
+            startDate: new Date("2025-04-01"),
+            endDate: new Date("2025-07-15"),
+            status: "active",
+            grade: null,
+            notes: null,
+            courseInstanceId: null,
+            teacherId: "teacher-123",
+            createdAt: new Date("2025-03-01"),
+        };
+        StudentEnrollmentQuery.lean.mockResolvedValue([packageEnrollment]);
+
+        const res = createRes();
+        await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+
+        const responseStudents = res.json.mock.calls[0][0];
+        const packageEntries = responseStudents[0].education.filter(
+            (entry) => entry.type === "CoursePackage"
+        );
+        expect(packageEntries).toHaveLength(1);
+        expect(new Date(packageEntries[0].endDate).toISOString()).toBe(
+            new Date("2025-07-15").toISOString()
+        );
+    });
+
+    it("auto-sets APL status to RED when the APL period ends within 3 weeks", async () => {
+        const handler = findRouteHandler("/students", "GET");
+        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+        const soon = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+        const studentDoc = {
+            _id: "student-auto-red",
+            aplStatus: "GRAY",
+            education: [
+                {
+                    _id: "pkg-edu-soon",
+                    type: "CoursePackage",
+                    refId: "pkg-soon",
+                    name: "APL Package",
+                    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+                    endDate: soon,
+                },
+            ],
+        };
+        Student.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([studentDoc]),
+        });
+        StudentEnrollmentQuery.lean.mockResolvedValue([]);
+
+        const res = createRes();
+        await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+
+        const responseStudents = res.json.mock.calls[0][0];
+        expect(responseStudents[0].aplStatus).toBe("RED");
+        expect(responseStudents[0].aplStatusStored).toBe("GRAY");
+        expect(responseStudents[0].aplStatusAuto).toBe(true);
+        expect(responseStudents[0].aplWeeksRemaining).toBe(2);
+        expect(new Date(responseStudents[0].aplEndDate).getTime()).toBe(
+            soon.getTime()
+        );
+    });
+
+    it("keeps the stored APL status when the APL period is far in the future", async () => {
+        const handler = findRouteHandler("/students", "GET");
+        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+        const studentDoc = {
+            _id: "student-not-red",
+            aplStatus: "YELLOW",
+            education: [
+                {
+                    _id: "pkg-edu-far",
+                    type: "CoursePackage",
+                    refId: "pkg-far",
+                    name: "APL Package",
+                    startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                    endDate: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+                },
+            ],
+        };
+        Student.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([studentDoc]),
+        });
+        StudentEnrollmentQuery.lean.mockResolvedValue([]);
+
+        const res = createRes();
+        await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+
+        const responseStudents = res.json.mock.calls[0][0];
+        expect(responseStudents[0].aplStatus).toBe("YELLOW");
+        expect(responseStudents[0].aplStatusStored).toBe("YELLOW");
+        expect(responseStudents[0].aplStatusAuto).toBe(false);
+    });
+
 });
 
+});
 describe("POST /student", () => {
     it("returns 400 when required fields missing", async () => {
         const handler = findRouteHandler("/student", "POST");
@@ -671,6 +867,86 @@ describe("POST /student", () => {
             error: "Missing required fields",
         });
         expect(Student).not.toHaveBeenCalled();
+    });
+
+    it("fires the Lärteamet email exactly once for a new Sollentuna student", async () => {
+        const handler = findRouteHandler("/student", "POST");
+        const req = {
+            body: {
+                name: "Sollentuna Student",
+                email: "sollentuna@example.com",
+                personalNumber: "20010101-1111",
+                municipality: "Sollentuna",
+            },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(201);
+        expect(maybeSendLarteametEmail).toHaveBeenCalledTimes(1);
+        expect(maybeSendLarteametEmail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                student: expect.objectContaining({
+                    name: "Sollentuna Student",
+                    email: "sollentuna@example.com",
+                    municipality: { type: "Sollentuna" },
+                }),
+            })
+        );
+    });
+
+    it("does not fire the Lärteamet email for a non-Sollentuna student", async () => {
+        const handler = findRouteHandler("/student", "POST");
+        const req = {
+            body: {
+                name: "Solna Student",
+                email: "solna@example.com",
+                personalNumber: "20010101-2222",
+                municipality: "Solna",
+            },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(201);
+        expect(maybeSendLarteametEmail).not.toHaveBeenCalled();
+    });
+
+    it("does not re-fire the Lärteamet email when an existing student is re-registered", async () => {
+        const handler = findRouteHandler("/student", "POST");
+        const existing = {
+            _id: "existing-larteamet",
+            name: "Returning",
+            email: "returning@example.com",
+            personalNumber: "19990101-1111",
+            save: vi.fn().mockImplementation(function () {
+                return Promise.resolve(this);
+            }),
+            toObject: vi.fn().mockImplementation(function () {
+                return { ...this };
+            }),
+        };
+        Student.findOne.mockResolvedValue(existing);
+
+        const req = {
+            body: {
+                name: "Returning",
+                email: "returning@example.com",
+                personalNumber: "19990101-1111",
+                municipality: "Sollentuna",
+            },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ alreadyExists: true })
+        );
+        expect(maybeSendLarteametEmail).not.toHaveBeenCalled();
     });
 
     it("creates a student and processes education when provided", async () => {
@@ -705,7 +981,8 @@ describe("POST /student", () => {
         expect(CourseMatchingServiceMock.default.processStudentEducation).toHaveBeenCalledWith(
             expect.any(String),
             req.body.education,
-            "creator-1"
+            "creator-1",
+            { needsSupport: undefined, examMode: undefined }
         );
         expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith(
@@ -791,6 +1068,127 @@ describe("POST /student", () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ error: "Failed to add student" });
+    });
+
+    it("auto-fills an existing student by personalNumber and returns alreadyExists", async () => {
+        const handler = findRouteHandler("/student", "POST");
+        const existing = {
+            _id: "existing-1",
+            name: "Old Name",
+            email: "old@example.com",
+            personalNumber: "20000101-0000",
+            dropout: true,
+            save: vi.fn().mockImplementation(function () {
+                return Promise.resolve(this);
+            }),
+            toObject: vi.fn().mockImplementation(function () {
+                return { ...this };
+            }),
+        };
+        Student.findOne.mockResolvedValue(existing);
+
+        const req = {
+            body: {
+                name: "New Name",
+                email: "new@example.com",
+                personalNumber: "20000101-0000",
+                dropout: false,
+            },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(Student).not.toHaveBeenCalled();
+        expect(existing.name).toBe("New Name");
+        expect(existing.email).toBe("new@example.com");
+        expect(existing.dropout).toBe(false);
+        expect(existing.save).toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                alreadyExists: true,
+                name: "New Name",
+                email: "new@example.com",
+            })
+        );
+    });
+
+    it("matches an existing student by email when personalNumber differs", async () => {
+        const handler = findRouteHandler("/student", "POST");
+        const existing = {
+            _id: "existing-3",
+            name: "Same Email",
+            email: "same@example.com",
+            personalNumber: "19880101-0000",
+            save: vi.fn().mockImplementation(function () {
+                return Promise.resolve(this);
+            }),
+            toObject: vi.fn().mockImplementation(function () {
+                return { ...this };
+            }),
+        };
+        Student.findOne.mockResolvedValue(existing);
+
+        const req = {
+            body: {
+                name: "Same Email",
+                email: "same@example.com",
+                personalNumber: "20000101-0000",
+            },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(Student).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ alreadyExists: true })
+        );
+    });
+
+    it("registers new courses on the existing student via education entries", async () => {
+        const handler = findRouteHandler("/student", "POST");
+        const existing = {
+            _id: "existing-2",
+            name: "Returning Student",
+            email: "ret@example.com",
+            personalNumber: "19900101-0000",
+            save: vi.fn().mockImplementation(function () {
+                return Promise.resolve(this);
+            }),
+            toObject: vi.fn().mockImplementation(function () {
+                return { ...this };
+            }),
+        };
+        Student.findOne.mockResolvedValue(existing);
+        CourseMatchingServiceMock.default.processStudentEducation.mockResolvedValue(
+            { enrollments: [] }
+        );
+
+        const req = {
+            body: {
+                name: "Returning Student",
+                email: "ret@example.com",
+                personalNumber: "19900101-0000",
+                education: [{ type: "Course", refId: "course-1" }],
+            },
+        };
+        const res = createRes();
+
+        await handler(req, res);
+
+        expect(CourseMatchingServiceMock.default.processStudentEducation).toHaveBeenCalledWith(
+            "existing-2",
+            req.body.education,
+            null,
+            { needsSupport: undefined, examMode: undefined }
+        );
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ alreadyExists: true })
+        );
     });
 });
 
@@ -1207,18 +1605,35 @@ describe("DELETE /student/:id", () => {
 });
 
 describe("DELETE /students", () => {
-    it("clears all students", async () => {
+    it("requires an explicit confirmation token before clearing all students", async () => {
         const handler = findRouteHandler("/students", "DELETE");
         Student.find.mockReturnValue({
             lean: vi.fn().mockResolvedValue([]),
         });
         const res = createRes();
 
-        await handler({ params: {}, user: { role: "admin" } }, res);
+        await handler({ params: {}, body: {}, user: { role: "admin" } }, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(Student.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("clears all students when confirmation token is supplied", async () => {
+        const handler = findRouteHandler("/students", "DELETE");
+        Student.find.mockReturnValue({
+            lean: vi.fn().mockResolvedValue([]),
+        });
+        const res = createRes();
+
+        await handler(
+            { params: {}, body: { confirm: "DELETE ALL STUDENTS" }, user: { role: "admin" } },
+            res
+        );
 
         expect(Student.deleteMany).toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith({
             message: "All students deleted successfully",
+            deletedStudents: 0,
             deletedFilesCount: 0,
         });
     });
@@ -1227,7 +1642,10 @@ describe("DELETE /students", () => {
         Student.deleteMany.mockRejectedValueOnce(new Error("boom all"));
         const res = createRes();
 
-        await handler({ params: {}, user: { role: "admin" } }, res);
+        await handler(
+            { params: {}, body: { confirm: "DELETE ALL STUDENTS" }, user: { role: "admin" } },
+            res
+        );
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({
@@ -2180,26 +2598,47 @@ describe("PUT /student/:id/education/:courseId/grade", () => {
 });
 
 describe("GET /students/earnings", () => {
-    it("queries graded students", async () => {
+    it("returns the revenue report from the analytics service", async () => {
         const handler = findRouteHandler("/students/earnings", "GET");
-        Student.find.mockResolvedValue([{ _id: "earn-1" }]);
+        getRevenueReportMock.mockResolvedValue({
+            totalRevenue: 12300,
+            totalRealized: 8200,
+            totalForecasted: 4100,
+            byMunicipality: [
+                {
+                    municipality: "Botkyrka",
+                    revenue: 8200,
+                    realized: 8200,
+                    forecasted: 0,
+                },
+            ],
+            byCourse: [],
+        });
         const res = createRes();
+        const req = { query: { municipality: "Botkyrka" } };
 
-        await handler({}, res);
+        await handler(req, res);
 
-        expect(Student.find).toHaveBeenCalledWith(
-            { "education.grade": { $ne: null } },
-            { municipality: 1, education: 1 }
-        );
-        expect(res.json).toHaveBeenCalledWith([{ _id: "earn-1" }]);
+        expect(getRevenueReportMock).toHaveBeenCalledWith({
+            startDate: undefined,
+            endDate: undefined,
+            municipality: "Botkyrka",
+        });
+        expect(res.status).not.toHaveBeenCalledWith(500);
+        const payload = res.json.mock.calls[0][0];
+        expect(payload.totalEarnings).toBe(8200);
+        expect(payload.totalForecasted).toBe(4100);
+        expect(payload.totalRevenue).toBe(12300);
+        expect(payload.byMunicipality[0].municipality).toBe("Botkyrka");
     });
 
-    it("returns 500 when earnings query fails", async () => {
+    it("returns 500 when the earnings report fails", async () => {
         const handler = findRouteHandler("/students/earnings", "GET");
-        Student.find.mockRejectedValueOnce(new Error("boom"));
+        getRevenueReportMock.mockRejectedValueOnce(new Error("boom"));
         const res = createRes();
+        const req = { query: {} };
 
-        await handler({}, res);
+        await handler(req, res);
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ error: "Server error" });
