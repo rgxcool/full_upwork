@@ -332,8 +332,39 @@ export async function updateAplRecordDetails({ studentId, updates, userId: _user
         "requirements",
         "cvDocId",
         "contractDocId",
+        "isSeeking",
     ];
 
+    for (const field of allowedFields) {
+        if (updates[field] !== undefined) {
+            record[field] = updates[field];
+        }
+    }
+
+    await record.save();
+    return record;
+}
+
+/**
+ * Student self-service updates for their own APL record. Students may declare
+ * that they are actively seeking a placement and attach their own CV document,
+ * nothing else (placement details remain coordinator-managed).
+ */
+export async function updateOwnAplRecord({ studentId, updates }) {
+    let record = await AplRecord.findOne({ studentId });
+    if (!record) {
+        const student = await Student.findById(studentId);
+        if (!student) throw new AppError("Student not found", 404);
+        const aplPeriod = computeAplPeriod(student.education || []);
+        record = new AplRecord({
+            studentId,
+            status: student.aplStatus || "GRAY",
+            internshipStartDate: aplPeriod.aplStartDate || null,
+            internshipEndDate: aplPeriod.aplEndDate || null,
+        });
+    }
+
+    const allowedFields = ["isSeeking", "cvDocId"];
     for (const field of allowedFields) {
         if (updates[field] !== undefined) {
             record[field] = updates[field];

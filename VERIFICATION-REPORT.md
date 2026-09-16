@@ -297,6 +297,21 @@ None. All items marked ✅ in the original checklist remain ✅.
 - **Details:** Automatic status derivation based on activity count, workplace activity start/completion dates, and course instance `handledningPeriod`. Used by frontend for color-coding APL entries.
 - **Checklist disagreement:** Original said Not Implemented ✘ — **WRONG**. Fully implemented.
 
+### APL — Student Self-Service Gap Note (Milestone 3 polish)
+
+**Added (implemented & verifiable):**
+- **Seeking toggle:** `isSeeking` Boolean on `AplRecord` (`backend/src/models/AplRecord.js:48`), updated by the student via `PATCH /apl/my` (`backend/src/router/aplRoutes.js` → `patchOwnAplRecord` in `backend/src/controllers/aplController.js`). Exposed in `frontend/src/views/Student/tabs/AplTab.vue` (`.apl-seeking-toggle`), surfaced to coordinators as a "Söker" column + `mdi-briefcase-search` badge. `GET /apl/my` returns `isSeeking`.
+- **CV self-upload:** students upload via `POST /documents/upload` then `PATCH /apl/my { cvDocId }` (`AplTab.vue handleCvUpload`). Permissions enforced by `canUploadForStudent` in `backend/src/router/documentRoutes.js` (student resolves their own `Student` doc via email; teacher only for own students; staff roles allowed).
+
+**Remaining gaps (documented, not implemented — coordinator/staff currently responsible):**
+1. **APL contract upload** — `contractDocId` is coordinator-only (`AplTab.vue` gates the contract button on `isCoordinator`; `PUT /apl/records/:studentId`).
+2. **Placement details** — `placementCompany`, `placementContact`, `placementAddress`, `internshipStartDate`, `internshipEndDate`, `notes`, `requirements` are editable only by coordinator/APL roles (`updateAplRecordDetails` allowed-fields in `backend/src/services/aplService.js`). Students have read-only access.
+3. **Prior-Praktik intyg** — `priorAplCompleted` / `priorAplIntygDocId` live on `Student` and are managed during course-package placement (the "previous internship" checkbox). No student-facing endpoint.
+4. **Status/color** — only APL roles may change `status` (`PUT /apl/records/:studentId/status`). Intentional; students only observe.
+5. **Data-integrity note:** APL status fields are duplicated across `AplRecord` (`status`, `statusHistory`) and `Student` (`aplStatus`, `aplStatusHistory`); both must stay in sync. `updateOwnAplRecord` deliberately excludes these to avoid divergence.
+
+**Test evidence:** `backend/tests/unit/aplController.test.js` (student self-read + `PATCH /apl/my` incl. 404/500), `backend/tests/unit/aplRoutes.test.js` (`GET /apl/my` returns `isSeeking`), `backend/tests/integration/documentRoutes.test.js` (student self-upload authority).
+
 ### #41 Studieintyg (Study Certificate)
 - **Status:** ✅ Implemented
 - **Evidence:** `backend/src/controllers/studyCertificateController.js` (`generateStudyCertificatePdf` — line 52), `backend/src/router/studyCertificateRoutes.js` (`GET /api/study-certificate/:enrollmentId/pdf`), `backend/src/services/studyCertificatePdf.js` (PDFKit rendering)
@@ -305,10 +320,10 @@ None. All items marked ✅ in the original checklist remain ✅.
 - **Checklist disagreement:** Original said Not Implemented ✘ — **WRONG**. Fully implemented.
 
 ### #42 Diploma (Diploma PDF)
-- **Status:** ⚠️ Partially Implemented
-- **Evidence:** `backend/src/controllers/studyCertificateController.js` (`generateDiplomaPdf` — line 95), `backend/src/router/studyCertificateRoutes.js` (`GET /api/diploma/:enrollmentId/pdf`)
-- **Missing:** No email delivery of diploma. PDF can be downloaded from endpoint but is not automatically emailed to student upon completion.
-- **Checklist disagreement:** Partially correct. PDF generation exists, but email delivery is missing. Original said Not Implemented ✘ — **PARTIALLY WRONG**.
+- **Status:** ✅ Implemented
+- **Evidence:** `backend/src/controllers/studyCertificateController.js` (`generateDiplomaPdf` — line 95, `sendDiplomaEmail` called at line 259), `backend/src/router/studyCertificateRoutes.js` (`GET /api/diploma/:enrollmentId/pdf`), `backend/src/router/router.js:78` (certificate routes now mounted), `backend/src/router/certificateRoutes.js`/`certificateRecordRoutes.js` (admin approve/generate workflow available).
+- **Details:** PDF generation works; diploma is now automatically emailed to the student (`sendDiplomaEmail`) with honest `deliveredForReal` audit recording. Daily scan (`diplomaNotificationScan.js`) detects eligibility, generates PDF, stores in GridFS, emails to student. Signing is a printed text block, NOT cryptographic — reported honestly.
+- **Checklist disagreement:** Original said Not Implemented ✘ — **WRONG**. Partially correct earlier review; email delivery now implemented.
 
 ### #43 Frågebank (Question Bank — Admin + Student)
 - **Status:** ✅ Implemented
@@ -334,7 +349,7 @@ None. Every item confirmed as implemented in the original checklist remains impl
 | #29 Learning platform rendering | Frontend component exists; no student-role test user in DB to render UI |
 | #31 Course cards rendering | Same as above — needs student-role user with enrollments |
 | #34 Assignment grading flow | Endpoints work; no student-role user to test full submit → grade flow |
-| #37 Reports data | Backend route exists but `completedComponents` not populated in handler |
+| #37 Reports data | `completedComponents` now written on submission grading (`learningController.js:311-313`); per-module ✓/✗ populates. "When set" column still missing from UI (`Reports.vue`). |
 | #38 Auto-removal timing | Cron runs at 02:00 UTC; cannot trigger in real-time test |
 | #39 LogbookTab rendering | Component exists; no student-role user to verify rendering |
 | #40 APL colors | Backend utility exists; no APL data to verify color rendering |
@@ -380,4 +395,4 @@ None. Every item confirmed as implemented in the original checklist remains impl
 
 ---
 
-*Report generated by verification agents on 2026-08-26. All code references verified against commit `212ce5c` on `feat/milestone-3`.*
+*Report updated 2026-09-16. Original generated 2026-08-26. Code references verified against commit `22e81e4` (M3 polish pass) on `feat/milestone-3`.*

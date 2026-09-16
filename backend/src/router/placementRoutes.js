@@ -148,6 +148,9 @@ router.post(
 
             let courseStart = getNextMonday(new Date(startDate));
             let i = 0;
+            // Studietakt: 100% → ×1, 50% → ×2, 25% → ×4 duration
+            const paceValue = Number(pace) || 100;
+            const paceFactor = 100 / paceValue;
 
             while (i < packageCourses.length) {
                 const course = packageCourses[i];
@@ -166,7 +169,7 @@ router.post(
                     }
                 }
 
-                const courseEnd = shouldGroup ? addWeeks(courseStart, 5) : addWeeks(courseStart, extentWeeks);
+                const courseEnd = shouldGroup ? addWeeks(courseStart, 5 * paceFactor) : addWeeks(courseStart, extentWeeks * paceFactor);
 
                 // Calculate slutprov
                 const teacherName = await getTeacherName(student.teacherId);
@@ -191,7 +194,7 @@ router.post(
                     endDate: new Date(courseEnd),
                     slutprovDate,
                     examMode: resolvedExamMode,
-                    weeks: shouldGroup ? 5 : extentWeeks,
+                    weeks: shouldGroup ? 5 * paceFactor : extentWeeks * paceFactor,
                     grouped: shouldGroup,
                 });
 
@@ -205,7 +208,7 @@ router.post(
                         endDate: new Date(courseEnd),
                         slutprovDate,
                         examMode: resolvedExamMode,
-                        weeks: 5,
+                        weeks: 5 * paceFactor,
                         grouped: true,
                         groupedWith: course._id,
                     });

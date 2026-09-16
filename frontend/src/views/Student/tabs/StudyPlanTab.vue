@@ -96,7 +96,7 @@
                 </div>
 
                   <div class="education-details">
-                  <div class="study-plan-dates" v-if="element.startDate || element.endDate || element.slutprovDate">
+                  <div v-if="element.startDate || element.endDate || element.slutprovDate" class="study-plan-dates">
                     <span><strong>Start:</strong> {{ formatDate(element.startDate) || '–' }}</span>
                     <span><strong>Slut:</strong> {{ formatDate(element.endDate) || '–' }}</span>
                     <span v-if="element.slutprovDate"><strong>Slutprov:</strong> {{ formatDate(element.slutprovDate) }}</span>

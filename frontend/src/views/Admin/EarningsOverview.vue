@@ -6,11 +6,11 @@
       <div class="filters">
         <label>
           Från
-          <input type="date" v-model="startDate" />
+          <input v-model="startDate" type="date" />
         </label>
         <label>
           Till
-          <input type="date" v-model="endDate" />
+          <input v-model="endDate" type="date" />
         </label>
         <button class="btn btn-sm btn-primary" :disabled="loading" @click="loadReport">
           {{ loading ? 'Laddar...' : 'Uppdatera' }}

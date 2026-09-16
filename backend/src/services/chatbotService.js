@@ -68,16 +68,6 @@ export function generateSessionId(prefix = "") {
 }
 
 /**
- * Check if a date is valid (not NaN, not epoch).
- * @param {*} val - Value to check
- * @returns {boolean} True if valid date
- */
- 
-function isValidDate(val) {
-  return val && !isNaN(new Date(val).getTime()) && new Date(val).getFullYear() > 1970;
-}
-
-/**
  * Base chatbot service with common functionality:
  * - Student permission checking (only enrolled courses)
  * - Interaction logging

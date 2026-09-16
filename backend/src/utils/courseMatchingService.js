@@ -74,7 +74,7 @@ class CourseMatchingService {
      * Find the best matching course using strict exact code matching only
      */
      
-    static async findBestCourseMatch(courseCodeOrName, threshold = 0.7) {
+    static async findBestCourseMatch(courseCodeOrName) {
         const { default: Course } = await import("../models/Course.js");
         // Normalize input: treat as code using the same function as database codes
         const normalizedInput = normalizeCodeForMatching(courseCodeOrName || "");
@@ -333,9 +333,6 @@ class CourseMatchingService {
 
         logger.debug({ educationCount: educationEntries.length, studentId }, "Processing education entries for student");
 
-        // Deduplicate missing package errors
-         
-        const missingPackages = new Set();
         for (const entry of educationEntries) {
             try {
                 // --- PATCH: Match course packages by code (prioritized) ---
@@ -679,6 +676,9 @@ class CourseMatchingService {
                         entry.startDate || new Date()
                     );
                     let i = 0;
+                    // Studietakt: 100% → ×1, 50% → ×2, 25% → ×4 duration
+                    const paceValue = Number(options.pace) || 100;
+                    const paceFactor = 100 / paceValue;
 
                     while (i < packageCourses.length) {
                         // Get current course details
@@ -722,9 +722,9 @@ class CourseMatchingService {
                         let courseEnd;
                         if (shouldGroup) {
                             // For grouped courses, use combined extent (5 weeks total)
-                            courseEnd = this.addWeeks(courseStart, 5);
+                            courseEnd = this.addWeeks(courseStart, 5 * paceFactor);
                         } else {
-                            courseEnd = this.addWeeks(courseStart, extentWeeks);
+                            courseEnd = this.addWeeks(courseStart, extentWeeks * paceFactor);
                         }
 
                         // Process current course - use student's teacher as responsibleTeacher
@@ -787,6 +787,7 @@ class CourseMatchingService {
                                 null,
                             notes: entry.notes || null,
                             needsSupport: options.needsSupport || false,
+                            pace: paceValue,
                             examMode: options.examMode || this.getDefaultExamMode(studentDocB?.municipality),
                         });
                         logger.debug({ teacherId: enrollment.teacherId || "null", studentDocTeacherId: studentDocB?.teacherId || "null", entryTeacherId: entry.teacherId || "null" }, "Creating enrollment");
@@ -923,6 +924,7 @@ class CourseMatchingService {
                                         null,
                                     notes: entry.notes || null,
                                     needsSupport: options.needsSupport,
+                                    pace: paceValue,
                                     examMode: options.examMode || this.getDefaultExamMode(studentDocB?.municipality),
                                 });
 

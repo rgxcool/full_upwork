@@ -150,6 +150,7 @@
               </div>
               <details v-for="module in card.modules" :key="'d' + module.moduleNumber" class="module-details">
                 <summary>{{ module.title }}</summary>
+                <p v-if="module.instructions" class="module-instructions">{{ module.instructions }}</p>
                 <ul class="section-list">
                   <li v-for="(section, i) in module.sections || []" :key="i" class="section-item">
                     <span class="section-title">{{ section.title || 'Sektion ' + (i + 1) }}</span>
@@ -622,6 +623,13 @@ onMounted(loadCourseCards)
   font-weight: 600;
   font-size: 0.85rem;
   color: #374151;
+}
+
+.module-instructions {
+  margin: 0.4rem 0 0 1rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+  white-space: pre-wrap;
 }
 
 .section-list {

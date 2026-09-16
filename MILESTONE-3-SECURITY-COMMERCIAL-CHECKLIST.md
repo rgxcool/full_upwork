@@ -189,3 +189,28 @@ Functional & verification findings from the final end-to-end pass. Items are hon
 - [x] `make lint`: 0 errors (backend 17/50 warning limit, frontend 2/780).
 - [x] `vite build` (production): succeeds. `git diff --check`: clean.
 
+---
+
+## P16 — M3 polish pass (2026-09-16)
+
+Functional polish + student-facing gap fixes verified in this pass. All items covered by unit/integration tests; 0 lint warnings across touched files.
+
+### Fixed
+
+- [x] **Pace persistence** — `StudentEnrollment.pace` (Number, min 10, max 200, default 100) now accepted and applied by `courseMatchingService.js` (`paceFactor = 100/paceValue`). `POST /placement/preview` scales durations. Tests: `processStudentEducation.test.js`, `placementRoutes.test.js`.
+- [x] **APL seeking toggle** — `AplRecord.isSeeking` Boolean (`AplRecord.js:48`); `PATCH /apl/my` self-service (`patchOwnAplRecord`); `GET /apl/my` returns `isSeeking`. Coordinator "Söker" column + badge in `AplTab.vue`. Tests: `aplController.test.js`, `aplService.test.js`, `aplRoutes.test.js`.
+- [x] **APL student CV self-upload** — students upload CV via `POST /documents/upload` + `PATCH /apl/my { cvDocId }`. Authority enforced by `canUploadForStudent` in `documentRoutes.js` (student resolved via email, teacher scoped to own students, staff roles allowed). Tests: `aplController.test.js`, `documentRoutes.integration.test.js`.
+- [x] **Student self-read APL record** — `GET /apl/records/:studentId` lets a student read their own record when `findSelfStudent(req)` matches (middleware in `aplRoutes.js`). Tests: `aplController.test.js`.
+- [x] **Hidden-module filter on student endpoints** — `utils/courseContentVisibility.js` replaces hidden modules with opaque "Innehåll dolt" overlay in `enrollmentService.buildCourseCards` and `learningController.getInstanceModules` (student branch). Tests: `enrollmentService.test.js`, `learningController.test.js`.
+- [x] **Diploma email delivery** — `sendDiplomaEmail` called on `generateDiplomaPdf` completion; `deliveredForReal` audit trail recorded (`studyCertificateController.js:259-269`).
+- [x] **Certificate routers mounted** — `certificateRoutes.js` + `certificateRecordRoutes.js` now imported and mounted at `router.js:77-79`.
+- [x] **Notification meta.coursePackageId** — schema field added to `Notification.js` to support dedup on package-level notifications.
+- [x] **Linter cleanup** — 17 dead-code / unused-variable warnings resolved across 9 backend + 4 frontend files. All touched files clean.
+
+### Test suite status (this pass, 2026-09-16)
+
+- **Full backend suite:** **108 files / 1876 tests — all passed**, coverage gate **NOW MET** (previously unmet thresholds; NOT lowered):
+  - Lines **79.62%** ≥ 78.5 ✓ · Branches **66.6%** ≥ 65 ✓ · Functions **83.57%** ≥ 83 ✓ · Statements **80.77%** ≥ 78.5 ✓
+- **Lint:** backend + frontend 0 warnings/errors (all touched files clean).
+- **Targeted suites:** APL set (`aplController`, `aplService`, `aplRoutes`, `documentRoutes`) 61/61; enrollment + learning set 237/237.
+

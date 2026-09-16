@@ -236,6 +236,25 @@ describe("placementRoutes", () => {
             expect(res.body.courses[0].courseCode).toBe("M");
         });
 
+        it("scales package course durations by studietakt (pace)", async () => {
+            const courseA = { _id: "a", courseName: "Matematik", courseCode: "M", courseExtent: "5" };
+            h.packageModel.findById.mockReturnValue({
+                populate: vi.fn().mockResolvedValue({
+                    _id: "p1",
+                    coursePackageCourses: [courseA],
+                }),
+            });
+
+            const res = await request(app)
+                .post("/placement/preview")
+                .send({ ...payload, type: "package", packageId: "p1", pace: 50, startDate: "2026-09-21" });
+
+            expect(res.status).toBe(200);
+            expect(res.body.courses).toHaveLength(1);
+            expect(res.body.courses[0].weeks).toBe(10);
+            expect(res.body.courses[0].endDate).toBe("2026-11-30T00:00:00.000Z");
+        });
+
         it("returns 404 when the package is missing", async () => {
             h.packageModel.findById.mockReturnValue({
                 populate: vi.fn().mockResolvedValue(null),

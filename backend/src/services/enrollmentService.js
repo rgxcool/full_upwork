@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import { AppError } from "../utils/errorHandler.js";
 import CourseMatchingService from "../utils/courseMatchingService.js";
+import { buildVisibleModules } from "../utils/courseContentVisibility.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
@@ -51,7 +52,7 @@ export const fetchStudentEnrollments = async ({ studentId, status, startDate, en
  * comes from the course instance, which already holds the duplicated template
  * modules created at admission.
  */
-export const buildCourseCards = async (studentId) => {
+export const buildCourseCards = async (studentId, { applyStudentVisibility = false } = {}) => {
     const enrollments = await StudentEnrollment.find({ studentId })
         .populate({
             path: "courseInstanceId",
@@ -158,7 +159,9 @@ export const buildCourseCards = async (studentId) => {
                     enrollment.status === "active" &&
                     new Date(startDate) <= new Date() &&
                     new Date(endDate) >= new Date(),
-                modules: instance?.modules || [],
+                modules: buildVisibleModules(instance?.modules, instance?.content, {
+                    applyStudentVisibility,
+                }),
             };
         });
 
