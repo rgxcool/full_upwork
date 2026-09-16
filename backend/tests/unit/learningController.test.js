@@ -165,6 +165,32 @@ describe("learningController", () => {
             expect(payload.submissions[1]).toMatchObject({ submittedText: "svar" });
         });
 
+        it("overlays teacher content and hides hidden modules for students", async () => {
+            const withContent = {
+                ...instance,
+                content: new Map([
+                    [1, { title: "Startmodul", instructions: "Börja här." }],
+                    [2, { title: "Hemlig", instructions: "Hemligt.", isHiddenFromStudent: true }],
+                ]),
+            };
+            Student.findOne.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            StudentEnrollment.findOne.mockResolvedValue(enrollment);
+            CourseInstance.findById.mockResolvedValue(withContent);
+            AssignmentSubmission.find.mockReturnValue(chainable([]));
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID } });
+            const res = makeRes();
+            await getInstanceModules(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.modules[0]).toMatchObject({ title: "Startmodul", instructions: "Börja här." });
+            expect(payload.modules[1]).toMatchObject({
+                title: "Innehåll dolt",
+                instructions: "Detta innehåll döljs för studenter.",
+                isHiddenFromStudent: true,
+            });
+        });
+
         it("forbids a student who is not enrolled", async () => {
             Student.findOne.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
             StudentEnrollment.findOne.mockResolvedValue(null);

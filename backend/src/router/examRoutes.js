@@ -364,9 +364,6 @@ router.put(
 
             // Permission check: Only admins or the responsible teacher can move events
             // Support both role (singular) and roles (array) for backward compatibility
-             
-            const _userRole =
-                req.user.role || (req.user.roles && req.user.roles[0]) || null;
             const userRoles =
                 req.user.roles || (req.user.role ? [req.user.role] : []);
 
@@ -400,15 +397,8 @@ router.put(
             // Parse dates and create them at local midnight to avoid timezone issues
             const fromKey = new Date(fromDate);
             const toKey = new Date(toDate);
-            
+
             // Create dates at local midnight (not UTC) to avoid timezone shifts
-             
-            const _fromLocal = new Date(
-                fromKey.getFullYear(),
-                fromKey.getMonth(),
-                fromKey.getDate(),
-                0, 0, 0, 0
-            );
             const toLocal = new Date(
                 toKey.getFullYear(),
                 toKey.getMonth(),
@@ -1231,7 +1221,6 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                     logger.debug({ examTime: eventExamTime, examMunicipality: eventExamMunicipality, examLocation: eventExamLocation }, "Final event exam info");
 
                      
-                    const startDate = new Date(dateKey + "T12:00:00.000Z"); // noon UTC to avoid TZ drift
                     grouped[key] = {
                         id: teacherId ? `${teacherId}_${dateKey}` : `no_teacher_${dateKey}`,
                         title: student.teacherId?.userId?.username || "Okänd lärare",
@@ -1399,9 +1388,6 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                     : "";
 
                 if (!grouped[key]) {
-                     
-                    const startDate = new Date(dateKey + "T00:00:00");
-
                     // Get the most common exam info from attendance records for this event
                     const { default: ExamAttendance } = await import(
                         "../models/ExamAttendance.js"
@@ -1562,8 +1548,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
         logger.debug({ count: Object.keys(grouped).length }, "Final grouped events");
         
         // Ensure all events use teacher name as title (not course name)
-         
-        for (const [key, event] of Object.entries(grouped)) {
+        for (const [, event] of Object.entries(grouped)) {
             // Always use teacher name as title
             if (event.extendedProps?.teacher) {
                 event.title = event.extendedProps.teacher;
@@ -1581,8 +1566,6 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                     const dateKey = parts.slice(1).join('_'); // Handle dates with underscores
                     
                     // Build query to find existing CalendarEvent
-                     
-                    const [year, month, day] = dateKey.split('-').map(Number);
                     const startOfDayUTC = new Date(dateKey + "T00:00:00.000Z");
                     const endOfDayUTC = new Date(dateKey + "T23:59:59.999Z");
                     
@@ -1675,9 +1658,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                             
                             // Use the saved student list as the authoritative source
                             const savedStudents = Array.from(allSavedStudents.values());
-                             
-                            const savedStudentIds = new Set(savedStudents.map(s => s._id?.toString()).filter(Boolean));
-                            
+
                             // Create a map of dynamically generated students by ID for merging
                             const dynamicStudentsMap = new Map();
                             if (event.extendedProps.students) {
@@ -1756,11 +1737,7 @@ router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_R
                             if (existingCalendarEvent.extendedProps?.students) {
                                 // Use the saved student list as the authoritative source
                                 const savedStudents = existingCalendarEvent.extendedProps.students || [];
-                                 
-                                const savedStudentIds = new Set(
-                                    savedStudents.map(s => s._id?.toString()).filter(Boolean)
-                                );
-                                
+
                                 // Create a map of dynamically generated students by ID for merging
                                 const dynamicStudentsMap = new Map();
                                 if (event.extendedProps.students) {
@@ -2054,8 +2031,7 @@ router.post("/calendar-events/fix-titles", isAuthenticated, hasRole(["systemadmi
         }
 
         // For each group, merge duplicates and fix titles
-         
-        for (const [key, duplicateEvents] of eventsByKey.entries()) {
+        for (const [, duplicateEvents] of eventsByKey.entries()) {
             if (duplicateEvents.length > 1) {
                 // Keep the first one, merge students, delete others
                 const baseEvent = duplicateEvents[0];

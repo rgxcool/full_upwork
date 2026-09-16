@@ -21,6 +21,10 @@ const notificationSchema = new mongoose.Schema({
       teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // User ID for reference
       studentUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // User ID of the student's login account
       catalogId: { type: mongoose.Schema.Types.ObjectId, ref: "GradeCatalog" }, // Betygskatalog (Scrive)
+      coursePackageId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "CoursePackage",
+      }, // Kurspaket (diploma_ready notifications)
       documentId: { type: String }, // Scrive Document ID
       url: { type: String }, // för direktlänk i frontend
       // Att göra-påminnelser (task_reminder)

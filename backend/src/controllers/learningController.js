@@ -7,6 +7,7 @@ import CourseInstance from "../models/CourseInstance.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import logger from "../utils/logger.js";
+import { buildVisibleModules } from "../utils/courseContentVisibility.js";
 
 const STAFF_ROLES = ["systemadmin", "admin", "tester"];
 const SUBMITTABLE_STATUSES = ["enrolled", "active"];
@@ -61,6 +62,8 @@ export const getInstanceModules = async (req, res) => {
             return res.status(403).json({ error: "Forbidden: Access denied." });
         }
 
+        const isSelfViewingStudent = isStudent && !isTeacher && !isStaff;
+
         const payload = {
             success: true,
             instance: {
@@ -68,10 +71,14 @@ export const getInstanceModules = async (req, res) => {
                 courseName: instance.courseName,
                 courseCode: instance.courseCode,
             },
-            modules: instance.modules || [],
+            modules: isSelfViewingStudent
+                ? buildVisibleModules(instance.modules, instance.content, {
+                      applyStudentVisibility: true,
+                  })
+                : instance.modules || [],
         };
 
-        if (isStudent && !isTeacher && !isStaff) {
+        if (isSelfViewingStudent) {
             const student = await getStudentForUser(user);
             if (!student) {
                 return res.status(403).json({ error: "Ingen elevprofil hittades för kontot" });

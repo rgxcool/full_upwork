@@ -37,29 +37,8 @@ function normalize(value) {
 }
 
 /**
- * Finds the best fuzzy match for a target string among candidates using Levenshtein distance.
- * @param {string} target - The string to match
- * @param {string[]} candidates - Array of candidate strings
- * @param {number} [maxRatio=0.3] - Maximum allowed ratio for a match
- * @returns {string|null} The best match or null if none found
+ * Returns the closest valid municipality name to the input using Levenshtein distance.
  */
- 
-function getBestFuzzyMatch(target, candidates, maxRatio = 0.3) {
-    let best = null;
-    let minDistance = Infinity;
-
-    for (const candidate of candidates) {
-        const d = distance(target, candidate);
-        if (d < minDistance) {
-            minDistance = d;
-            best = candidate;
-        }
-    }
-
-    const maxAllowed = Math.floor(target.length * maxRatio);
-    return minDistance <= maxAllowed ? best : null;
-}
-
 const VALID_MUNICIPALITIES = [
     "Botkyrka",
     "Danderyd",

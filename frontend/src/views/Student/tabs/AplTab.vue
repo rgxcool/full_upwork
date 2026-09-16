@@ -49,6 +49,18 @@
               {{ getStatusLabel(aplRecord.status) }}
             </span>
             <span v-if="aplRecord.aplStatusAuto" class="auto-badge">AUTO</span>
+            <span v-if="aplRecord.isSeeking" class="seeking-badge" title="Eleven söker aktivt en APL-plats">
+              <v-icon size="small" left>mdi-briefcase-search</v-icon>Söker APL-plats
+            </span>
+          </div>
+
+          <!-- Seeking self-service (student's own record) -->
+          <div v-if="isStudent" class="apl-seeking-toggle">
+            <label class="seeking-label">
+              <input v-model="seeking" type="checkbox" :disabled="savingSeeking" @change="toggleSeeking" />
+              <span>Söker aktivt en APL-plats</span>
+            </label>
+            <span v-if="savingSeeking" class="updating-text">Sparar...</span>
           </div>
 
           <!-- Auto-RED note -->
@@ -118,7 +130,7 @@
               <span>{{ aplRecord.cvDocId.filename }}</span>
               <span class="doc-date">({{ formatDate(aplRecord.cvDocId.uploadDate) }})</span>
             </div>
-            <div v-if="isCoordinator" class="upload-section">
+            <div v-if="isCoordinator || isStudent" class="upload-section">
               <input ref="cvFileInput" type="file" accept=".pdf,.doc,.docx" style="display: none" @change="handleCvUpload" />
               <v-btn size="small" variant="outlined" :loading="uploadingCv" @click="cvFileInput?.click()">
                 <v-icon left size="small">mdi-upload</v-icon>
@@ -196,6 +208,7 @@
             <tr>
               <th>Elev</th>
               <th>Status</th>
+              <th>Söker</th>
               <th>Periodstart</th>
               <th>Periodslut</th>
               <th>Veckor kvar</th>
@@ -210,6 +223,10 @@
                 <v-chip :color="getStatusColor(item.status)" size="small" label>
                   {{ getStatusLabel(item.status) }}
                 </v-chip>
+              </td>
+              <td>
+                <v-icon v-if="item.isSeeking" size="small" color="primary" title="Söker APL-plats">mdi-briefcase-search</v-icon>
+                <span v-else>—</span>
               </td>
               <td>{{ formatDate(item.internshipStartDate || item.aplStartDate) }}</td>
               <td>{{ formatDate(item.internshipEndDate || item.aplEndDate) }}</td>
@@ -265,6 +282,8 @@ export default {
     const uploadingCv = ref(false)
     const uploadingContract = ref(false)
     const autoTransitioning = ref(false)
+    const seeking = ref(false)
+    const savingSeeking = ref(false)
 
     const editForm = reactive({
       placementCompany: '',
@@ -279,6 +298,11 @@ export default {
     const isCoordinator = computed(() => {
       const role = store.getters.userRole || store.state.user?.role
       return ['admin', 'systemadmin', 'coordinator'].includes(role)
+    })
+
+    const isStudent = computed(() => {
+      const role = store.getters.userRole || store.state.user?.role
+      return role === 'student'
     })
 
     const statusOptions = [
@@ -362,6 +386,7 @@ export default {
       try {
         const { data } = await client.get(`/apl/records/${props.student._id}`)
         aplRecord.value = data
+        seeking.value = Boolean(data.isSeeking)
         editForm.placementCompany = data.placementCompany || ''
         editForm.placementContact = data.placementContact || ''
         editForm.placementAddress = data.placementAddress || ''
@@ -427,7 +452,12 @@ export default {
         const { data } = await client.post('/documents/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         })
-        await client.put(`/apl/records/${props.student._id}`, { cvDocId: data.document?._id || data._id })
+        const docId = data.document?._id || data._id
+        if (isStudent.value) {
+          await client.patch('/apl/my', { cvDocId: docId })
+        } else {
+          await client.put(`/apl/records/${props.student._id}`, { cvDocId: docId })
+        }
         toast.success('CV uppladdat')
         await loadStudentRecord()
       } catch (error) {
@@ -472,6 +502,20 @@ export default {
       }
     }
 
+    async function toggleSeeking() {
+      if (!props.student?._id) return
+      savingSeeking.value = true
+      try {
+        await client.patch('/apl/my', { isSeeking: seeking.value })
+        toast.success(seeking.value ? 'Du är registrerad som arbetssökande' : 'Sökande-status borttagen')
+      } catch (error) {
+        toast.error(error.response?.data?.error || 'Kunde inte spara sökande-status')
+        await loadStudentRecord()
+      } finally {
+        savingSeeking.value = false
+      }
+    }
+
     async function runAutoTransition() {
       autoTransitioning.value = true
       try {
@@ -507,11 +551,11 @@ export default {
     return {
       allRecords, aplRecord, loading, search, activeFilter,
       updatingStatus, savingDetails, uploadingCv, uploadingContract,
-      autoTransitioning, editForm, isCoordinator, statusOptions,
-      filteredRecords, statusCounts,
+      autoTransitioning, editForm, isCoordinator, isStudent, statusOptions,
+      filteredRecords, statusCounts, seeking, savingSeeking,
       getStatusLabel, getStatusColor, getWeeksRemainingColor,
       formatDate, toggleFilter, viewDetails,
-      handleStatusChange, saveRecordDetails,
+      handleStatusChange, saveRecordDetails, toggleSeeking,
       handleCvUpload, handleContractUpload,
       createRecord, runAutoTransition,
       cvFileInput, contractFileInput,
@@ -580,6 +624,34 @@ export default {
   border-radius: 12px;
   font-size: 10px;
   font-weight: 700;
+}
+.seeking-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #e7f0fd;
+  color: #1565c0;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.apl-seeking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 16px;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+}
+.seeking-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
 }
 .apl-status-display {
   display: flex;

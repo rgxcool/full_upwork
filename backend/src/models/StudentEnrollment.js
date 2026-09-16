@@ -27,6 +27,13 @@ const studentEnrollmentSchema = new mongoose.Schema(
             enum: ["on-site", "remote"],
             default: "on-site",
         },
+        // Studietakt for course-package enrollments (100%, 50%, 25%)
+        pace: {
+            type: Number,
+            min: 10,
+            max: 200,
+            default: 100,
+        },
 
         // Main course reference (for easy querying)
         mainCourseId: {

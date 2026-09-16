@@ -67,6 +67,7 @@ import {
     getAplRecords,
     getAplRecordByStudent,
     updateAplRecordDetails,
+    updateOwnAplRecord,
     getAplStatistics,
 } from "../../src/services/aplService.js";
 import AplRecord from "../../src/models/AplRecord.js";
@@ -548,6 +549,48 @@ describe("APL Status Transitions", () => {
             await expect(
                 updateAplRecordDetails({ studentId: "s1", updates: {}, userId: "u1" })
             ).rejects.toThrow("Student not found");
+        });
+    });
+
+    describe("updateOwnAplRecord", () => {
+        it("only permits seeking status and own CV document", async () => {
+            const record = { isSeeking: false, save: vi.fn().mockResolvedValue({}) };
+            AplRecord.findOne.mockResolvedValue(record);
+
+            const result = await updateOwnAplRecord({
+                studentId: "s1",
+                updates: {
+                    isSeeking: true,
+                    cvDocId: "doc123",
+                    placementCompany: "Acme AB",
+                },
+            });
+
+            expect(result.isSeeking).toBe(true);
+            expect(result.cvDocId).toBe("doc123");
+            expect(result.placementCompany).toBeUndefined();
+            expect(record.save).toHaveBeenCalled();
+        });
+
+        it("auto-creates a record when none exists", async () => {
+            AplRecord.findOne.mockResolvedValue(null);
+            Student.findById.mockResolvedValue({
+                _id: "s1",
+                aplStatus: "BLUE",
+                education: [],
+            });
+            computeAplPeriod.mockReturnValue({
+                aplStartDate: new Date("2026-01-15"),
+                aplEndDate: new Date("2026-06-15"),
+            });
+
+            const result = await updateOwnAplRecord({
+                studentId: "s1",
+                updates: { isSeeking: false },
+            });
+
+            expect(result.status).toBe("BLUE");
+            expect(result.isSeeking).toBe(false);
         });
     });
 

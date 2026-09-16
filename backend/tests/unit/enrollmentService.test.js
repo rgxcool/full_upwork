@@ -294,6 +294,82 @@ describe("buildCourseCards", () => {
         expect(cards[0].progress).toBeNull();
         expect(AssignmentSubmissionMock.find).not.toHaveBeenCalled();
     });
+
+    it("overlays teacher content and hides modules flagged isHiddenFromStudent", async () => {
+        const instance = {
+            _id: INSTANCE_1,
+            courseName: "Svenska 1",
+            courseCode: "SVEENG01",
+            coursePoints: "100",
+            courseExtent: "5",
+            startDate: new Date("2026-01-05"),
+            endDate: new Date("2026-02-09"),
+            mainCourseId: { _id: "c1", courseName: "Svenska 1", courseCode: "SVEENG01" },
+            modules: [
+                { moduleNumber: 1, title: "Modul 1", sections: [{ title: "S1", instructions: "Läs." }] },
+                { moduleNumber: 2, title: "Modul 2", sections: [{ title: "S1" }] },
+                { moduleNumber: 3, title: "Modul 3", sections: [{ title: "S1" }] },
+            ],
+            content: new Map([
+                [1, { title: "Startmodul", instructions: "Börja här." }],
+                [2, { title: "Hemlig modul", instructions: "Hemligt.", isHiddenFromStudent: true }],
+            ]),
+        };
+        const ownEnrollments = [
+            {
+                _id: "enrA",
+                courseInstanceId: instance,
+                mainCourseId: { _id: "c1", courseName: "Svenska 1", courseCode: "SVEENG01" },
+                startDate: instance.startDate,
+                endDate: instance.endDate,
+                status: "active",
+            },
+        ];
+        StudentEnrollmentMock.find
+            .mockReturnValueOnce(createFindChain({ result: ownEnrollments }))
+            .mockReturnValueOnce(createFindChain({ result: [], resolveOn: "select" }));
+
+        const cards = await buildCourseCards(STUDENT_1, { applyStudentVisibility: true });
+
+        expect(cards[0].modules[0]).toMatchObject({ title: "Startmodul", instructions: "Börja här." });
+        expect(cards[0].modules[1]).toMatchObject({
+            title: "Innehåll dolt",
+            instructions: "Detta innehåll döljs för studenter.",
+            isHiddenFromStudent: true,
+        });
+        expect(cards[0].modules[2].title).toBe("Modul 3");
+    });
+
+    it("keeps hidden content visible when visibility is not applied (staff view)", async () => {
+        const instance = {
+            _id: INSTANCE_1,
+            courseName: "Svenska 1",
+            courseCode: "SVEENG01",
+            startDate: new Date("2026-01-05"),
+            endDate: new Date("2026-02-09"),
+            mainCourseId: { _id: "c1", courseName: "Svenska 1", courseCode: "SVEENG01" },
+            modules: [{ moduleNumber: 2, title: "Modul 2", sections: [{ title: "S1" }] }],
+            content: new Map([[2, { title: "Hemlig", instructions: "Hemligt.", isHiddenFromStudent: true }]]),
+        };
+        const ownEnrollments = [
+            {
+                _id: "enrA",
+                courseInstanceId: instance,
+                mainCourseId: { _id: "c1", courseName: "Svenska 1", courseCode: "SVEENG01" },
+                startDate: instance.startDate,
+                endDate: instance.endDate,
+                status: "active",
+            },
+        ];
+        StudentEnrollmentMock.find
+            .mockReturnValueOnce(createFindChain({ result: ownEnrollments }))
+            .mockReturnValueOnce(createFindChain({ result: [], resolveOn: "select" }));
+
+        const cards = await buildCourseCards(STUDENT_1);
+
+        expect(cards[0].modules[0]).toMatchObject({ title: "Hemlig", instructions: "Hemligt." });
+        expect(cards[0].modules[0].isHiddenFromStudent).toBeUndefined();
+    });
 });
 
 describe("fetchCourseInstanceEnrollments", () => {

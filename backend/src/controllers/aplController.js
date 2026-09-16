@@ -7,6 +7,7 @@ import {
     getAplRecords,
     getAplRecordByStudent,
     updateAplRecordDetails,
+    updateOwnAplRecord,
     getAplStatistics,
 } from "../services/aplService.js";
 
@@ -83,6 +84,29 @@ export const putAplRecord = async (req, res) => {
     } catch (error) {
         if (error.statusCode === 404) return res.status(404).json({ error: error.message });
         logger.error({ err: error }, "Error updating APL record");
+        res.status(500).json({ error: "Failed to update APL record" });
+    }
+};
+
+/**
+ * PATCH /apl/my — Student self-service updates for their own APL record.
+ * Resolves the caller's Student profile by email and only permits seeking
+ * status and their own CV document reference.
+ */
+export const patchOwnAplRecord = async (req, res) => {
+    try {
+        const Student = (await import("../models/Student.js")).default;
+        const student = await Student.findOne({ email: req.user.email }).select("_id");
+        if (!student) return res.status(404).json({ error: "Ingen elevprofil hittad." });
+
+        const record = await updateOwnAplRecord({
+            studentId: student._id,
+            updates: req.body || {},
+        });
+        res.json({ success: true, record });
+    } catch (error) {
+        if (error.statusCode === 404) return res.status(404).json({ error: error.message });
+        logger.error({ err: error }, "Error updating own APL record");
         res.status(500).json({ error: "Failed to update APL record" });
     }
 };
