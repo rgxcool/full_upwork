@@ -62,6 +62,7 @@
       v-for="status in statusMap"
       :key="status.key"
       class="column"
+      :class="status.key.toLowerCase()"
       :data-hue="status.hue"
       @dragover.prevent
       @drop="handleDrop($event, status.key)"
