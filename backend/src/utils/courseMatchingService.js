@@ -1,6 +1,7 @@
 import { normalizeCodeForMatching } from "./parseStudentExcel.js";
 import { cloneModules } from "../models/courseModuleSchema.js";
 import logger from "./logger.js";
+import mongoose from "mongoose";
 import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
 import CourseInstance from "../models/CourseInstance.js";
 

@@ -59,6 +59,8 @@
 </template>
 
 <script>
+import { ref, onMounted } from 'vue'
+import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
 
 const PERMISSIONS_API = '/api/permissions'

@@ -2,12 +2,12 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 
-// Define users for auth flows based on original context
+// Define users for auth flows based on seeded database accounts
 const users = {
-  admin: { email: 'admin@test.com', password: 'Admin123!' },
-  teacher: { email: 'teacher@test.com', password: 'Teacher123!' },
-  coord: { email: 'coord@test.com', password: 'Coord123!' },
-  user: { email: 'user@test.com', password: 'User123!' },
+  admin: { email: 'admin@mindful.se', password: 'Admin123!' },
+  teacher: { email: 'teacher@mindful.se', password: 'Teacher123!' },
+  coord: { email: 'coordinator@mindful.se', password: 'Teacher123!' },
+  user: { email: 'student@mindful.se', password: 'Student123!' },
 };
 
 // Global error tracking for Step 6

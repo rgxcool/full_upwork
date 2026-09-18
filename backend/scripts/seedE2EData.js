@@ -274,8 +274,8 @@ async function main() {
         });
         await e.save();
     };
-    await pkgEnroll(anna, new Date("2026-12-31"));
-    await pkgEnroll(calle, new Date("2026-08-21")); // Ends soon → auto-RED
+    await pkgEnroll(anna, new Date(Date.now() + 150 * 86400000)); // far out → stays stored YELLOW, no auto-RED
+    await pkgEnroll(calle, new Date(Date.now() + 14 * 86400000)); // ends within 3 weeks → auto-RED
 
     // ── 9. Exams (Prövningar) ──────────────────────────────
     const createExam = async (studentDoc, month, decision = "", status = "intresse") => {

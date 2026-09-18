@@ -100,7 +100,9 @@ client.interceptors.response.use(
     if (error.response?.status === 401) {
       import('@/store/store.js').then(({ default: store }) => {
         store.commit('LOGOUT')
+        const isSessionCheck = error.config?.url?.includes('/auth/session')
         if (
+          !isSessionCheck &&
           typeof window !== 'undefined' &&
           window.location.pathname !== '/login'
         ) {

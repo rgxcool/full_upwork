@@ -59,6 +59,14 @@ async function checkStudentAccess(req, res, next) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    // Never attempt a DB cast on a malformed id — return a clear 400 instead
+    // of letting Mongoose throw a CastError (500). Literal one-segment paths
+    // such as /uploads/file-counts are matched before this route in practice,
+    // this guard is defense-in-depth.
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({ error: "Invalid student ID" });
+    }
+
     const userRoles = user.roles || (user.role ? [user.role] : []);
     const isStaff = userRoles.some(r => ["systemadmin", "admin", "coordinator", "syv", "specped", "tester"].includes(r));
     const isTeacher = userRoles.includes("teacher");
@@ -276,6 +284,45 @@ router.post('/:studentId', authenticateUser, checkStudentAccess, uploadRateLimit
   }
 })
 
+// Bulk endpoint: get file counts for a list of student IDs (for APL board badges)
+router.get('/file-counts', authenticateUser, async (req, res) => {
+  try {
+    const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
+    const isStaff = userRoles.some(r => ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"].includes(r));
+    if (!isStaff) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { studentIds } = req.query;
+    if (!studentIds) {
+      return res.status(400).json({ error: "studentIds query param required" });
+    }
+
+    const ids = studentIds.split(',').filter(Boolean);
+    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'fs' });
+
+    const counts = {};
+    for (const id of ids) {
+      try {
+        const files = await bucket.find({ 'metadata.studentId': id }).toArray();
+        counts[id] = files.length;
+      } catch {
+        counts[id] = 0;
+      }
+    }
+
+    // Always return counts for every requested id, even after a partial failure.
+    for (const id of ids) {
+      if (!(id in counts)) counts[id] = 0;
+    }
+
+    res.json(counts);
+  } catch (err) {
+    logger.error({ err }, "Failed to get file counts")
+    res.status(500).json({ error: 'Failed to get file counts' })
+  }
+})
+
 // List all files for a student
 router.get('/:studentId', authenticateUser, checkStudentAccess, async (req, res) => {
   try {
@@ -465,45 +512,6 @@ router.delete('/cleanup/orphaned', authenticateUser, hasRole(ALLOWED_ADMIN_ROLES
   } catch (err) {
     logger.error({ err }, "Failed to cleanup orphaned files")
     res.status(500).json({ error: 'Failed to cleanup orphaned files' })
-  }
-})
-
-// Bulk endpoint: get file counts for a list of student IDs (for APL board badges)
-router.get('/file-counts', authenticateUser, async (req, res) => {
-  try {
-    const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
-    const isStaff = userRoles.some(r => ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"].includes(r));
-    if (!isStaff) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
-    const { studentIds } = req.query;
-    if (!studentIds) {
-      return res.status(400).json({ error: "studentIds query param required" });
-    }
-
-    const ids = studentIds.split(',').filter(Boolean);
-    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'fs' });
-
-    const counts = {};
-    for (const id of ids) {
-      try {
-        const files = await bucket.find({ 'metadata.studentId': id }).toArray();
-        counts[id] = files.length;
-      } catch {
-        counts[id] = 0;
-      }
-    }
-
-    // Always return counts for every requested id, even after a partial failure.
-    for (const id of ids) {
-      if (!(id in counts)) counts[id] = 0;
-    }
-
-    res.json(counts);
-  } catch (err) {
-    logger.error({ err }, "Failed to get file counts")
-    res.status(500).json({ error: 'Failed to get file counts' })
   }
 })
 
