@@ -92,7 +92,7 @@ router.get(
                 "Engelska",
                 "Naturkunskap",
                 "Samhällskunskap",
-                "Histori",
+                "Historia",
                 "Geografi",
                 "Idrott",
                 "Kemi",

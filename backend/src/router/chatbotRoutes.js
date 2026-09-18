@@ -2,6 +2,7 @@ import { Router } from "express";
 import logger from "../utils/logger.js";
 import { isAuthenticated } from "../middleware/auth.js";
 import chatbotService from "../services/chatbotService.impl.js";
+import { isAiEnabled, providerName } from "../services/aiAnswerService.js";
 
 const router = Router();
 
@@ -52,8 +53,9 @@ router.get("/status", isAuthenticated, async (req, res) => {
         status: "available",
         description: "Chatbot service is running",
         supportsExternalAI: true,
-        // In a production system, this would indicate which AI provider is configured
-        aiProvider: process.env.OPENAI_API_KEY ? "openai" : "knowledge-base-only",
+        // Truthful: reports the provider that actually answers questions.
+        aiProvider: providerName(),
+        aiEnabled: isAiEnabled(),
       },
     });
   } catch (error) {

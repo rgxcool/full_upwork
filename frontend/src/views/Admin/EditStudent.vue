@@ -27,7 +27,22 @@
           class="list-group-item list-group-item-action"
           @click="selectStudent(s)"
         >
-          {{ s.name }} ({{ s.personalNumber }})
+          <span class="apl-status-chip"
+                :class="{
+                  'status-GRAY': s.aplStatus === 'GRAY',
+                  'status-BLUE': s.aplStatus === 'BLUE',
+                  'status-YELLOW': s.aplStatus === 'YELLOW',
+                  'status-PURPLE': s.aplStatus === 'PURPLE',
+                  'status-RED': s.aplStatus === 'RED',
+                  'status-GREEN': s.aplStatus === 'GREEN',
+                }"
+                title="Klicka för att se elevens APL-detaljer"
+                @click="selectStudent(s)"
+              >
+                <span v-if="s.aplStatus">{{ getStatusLabel(s.aplStatus) }}</span>
+                <span v-else class="text-muted">–</span>
+              </span>
+              <span class="student-name">{{ s.name || s.namn || '' }} ({{ s.personalNumber }})</span>
         </li>
       </ul>
     </div>
@@ -318,6 +333,18 @@
         return dt.toISOString().slice(0, 10)
       }
 
+      function getStatusLabel(status) {
+        const labels = {
+          GRAY: 'Ej påbörjat',
+          BLUE: 'Registrerad',
+          YELLOW: 'Pågående',
+          PURPLE: 'After schedule',
+          RED: 'Auto-RED',
+          GREEN: 'Godkänd',
+        }
+        return labels[status] || status
+      }
+
       return {
         students,
         teachers,
@@ -338,6 +365,7 @@
         save,
         reload,
         formatDate,
+        getStatusLabel,
       }
     },
   }
@@ -351,5 +379,47 @@
     z-index: 1050;
     max-height: 260px;
     overflow-y: auto;
+  }
+
+  .apl-status-chip {
+    position: relative;
+    top: 1px;
+    margin-left: 2px;
+    padding: 2px 6px;
+    padding-right: 22px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .apl-status-chip status-GRAY {
+    background: #e9ecef;
+    color: #6c757d;
+  }
+
+  .apl-status-chip status-BLUE {
+    background: #cfe2f3;
+    color: #31708f;
+  }
+
+  .apl-status-chip status-YELLOW {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .apl-status-chip status-PURPLE {
+    background: #d6d8ec;
+    color: #6f42c1;
+  }
+
+  .apl-status-chip status-RED {
+    background: #f8d7da;
+    color: #721c1e;
+  }
+
+  .apl-status-chip status-GREEN {
+    background: #d4edda;
+    color: #155724;
   }
 </style>

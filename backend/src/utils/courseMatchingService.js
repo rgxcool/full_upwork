@@ -2,6 +2,7 @@ import { normalizeCodeForMatching } from "./parseStudentExcel.js";
 import { cloneModules } from "../models/courseModuleSchema.js";
 import logger from "./logger.js";
 import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
+import CourseInstance from "../models/CourseInstance.js";
 
 class CourseMatchingService {
     /**
@@ -73,7 +74,7 @@ class CourseMatchingService {
      * Find the best matching course using strict exact code matching only
      */
      
-    static async findBestCourseMatch(courseCodeOrName, threshold = 0.7) {
+    static async findBestCourseMatch(courseCodeOrName) {
         const { default: Course } = await import("../models/Course.js");
         // Normalize input: treat as code using the same function as database codes
         const normalizedInput = normalizeCodeForMatching(courseCodeOrName || "");
@@ -332,9 +333,6 @@ class CourseMatchingService {
 
         logger.debug({ educationCount: educationEntries.length, studentId }, "Processing education entries for student");
 
-        // Deduplicate missing package errors
-         
-        const missingPackages = new Set();
         for (const entry of educationEntries) {
             try {
                 // --- PATCH: Match course packages by code (prioritized) ---
@@ -451,6 +449,7 @@ class CourseMatchingService {
                         studentId,
                         courseInstanceId: instance._id,
                         mainCourseId: match.course._id,
+                        enrollmentPrice: match.course.price ?? null,
                         startDate: new Date(entry.startDate),
                         endDate: new Date(entry.endDate),
                         status: "enrolled",
@@ -677,6 +676,9 @@ class CourseMatchingService {
                         entry.startDate || new Date()
                     );
                     let i = 0;
+                    // Studietakt: 100% → ×1, 50% → ×2, 25% → ×4 duration
+                    const paceValue = Number(options.pace) || 100;
+                    const paceFactor = 100 / paceValue;
 
                     while (i < packageCourses.length) {
                         // Get current course details
@@ -720,9 +722,9 @@ class CourseMatchingService {
                         let courseEnd;
                         if (shouldGroup) {
                             // For grouped courses, use combined extent (5 weeks total)
-                            courseEnd = this.addWeeks(courseStart, 5);
+                            courseEnd = this.addWeeks(courseStart, 5 * paceFactor);
                         } else {
-                            courseEnd = this.addWeeks(courseStart, extentWeeks);
+                            courseEnd = this.addWeeks(courseStart, extentWeeks * paceFactor);
                         }
 
                         // Process current course - use student's teacher as responsibleTeacher
@@ -775,6 +777,7 @@ class CourseMatchingService {
                             courseInstanceId: courseInstance._id,
                             mainCourseId: course._id,
                             coursePackageId: packageDoc._id,
+                            enrollmentPrice: course.price ?? null,
                             startDate: courseStart,
                             endDate: courseEnd,
                             status: "enrolled",
@@ -784,6 +787,7 @@ class CourseMatchingService {
                                 null,
                             notes: entry.notes || null,
                             needsSupport: options.needsSupport || false,
+                            pace: paceValue,
                             examMode: options.examMode || this.getDefaultExamMode(studentDocB?.municipality),
                         });
                         logger.debug({ teacherId: enrollment.teacherId || "null", studentDocTeacherId: studentDocB?.teacherId || "null", entryTeacherId: entry.teacherId || "null" }, "Creating enrollment");
@@ -910,6 +914,7 @@ class CourseMatchingService {
                                     courseInstanceId: nextCourseInstance._id,
                                     mainCourseId: nextCourse._id,
                                     coursePackageId: packageDoc._id,
+                                    enrollmentPrice: nextCourse.price ?? null,
                                     startDate: courseStart,
                                     endDate: courseEnd,
                                     status: "enrolled",
@@ -919,6 +924,7 @@ class CourseMatchingService {
                                         null,
                                     notes: entry.notes || null,
                                     needsSupport: options.needsSupport,
+                                    pace: paceValue,
                                     examMode: options.examMode || this.getDefaultExamMode(studentDocB?.municipality),
                                 });
 
@@ -1156,6 +1162,7 @@ class CourseMatchingService {
                         studentId,
                         courseInstanceId: courseInstance._id,
                         mainCourseId: course._id,
+                        enrollmentPrice: course.price ?? null,
                         startDate: courseStart,
                         endDate: courseEnd,
                         status: "enrolled",
@@ -1317,6 +1324,70 @@ class CourseMatchingService {
         });
 
         return results;
+    }
+
+    /**
+     * Aggregate course statistics for a date range (optionally a single course).
+     * Counts course instances that OVERLAP the range, so a period filter shows
+     * the courses running at that time.
+     *
+     * @param {Date} startDate
+     * @param {Date} endDate
+     * @param {string} [courseId]  optional mainCourseId filter
+     * @returns {Promise<object>}
+     */
+    static async getCourseStatistics(startDate, endDate, courseId) {
+        const query = {
+            startDate: { $lt: endDate },
+            endDate: { $gt: startDate },
+        };
+        if (courseId) {
+            query.mainCourseId = courseId;
+        }
+
+        const instances = await CourseInstance.find(query)
+            .select(
+                "courseName courseCode isActive enrollmentCount completionCount dropoutCount"
+            )
+            .lean();
+
+        const totalInstances = instances.length;
+        const activeInstances = instances.filter((i) => i.isActive).length;
+        const totalEnrollments = instances.reduce(
+            (sum, i) => sum + (Number(i.enrollmentCount) || 0),
+            0
+        );
+        const completions = instances.reduce(
+            (sum, i) => sum + (Number(i.completionCount) || 0),
+            0
+        );
+        const dropouts = instances.reduce(
+            (sum, i) => sum + (Number(i.dropoutCount) || 0),
+            0
+        );
+        const averageEnrollments =
+            totalInstances > 0
+                ? Number((totalEnrollments / totalInstances).toFixed(1))
+                : 0;
+
+        return {
+            totalInstances,
+            activeInstances,
+            totalEnrollments,
+            completions,
+            dropouts,
+            averageEnrollments,
+            byCourse: instances.reduce((acc, i) => {
+                const key = i.courseCode || i.courseName || "Okänd kurs";
+                if (!acc[key]) {
+                    acc[key] = { total: 0, active: 0, enrollments: 0 };
+                }
+                acc[key].total += 1;
+                if (i.isActive) acc[key].active += 1;
+                acc[key].enrollments += Number(i.enrollmentCount) || 0;
+                return acc;
+            }, {}),
+        };
     }
 }
 

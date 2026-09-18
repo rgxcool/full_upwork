@@ -20,10 +20,38 @@ const objectIdArray = (value) => {
     return null;
 };
 
+// Accepts a number or a numeric string; rejects negatives and non-numeric
+// values so a course price can never be stored as garbage.
+const nonNegativeNumber = (value) => {
+    const num = typeof value === "number" ? value : Number(value);
+    if (typeof value === "boolean" || !Number.isFinite(num) || num < 0) {
+        return "måste vara ett icke-negativt tal";
+    }
+    return null;
+};
+
+// Normalize whatever the client sent into a number (or null to clear).
+const parsePrice = (value) => {
+    if (value === undefined || value === null || value === "") return null;
+    return Number(value);
+};
+
+const validateResultTypes = (value) => {
+    if (!Array.isArray(value)) return "måste vara en lista av resultattyper";
+    for (const item of value) {
+        if (!item || typeof item !== "object") return "ogiltig resultattyp";
+        if (!item.id || typeof item.id !== "string") return "resultattyp saknar id";
+        if (!item.label || typeof item.label !== "string") return "resultattyp saknar label";
+    }
+    return null;
+};
+
 const createCourseSchema = {
     courseName: { type: "string", required: true, min: 1, max: 200, sanitize: true },
     courseCode: { type: "string", required: true, min: 1, max: 50, sanitize: true },
+    price: { custom: nonNegativeNumber },
     programs: { custom: objectIdArray },
+    resultTypes: { custom: validateResultTypes },
 };
 
 const updateCourseSchema = {
@@ -31,7 +59,9 @@ const updateCourseSchema = {
     courseCode: { type: "string", min: 1, max: 50, sanitize: true },
     coursePoints: { type: "string", max: 50, sanitize: true },
     courseExtent: { type: "string", max: 100, sanitize: true },
+    price: { custom: nonNegativeNumber },
     programs: { custom: objectIdArray },
+    resultTypes: { custom: validateResultTypes },
     isActive: { type: "boolean" },
 };
 
@@ -104,14 +134,16 @@ router.post(
     validate(createCourseSchema),
     async (req, res) => {
         try {
-            const { courseName, courseCode, coursePoints, courseExtent, programs, isActive } = req.body;
+            const { courseName, courseCode, coursePoints, courseExtent, programs, isActive, resultTypes } = req.body;
 
             const created = await Course.create({
                 courseName,
                 courseCode,
                 coursePoints,
                 courseExtent,
+                price: parsePrice(req.body.price),
                 isActive: isActive === undefined ? true : isActive,
+                resultTypes: Array.isArray(resultTypes) ? resultTypes : undefined,
                 programs: (programs || []).map((id) =>
                     mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
                 ),
@@ -153,6 +185,14 @@ router.put(
                     updates[field] = req.body[field];
                     changed.push(`${field}: ${course[field]} -> ${req.body[field]}`);
                 }
+            }
+            if (req.body.resultTypes !== undefined) {
+                updates.resultTypes = Array.isArray(req.body.resultTypes) ? req.body.resultTypes : undefined;
+                changed.push("resultTypes uppdaterade");
+            }
+            if (req.body.price !== undefined) {
+                updates.price = parsePrice(req.body.price);
+                changed.push(`price: ${course.price ?? 0} -> ${updates.price ?? 0}`);
             }
             if (Array.isArray(req.body.programs)) {
                 updates.programs = req.body.programs.map((id) =>

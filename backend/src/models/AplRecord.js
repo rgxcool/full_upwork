@@ -45,6 +45,10 @@ const aplRecordSchema = new mongoose.Schema(
             ref: "Document",
             default: null,
         },
+        isSeeking: {
+            type: Boolean,
+            default: false,
+        },
         completedAt: { type: Date, default: null },
         completedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     },

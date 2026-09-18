@@ -1264,7 +1264,9 @@
         )
           return
         try {
-          await client.delete('/course-instances/all')
+          await client.delete('/course-instances/all', {
+            data: { confirmation: 'DELETE_ALL_COURSE_INSTANCES' },
+          })
           await loadInstances()
           toast.success('Alla kursinstanser och tillhörande data har raderats.')
         } catch (error) {

@@ -82,6 +82,38 @@ const upload = multer({
   }
 });
 
+// Staff roles that may upload documents for any student (APL coordinator included).
+const STAFF_UPLOAD_ROLES = ["systemadmin", "admin", "coordinator", "tester"];
+
+// Resolve the student document a caller may upload for. Students are linked to
+// their login account by email (the same linkage used across the app); teachers
+// may upload for their own students; staff may upload for any student.
+async function canUploadForStudent(user, studentId) {
+  const roles = user.roles || (user.role ? [user.role] : []);
+  if (roles.some((role) => STAFF_UPLOAD_ROLES.includes(role))) return true;
+
+  if (roles.includes("student")) {
+    const Student = mongoose.model("Student");
+    const student = await Student.findOne({ email: user.email }).select("_id");
+    return Boolean(student && String(student._id) === String(studentId));
+  }
+
+  if (roles.includes("teacher")) {
+    const Student = mongoose.model("Student");
+    const Teacher = mongoose.model("Teacher");
+    const teacher = await Teacher.findOne({ userId: user.userId }).select("_id");
+    const student = await Student.findById(studentId).select("teacherId");
+    return Boolean(
+      teacher &&
+        student &&
+        student.teacherId &&
+        String(student.teacherId) === String(teacher._id)
+    );
+  }
+
+  return false;
+}
+
 // Error handling middleware for multer
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -125,11 +157,10 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
         return res.status(400).json({ message: 'studentId is required' });
       }
       
-      // Permission check: students can upload for themselves, admins/systemadmins can upload for any student
-      const userIdStr = String(user.userId);
-      const studentIdStr = String(studentId);
-      
-      if (!isAdmin && userIdStr !== studentIdStr) {
+      // Permission check: students can upload for themselves (matched by email),
+      // teachers for their own students, staff (admin/coordinator) for any student.
+      const allowed = await canUploadForStudent(user, studentId);
+      if (!allowed) {
         return res.status(403).json({ message: 'Du har inte behörighet att ladda upp dokument för denna elev' });
       }
       

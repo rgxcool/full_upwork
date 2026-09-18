@@ -53,6 +53,12 @@ vi.mock("../../src/models/StudentEnrollment.js", () => ({
         deleteMany: vi.fn(),
     },
 }));
+vi.mock("../../src/models/AuditLog.js", () => ({
+    __esModule: true,
+    default: {
+        create: vi.fn().mockResolvedValue({}),
+    },
+}));
 vi.mock("../../src/models/CoursePackage.js", () => ({
     __esModule: true,
     default: {
@@ -387,6 +393,8 @@ describe("uploadStudentsForMatching", () => {
             "teacher_auto_created",
             expect.stringContaining("Teacher One")
         );
+        const notificationArg = createGlobalNotification.mock.calls.at(-1)?.[1] ?? "";
+        expect(notificationArg).not.toMatch(/Lösenord:/i);
         expect(CourseMatchingService.processStudentEducation).toHaveBeenCalledTimes(2);
         expect(CourseMatchingService.processStudentEducation).toHaveBeenNthCalledWith(
             1,
@@ -2434,7 +2442,7 @@ describe("deleteAllCourseInstances", () => {
     it("clears all instances and enrollments", async () => {
         CourseInstance.deleteMany.mockResolvedValue({ deletedCount: 2 });
         StudentEnrollment.deleteMany.mockResolvedValue({ deletedCount: 3 });
-        const req = {};
+        const req = { body: { confirmation: "DELETE_ALL_COURSE_INSTANCES" }, user: {} };
         const res = createRes();
 
         await deleteAllCourseInstances(req, res);
@@ -2445,8 +2453,18 @@ describe("deleteAllCourseInstances", () => {
         });
     });
 
+    it("rejects when server-side confirmation token is missing", async () => {
+        const req = { body: {}, user: {} };
+        const res = createRes();
+
+        await deleteAllCourseInstances(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(CourseInstance.deleteMany).not.toHaveBeenCalled();
+    });
+
     it("returns 500 when bulk deletion fails", async () => {
-        const req = {};
+        const req = { body: { confirmation: "DELETE_ALL_COURSE_INSTANCES" }, user: {} };
         const res = createRes();
         CourseInstance.deleteMany.mockRejectedValue(new Error("boom"));
 

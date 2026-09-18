@@ -51,6 +51,19 @@ export const getEmailSignature = () =>
 let transporter = null;
 let transportMode = null;
 
+// Bounded retry for transient SMTP failures. A single send must never throw,
+// but a flaky SMTP connection should get a couple of quick retries before we
+// give up and report the failure (see sendEmail). Read per call so tests and
+// operators can tune via env without restarting module-load semantics.
+const maxEmailAttempts = () => {
+    const raw = parseInt(process.env.EMAIL_MAX_ATTEMPTS, 10);
+    return Number.isFinite(raw) && raw >= 1 ? raw : 3;
+};
+const emailRetryDelayMs = () => {
+    const raw = parseInt(process.env.EMAIL_RETRY_DELAY_MS, 10);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 500;
+};
+
 /**
  * Select (and cache) the outbound transporter based on configured credentials.
  * @returns {{ transporter: import("nodemailer").Transporter, transportMode: string }}
@@ -124,41 +137,61 @@ export const sendEmail = async ({ to, subject, text, html, attachments }) => {
 
     const { transporter: mailer, transportMode: mode } = getTransporter();
 
-    try {
-        const info = await mailer.sendMail({
-            from: EMAIL_FROM,
-            to,
-            subject,
-            text,
-            html,
-            ...(Array.isArray(attachments) && attachments.length
-                ? { attachments }
-                : {}),
-        });
+    const maxAttempts = maxEmailAttempts();
+    const retryDelayMs = emailRetryDelayMs();
 
-        if (mode === "stream") {
-            // Real delivery is NOT configured — say so explicitly on every send
-            // instead of pretending the mail went out.
-            logger.warn(
-                { to, subject, messageId: info?.messageId },
-                "EMAIL NOT DELIVERED (stream transport — unconfigured SMTP). Would have sent: " +
-                    `"${subject}" to ${to}`
-            );
-        } else {
-            logger.info(
-                { to, subject, messageId: info?.messageId, transportMode: mode },
-                "Email sent"
-            );
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const info = await mailer.sendMail({
+                from: EMAIL_FROM,
+                to,
+                subject,
+                text,
+                html,
+                ...(Array.isArray(attachments) && attachments.length
+                    ? { attachments }
+                    : {}),
+            });
+
+            if (mode === "stream") {
+                // Real delivery is NOT configured — say so explicitly on every send
+                // instead of pretending the mail went out.
+                logger.warn(
+                    { to, subject, messageId: info?.messageId },
+                    "EMAIL NOT DELIVERED (stream transport — unconfigured SMTP). Would have sent: " +
+                        `"${subject}" to ${to}`
+                );
+            } else {
+                logger.info(
+                    { to, subject, messageId: info?.messageId, transportMode: mode, attempt },
+                    "Email sent"
+                );
+            }
+
+            return { success: true, messageId: info?.messageId, transportMode: mode, attempt };
+        } catch (err) {
+            lastError = err;
+            if (attempt < maxAttempts) {
+                logger.warn(
+                    { err, to, subject, attempt },
+                    `Email send attempt ${attempt} failed; retrying`
+                );
+                await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+            }
         }
-
-        return { success: true, messageId: info?.messageId, transportMode: mode };
-    } catch (err) {
-        logger.error(
-            { err, to, subject },
-            "Email send failed (non-fatal, caller continues)"
-        );
-        return { success: false, error: err.message, transportMode: mode };
     }
+
+    logger.error(
+        { err: lastError, to, subject, attempts: maxAttempts },
+        "Email send failed after retries (non-fatal, caller continues)"
+    );
+    return {
+        success: false,
+        error: lastError?.message || "Unknown error",
+        transportMode: mode,
+        attempts: maxAttempts,
+    };
 };
 
 // ── Templates ──────────────────────────────────────────────────────────────
@@ -363,6 +396,77 @@ export const maybeSendLarteametEmail = async ({
         ...(brochure ? { attachments: [brochure] } : {}),
     });
     return { sent: result.success, result, brochureAttached: !!brochure };
+};
+
+/**
+ * Diploma delivery email template (P7/P8).
+ *
+ * Sent to a course-package student when their diploma PDF is generated, with
+ * the PDF attached. The copy keeps the wording generic and avoids echoing the
+ * sensitive fields that live inside the PDF (personnummer etc.).
+ * @param {{ studentName?: string }} ctx
+ */
+export const renderDiplomaEmail = ({ studentName } = {}) => {
+    const greeting = studentName ? `Hej ${studentName}!` : "Hej!";
+    const subject = "Ditt diplom från Mindful Learning";
+    const text = [
+        greeting,
+        "",
+        "Grattis! Du har slutfört din utbildning och vi har tagit fram ett diplom åt dig.",
+        "",
+        "Diplomet finns bifogat i detta mail.",
+        "",
+        "Vänliga hälsningar",
+        getEmailSignature(),
+    ].join("\n");
+    return { subject, text };
+};
+
+/**
+ * Send the diploma PDF to the student's email (P8 diploma delivery). Never
+ * throws; failures are logged by sendEmail and reported in the result.
+ *
+ * Delivery is reported honestly: `deliveredForReal` is only true when the
+ * configured transport actually delivers (gmail/smtp). When the transport falls
+ * back to nodemailer's stream transport (unconfigured SMTP) the email is NOT
+ * delivered and `deliveredForReal` is false — the caller must not claim "sent".
+ *
+ * @param {{ studentName: string, email: string, pdf: Buffer, filename?: string }} args
+ * @returns {Promise<{sent: boolean, deliveredForReal: boolean, transportMode?: string, reason?: string, result?: Object}>}
+ */
+export const sendDiplomaEmail = async ({
+    studentName,
+    email,
+    pdf,
+    filename = "diplom.pdf",
+}) => {
+    if (!email) {
+        logger.warn({ studentName }, "Diploma email skipped — no student email");
+        return { sent: false, reason: "no_email" };
+    }
+
+    const { subject, text } = renderDiplomaEmail({ studentName });
+    const result = await sendEmail({
+        to: email,
+        subject,
+        text,
+        attachments: [
+            {
+                filename,
+                content: pdf,
+                contentType: "application/pdf",
+            },
+        ],
+    });
+
+    // Only claim real delivery for a real (non-stream) transport.
+    const deliveredForReal = result.success && result.transportMode !== "stream";
+    return {
+        sent: deliveredForReal,
+        deliveredForReal,
+        transportMode: result.transportMode,
+        result,
+    };
 };
 
 /**

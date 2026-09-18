@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import CourseInstance from "../models/CourseInstance.js";
 import logger from "../utils/logger.js";
 import { findMatchingFaq } from "./faqService.js";
+import { isAiEnabled, generateAiAnswer } from "./aiAnswerService.js";
 
 const CONFIDENCE_HIGH = 0.8;
 const CONFIDENCE_MEDIUM = 0.5;
@@ -107,8 +108,18 @@ class ConcreteChatbotService extends BaseChatbotService {
         };
       }
 
-      // Generate answer from the retrieved sources
-      const answer = this.generateAnswer(question, approvedSources);
+      // Generate answer from the retrieved sources. When an AI provider is
+      // configured, prefer its answer; otherwise (or on AI failure) fall
+      // back to the built-in heuristic synthesizer.
+      let aiGenerated = false;
+      let answer = null;
+      if (isAiEnabled()) {
+        answer = await generateAiAnswer(question, approvedSources);
+        aiGenerated = Boolean(answer);
+      }
+      if (!answer) {
+        answer = this.generateAnswer(question, approvedSources);
+      }
       const confidence = this.calculateConfidence(approvedSources);
 
       // Log the interaction
@@ -117,7 +128,8 @@ class ConcreteChatbotService extends BaseChatbotService {
         question,
         answer,
         approvedSources,
-        true
+        true,
+        { aiGenerated }
       );
 
       return {

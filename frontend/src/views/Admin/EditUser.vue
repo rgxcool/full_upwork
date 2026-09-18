@@ -58,6 +58,43 @@
       </div>
 
       <div class="card">
+        <h4>Kommuner (data-omfång)</h4>
+        <p class="hint">
+          Begränsa vilka kommuner användaren har åtkomst till. Lämna alla
+          omarkerade för global åtkomst (alla kommuner). Om en begränsning sätts
+          kan användaren endast se och hantera elever i valda kommuner.
+        </p>
+        <div class="role-grid">
+          <label
+            v-for="municipality in availableMunicipalities"
+            :key="municipality"
+            class="role-checkbox"
+          >
+            <input
+              v-model="selectedMunicipalities"
+              type="checkbox"
+              :value="municipality"
+            />
+            <span class="role-label">{{ municipality }}</span>
+          </label>
+        </div>
+        <p class="hint">
+          Valda: {{ selectedMunicipalities.length || 0 }}
+          {{ selectedMunicipalities.length === 0 ? '(global åtkomst)' : 'kommun(er)' }}
+        </p>
+        <div class="actions">
+          <button
+            class="btn btn-primary"
+            :disabled="savingMunicipalities || !hasMuniChanges"
+            @click="saveMunicipalities"
+          >
+            {{ savingMunicipalities ? 'Sparar...' : 'Spara kommun-spann' }}
+          </button>
+        </div>
+        <div v-if="muniMessage" :class="['message', muniMessageType]">{{ muniMessage }}</div>
+      </div>
+
+      <div class="card">
         <h4>Individuella behörighetsöverridningar</h4>
         <p class="hint">Överstyr standardbehörigheter för denna användare. Ett启用 betyder att featuren är på, ett inaktiverat betyder att den är av. Om ingen ändring görs används rollens standard.</p>
         <div class="permission-grid">
@@ -130,6 +167,13 @@ const ROLE_OPTIONS = [
   { value: 'student', label: 'Elev' },
 ]
 
+const MUNICIPALITY_OPTIONS = [
+  'Botkyrka', 'Danderyd', 'Göteborg', 'Huddinge', 'Järfälla', 'KCNO',
+  'Lidingö', 'Norrtälje', 'Nykvarn', 'Privat kunder', 'Salem', 'Sigtuna',
+  'Sollentuna', 'Solna', 'Stockholm', 'Sundbyberg', 'Södertälje', 'Täby',
+  'Upplands Bro', 'Upplands Väsby', 'Vallentuna', 'Vaxholm', 'Växjö', 'Österåker',
+]
+
 const FEATURE_OPTIONS = [
   { key: 'calendar_final_exam', label: 'Kalender (slutprov)' },
   { key: 'search_content', label: 'Söka efter innehåll' },
@@ -162,6 +206,7 @@ export default {
     const loading = ref(true)
     const error = ref(null)
     const availableRoles = ROLE_OPTIONS
+    const availableMunicipalities = MUNICIPALITY_OPTIONS
     const features = FEATURE_OPTIONS
 
     const selectedRoles = ref([])
@@ -176,6 +221,12 @@ export default {
     const permMessage = ref('')
     const permMessageType = ref('')
 
+    const selectedMunicipalities = ref([])
+    const originalMunicipalities = ref([])
+    const savingMunicipalities = ref(false)
+    const muniMessage = ref('')
+    const muniMessageType = ref('')
+
     const resettingPassword = ref(false)
     const resetMessage = ref('')
     const resetMessageType = ref('')
@@ -183,6 +234,12 @@ export default {
     const hasRoleChanges = computed(() => {
       const sortedNew = [...selectedRoles.value].sort()
       const sortedOld = [...originalRoles.value].sort()
+      return JSON.stringify(sortedNew) !== JSON.stringify(sortedOld)
+    })
+
+    const hasMuniChanges = computed(() => {
+      const sortedNew = [...selectedMunicipalities.value].sort()
+      const sortedOld = [...originalMunicipalities.value].sort()
       return JSON.stringify(sortedNew) !== JSON.stringify(sortedOld)
     })
 
@@ -194,6 +251,8 @@ export default {
         user.value = data
         selectedRoles.value = [...(data.roles || [])]
         originalRoles.value = [...(data.roles || [])]
+        selectedMunicipalities.value = [...(data.municipalities || [])]
+        originalMunicipalities.value = [...(data.municipalities || [])]
 
         const perms = data.permissions && typeof data.permissions === 'object' ? data.permissions : {}
         Object.keys(perms).forEach((k) => {
@@ -262,6 +321,27 @@ export default {
       }
     }
 
+    const saveMunicipalities = async () => {
+      savingMunicipalities.value = true
+      muniMessage.value = ''
+      try {
+        await client.put(`/users/${userId}/municipalities`, {
+          municipalities: selectedMunicipalities.value,
+        })
+        originalMunicipalities.value = [...selectedMunicipalities.value]
+        muniMessage.value =
+          originalMunicipalities.value.length === 0
+            ? 'Kommun-spann sparad (global åtkomst — alla kommuner).'
+            : 'Kommun-spann sparad.'
+        muniMessageType.value = 'success'
+      } catch (e) {
+        muniMessage.value = e.message || 'Fel vid sparning av kommun-spann'
+        muniMessageType.value = 'error'
+      } finally {
+        savingMunicipalities.value = false
+      }
+    }
+
     const resetPassword = async () => {
       resettingPassword.value = true
       resetMessage.value = ''
@@ -284,6 +364,7 @@ export default {
       loading,
       error,
       availableRoles,
+      availableMunicipalities,
       features,
       selectedRoles,
       savingRoles,
@@ -294,6 +375,11 @@ export default {
       savingPermissions,
       permMessage,
       permMessageType,
+      selectedMunicipalities,
+      savingMunicipalities,
+      muniMessage,
+      muniMessageType,
+      hasMuniChanges,
       resettingPassword,
       resetMessage,
       resetMessageType,
@@ -304,6 +390,7 @@ export default {
       clearPermissionOverride,
       saveRoles,
       savePermissions,
+      saveMunicipalities,
       resetPassword,
     }
   },

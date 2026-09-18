@@ -20,6 +20,7 @@
               <th class="text-left">Kod</th>
               <th class="text-left">Poäng</th>
               <th class="text-left">Omfattning</th>
+              <th class="text-left">Pris</th>
               <th class="text-left">Program</th>
               <th class="text-left">Status</th>
               <th class="text-left">Åtgärder</th>
@@ -33,6 +34,7 @@
               <td>{{ course.courseCode }}</td>
               <td>{{ course.coursePoints || '–' }}</td>
               <td>{{ course.courseExtent || '–' }}</td>
+              <td>{{ formatPrice(course.price) }}</td>
               <td>
                 <v-chip
                   v-for="p in programNames(course)"
@@ -58,7 +60,7 @@
               </td>
             </tr>
             <tr v-if="courses.length === 0">
-              <td colspan="7" class="text-center text-grey">Inga kurser ännu.</td>
+              <td colspan="8" class="text-center text-grey">Inga kurser ännu.</td>
             </tr>
           </tbody>
         </v-table>
@@ -85,6 +87,13 @@
             />
             <v-text-field v-model="form.coursePoints" label="Poäng" />
             <v-text-field v-model="form.courseExtent" label="Omfattning" />
+            <v-text-field
+              v-model.number="form.price"
+              label="Pris (kr)"
+              type="number"
+              min="0"
+              :error-messages="validationErrors.price"
+            />
             <v-select
               v-model="form.programs"
               :items="programOptions"
@@ -94,6 +103,21 @@
               multiple
               clearable
             />
+            <div class="mt-3 mb-2">
+              <div class="text-subtitle-2 mb-1 font-weight-medium">Resultattyper för betygssättning</div>
+              <div class="text-caption text-grey mb-2">Välj vilka delmoment/resultat som kan registreras för kursen</div>
+              <v-row dense>
+                <v-col v-for="rt in availableResultTypes" :key="rt.id" cols="12" sm="6">
+                  <v-checkbox
+                    v-model="form.selectedResultTypes"
+                    :value="rt.id"
+                    :label="rt.label"
+                    density="compact"
+                    hide-details
+                  />
+                </v-col>
+              </v-row>
+            </div>
             <v-checkbox v-model="form.isActive" label="Aktiv" hide-details class="mt-2" />
           </v-form>
         </v-card-text>
@@ -158,9 +182,15 @@
     courseCode: '',
     coursePoints: '',
     courseExtent: '',
+    price: null,
     programs: [],
     isActive: true,
   })
+
+  const formatPrice = (price) =>
+    price === null || price === undefined || price === ''
+      ? '–'
+      : `${new Intl.NumberFormat('sv-SE').format(price)} kr`
 
   const fetchCourses = async () => {
     try {
@@ -183,6 +213,17 @@
     }
   }
 
+  const availableResultTypes = [
+    { id: 'final_grade', label: 'Slutbetyg (A–F)', type: 'grade' },
+    { id: 'national_test', label: 'Nationellt prov (NP-poäng)', type: 'numeric', min: 0, max: 100 },
+    { id: 'speaking', label: 'Muntligt / Speaking', type: 'grade' },
+    { id: 'listening', label: 'Hörförståelse / Listening', type: 'grade' },
+    { id: 'reading', label: 'Läsförståelse / Reading', type: 'grade' },
+    { id: 'writing', label: 'Skriftligt / Writing', type: 'grade' },
+    { id: 'practical', label: 'Praktiskt prov', type: 'pass_fail' },
+    { id: 'attendance', label: 'Närvaro / Fullföljande', type: 'percentage' },
+  ]
+
   const openCreate = () => {
     editing.value = null
     validationErrors.value = {}
@@ -191,7 +232,9 @@
       courseCode: '',
       coursePoints: '',
       courseExtent: '',
+      price: null,
       programs: [],
+      selectedResultTypes: ['final_grade'],
       isActive: true,
     }
     showModal.value = true
@@ -205,7 +248,11 @@
       courseCode: course.courseCode,
       coursePoints: course.coursePoints || '',
       courseExtent: course.courseExtent || '',
+      price: course.price ?? null,
       programs: (course.programs || []).map((p) => (typeof p === 'string' ? p : p._id)),
+      selectedResultTypes: Array.isArray(course.resultTypes) && course.resultTypes.length > 0
+        ? course.resultTypes.map((r) => r.id)
+        : ['final_grade'],
       isActive: course.isActive !== false,
     }
     showModal.value = true
@@ -224,12 +271,20 @@
 
     saving.value = true
     try {
+      const chosenResultTypes = availableResultTypes.filter((rt) =>
+        (form.value.selectedResultTypes || []).includes(rt.id)
+      )
       const payload = {
         courseName: form.value.courseName.trim(),
         courseCode: form.value.courseCode.trim(),
         coursePoints: form.value.coursePoints || undefined,
         courseExtent: form.value.courseExtent || undefined,
+        price:
+          form.value.price === '' || form.value.price === null || form.value.price === undefined
+            ? null
+            : Number(form.value.price),
         programs: form.value.programs || [],
+        resultTypes: chosenResultTypes.length > 0 ? chosenResultTypes : undefined,
         isActive: form.value.isActive,
       }
       if (editing.value) {

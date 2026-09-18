@@ -1,10 +1,34 @@
 import express from "express";
 import { authenticateUser } from '../controllers/authController.js'; // om du har detta
 import Meeting from "../models/Meeting.js";
+import Student from "../models/Student.js";
 import logger from "../utils/logger.js";
 
 
 const router = express.Router();
+
+// Sanitize exam-accommodation payloads before persisting. Accepts
+// strings/form-data values (e.g. "on", "true") as well as booleans/numbers,
+// and clamps extraTime to a non-negative integer of minutes.
+function sanitizeExtraTime(value) {
+    if (value === undefined || value === null || value === "") return 0;
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) return 0;
+    return Math.round(num);
+}
+
+function sanitizeBoolean(value) {
+    if (value === undefined || value === null) return false;
+    if (typeof value === "boolean") return value;
+    if (value === "on" || value === "true" || value === "1" || Number(value) > 0)
+        return true;
+    return false;
+}
+
+function sanitizeNotes(value) {
+    if (value === undefined || value === null) return "";
+    return String(value).trim().slice(0, 2000);
+}
 
 // GET: Alla möten
 router.get('/meetings', authenticateUser, async (req, res) => {
@@ -193,10 +217,10 @@ router.put('/students/:id/exam-accommodations', authenticateUser, async (req, re
             id,
             {
                 examAccommodations: {
-                    extraTime: extraTime !== undefined ? extraTime : undefined,
-                    computer: computer !== undefined ? computer : undefined,
-                    separateRoom: separateRoom !== undefined ? separateRoom : undefined,
-                    notes: notes !== undefined ? notes : undefined,
+                    extraTime: sanitizeExtraTime(extraTime),
+                    computer: sanitizeBoolean(computer),
+                    separateRoom: sanitizeBoolean(separateRoom),
+                    notes: sanitizeNotes(notes),
                 },
             },
             { new: true }

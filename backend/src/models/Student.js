@@ -15,6 +15,7 @@ const StudentSchema = new mongoose.Schema(
         examMunicipality: String,
         examLocation: String,
         examTime: String,
+        examRoom: String,
 
         // Exam history tracking
         examHistory: [
@@ -33,6 +34,7 @@ const StudentSchema = new mongoose.Schema(
                 examTime: String,
                 examMunicipality: String,
                 examLocation: String,
+                examRoom: String,
                 grade: String,
                 notes: String,
                 recordedAt: { type: Date, default: Date.now },
@@ -93,7 +95,7 @@ const StudentSchema = new mongoose.Schema(
 
         // Exam accommodations (Section 19.8, 21.5)
         examAccommodations: {
-            extraTime: { type: Boolean, default: false },
+            extraTime: { type: Number, default: 0, min: 0 },
             computer: { type: Boolean, default: false },
             separateRoom: { type: Boolean, default: false },
             notes: { type: String },

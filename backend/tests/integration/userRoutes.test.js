@@ -104,8 +104,8 @@ describe("User Routes", () => {
         });
 
         it("returns 500 when registration fails", async () => {
-            vi.spyOn(User, "findOne").mockRejectedValueOnce(
-                new Error("Lookup failed")
+            vi.spyOn(User.prototype, "save").mockRejectedValueOnce(
+                new Error("db write failed")
             );
 
             const response = await request(app)
