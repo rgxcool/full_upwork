@@ -148,6 +148,37 @@ describe("courseRoutes", () => {
             expect(audit.performedBy.role).toBe("admin");
         });
 
+        it("creates a course with a price", async () => {
+            const response = await request(app)
+                .post("/api/course")
+                .set("Cookie", authCookie)
+                .send({
+                    courseName: "Priced Course",
+                    courseCode: "PR001",
+                    price: 4500,
+                })
+                .expect(201);
+
+            expect(response.body.courseCode).toBe("PR001");
+            expect(response.body.price).toBe(4500);
+
+            const stored = await Course.findById(response.body._id);
+            expect(stored.price).toBe(4500);
+        });
+
+        it("rejects a negative course price", async () => {
+            const response = await request(app)
+                .post("/api/course")
+                .set("Cookie", authCookie)
+                .send({
+                    courseName: "Bad Price",
+                    courseCode: "BP001",
+                    price: -10,
+                })
+                .expect(400);
+            expect(response.body).toHaveProperty("error");
+        });
+
         it("returns 500 when course creation fails", async () => {
             vi.spyOn(Course, "create").mockRejectedValueOnce(
                 new Error("create failure")
@@ -191,6 +222,17 @@ describe("courseRoutes", () => {
             const audit = await AuditLog.findOne({ entityType: "Course", action: "update" });
             expect(audit).not.toBeNull();
             expect(audit.entityId.toString()).toBe(course._id.toString());
+        });
+
+        it("updates a course price", async () => {
+            const course = await createCourse();
+            const response = await request(app)
+                .put(`/api/course/${course._id}`)
+                .set("Cookie", authCookie)
+                .send({ price: 3800 })
+                .expect(200);
+
+            expect(response.body.price).toBe(3800);
         });
 
         it("returns 404 for a missing course", async () => {

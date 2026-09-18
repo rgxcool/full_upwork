@@ -62,17 +62,18 @@ router.put(
     asyncHandler(setSubmissionFeedback)
 );
 
-// Assignment-tied comments / discussion thread per submission
+// Assignment-tied comments / discussion thread per submission.
+// No hasRole gate here: the controller authorizes students (own submission only),
+// teachers (owned course), and staff (any), so students can read/comment on their
+// own submission threads without exposing others' discussions.
 router.get(
     "/learning/submissions/:submissionId/comments",
     isAuthenticated,
-    hasRole(STAFF_ROLES),
     asyncHandler(getSubmissionComments)
 );
 router.post(
     "/learning/submissions/:submissionId/comments",
     isAuthenticated,
-    hasRole(STAFF_ROLES),
     asyncHandler(addSubmissionComment)
 );
 

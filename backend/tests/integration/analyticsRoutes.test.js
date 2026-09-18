@@ -122,6 +122,40 @@ describe("Analytics Routes Integration Tests", () => {
             expect(res.body.totalRevenue).toBeGreaterThan(0);
         });
 
+        it("uses enrollmentPrice snapshot for revenue when present", async () => {
+            await StudentEnrollment.create({
+                studentId: student._id,
+                courseInstanceId: instance._id,
+                mainCourseId: course._id,
+                startDate: new Date("2026-01-01"),
+                endDate: new Date("2026-06-30"),
+                status: "completed",
+                grade: "B",
+                gradeDate: new Date("2026-06-26"),
+                enrollmentPrice: 5000,
+            });
+
+            const res = await request(app)
+                .get("/api/analytics/revenue")
+                .set(buildAuthHeader("admin"))
+                .expect(200);
+
+            // Seeded enrollment falls back to grade-based pricing (Sollentuna
+            // A-E = 3200), the new one uses its 5000 course-price snapshot.
+            expect(res.body.totalRevenue).toBe(8200);
+            expect(res.body.totalRealized).toBe(8200);
+        });
+
+        it("falls back to gradeToRevenue when no enrollmentPrice is set", async () => {
+            const res = await request(app)
+                .get("/api/analytics/revenue")
+                .set(buildAuthHeader("admin"))
+                .expect(200);
+
+            // Only the seeded Sollentuna enrollment with grade B exists.
+            expect(res.body.totalRevenue).toBe(3200);
+        });
+
         it("returns monthly income forecast for admins", async () => {
             const res = await request(app)
                 .get("/api/analytics/forecast")

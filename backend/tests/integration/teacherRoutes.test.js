@@ -281,7 +281,7 @@ describe("Teacher Routes", () => {
         }, 15000);
 
         it("returns 500 when teacher creation fails", async () => {
-            vi.spyOn(User, "findOne").mockRejectedValueOnce(
+            vi.spyOn(User.prototype, "save").mockRejectedValueOnce(
                 new Error("db error")
             );
 
@@ -392,7 +392,7 @@ describe("Teacher Routes", () => {
         });
 
         it("returns 500 when creation fails", async () => {
-            vi.spyOn(User, "findOne").mockRejectedValueOnce(
+            vi.spyOn(User.prototype, "save").mockRejectedValueOnce(
                 new Error("create error")
             );
 

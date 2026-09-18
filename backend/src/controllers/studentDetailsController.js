@@ -7,6 +7,7 @@ import StudentEnrollment from "../models/StudentEnrollment.js";
 import Deviation from "../models/Deviation.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
+import { municipalityInScope } from "../utils/tenantScope.js";
 import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
 import {
     performStudentDropout,
@@ -40,6 +41,11 @@ export const getStudentDetails = async (req, res) => {
 
         if (!student) {
             return res.status(404).json({ error: "Student not found" });
+        }
+
+        // Backend-enforced tenant (kommun) scope.
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
         }
 
         const user = await User.findOne({ email: student.email });
@@ -628,7 +634,7 @@ export const reactivateStudentWithCourses = async (req, res) => {
         for (const notif of dropoutNotifications) {
             notif.resolved = true;
             if (!notif.resolvedByUsers) notif.resolvedByUsers = [];
-            notif.resolvedByUsers.push({ userId, resolvedAt: new Date() });
+            notif.resolvedByUsers.push(userId);
             await notif.save();
         }
 
@@ -660,10 +666,13 @@ export const reactivateStudentWithCourses = async (req, res) => {
                     student.teacherId || null
                 );
 
+                const courseDoc = await Course.findById(courseId).lean();
+
                 const enrollment = new StudentEnrollment({
                     studentId: id,
                     courseInstanceId: instance._id,
                     mainCourseId: courseId,
+                    enrollmentPrice: courseDoc?.price ?? null,
                     startDate,
                     endDate,
                     status: "enrolled",
@@ -714,6 +723,10 @@ export const getSupportInfo = async (req, res) => {
         const student = await Student.findById(id).select("supportInfo name email");
         if (!student) {
             return res.status(404).json({ error: "Student not found" });
+        }
+
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
         }
 
         res.json({
@@ -785,6 +798,14 @@ export const getDeviations = async (req, res) => {
     try {
         const { id } = req.params;
         const { enrollmentId } = req.query;
+
+        const student = await Student.findById(id).select("municipality name");
+        if (!student) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
 
         const query = { studentId: id };
         if (enrollmentId) {

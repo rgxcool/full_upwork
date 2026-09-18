@@ -483,7 +483,7 @@ router.get('/file-counts', authenticateUser, async (req, res) => {
     }
 
     const ids = studentIds.split(',').filter(Boolean);
-    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'uploads' });
+    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'fs' });
 
     const counts = {};
     for (const id of ids) {
@@ -493,6 +493,11 @@ router.get('/file-counts', authenticateUser, async (req, res) => {
       } catch {
         counts[id] = 0;
       }
+    }
+
+    // Always return counts for every requested id, even after a partial failure.
+    for (const id of ids) {
+      if (!(id in counts)) counts[id] = 0;
     }
 
     res.json(counts);

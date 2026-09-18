@@ -2,10 +2,12 @@ import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
+import Course from "../models/Course.js";
 import CourseInstance from "../models/CourseInstance.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import logger from "../utils/logger.js";
+import { buildVisibleModules } from "../utils/courseContentVisibility.js";
 
 const STAFF_ROLES = ["systemadmin", "admin", "tester"];
 const SUBMITTABLE_STATUSES = ["enrolled", "active"];
@@ -60,6 +62,8 @@ export const getInstanceModules = async (req, res) => {
             return res.status(403).json({ error: "Forbidden: Access denied." });
         }
 
+        const isSelfViewingStudent = isStudent && !isTeacher && !isStaff;
+
         const payload = {
             success: true,
             instance: {
@@ -67,10 +71,14 @@ export const getInstanceModules = async (req, res) => {
                 courseName: instance.courseName,
                 courseCode: instance.courseCode,
             },
-            modules: instance.modules || [],
+            modules: isSelfViewingStudent
+                ? buildVisibleModules(instance.modules, instance.content, {
+                      applyStudentVisibility: true,
+                  })
+                : instance.modules || [],
         };
 
-        if (isStudent && !isTeacher && !isStaff) {
+        if (isSelfViewingStudent) {
             const student = await getStudentForUser(user);
             if (!student) {
                 return res.status(403).json({ error: "Ingen elevprofil hittades för kontot" });
@@ -177,6 +185,17 @@ export const submitAssignment = async (req, res) => {
             { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
         );
 
+        // A resubmission invalidates any prior "godkänd" marking for the module.
+        try {
+            if (enrollment.completedComponents) {
+                enrollment.completedComponents.set(String(moduleNumberInt), "✗");
+                enrollment.skipNotification = true;
+                await enrollment.save();
+            }
+        } catch (completedError) {
+            logger.warn({ err: completedError, enrollmentId: enrollment._id }, "Error resetting module completion on resubmission");
+        }
+
         logger.info(
             { studentId: student._id, enrollmentId: enrollment._id, moduleNumber: moduleNumberInt },
             "Assignment submitted"
@@ -281,6 +300,24 @@ export const setSubmissionFeedback = async (req, res) => {
             at: new Date(),
         };
         await submission.save();
+
+        // Keep the enrollment's per-module completion tracking in sync so the
+        // activity/report ✓/✗ views reflect teacher feedback. "godkänd" marks
+        // the module complete, anything else marks it as needing revision.
+        if (submission.enrollmentId) {
+            try {
+                const enrollment = await StudentEnrollment.findById(submission.enrollmentId);
+                if (enrollment) {
+                    const completedComponents = enrollment.completedComponents || new Map();
+                    completedComponents.set(String(submission.moduleNumber), status === "godkänd" ? "✓" : "✗");
+                    enrollment.completedComponents = completedComponents;
+                    enrollment.skipNotification = true;
+                    await enrollment.save();
+                }
+            } catch (completedError) {
+                logger.warn({ err: completedError, submissionId: submission._id }, "Error updating enrollment module completion");
+            }
+        }
 
         logger.info(
             { submissionId: submission._id, status, by: user.userId },
@@ -555,9 +592,18 @@ export const addCourseInstanceParticipant = async (req, res) => {
         }
 
         // Create new enrollment
+        let mainCourseId = instance.mainCourseId || null;
+        let enrollmentPrice = null;
+        if (mainCourseId && mongoose.isValidObjectId(mainCourseId)) {
+            const mainCourse = await Course.findById(mainCourseId).lean();
+            enrollmentPrice = mainCourse?.price ?? null;
+        }
+
         const newEnrollment = new StudentEnrollment({
             studentId: participantId,
             courseInstanceId: instance._id,
+            mainCourseId,
+            enrollmentPrice,
             status: "enrolled",
         });
 

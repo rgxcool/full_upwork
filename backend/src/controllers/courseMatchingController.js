@@ -14,6 +14,7 @@ import { cloneModules } from "../models/courseModuleSchema.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import * as enrollmentService from "../services/enrollmentService.js";
+import { recordAudit } from "../utils/auditLog.js";
 
 /**
  * Course Matching Controller
@@ -294,9 +295,13 @@ export const uploadStudentsForMatching = async (req, res) => {
 
                     // Create notification for the user who uploaded the file
                     try {
+                        // NOTE: The temporary password is intentionally NOT included
+                        // here — it is returned to the uploading admin via
+                        // `results.createdTeachers` and must not be persisted in a
+                        // broadcast notification message (credential leak).
                         await createGlobalNotification(
                             "teacher_auto_created",
-                            `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Lösenord: ${teacherResult.password}`
+                            `Lärare "${safeUsername}" skapades automatiskt vid uppladdning av studenter. Temporärt lösenord finns i uppladdningsresultatet.`
                         );
                     } catch (notificationError) {
                         logger.error({ err: notificationError }, "Error creating notification");
@@ -522,7 +527,11 @@ export const uploadStudentsForMatching = async (req, res) => {
 
                 if (!dbStudent) {
                     // Create new student
-                    logger.debug({ studentData }, "Creating student with data");
+                    // Log only non-sensitive identifiers — never personalNumber or full payload.
+                    logger.debug(
+                        { name: studentData.name || studentData.email, municipality: studentData.municipality },
+                        "Creating student with data"
+                    );
                     logger.debug({ municipality: studentData.municipality }, "Municipality value before creation");
 
                     // Allowed municipality types from schema
@@ -1178,7 +1187,7 @@ export const uploadStudentsForMatching = async (req, res) => {
 
 export const processStudentEducation = async (req, res) => {
     try {
-        const { studentId, educationEntries, needsSupport, examMode } = req.body;
+        const { studentId, educationEntries, needsSupport, examMode, pace } = req.body;
         const userId = req.user?.userId;
 
         if (!studentId || !educationEntries) {
@@ -1198,7 +1207,7 @@ export const processStudentEducation = async (req, res) => {
             studentId,
             educationEntries,
             userId,
-            { needsSupport, examMode }
+            { needsSupport, examMode, pace }
         );
 
         res.json({
@@ -1478,7 +1487,9 @@ export const getMyCourseCards = async (req, res) => {
             return res.status(404).json({ error: "Ingen elevprofil hittades för kontot" });
         }
 
-        const cards = await enrollmentService.buildCourseCards(student._id);
+        const cards = await enrollmentService.buildCourseCards(student._id, {
+            applyStudentVisibility: true,
+        });
         res.json({ success: true, student: { _id: student._id, name: student.name }, cards });
     } catch (error) {
         logger.error({ err: error }, "Error fetching my course cards");
@@ -1515,7 +1526,9 @@ export const getStudentCourseCards = async (req, res) => {
             }
         }
 
-        const cards = await enrollmentService.buildCourseCards(studentId);
+        const cards = await enrollmentService.buildCourseCards(studentId, {
+            applyStudentVisibility: userRoles.includes("student"),
+        });
         res.json({ success: true, cards });
     } catch (error) {
         logger.error({ err: error }, "Error fetching student course cards");
@@ -1527,6 +1540,27 @@ export const getCourseInstanceEnrollments = async (req, res) => {
     try {
         const { instanceId } = req.params;
         const { status } = req.query;
+
+        if (req.user?.role === "teacher") {
+            const Teacher = mongoose.model("Teacher");
+            const CourseInstance = mongoose.model("CourseInstance");
+            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            if (!teacher) {
+                return res.status(403).json({ error: "Teacher profile not found" });
+            }
+            const instance = await CourseInstance.findById(instanceId).lean();
+            if (instance) {
+                const respId = instance.responsibleTeacher?._id?.toString() || instance.responsibleTeacher?.toString();
+                const asstId = instance.assistantTeacher?._id?.toString() || instance.assistantTeacher?.toString();
+                if (respId && asstId) {
+                    if (respId !== teacher._id.toString() && asstId !== teacher._id.toString()) {
+                        return res.status(403).json({ error: "Du är inte behörig för denna kursomgång." });
+                    }
+                } else if (respId && respId !== teacher._id.toString()) {
+                    return res.status(403).json({ error: "Du är inte behörig för denna kursomgång." });
+                }
+            }
+        }
 
         const enrollments = await enrollmentService.fetchCourseInstanceEnrollments({
             instanceId,
@@ -2434,115 +2468,27 @@ export const postCourseInstanceActivityFeed = async (req, res) => {
     }
 };
 
-// Per-component completion report
-// GET /course-instances/:instanceId/report/:studentId - Get per-component completion report for a student
-// GET /course-instances/:instanceId/reports - Get macro reports for the course instance
-export const getCourseInstanceReport = async (req, res) => {
-    try {
-        const { instanceId, studentId } = req.params;
-
-        if (!mongoose.isValidObjectId(instanceId) || !mongoose.isValidObjectId(studentId)) {
-            return res.status(400).json({ error: "Ogiltiga IDs-parametrar" });
-        }
-
-        const instance = await CourseInstance.findById(instanceId);
-        if (!instance) {
-            return res.status(404).json({ error: "Kursinstans hittades inte" });
-        }
-
-        const student = await Student.findById(studentId);
-        if (!student) {
-            return res.status(404).json({ error: "Student hittades inte" });
-        }
-
-        // Get the student's enrollment for this instance
-        const enrollment = await StudentEnrollment.findOne({
-            studentId: student._id,
-            courseInstanceId: instanceId,
-        });
-
-        let completedComponents = {};
-        let totalModules = 0;
-        let completedModules = 0;
-
-        if (enrollment && enrollment.completedComponents) {
-            completedComponents = Object.fromEntries(enrollment.completedComponents);
-            totalModules = instance.modules ? instance.modules.length : 0;
-            completedModules = Object.values(completedComponents).filter(
-                c => c === "✓"
-            ).length;
-        }
-
-        res.json({
-            success: true,
-            instanceId,
-            studentId,
-            totalModules,
-            completedModules,
-            completionRate: totalModules > 0 ? (completedModules / totalModules * 100).toFixed(1) : 0,
-            completedComponents,
-        });
-    } catch (error) {
-        logger.error({ err: error }, "Error fetching course instance report");
-        res.status(500).json({ error: "Intern servererror" });
-    }
-};
-
-// GET /course-instances/:instanceId/reports - Get macro reports for the course instance
-export const getCourseInstanceReports = async (req, res) => {
-    try {
-        const { instanceId } = req.params;
-
-        if (!mongoose.isValidObjectId(instanceId)) {
-            return res.status(400).json({ error: "Ogiltigt kursinstans-ID" });
-        }
-
-        const instance = await CourseInstance.findById(instanceId);
-        if (!instance) {
-            return res.status(404).json({ error: "Kursinstans hittades inte" });
-        }
-
-        // Get all enrollments for this instance
-        const enrollments = await StudentEnrollment.find({ courseInstanceId: instanceId })
-            .select("completedAt completionCertificate studentId completedComponents");
-
-        const totalEnrollments = enrollments.length;
-        let totalCompletedStudents = 0;
-        let totalCompletedModules = 0;
-
-        enrollments.forEach(enrollment => {
-            if (enrollment.completedAt) totalCompletedStudents++;
-            if (enrollment.completedComponents) {
-                const completed = Object.values(enrollment.completedComponents || {}).filter(c => c === "✓").length;
-                totalCompletedModules += completed;
-            }
-        });
-
-        const overallCompletionRate = totalEnrollments > 0 
-            ? (totalCompletedStudents / totalEnrollments * 100).toFixed(1) 
-            : 0;
-
-        res.json({
-            success: true,
-            instanceId,
-            totalEnrollments,
-            totalCompletedStudents,
-            totalCompletedModules,
-            overallCompletionRate,
-        });
-    } catch (error) {
-        logger.error({ err: error }, "Error fetching course instance reports");
-        res.status(500).json({ error: "Intern servererror" });
-    }
-};
-
 // Bulk delete all course instances and related enrollments
+const DELETE_ALL_CONFIRMATION = "DELETE_ALL_COURSE_INSTANCES";
+
 export const deleteAllCourseInstances = async (req, res) => {
     try {
+        // Server-side destroy confirmation — never trust the frontend dialog.
+        if (req.body?.confirmation !== DELETE_ALL_CONFIRMATION) {
+            logger.warn("DELETE /course-instances/all rejected: missing confirmation token");
+            return res
+                .status(400)
+                .json({ error: "Missing confirmation token. This destructive action requires explicit server-side confirmation." });
+        }
         logger.info("DELETE /course-instances/all called");
         const courseResult = await CourseInstance.deleteMany({});
         const enrollmentResult = await StudentEnrollment.deleteMany({});
         logger.info({ courseInstancesDeleted: courseResult.deletedCount, enrollmentsDeleted: enrollmentResult.deletedCount }, "Deleted course instances and enrollments");
+        await recordAudit(req, {
+            entityType: "CourseInstance",
+            action: "delete_all",
+            description: `Deleted all course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount})`,
+        });
         res.json({
             success: true,
             message: `All course instances (${courseResult.deletedCount}) and related enrollments (${enrollmentResult.deletedCount}) deleted`,

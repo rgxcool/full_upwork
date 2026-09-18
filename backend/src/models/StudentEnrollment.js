@@ -27,6 +27,13 @@ const studentEnrollmentSchema = new mongoose.Schema(
             enum: ["on-site", "remote"],
             default: "on-site",
         },
+        // Studietakt for course-package enrollments (100%, 50%, 25%)
+        pace: {
+            type: Number,
+            min: 10,
+            max: 200,
+            default: 100,
+        },
 
         // Main course reference (for easy querying)
         mainCourseId: {
@@ -108,6 +115,11 @@ const studentEnrollmentSchema = new mongoose.Schema(
         motivation: { type: String, default: '' }, // Grade motivation/reason
         comments: { type: String, default: '' }, // Grade comments
         nationalTestPoints: { type: Number, default: null }, // National test points
+        assessmentResults: {
+            type: Map,
+            of: mongoose.Schema.Types.Mixed,
+            default: () => new Map(),
+        },
         isGradeLocked: { type: Boolean, default: false }, // Lock grade from editing
         gradeLockedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         gradeLockedAt: { type: Date, default: null },
@@ -137,6 +149,9 @@ const studentEnrollmentSchema = new mongoose.Schema(
             enum: ["pending", "paid", "partial", "overdue", "waived"],
             default: "pending",
         },
+        // Course price snapshot at the time of enrollment, for historical
+        // revenue accuracy. Null when the course had no price set.
+        enrollmentPrice: { type: Number, default: null, min: 0 },
 
         // Metadata
         teacherId: {

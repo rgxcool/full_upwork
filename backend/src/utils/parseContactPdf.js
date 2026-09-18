@@ -78,9 +78,9 @@ function parseContactPdf(text) {
                     if (nextLine && nextLine.match(/^[0-9]+\./)) {
                         logger.debug("Detail line matched");
                         let details = nextLine.split(",").map((d) => d.trim());
-                        let Dates = details[0].slice(2).split(" ");
-                        let startDate = Dates[0];
-                        let endDate = Dates[2];
+                        let dateMatches = details[0].match(/\d{4}-\d{2}-\d{2}/g) || [];
+                        let startDate = dateMatches[0] || "";
+                        let endDate = dateMatches[1] || "";
                         logger.debug({ count: details.length, details }, "Course details parsed");
                         if (details.length >= 5) {
                             let courseObj = {

@@ -11,10 +11,57 @@ const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "
 
 import { evaluateActionPlanStatusAndNotify } from "../controllers/notificationController.js";
 
+// Determine whether the acting user is allowed to see/act on a given
+// notification, mirroring the scoping rules applied by GET /notifications.
+// Prevents one user from resolving/resetting notifications belonging to
+// another role/tenant (IDOR on the per-user resolve/reset endpoints).
+async function isUserAuthorizedForNotification(req, note) {
+  if (!note) return false;
+  const role = req.user?.role;
+  const userId = req.user?.userId;
+  if (!userId) return false;
+
+  const objectId = (v) =>
+    mongoose.Types.ObjectId.isValid(v) ? new mongoose.Types.ObjectId(v) : v;
+  const userIdStr = String(objectId(userId));
+
+  if (role === "student") {
+    return String(note.meta?.studentUserId || "") === userIdStr;
+  }
+
+  if (role === "teacher") {
+    const teacher = await Teacher.findOne({ userId });
+    if (!teacher) return false;
+    return String(note.teacher || "") === String(objectId(teacher._id));
+  }
+
+  if (role === "admin" || role === "systemadmin") {
+    if (note.type === "dropout") {
+      return String(note.createdByAdmin || "") === userIdStr;
+    }
+    return true;
+  }
+
+  // coordinator / syv / specped / tester: GET exposes all non-resolved notes
+  return true;
+}
+
+
 
 
 router.get("/notifications", authenticateUser, async (req, res) => {
   try {
+    // Pagination: sensible default page size, hard max, newest-first ordering.
+    const DEFAULT_LIMIT = 100;
+    const MAX_LIMIT = 200;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(rawLimit, MAX_LIMIT)
+      : DEFAULT_LIMIT;
+    const rawPage = parseInt(req.query.page, 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const skip = (page - 1) * limit;
+
     // Exclude notifications that this user has already resolved
     // Use $nin (not in) to exclude notifications where current user is in resolvedByUsers array
     const mongoose = (await import("mongoose")).default;
@@ -128,7 +175,7 @@ router.get("/notifications", authenticateUser, async (req, res) => {
       logger.debug({ count: notesWithStringMatch.length }, "Query with string match found notifications")
     }
     
-    const notes = await Notification.find(query);
+    const notes = await Notification.find(query).sort({ createdAt: -1, _id: -1 });
 
     // Filter task_reminder notifications: only the user they belong to may
     // see them (they are stored with a non-ObjectId meta.userId so the Mongo
@@ -178,7 +225,13 @@ router.get("/notifications", authenticateUser, async (req, res) => {
     
     logger.info({ count: uniqueNotes.length }, "After deduplication: unique notifications");
 
-    res.json(uniqueNotes);
+    // Server-side bounding/pagination applied AFTER deduplication so the result
+    // array stays bounded while preserving the dedup invariants. Newest-first
+    // ordering is guaranteed by the sort on the Mongo query. `limit` is capped
+    // at the top of the handler so the endpoint stays bounded regardless.
+    const responseNotes = uniqueNotes.slice(skip, skip + limit);
+
+    res.json(responseNotes);
   } catch (err) {
     logger.error({ err }, "Error fetching notifications");
     res.status(500).json({ message: 'Server error' });
@@ -222,6 +275,10 @@ router.put("/notifications/:id/resolve", authenticateUser, async (req, res) => {
     
     if (!note) {
       return res.status(404).send("Notis hittades inte");
+    }
+
+    if (!(await isUserAuthorizedForNotification(req, note))) {
+      return res.status(403).send("Du har inte behörighet att hantera denna notis");
     }
 
     // Add current user to resolvedByUsers array (per-user resolution)
@@ -281,11 +338,14 @@ router.put("/notifications/:id/resolve", authenticateUser, async (req, res) => {
 
 
 
-router.put("/notifications/:id/reset", authenticateUser, async (req, res) => {
+    router.put("/notifications/:id/reset", authenticateUser, async (req, res) => {
     try {
       const note = await Notification.findById(req.params.id);
       if (!note) return res.status(404).send("Notis hittades inte");
   
+      if (!(await isUserAuthorizedForNotification(req, note))) {
+        return res.status(403).send("Du har inte behörighet att hantera denna notis");
+      }
       // Remove current user from resolvedByUsers array (per-user reset)
       const mongoose = (await import("mongoose")).default;
       const userId = mongoose.Types.ObjectId.isValid(req.user.userId) 

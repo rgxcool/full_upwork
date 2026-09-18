@@ -27,7 +27,7 @@ const DocumentSchema = new mongoose.Schema({
   type: {
     type: String,
     default: 'GENERAL',
-    enum: ['GENERAL', 'ACTION_PLAN', 'REPORT', 'COURSE_ARCHIVE', 'TEACHER_DOCUMENT', 'APL_CONTRACT', 'CV']
+    enum: ['GENERAL', 'ACTION_PLAN', 'REPORT', 'COURSE_ARCHIVE', 'TEACHER_DOCUMENT', 'APL_CONTRACT', 'APL_CV', 'CV']
   },
   enrollmentId: {
     type: mongoose.Schema.Types.ObjectId,

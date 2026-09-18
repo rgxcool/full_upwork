@@ -261,6 +261,91 @@ describe("userRoutes", () => {
         });
     });
 
+    describe("PUT /api/users/:userId/municipalities", () => {
+        it("returns 400 when municipalities are not an array", async () => {
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: "Stockholm" })
+                .expect(400);
+
+            expect(res.body).toEqual({
+                message: "Municipalities must be an array.",
+            });
+        });
+
+        it("returns 400 when municipalities contain invalid values", async () => {
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: ["Stockholm", "Fakeort"] })
+                .expect(400);
+
+            expect(res.body.message).toMatch(/Invalid municipality/);
+        });
+
+        it("returns 404 when user does not exist", async () => {
+            User.findById.mockResolvedValueOnce(null);
+
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: ["Stockholm"] })
+                .expect(404);
+
+            expect(res.body).toEqual({ message: "User not found." });
+        });
+
+        it("updates municipality scope and dedupes values", async () => {
+            const user = {
+                _id: "user-1",
+                name: "Alice",
+                email: "alice@test.com",
+                municipalities: [],
+                save: vi.fn().mockResolvedValue(true),
+            };
+            User.findById.mockResolvedValueOnce(user);
+
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: ["Stockholm", "Solna", "Stockholm"] })
+                .expect(200);
+
+            expect(user.municipalities).toEqual(["Stockholm", "Solna"]);
+            expect(user.save).toHaveBeenCalled();
+            expect(res.body.message).toBe(
+                "User municipality scope updated successfully."
+            );
+        });
+
+        it("allows an empty array to set global access", async () => {
+            const user = {
+                _id: "user-1",
+                municipalities: ["Stockholm"],
+                save: vi.fn().mockResolvedValue(true),
+            };
+            User.findById.mockResolvedValueOnce(user);
+
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: [] })
+                .expect(200);
+
+            expect(user.municipalities).toEqual([]);
+            expect(res.body.user.municipalities).toEqual([]);
+        });
+
+        it("returns 500 when update throws", async () => {
+            User.findById.mockRejectedValueOnce(new Error("boom"));
+
+            const res = await request(app)
+                .put("/api/users/user-1/municipalities")
+                .send({ municipalities: ["Stockholm"] })
+                .expect(500);
+
+            expect(res.body.message).toBe(
+                "An error occurred while updating user municipality scope."
+            );
+        });
+    });
+
     describe("GET /api/users", () => {
         it("returns paginated user list", async () => {
             const mockUsers = [

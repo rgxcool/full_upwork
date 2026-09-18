@@ -21,6 +21,13 @@ import {
     connectTestDatabase,
     disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
+import CoursePackage from "../../src/models/CoursePackage.js";
+
+vi.mock("../../src/services/emailService.js", () => ({
+    sendDiplomaEmail: vi.fn(),
+}));
+
+import { sendDiplomaEmail } from "../../src/services/emailService.js";
 
 const buildApp = () => {
     const app = express();
@@ -202,4 +209,159 @@ describe("Study Certificate Routes", () => {
             .get(`/api/study-certificate/${completedEnrollment._id}/pdf`)
             .expect(401);
     });
+});
+
+describe("Diploma email delivery (P7/P8)", () => {
+    let app;
+    let pkg;
+    let student;
+    let courseB;
+    let teacherUser;
+    let teacher;
+    let diplomaEnrollment;
+
+    beforeAll(async () => {
+        await connectTestDatabase();
+    }, 60000);
+
+    afterAll(async () => {
+        await disconnectTestDatabase();
+    }, 60000);
+
+    beforeEach(async () => {
+        app = buildApp();
+        await Promise.all([
+            Course.deleteMany({}),
+            CoursePackage.deleteMany({}),
+            Student.deleteMany({}),
+            StudentEnrollment.deleteMany({}),
+            Teacher.deleteMany({}),
+            User.deleteMany({}),
+        ]);
+        vi.mocked(sendDiplomaEmail).mockReset();
+
+        courseB = await Course.create({
+            courseName: "Matematik 1",
+            courseCode: "MAMAT01",
+        });
+        pkg = await CoursePackage.create({
+            coursePackageName: "Gymnasiepaket",
+            coursePackageCode: "GYM",
+            coursePackagePoints: "2500",
+            coursePackageExtent: "3 år",
+            coursePackageCourses: [courseB._id],
+        });
+
+        student = await Student.create({
+            name: "Bea Berg",
+            personalNumber: "19920202-5678",
+            email: "bea@student.se",
+            aplStatus: "GREEN",
+        });
+
+        teacherUser = await User.create({
+            username: "Malin Mellin",
+            email: "malin@mindful.se",
+            password: "hashed-placeholder",
+        });
+        teacher = await Teacher.create({
+            userId: teacherUser._id,
+            subject: "Matematik",
+        });
+
+        diplomaEnrollment = await StudentEnrollment.create({
+            studentId: student._id,
+            courseInstanceId: new mongoose.Types.ObjectId(),
+            mainCourseId: courseB._id,
+            teacherId: teacher._id,
+            coursePackageId: pkg._id,
+            startDate: new Date("2025-01-01T00:00:00.000Z"),
+            endDate: new Date("2025-03-15T00:00:00.000Z"),
+            status: "completed",
+            completedAt: new Date("2025-03-16T00:00:00.000Z"),
+            grade: "C",
+            completionCertificate: "DIPL-2025-BEA123",
+        });
+    }, 60000);
+
+    afterEach(async () => {
+        await Promise.all([
+            Course.deleteMany({}),
+            CoursePackage.deleteMany({}),
+            Student.deleteMany({}),
+            StudentEnrollment.deleteMany({}),
+            Teacher.deleteMany({}),
+            User.deleteMany({}),
+        ]);
+        vi.restoreAllMocks();
+    });
+
+    it("downloads a diploma PDF and emails it to the student on real delivery", async () => {
+        vi.mocked(sendDiplomaEmail).mockResolvedValue({
+            sent: true,
+            deliveredForReal: true,
+            transportMode: "smtp",
+            result: { success: true, transportMode: "smtp" },
+        });
+
+        const response = await request(app)
+            .get(`/api/diploma/${diplomaEnrollment._id}/pdf`)
+            .set("x-test-user-role", "admin")
+            .expect(200)
+            .buffer(true)
+            .parse((res, callback) => {
+                const chunks = [];
+                res.on("data", (chunk) => chunks.push(chunk));
+                res.on("end", () => callback(null, Buffer.concat(chunks)));
+            });
+
+        expect(response.headers["content-type"]).toBe("application/pdf");
+        expect(sendDiplomaEmail).toHaveBeenCalledTimes(1);
+        expect(sendDiplomaEmail).toHaveBeenCalledWith(
+            expect.objectContaining({
+                email: "bea@student.se",
+                filename: `diplom-${diplomaEnrollment._id}.pdf`,
+            })
+        );
+        const attachment = vi.mocked(sendDiplomaEmail).mock.calls[0][0];
+        expect(Buffer.isBuffer(attachment.pdf)).toBe(true);
+
+        // The audit trail is written after res.send() — poll until it lands.
+        const lastEntry = await waitForFirstChangeHistory(student._id);
+        expect(lastEntry.changes).toContain("diplom_email_sent_generated");
+    });
+
+    it("records a not-delivered audit marker when transport does not deliver", async () => {
+        vi.mocked(sendDiplomaEmail).mockResolvedValue({
+            sent: false,
+            deliveredForReal: false,
+            transportMode: "stream",
+            result: { success: true, transportMode: "stream" },
+        });
+
+        await request(app)
+            .get(`/api/diploma/${diplomaEnrollment._id}/pdf`)
+            .set("x-test-user-role", "admin")
+            .expect(200)
+            .buffer(true)
+            .parse((res, callback) => {
+                const chunks = [];
+                res.on("data", (chunk) => chunks.push(chunk));
+                res.on("end", () => callback(null, Buffer.concat(chunks)));
+            });
+
+        const lastEntry = await waitForFirstChangeHistory(student._id);
+        expect(lastEntry.changes).toContain("diplom_email_not_delivered_generated");
+    });
+
+    // addCertificateAuditTrail runs after res.send(pdf), so poll for it.
+    async function waitForFirstChangeHistory(studentId) {
+        const deadline = Date.now() + 3000;
+        while (Date.now() < deadline) {
+            const doc = await Student.findById(studentId);
+            if (doc?.changeHistory?.length) return doc.changeHistory[0];
+            await new Promise((r) => setTimeout(r, 25));
+        }
+        throw new Error("changeHistory never populated");
+    }
 });

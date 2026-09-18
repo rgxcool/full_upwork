@@ -1716,4 +1716,137 @@ describe("examRoutes", () => {
     const res = await request(app).get("/api/exams/student/student-1");
     expect(res.status).toBe(500);
   });
+
+  it("persists examRoom via examtime-location", async () => {
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 2 });
+    const res = await request(app)
+      .post("/api/examtime-location")
+      .send({
+        studentIds: ["student-1"],
+        examTime: "09:00",
+        examMunicipality: "Sollentuna",
+        examLocation: "308",
+        examRoom: "lilla rummet",
+      });
+    expect(res.status).toBe(200);
+    expect(Student.updateMany).toHaveBeenCalledWith(
+      { _id: { $in: ["student-1"] } },
+      { $set: expect.objectContaining({ examRoom: "lilla rummet" }) }
+    );
+  });
+
+  it("persists examRoom when creating a new attendance record", async () => {
+    const attendanceStudent = {
+      _id: "room-student-new",
+      name: "Room New Student",
+      personalNumber: "201",
+      examHistory: [],
+      save: vi.fn().mockResolvedValue(true),
+    };
+    Student.findById.mockResolvedValueOnce(attendanceStudent);
+    mockExamAttendanceFindOne.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .post("/api/calendar-events/mark-attendance")
+      .send({
+        date: "2025-04-15",
+        teacherId: "teacher-1",
+        courseName: "Physics",
+        examTime: "10:00",
+        examMunicipality: "Sollentuna",
+        examLocation: "308",
+        examRoom: "lilla rummet",
+        students: [{ _id: "room-student-new", attended: true }],
+      });
+
+    expect(res.status).toBe(200);
+    expect(ExamAttendance).toHaveBeenCalledWith(
+      expect.objectContaining({ examRoom: "lilla rummet" })
+    );
+    expect(attendanceStudent.examHistory[0]).toEqual(
+      expect.objectContaining({ examRoom: "lilla rummet" })
+    );
+  });
+
+  it("updates examRoom on an existing attendance record and history entry", async () => {
+    const studentDoc = {
+      _id: "room-student-existing",
+      name: "Room Existing Student",
+      personalNumber: "202",
+      examHistory: [
+        {
+          examDate: new Date("2025-04-15T00:00:00.000Z"),
+          teacherId: "teacher-1",
+          attended: false,
+          examRoom: "",
+        },
+      ],
+      save: vi.fn().mockResolvedValue(true),
+    };
+    Student.findById.mockResolvedValueOnce(studentDoc);
+    const existingAttendance = {
+      _id: "attendance-room",
+      attended: false,
+      paidExamFee: false,
+      examTime: "08:00",
+      examMunicipality: "Town",
+      examLocation: "Hall",
+      examRoom: "Old Room",
+      save: vi.fn().mockResolvedValue(true),
+    };
+    mockExamAttendanceFindOne.mockResolvedValueOnce(existingAttendance);
+
+    const res = await request(app)
+      .post("/api/calendar-events/mark-attendance")
+      .send({
+        date: "2025-04-15",
+        teacherId: "teacher-1",
+        courseName: "Physics",
+        examTime: "10:00",
+        examMunicipality: "Sollentuna",
+        examLocation: "308",
+        examRoom: "Kung Agnes",
+        students: [
+          {
+            _id: "room-student-existing",
+            attended: true,
+            examRoom: "Kung Agnes",
+          },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(existingAttendance.examRoom).toBe("Kung Agnes");
+    expect(studentDoc.examHistory[0].examRoom).toBe("Kung Agnes");
+    expect(existingAttendance.save).toHaveBeenCalled();
+  });
+
+  it("includes examRoom in syncable event extendedProps", async () => {
+    const student = createStudent();
+    student.examRoom = "Aniara";
+    studentFindResult = [student];
+    enrollmentFindResult = [
+      {
+        ...createEnrollment(),
+        studentId: student,
+      },
+    ];
+    StudentEnrollment.findOne.mockResolvedValue({
+      mainCourseId: { courseName: "Manual Course" },
+    });
+    mockExamAttendanceFindOne.mockResolvedValue(null);
+    student.examMunicipality = "Sollentuna";
+    student.examLocation = "308";
+
+    const res = await request(app)
+      .get("/api/calendar-events/syncable")
+      .set("x-user-role", "admin");
+
+    expect(res.status).toBe(200);
+    const manualEvent = res.body.find(
+      (event) => event.extendedProps.students?.length > 0
+    );
+    expect(manualEvent.extendedProps.examRoom).toBe("Aniara");
+    expect(manualEvent.extendedProps.students[0].examRoom).toBe("Aniara");
+  });
 });

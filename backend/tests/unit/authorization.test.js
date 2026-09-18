@@ -83,70 +83,70 @@ describe("hasFeaturePermission", () => {
 });
 
 describe("canFeature middleware", () => {
-    it("returns 401 when unauthenticated", () => {
+    it("returns 401 when unauthenticated", async () => {
         const { req, res, next } = buildCtx(null);
-        canFeature("statistics")(req, res, next);
+        await canFeature("statistics")(req, res, next);
         expect(res.statusCode).toBe(401);
         expect(next).not.toHaveBeenCalled();
     });
 
-    it("allows when the role default grants the feature", () => {
+    it("allows when the role default grants the feature", async () => {
         const { req, res, next } = buildCtx({ roles: ["teacher"] });
-        canFeature("statistics")(req, res, next);
+        await canFeature("statistics")(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 
-    it("returns 403 when the role default denies the feature", () => {
+    it("returns 403 when the role default denies the feature", async () => {
         const { req, res, next } = buildCtx({ roles: ["coordinator"] });
-        canFeature("statistics")(req, res, next);
+        await canFeature("statistics")(req, res, next);
         expect(res.statusCode).toBe(403);
         expect(next).not.toHaveBeenCalled();
     });
 
-    it("grants a feature via explicit per-user override", () => {
+    it("grants a feature via explicit per-user override", async () => {
         const { req, res, next } = buildCtx({ roles: ["coordinator"], permissions: { statistics: true } });
-        canFeature("statistics")(req, res, next);
+        await canFeature("statistics")(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 
-    it("revokes a feature via explicit per-user override", () => {
+    it("revokes a feature via explicit per-user override", async () => {
         const { req, res, next } = buildCtx({ roles: ["teacher"], permissions: { statistics: false } });
-        canFeature("statistics")(req, res, next);
+        await canFeature("statistics")(req, res, next);
         expect(res.statusCode).toBe(403);
         expect(next).not.toHaveBeenCalled();
     });
 });
 
 describe("can middleware with per-user overrides", () => {
-    it("allows a role-based permission as before", () => {
+    it("allows a role-based permission as before", async () => {
         const { req, res, next } = buildCtx({ roles: ["teacher"] });
-        can("courseTemplates:read")(req, res, next);
+        await can("courseTemplates:read")(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 
-    it("denies a role-based permission without the role", () => {
+    it("denies a role-based permission without the role", async () => {
         const { req, res, next } = buildCtx({ roles: ["coordinator"] });
-        can("courseTemplates:read")(req, res, next);
+        await can("courseTemplates:read")(req, res, next);
         expect(res.statusCode).toBe(403);
         expect(next).not.toHaveBeenCalled();
     });
 
-    it("grants a mapped permission via explicit per-user override", () => {
+    it("grants a mapped permission via explicit per-user override", async () => {
         const { req, res, next } = buildCtx({ roles: ["coordinator"], permissions: { course_templates: true } });
-        can("courseTemplates:read")(req, res, next);
+        await can("courseTemplates:read")(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 
-    it("revokes a mapped permission via explicit per-user override even when the role grants it", () => {
+    it("revokes a mapped permission via explicit per-user override even when the role grants it", async () => {
         const { req, res, next } = buildCtx({ roles: ["teacher"], permissions: { course_templates: false } });
-        can("courseTemplates:read")(req, res, next);
+        await can("courseTemplates:read")(req, res, next);
         expect(res.statusCode).toBe(403);
         expect(next).not.toHaveBeenCalled();
     });
 
-    it("ignores overrides for unmapped permissions", () => {
+    it("ignores overrides for unmapped permissions", async () => {
         const { req, res, next } = buildCtx({ roles: ["admin"] });
-        can("teachers:read")(req, res, next);
+        await can("teachers:read")(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 });
@@ -154,56 +154,54 @@ describe("can middleware with per-user overrides", () => {
 describe("role authorization - all seven required roles", () => {
     const ALL_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "student"];
 
-    it("hasRole allows access when user has one of the allowed roles", () => {
+    it("hasRole allows access when user has one of the allowed roles", async () => {
         const middleware = hasRole(["admin", "systemadmin"]);
 
-        ALL_ROLES.forEach((role) => {
+        for (const role of ["admin", "systemadmin"]) {
             const req = { user: { role, roles: [role] } };
             const res = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json() {} };
             const next = vi.fn();
 
-            if (["admin", "systemadmin"].includes(role)) {
-                middleware(req, res, next);
-                expect(next).toHaveBeenCalled();
-            }
-        });
+            await middleware(req, res, next);
+            expect(next).toHaveBeenCalled();
+        }
     });
 
-    it("hasRole denies access when user role is not in allowed list", () => {
+    it("hasRole denies access when user role is not in allowed list", async () => {
         const middleware = hasRole(["admin"]);
         const req = { user: { role: "student", roles: ["student"] } };
         const res = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json() {} };
         const next = vi.fn();
 
-        middleware(req, res, next);
+        await middleware(req, res, next);
         expect(res.statusCode).toBe(403);
         expect(next).not.toHaveBeenCalled();
     });
 
-    it("hasRole checks roles array for multi-role users", () => {
+    it("hasRole checks roles array for multi-role users", async () => {
         const middleware = hasRole(["admin"]);
         const req = { user: { role: "teacher", roles: ["teacher", "admin"] } };
         const res = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json() {} };
         const next = vi.fn();
 
-        middleware(req, res, next);
+        await middleware(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 
-    it("hasRole returns 401 when no user is present", () => {
+    it("hasRole returns 401 when no user is present", async () => {
         const middleware = hasRole(["admin"]);
         const req = {};
         const res = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json() {} };
         const next = vi.fn();
 
-        middleware(req, res, next);
+        await middleware(req, res, next);
         expect(res.statusCode).toBe(401);
         expect(next).not.toHaveBeenCalled();
     });
 
-    it("coordinator does not have courseTemplates:read by default", () => {
+    it("coordinator does not have courseTemplates:read by default", async () => {
         const { req, res, next } = buildCtx({ roles: ["coordinator"] });
-        can("courseTemplates:read")(req, res, next);
+        await can("courseTemplates:read")(req, res, next);
         expect(res.statusCode).toBe(403);
     });
 
@@ -285,47 +283,47 @@ describe("individual permission overrides - privilege escalation prevention", ()
         expect(perms).not.toContain("users:create");
     });
 
-    it("canFeature middleware respects per-user overrides for student role", () => {
+    it("canFeature middleware respects per-user overrides for student role", async () => {
         const { req, res, next } = buildCtx({ roles: ["student"], permissions: { search_users: true } });
-        canFeature("search_users")(req, res, next);
+        await canFeature("search_users")(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 
-    it("canFeature denies student with no search override", () => {
+    it("canFeature denies student with no search override", async () => {
         const { req, res, next } = buildCtx({ roles: ["student"] });
-        canFeature("search_users")(req, res, next);
+        await canFeature("search_users")(req, res, next);
         expect(res.statusCode).toBe(403);
     });
 });
 
 describe("can middleware - privilege escalation prevention", () => {
-    it("admin bypasses all permission checks", () => {
+    it("admin bypasses all permission checks", async () => {
         const { req, res, next } = buildCtx({ roles: ["admin"] });
-        can("nonexistent:perm")(req, res, next);
+        await can("nonexistent:perm")(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 
-    it("systemadmin bypasses all permission checks", () => {
+    it("systemadmin bypasses all permission checks", async () => {
         const { req, res, next } = buildCtx({ roles: ["systemadmin"] });
-        can("nonexistent:perm")(req, res, next);
+        await can("nonexistent:perm")(req, res, next);
         expect(next).toHaveBeenCalled();
     });
 
-    it("student cannot access teacher-only permission", () => {
+    it("student cannot access teacher-only permission", async () => {
         const { req, res, next } = buildCtx({ roles: ["student"] });
-        can("assignments:grade")(req, res, next);
+        await can("assignments:grade")(req, res, next);
         expect(res.statusCode).toBe(403);
     });
 
-    it("teacher cannot access admin-only permission", () => {
+    it("teacher cannot access admin-only permission", async () => {
         const { req, res, next } = buildCtx({ roles: ["teacher"] });
-        can("users:create")(req, res, next);
+        await can("users:create")(req, res, next);
         expect(res.statusCode).toBe(403);
     });
 
-    it("coordinator cannot access teacher permission without override", () => {
+    it("coordinator cannot access teacher permission without override", async () => {
         const { req, res, next } = buildCtx({ roles: ["coordinator"] });
-        can("assignments:create")(req, res, next);
+        await can("assignments:create")(req, res, next);
         expect(res.statusCode).toBe(403);
     });
 });

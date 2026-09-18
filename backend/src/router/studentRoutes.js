@@ -25,6 +25,8 @@ import {
     performStudentDropout,
     removeStudentDropoutRecord,
 } from "../services/dropoutService.js";
+import { studentScopeFilter, municipalityInScope } from "../utils/tenantScope.js";
+import { getRevenueReport } from "../services/analyticsService.js";
 
 const router = Router();
 
@@ -137,6 +139,10 @@ router.put(
 router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
         let query = {};
+
+        // Backend-enforced tenant (kommun) scope. For scoped users the query is
+        // restricted to their allowed municipalities; global users get {}.
+        Object.assign(query, studentScopeFilter(req.user));
 
         const userRoles = req.user.roles || (req.user.role ? [req.user.role] : []);
         const hasCoordinatorRole = userRoles.includes("coordinator") || userRoles.includes("specped") || userRoles.includes("syv") || userRoles.includes("admin") || userRoles.includes("systemadmin") || userRoles.includes("tester");
@@ -521,6 +527,20 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
         if (typeof studentData.municipality === "string") {
             studentData.municipality = { type: studentData.municipality };
         }
+
+        // Backend-enforced tenant write guard: a scoped user may only create /
+        // re-register students within their own municipality scope. A global
+        // (unscoped) user is unaffected.
+        const targetMunicipality = studentData.municipality?.type;
+        if (!municipalityInScope(req.user, targetMunicipality)) {
+            logger.warn(
+                { email: req.user.email, targetMunicipality },
+                "Tenant scope DENIED: municipality outside caller's scope on student create"
+            );
+            return res.status(403).json({
+                error: "Du saknar behörighet för denna kommun (municipality).",
+            });
+        }
         // Re-registration (returning student): if a student with the same
         // personalNumber or email already exists, auto-fill their record with
         // the submitted details and register the new courses instead of
@@ -551,7 +571,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
             const student = new Student(studentData);
             savedStudent = await student.save();
 
-            logger.info({ id: savedStudent._id, name: savedStudent.name, email: savedStudent.email, aplStatus: savedStudent.aplStatus, education: savedStudent.education }, "Student saved");
+            logger.info({ id: savedStudent._id, name: savedStudent.name, email: savedStudent.email, aplStatus: savedStudent.aplStatus, educationCount: savedStudent.education?.length || 0 }, "Student saved");
         }
 
         if (req.body.education && req.body.education.length > 0) {
@@ -758,6 +778,12 @@ router.get("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async
         if (!student)
             return res.status(404).json({ error: "Student not found" });
 
+        // Backend-enforced tenant (kommun) scope: scoped users may only read
+        // students in their allowed municipalities.
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+
         res.json(student);
     } catch (error) {
         logger.error({ err: error }, "Error fetching student");
@@ -780,6 +806,10 @@ router.get("/student/:id/basic", authenticateUser, hasRole(ALLOWED_STAFF_ROLES),
 
         if (!student)
             return res.status(404).json({ error: "Student not found" });
+
+        if (!municipalityInScope(req.user, student.municipality?.type)) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
 
         res.json(student);
     } catch (error) {
@@ -899,28 +929,51 @@ router.delete("/student/:id", authenticateUser, hasRole(ALLOWED_ADMIN_ROLES), as
 
 /**
  * @route   DELETE /students
- * @desc    Deletes all student records and their associated files.
- * @access  Protected (Admin only)
+ * @desc    Deletes ALL student records and their associated files.
+ * @access  Protected — systemadmin/admin ONLY, with explicit confirmation.
+ *
+ * This is an intentionally dangerous bulk-operation endpoint. It must never be
+ * triggerable by a normal user, must require an explicit confirmation token,
+ * and must be fully audited. Soft deletion is preferred elsewhere; here the
+ * endpoint exists for test/environment reset and is hard-guarded.
  */
-router.delete("/students", authenticateUser, hasRole(ALLOWED_ADMIN_ROLES), async (req, res) => {
+router.delete("/students", authenticateUser, hasRole(["systemadmin", "admin", "tester"]), async (req, res) => {
     try {
-        // Manual role check inside handler to support unit tests that bypass middleware
-        if (!req.user || !["admin", "systemadmin", "tester"].includes(req.user.role)) {
+        // Manual role check inside handler to support unit tests that bypass middleware.
+        if (!req.user || !["systemadmin", "admin", "tester"].includes(req.user.role)) {
             return res.status(403).json({ error: "Insufficient permissions to delete all students." });
+        }
+
+        // Defense in depth: require an explicit confirmation token so an
+        // accidental or cross-site request can never wipe the student table.
+        const confirmToken = req.body?.confirm ?? req.query?.confirm;
+        if (confirmToken !== "DELETE ALL STUDENTS") {
+            return res.status(400).json({
+                error: "Mass deletion requires body { \"confirm\": \"DELETE ALL STUDENTS\" }.",
+            });
         }
 
         // Get all student IDs before deletion
         const allStudents = await Student.find({}, { _id: 1 }).lean();
         const studentIds = allStudents.map(s => s._id.toString());
-        
+
+        // Log the destructive action BEFORE performing it (append-only).
+        import("../utils/auditLog.js").then(({ recordAudit }) => recordAudit(req, {
+            entityType: "Student",
+            entityId: allStudents[0]?._id,
+            action: "students_mass_delete",
+            description: `Mass deletion of ${studentIds.length} student records (confirm token supplied)`,
+        }));
+
         const totalDeletedFiles = await deleteAllStudentFiles(studentIds);
-        
+
         await Student.deleteMany({});
-        
-        logger.info({ totalDeletedFiles }, "Deleted all students and associated file(s)");
-        res.json({ 
+
+        logger.info({ totalDeletedFiles, count: studentIds.length }, "Deleted ALL students (confirmed)");
+        res.json({
             message: "All students deleted successfully",
-            deletedFilesCount: totalDeletedFiles
+            deletedStudents: studentIds.length,
+            deletedFilesCount: totalDeletedFiles,
         });
     } catch (error) {
         logger.error({ err: error }, "Error deleting all students");
@@ -1489,21 +1542,30 @@ router.put("/student/:id/education/:courseId/grade", authenticateUser, hasRole(A
 
 /**
  * @route   GET /students/earnings
- * @desc    Returns students with non-null education grades (for analytics).
+ * @desc    Earnings report computed server-side from real StudentEnrollment
+ *          data (realized = graded enrollments, forecasted = active/enrolled).
+ *          Reuses the same revenue logic as the analytics revenue report.
  * @access  Protected (Staff only)
  */
 router.get("/students/earnings", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
-        const students = await Student.find(
-            { "education.grade": { $ne: null } },
-            {
-                municipality: 1,
-                education: 1,
-            }
-        );
-        res.json(students);
+        const { startDate, endDate, municipality } = req.query;
+        const report = await getRevenueReport({
+            startDate: startDate ? String(startDate) : undefined,
+            endDate: endDate ? String(endDate) : undefined,
+            municipality: municipality ? String(municipality) : undefined,
+        });
+
+        res.json({
+            totalEarnings: report.totalRealized,
+            totalRevenue: report.totalRevenue,
+            totalForecasted: report.totalForecasted,
+            byMunicipality: report.byMunicipality,
+            byCourse: report.byCourse,
+            generatedAt: new Date().toISOString(),
+        });
     } catch (err) {
-        logger.error({ err }, "Failed to fetch earnings students");
+        logger.error({ err }, "Failed to fetch earnings report");
         res.status(500).json({ error: "Server error" });
     }
 });

@@ -42,16 +42,16 @@ export async function runDiplomaNotificationScan() {
 
             // 3. Find all courses in this package
             const pkg = await CoursePackage.findById(coursePackageId).lean();
-            if (!pkg || !pkg.courses?.length) {
+            if (!pkg || !pkg.coursePackageCourses?.length) {
                 skipped++;
                 continue;
             }
 
             // 4. Check all package courses are completed for this student
-            const packageCourseIds = pkg.courses.map((c) => c.courseId || c._id);
+            const packageCourseIds = pkg.coursePackageCourses;
             const completedCount = await StudentEnrollment.countDocuments({
                 studentId,
-                courseId: { $in: packageCourseIds },
+                mainCourseId: { $in: packageCourseIds },
                 status: "completed",
             });
 

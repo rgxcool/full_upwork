@@ -9,6 +9,7 @@ import { validate, validateId } from "../middleware/validation.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { PERMISSION_FEATURES } from "../config/permissions.js";
+import { ALL_MUNICIPALITIES } from "../config/municipalities.js";
 import logger from "../utils/logger.js";
 
 const LOGBOOK_ROLES = ["admin", "systemadmin", "teacher"];
@@ -266,6 +267,149 @@ router.put(
             logger.error({ err: error }, "Error updating user permissions");
             res.status(500).send({
                 message: "An error occurred while updating user permissions.",
+            });
+        }
+    }
+);
+
+/**
+ * Get permission matrix and role/feature definitions
+ * GET /api/permissions
+ */
+router.get(
+    "/permissions",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const matrix = {
+                calendar_final_exam: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: false },
+                search_content: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: false },
+                search_users: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: false },
+                statistics: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: false },
+                manage_users_permissions: { systemadmin: true, admin: true, teacher: false, syv: false, specped: false, coordinator: false, student: false },
+                hierarchy_management: { systemadmin: true, admin: false, teacher: false, syv: false, specped: false, coordinator: false, student: false },
+                own_settings: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: true },
+                add_municipalities_courses: { systemadmin: true, admin: false, teacher: false, syv: false, specped: false, coordinator: false, student: false },
+                course_templates: { systemadmin: true, admin: true, teacher: true, syv: false, specped: false, coordinator: false, student: false },
+            };
+
+            const rbacPermissions = {
+                systemadmin: ['users:create', 'users:read', 'users:update', 'users:delete', 'teachers:read', 'teachers:create', 'teachers:update', 'teachers:delete', 'teachers:unassign', 'assignments:create', 'assignments:read:own', 'assignments:update:own', 'assignments:grade', 'students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update', 'courseTemplates:delete'],
+                admin: ['users:create', 'users:read', 'users:update', 'users:delete', 'teachers:read', 'teachers:create', 'teachers:update', 'teachers:delete', 'teachers:unassign', 'analytics:read', 'inactivity:read', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update', 'courseTemplates:delete'],
+                teacher: ['inactivity:read', 'assignments:create', 'assignments:read:own', 'assignments:update:own', 'assignments:grade', 'students:view_list:assigned', 'students:view_grades:assigned', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update'],
+                coordinator: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
+                syv: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
+                specped: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
+                student: ['viewOwnGrades', 'viewOwnSchedule', 'viewOwnProfile', 'viewCourseInfo', 'viewNotifications'],
+            };
+
+            const ALL_RBAC_KEYS = [...new Set(Object.values(RBAC_PERMISSIONS).flat())].sort();
+
+            const RBAC_LABELS = {
+                'users:create': 'Skapa användare',
+                'users:read': 'Visa användare',
+                'users:update': 'Uppdatera användare',
+                'users:delete': 'Ta bort användare',
+                'teachers:read': 'Visa lärare',
+                'teachers:create': 'Skapa lärare',
+                'teachers:update': 'Uppdatera lärare',
+                'teachers:delete': 'Ta bort lärare',
+                'teachers:unassign': 'Avlotta lärare',
+                'assignments:create': 'Skapa uppgifter',
+                'assignments:read:own': 'Visa egna uppgifter',
+                'assignments:update:own': 'Uppdatera egna uppgifter',
+                'assignments:grade': 'Betygsätt',
+                'students:view_list:assigned': 'Visa elever (tilldelade)',
+                'students:view_grades:assigned': 'Visa betyg (tilldelade)',
+                'analytics:read': 'Statistik & analys',
+                'inactivity:read': 'Inaktivitetsrapport',
+                'courseTemplates:create': 'Skapa kursmallar',
+                'courseTemplates:read': 'Visa kursmallar',
+                'courseTemplates:update': 'Uppdatera kursmallar',
+                'courseTemplates:delete': 'Ta bort kursmallar',
+                'viewOwnGrades': 'Visa egna betyg',
+                'viewOwnSchedule': 'Visa eget schema',
+                'viewOwnProfile': 'Visa egen profil',
+                'viewCourseInfo': 'Visa kursinfo',
+                'viewNotifications': 'Visa aviseringar',
+            };
+
+            const roles = [
+                { key: 'systemadmin', label: 'Systemadmin' },
+                { key: 'admin', label: 'Admin' },
+                { key: 'teacher', label: 'Lärare' },
+                { key: 'coordinator', label: 'Koordinator' },
+                { key: 'syv', label: 'SYV' },
+                { key: 'specped', label: 'Specped' },
+                { key: 'student', label: 'Elev' },
+            ];
+
+            const features = [
+                { key: 'calendar_final_exam', label: 'Kalender (slutprov)' },
+                { key: 'search_content', label: 'Söka efter innehåll' },
+                { key: 'search_users', label: 'Söka efter användare' },
+                { key: 'statistics', label: 'Statistik' },
+                { key: 'manage_users_permissions', label: 'Hantering av användare och åtkomstbehörigheter' },
+                { key: 'hierarchy_management', label: 'Hierarkihantering' },
+                { key: 'own_settings', label: 'Egna inställningar' },
+                { key: 'add_municipalities_courses', label: 'Lägga till kommuner, kurser etc.' },
+                { key: 'course_templates', label: 'Kursmallar (kursmoduler)' },
+            ];
+
+            res.send({ roles, features, permissionMatrix: matrix, rbacPermissions, ALL_RBAC_KEYS, RBAC_LABELS });
+        } catch (error) {
+            logger.error({ err: error }, "Error fetching permissions");
+            res.status(500).send({ message: "Could not fetch permissions." });
+        }
+    }
+);
+
+/**
+ * Update user municipality (tenant) scope
+ * PUT /api/users/:userId/municipalities
+ */
+router.put(
+    "/users/:userId/municipalities",
+    isAuthenticated,
+    hasRole(["admin", "systemadmin"]),
+    async (req, res) => {
+        try {
+            const { municipalities } = req.body;
+            const { userId } = req.params;
+
+            if (!municipalities || !Array.isArray(municipalities)) {
+                return res
+                    .status(400)
+                    .send({ message: "Municipalities must be an array." });
+            }
+
+            const unique = [...new Set(municipalities)];
+            const invalid = unique.filter(
+                (m) => !ALL_MUNICIPALITIES.includes(m)
+            );
+            if (invalid.length > 0) {
+                return res
+                    .status(400)
+                    .send({ message: `Invalid municipality: ${invalid.join(", ")}. Valid: ${ALL_MUNICIPALITIES.join(", ")}` });
+            }
+
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).send({ message: "User not found." });
+            }
+
+            user.municipalities = unique;
+            await user.save();
+
+            res.send({
+                message: "User municipality scope updated successfully.",
+                user: { _id: user._id, name: user.name, email: user.email, municipalities: user.municipalities },
+            });
+        } catch (error) {
+            logger.error({ err: error }, "Error updating user municipality scope");
+            res.status(500).send({
+                message: "An error occurred while updating user municipality scope.",
             });
         }
     }

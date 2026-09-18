@@ -167,6 +167,66 @@ describe("Learning Route Permission Tests", () => {
             expect(res.status).toBe(200);
             expect(res.body).toHaveProperty("success", true);
         });
+
+        it("student can read and comment on their own submission thread", async () => {
+            const submitResp = await request(app)
+                .post(`/api/learning/instances/${courseInstance._id}/modules/1/submissions`)
+                .set(buildAuthHeader("student", { email: "student@example.com" }))
+                .send({ submittedText: "Inlämning med tråd" });
+            const submissionId = submitResp.body.submission._id;
+
+            const readRes = await request(app)
+                .get(`/api/learning/submissions/${submissionId}/comments`)
+                .set(buildAuthHeader("student", { email: "student@example.com" }));
+            expect(readRes.status).toBe(200);
+            expect(Array.isArray(readRes.body.comments)).toBe(true);
+
+            const postRes = await request(app)
+                .post(`/api/learning/submissions/${submissionId}/comments`)
+                .set(buildAuthHeader("student", { email: "student@example.com" }))
+                .send({ text: "En fråga från studenten" });
+            expect(postRes.status).toBe(200);
+            expect(postRes.body.comments.length).toBe(1);
+            expect(postRes.body.comments[0].text).toBe("En fråga från studenten");
+            expect(postRes.body.comments[0]).toHaveProperty("at");
+        });
+
+        it("student cannot read or comment on another student's submission", async () => {
+            const other = await Student.create({
+                name: "Other Student",
+                personalNumber: "19920202-5678",
+                email: "other@example.com",
+                municipality: { type: "Sollentuna" },
+            });
+            const otherEnrollment = await StudentEnrollment.create({
+                studentId: other._id,
+                courseInstanceId: courseInstance._id,
+                courseName: course.courseName,
+                mainCourseId: course._id,
+                municipalityName: "Sollentuna",
+                startDate: new Date("2026-01-01"),
+                endDate: new Date("2026-06-30"),
+                status: "active",
+            });
+
+            const submitResp = await request(app)
+                .post(`/api/learning/instances/${courseInstance._id}/modules/1/submissions`)
+                .set(buildAuthHeader("student", { email: "other@example.com" }))
+                .send({ submittedText: "Den andres inlämning" });
+            const submissionId = submitResp.body.submission._id;
+
+            // The original student must not read or comment on the other's submission.
+            const readRes = await request(app)
+                .get(`/api/learning/submissions/${submissionId}/comments`)
+                .set(buildAuthHeader("student", { email: "student@example.com" }));
+            expect(readRes.status).toBe(403);
+
+            const postRes = await request(app)
+                .post(`/api/learning/submissions/${submissionId}/comments`)
+                .set(buildAuthHeader("student", { email: "student@example.com" }))
+                .send({ text: "försök att kommentera annans" });
+            expect(postRes.status).toBe(403);
+        });
     });
 
     describe("Teacher permissions on learning endpoints", () => {

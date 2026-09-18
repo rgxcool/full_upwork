@@ -403,6 +403,13 @@ const routes = [
   },
 
   {
+    path: '/larare/generera-exam',
+    name: 'ExamGeneration',
+    component: () => import('@/views/Admin/QuestionBank/ExamGeneration.vue'),
+    meta: { title: 'Generera exam', role: ['admin', 'systemadmin', 'teacher'] },
+  },
+
+  {
     path: '/course-cards',
     name: 'CourseCards',
     component: CourseCards,
@@ -446,9 +453,7 @@ const routes = [
     },
   },
 
-  // Remove duplicate /betyg route
-  // { path: '/betyg', name: 'Betyg', component: GradeStudent, meta: { title: 'Grade Student', role: 'teacher' } },
-
+// Remove duplicate /betyg route
   // Admin Category A – Activity Feed
   {
     path: '/admin/activity-feed',

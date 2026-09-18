@@ -2,6 +2,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CourseCards from '@/views/Student/CourseCards.vue'
 
+vi.mock('vue-router', () => ({
+    useRoute: () => ({ query: {} }),
+}))
+
 vi.mock('@/api/client.js', () => ({
     default: {
         get: vi.fn(),

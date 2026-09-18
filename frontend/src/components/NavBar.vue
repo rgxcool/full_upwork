@@ -878,6 +878,7 @@
         { name: 'Betygsuppföljning', link: '/grade-lookups', role: 'admin' },
         { name: 'Hantera Prövningar', link: '/provningar', role: 'admin' },
         { name: 'Frågebank (Redigera)', link: '/larare/fragebank', role: ['admin', 'systemadmin', 'teacher'] },
+        { name: 'Generera exam', link: '/larare/generera-exam', role: ['admin', 'systemadmin', 'teacher'] },
         { name: 'Frågebank', link: '/student/fragebank', role: 'student' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
   { name: 'Mina kurser', link: '/course-cards', role: 'student' },

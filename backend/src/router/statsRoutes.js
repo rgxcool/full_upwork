@@ -9,7 +9,7 @@ const router = express.Router();
 
 router.get("/courses-per-month", authenticateUser, async (req, res) => {
   try {
-    const students = await Student.find();
+    const students = await Student.find().select({ municipality: 1, education: 1 });
 
     const stats = {};
 

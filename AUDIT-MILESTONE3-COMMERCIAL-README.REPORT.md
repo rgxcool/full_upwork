@@ -3,6 +3,8 @@
 **Branch audited:** `feat/milestone-3` (HEAD `4395f15`).
 **Method:** Static code audit of the checked-out repo (Vue 3/Vuetify frontend, Express/Mongo backend). Every claim cites `file:line`. Status legend: **BUILT / PARTIAL / MISSING / DIVERGED** (from spec).
 
+> **Status update (2026-09-16, M3 polish pass):** items #22, #24b, #24c (CV part), #27, #36a, #61, #62 (core), #64 (landing link), #66 (auto-email+mounting), the chatbot `StudentEnrollment` latent bug, and the certificate-router mounting defect below have since been **fixed and are re-marked inline**; see the **Addendum — M3 polish delta** at the end for the full change list and current `HEAD`.
+
 ---
 
 ## Part 1 — Etapp 1 feature-by-feature status
@@ -55,7 +57,7 @@
 | # | Item | Status | Evidence |
 |---|---|---|---|
 | 21 | Avbrott (dropout): status→Avbrott, teacher notification, removed from slutprovslista+APL-lista, moved to inactive list, recoverable | BUILT | `dropoutService.js:140-326` (notification `:93-126`, exam removal `:216-291`, APL filtered `aplService.js:30`, provning removal `:257-259`); recovery `dropoutService.js:338-448`; inactive list `studentRoutes.js:442-481`; UI `InactiveStudents.vue`. |
-| 22 | Revidering: replan, slutprov/APL auto-update, notify teacher **AND student** | PARTIAL (teacher notified, **student not**) | `revisionService.js:42-155`; `sendRevisionNotifications` only emails/notifies the teacher (`revisionService.js:338-393`). Spec requires confirmation to teacher **and student** — student gets nothing. |
+| 22 | Revidering: replan, slutprov/APL auto-update, notify teacher **AND student** | BUILT | `revisionService.js:42-155`; `sendRevisionNotifications` now notifies teacher **and student** (in-app `Notification` + email) (`revisionService.js:343-443`). Spec requirement satisfied. |
 | 23 | Inaktiva elever (returning): recognize, auto-fill, course history w/ checkboxes, or new course | BUILT | `studentDetailsController.js:586-703`; `InactiveStudents.vue:119-155,230-251`; `StudyPlanTab.vue:730-784`. |
 
 ### APL module
@@ -63,15 +65,15 @@
 |---|---|---|---|
 | 24 | Tab1 auto-populated, 6 colors (Vit/Blå/Gul/Lila/Röd/Grön) + filtering | BUILT | `APLView.vue:10-13`; `statusSystem.js:13-23` (GRAY/BLUE/YELLOW/PURPLE/RED/GREEN); `APLBoard.vue:42-48,414-423`. |
 | 24a | Red auto-triggered X weeks before end | PARTIAL | Displayed effective status auto-derives RED via `aplAutoStatus.js:87-112` (default 3 wks). But persisted status auto-transition only runs via **manual button** — no scheduled job (`aplService.js:171-233`; `scheduler.js` has no APL job). |
-| 24b | Fields for what student is seeking | MISSING | No `seeking`/`interest` field in `AplRecord.js`/`Student.js`/`AplTab.vue`. |
-| 24c | CV/contract upload on student's own page | PARTIAL | Uploads exist but **coordinator-only** (`AplTab.vue:121-127,138-144` guard `isCoordinator`). Not student-uploadable. |
+| 24b | Fields for what student is seeking | BUILT | `AplRecord.isSeeking` boolean (`AplRecord.js:48`); student sets it via `PATCH /apl/my` (`aplRoutes.js`, `patchOwnAplRecord` in `aplController.js`); toggle UI + coordinator "Söker" badge in `AplTab.vue`. |
+| 24c | CV/contract upload on student's own page | PARTIAL (CV fixed; contract stays staff) | Students can now upload their own CV — `PATCH /apl/my { cvDocId }` (`aplRoutes.js`), UI `AplTab.vue handleCvUpload`, upload authority enforced by `canUploadForStudent` in `documentRoutes.js` (student resolved via `Student.findOne({ email })`, teacher scoped to own students, staff roles allowed). APL **contract** upload remains coordinator-only (`AplTab.vue` gates the button on `isCoordinator`). |
 | 25 | Tab2 completed (green) w/ contact info, period, contract-upload checkbox | PARTIAL | Period shown (`AplCompletedTab.vue:31-36`); **contact info and contract checkbox MISSING** (backend exposes email/phone/cvDocId/contractDocId `aplService.js:246-249` but UI doesn't render them). |
 | 26 | Tab3 APL contract file storage | BUILT | `APLFileArchive.vue`; `GET /uploads/all/apl` (`uploadRoutes.js:336-409`) GridFS. |
 
 ### Betyg (grading)
 | # | Item | Status | Evidence |
 |---|---|---|---|
-| 27 | Auto-reminder to teachers at course end | MISSING | `taskReminderScan.js` only handles `Task` due dates, not course-end grading. No scheduled course-end scan (`scheduler.js:15-17,95`). Only pull-based `endDate<$now` query (`gradeRoutes.js:239-242`). |
+| 27 | Auto-reminder to teachers at course end | BUILT | `gradingReminderScan.js` (`runGradingReminderScan`) wired into the scheduler (`scheduler.js:17,61`); detects course end (`endDate`), targets the responsible teacher, idempotent, Sweden timezone. |
 | 28 | Grading page listing students needing grades | BUILT | `GET /students-to-grade` (`gradeRoutes.js:218-491`); `BetygSattning.vue:156,419` auto-populates on mount. |
 | 29 | A–F dropdown, mandatory justification, optional comment | PARTIAL | Frontend enforces reason for all (`BetygSattning.vue:343-346`); **backend only enforces motivation for F** (`gradeRoutes.js:500,791`). |
 | 30 | National-test score entry (Eng/Sve/Mat) | BUILT | `gradingScale.js:7,12-18`; `BetygSattning.vue:58-77`; `gradeRoutes.js:907-927`. |
@@ -85,7 +87,7 @@
 | # | Item | Status | Evidence |
 |---|---|---|---|
 | 36 | Auto-notification on F that persists until filled | BUILT | `gradeRoutes.js:538-558,836-855`; `Notification.js:6` (resolved:false); resolves on save `actionPlanRoutes.js:342-357`. |
-| 36a | Configurable questionnaire | PARTIAL (security gap) | `ActionPlanQuestions.js`; PUT restricted to systemadmin (`actionPlanRoutes.js:263-265`) but **POST not restricted** (any staff can delete+recreate the form: `actionPlanRoutes.js:115-120`). |
+| 36a | Configurable questionnaire | BUILT | `ActionPlanQuestions.js`; POST now restricted to systemadmin (`actionPlanRoutes.js:85`) and PUT restricted (`actionPlanRoutes.js:233`). The staff-POST security gap is closed. |
 | 36b | Downloadable PDF on completion | BUILT | `actionPlanPdf.js`; `actionPlanRoutes.js:331-338`; download `ActionPlanQuestions.vue:356-381`. |
 | 36c | Form editable by systemadmin | BUILT (frontend) / partial (backend POST gap above) | `ActionPlanTab.vue:12,42` (isSystemAdmin gate). |
 
@@ -142,12 +144,12 @@
 | 58 | Kurskort first page: activity feed + staff-only noticeboard + teacher view of submissions + student's current module | PARTIAL | Activity feed built (staff-only post `courseMatchingController.js:2397-2411`); **no distinct noticeboard** (feed doubles as one); submissions built; **"student's current module" MISSING** — `sectionPositions` (`CourseInstance.js:109-113`) declared but never written. |
 | 59 | Övningsuppgifter: return for revision; inline comments OR threaded discussion | PARTIAL | Return/`komplettera` built (`learningController.js:245-294`); inline comments shown (`CourseCards.vue:178-183`); **threaded discussion backend-only** — frontend posts flat, no `parentCommentId`, no reply UI (`Submissions.vue:79-100,219-242`). |
 | 60 | Datumplanering automated from teacher params (5/10/20) auto-applied on new kurskort | **BUILT — AUTOMATED** | `TeacherScheduleParameters.js` + admin CRUD (`teacherScheduleParameterController.js`, `ScheduleParameters.vue`); auto-applied at creation (`courseMatchingService.js:226-265`, `courseMatchingController.js:1805-1843`). **No manual per-card planning editor** (replaced by automation). |
-| 61 | Innehåll: admin/permitted teachers view/edit all modules, hide specific modules | PARTIAL | Content endpoint + `isHiddenFromStudent` (`courseMatchingController.js:2222-2334`; `CourseInstance.js:67-81`); **BUT hidden-content filter is NOT applied to the student course card/learning endpoints** — students still see raw modules (`enrollmentService.js:161`, `learningController.js:70`). Editor is a raw JSON textarea (`CourseContentEditor.vue:38-50`). |
-| 62 | Rapporter: per-kurskort activity feeding inactivity logic; drill into student for per-module ✓/✗; "when was assignment scheduled" column | PARTIAL | Activity view feeds inactivity (`activityStatusService.js`, `InactivityReport.vue`); per-module report exists (`learningController.js:338-464`; `Reports.vue:127-129` green/gray) **BUT `completedComponents` is never written** — no code path populates it, so ✓/✗ is always empty. **"When set" column MISSING** (backend returns `scheduledDates`/`submittedAt` but UI doesn't render it, `Reports.vue:117-121,232-234`). |
+| 61 | Innehåll: admin/permitted teachers view/edit all modules, hide specific modules | BUILT | Content endpoint + `isHiddenFromStudent` (`courseMatchingController.js:2222-2334`; `CourseInstance.js:67-81`); the hidden-content filter is now applied to student-facing endpoints via `utils/courseContentVisibility.js` — `enrollmentService.buildCourseCards` (`course cards`) and `learningController.getInstanceModules` (student branch) replace hidden modules with an opaque "Innehåll dolt" overlay. Editor is a raw JSON textarea (`CourseContentEditor.vue:38-50`). |
+| 62 | Rapporter: per-kurskort activity feeding inactivity logic; drill into student for per-module ✓/✗; "when was assignment scheduled" column | PARTIAL (core fixed) | Activity view feeds inactivity (`activityStatusService.js`, `InactivityReport.vue`); per-module report exists (`learningController.js:338-464`; `Reports.vue:127-129` green/gray) and `completedComponents` is **now written** on submission grading (`learningController.js:311-313`) so ✓/✗ actually populates. **"When set" column STILL MISSING** — backend returns `scheduledDates`/`submittedAt` but UI doesn't render it (`Reports.vue:117-121,232-234`). |
 | 63 | Deltagare: list/add/remove, auto-removal on dropout/staff departure, "last active" column | PARTIAL | List/add/remove built (`learningController.js:467-641`, `LearningManagement.vue`); auto-removal via dropout cascade / teacher-departure clearing (`teacherRoutes.js:417-419,509-512`). **"Last active on this kurskort" column MISSING** from the main participants table (only legacy modal shows last-login, `CourseInstances.vue:573,598`). |
-| 64 | APL Etapp 2: loggbok (personalized kits issued at start, on landing page); activity color-coding | PARTIAL | Logbook CRUD built (`Student.js:154-170`, `userRoutes.js:399-533`, `LogbookTab.vue`); **no auto-issue at APL start**; landing-page link **broken** — `/apl/my` reads non-existent fields (`aplRoutes.js:37-42` reads `record.color/logbook/cvUrl/period` not on schema) → `hasLogbook` always false (`Dashboard.vue:103`). Activity behind-schedule: frontend hardcoded 14-day badge (`APLBoard.vue:345-353`); backend util `aplAutoStatus.js:130-145` is **dead code** (never wired). |
+| 64 | APL Etapp 2: loggbok (personalized kits issued at start, on landing page); activity color-coding | PARTIAL | Logbook CRUD built (`Student.js:154-170`, `userRoutes.js:399-533`, `LogbookTab.vue`); **no auto-issue at APL start** (still manual). Landing-page link was repaired: `/apl/my` now returns real schema fields (`status`, `placement*`, `internship*`, `hasCv`/`hasContract`, `hasLogbook`) instead of non-existent keys, so `hasLogbook`/the student APL panel work (`aplRoutes.js`, `Dashboard.vue`). Activity behind-schedule is still frontend-hardcoded (14-day badge, `APLBoard.vue:345-353`); the backend util `aplAutoStatus.js` drives *display* color but persisted status transition still requires the coordinator trigger (`aplService.autoTransitionStatuses`) — no scheduled APL job in `scheduler.js`. |
 | 65 | Intyg: on-demand studieintyg button (Alvis-style) | BUILT | `studyCertificateController.js:48-115`; `StudentDetails.vue:39-56`; `CourseCards.vue:100-103`; `StudyPlanTab.vue:177-190`. (Signature is a printed text block, not cryptographic.) |
-| 66 | Diploma: auto-triggered on kurspaket completion (all courses + APL approved), **sent signed to student** | PARTIAL | Eligibility verified (`studyCertificateController.js:122-251`, `certificateService.js:63-118`); daily scan creates a `diploma_ready` **staff notification** (`diplomaNotificationScan.js:17-101`) — **not auto-issued, not emailed to student**. The full approve/generate workflow router (`certificateRecordRoutes.js`, `certificateRoutes.js`) is **NOT mounted** in `router.js` → `CertificateManager.vue` cannot work. |
+| 66 | Diploma: auto-triggered on kurspaket completion (all courses + APL approved), **sent signed to student** | PARTIAL (auto-email fixed) | Eligibility verified (`studyCertificateController.js:122-251`, `certificateService.js:63-118`); daily scan (`diplomaNotificationScan.js`) creates the `diploma_ready` notification; the generated diploma PDF is **now emailed to the student with delivery status recorded** (`studyCertificateController.js:259-269 sendDiplomaEmail`, honest `deliveredForReal` for stream transport). The approve/generate workflow routers (`certificateRoutes.js`, `certificateRecordRoutes.js`) are **now mounted** in `router.js:77-79`. **Signing remains a printed text block, NOT cryptographic** — must be reported honestly. |
 | 67 | Frågebank: bank of questions to generate new exams | PARTIAL | Question bank built (`Question.js`, `questionBankRoutes.js`, `QuestionBank.vue`); backend `POST /generate-exam` built (`questionBankRoutes.js:146-225`); **but `ExamGeneration.vue` is not routed and has broken calls** (GET generate-exam `:241`, non-existent save-exam `:319`) — no working exam-generation UI. |
 | 67a | Frågebank kept separate from chatbot | BUILT (cleanly separated) | Distinct routers (`/api/question-bank`, `/api/course-bank`, `/api/chatbot`, `/api`) and models (`Question`/`Faq`/chatbot). No shared code. **Not conflated.** |
 
@@ -170,7 +172,7 @@
 - It can only "answer" if the FAQ keyword or an exact module substring is present. Anything phrased differently fails and returns a canned refusal.
 - `status` advertises `aiProvider: openai` only if `OPENAI_API_KEY` is set (`chatbotRoutes.js:56`), **but the ConcreteChatbotService never calls an LLM** — the design comment explicitly says "this would be replaced by an LLM call" (`chatbotService.impl.js:246-247`) and never wires one.
 
-**Latent bug:** `chatbotService.js:127` calls `StudentEnrollment.findOne(...)` but `StudentEnrollment` is **not imported** — would throw `ReferenceError` if the `courseInstanceId` path is used. Not currently exercised (ChatbotView sends only `{question}`), but it's a defect in the design interface.
+**Latent bug (FIXED):** `chatbotService.js:127` called `StudentEnrollment.findOne(...)` but `StudentEnrollment` was **not imported** (would throw `ReferenceError` on the `courseInstanceId` path). Import added — `chatbotService.js:2` now imports `StudentEnrollment`; the openai-labeled status path still does not call an LLM (see verdict above).
 
 ### 3.2 Question bank vs. chatbot: NOT conflated (confirmed)
 Separate routers/models (`Question` vs `Faq` vs chatbot). The only overlap is the generic word "question". **No conflation.**
@@ -235,7 +237,7 @@ Legend: match / partial / diverged / missing.
 | ManualAddStudent | MATCH (superset) | has pace + UpplandsBro + APL-cert (unlike wizard) | `ManualAddStudent.vue:287-452` |
 | Inactive students | MATCH | reactivation with course checkboxes | `InactiveStudents.vue` |
 | Study plan revision modal | MATCH (UI) | history + reason; but no student notification backend | `StudyPlanRevisionModal.vue`, `revisionService.js:338-393` |
-| APL board (Tab1) | PARTIAL | 6 colors + filter + auto-red display; no "seeking" field, no scheduled persisted RED | `APLBoard.vue`, `aplAutoStatus.js` |
+| APL board (Tab1) | PARTIAL | 6 colors + filter + auto-red display; seeking field now present (Coordinator badge + student toggle); scheduled persisted RED still manual | `APLBoard.vue`, `AplTab.vue`, `aplAutoStatus.js` |
 | APL completed (Tab2) | PARTIAL | period yes; no contact info/contract check | `AplCompletedTab.vue` |
 | APL archive (Tab3) | MATCH | GridFS archive | `APLFileArchive.vue` |
 | Betyg (teacher grading) | PARTIAL | auto-populates; reason client-only for all, server only for F | `BetygSattning.vue:343-346`, `gradeRoutes.js:500,791` |
@@ -246,13 +248,13 @@ Legend: match / partial / diverged / missing.
 | Slutprovskalender | PARTIAL | month view + colors + attendance; accommodations not on list; room not persisted; 9 rooms not 7 | `ExamCalendar.vue`, `EventModal.vue`, `examRooms.js` |
 | Messaging | MATCH (in-app + email copy); no push | role RBAC; no tenancy; no push/notif badge | `MessagingView.vue`, `messagingService.js` |
 | Chatbot | DIVERGED (FAQ+keyword, not true bot); no escalation/logging | — | `ChatbotView.vue`, `chatbotService*.js` |
-| CourseCards (student learning) | PARTIAL | shared card + lessons + assignment submission; no hidden-module filter; no current-module | `CourseCards.vue`, `enrollmentService.js:161` |
+| CourseCards (student learning) | PARTIAL | shared card + lessons + assignment submission; hidden-module filter now applied; no current-module | `CourseCards.vue`, `utils/courseContentVisibility.js` |
 | Course templates | MATCH | 5×2, delprov M3, case M5, clone | `CourseTemplates.vue`, `courseModuleSchema.js` |
 | Schedule parameters | MATCH | teacher 5/10/20 params, auto-applied | `ScheduleParameters.vue` |
 | Reports (activity) | PARTIAL | per-module ✓/✗ present but never populated; no "when set" column | `Reports.vue`, `learningController.js:338-464` |
 | Learning management / participants | PARTIAL | list/add/remove; no "last active" column | `LearningManagement.vue` |
-| APL loggbok | PARTIAL | CRUD built; no auto-issue at start; landing link broken | `LogbookTab.vue`, `aplRoutes.js:37-42` |
-| Certificates / diploma | PARTIAL | study cert built; diploma not auto-sent; record workflow not mounted | `CertificateManager.vue`, `certificateRecordRoutes.js` |
+| APL loggbok | PARTIAL | CRUD built; no auto-issue at start; landing link now fixed (real schema fields served) | `LogbookTab.vue`, `aplRoutes.js` (GET /apl/my) |
+| Certificates / diploma | PARTIAL | study cert built; diploma now auto-emailed to student + delivery recorded; record workflow routers now mounted | `CertificateManager.vue`, `studyCertificateController.js:259-269`, `certificateRoutes.js` |
 | Question bank + exam generation | PARTIAL | bank built; generation UI orphaned/broken | `QuestionBank.vue`, `ExamGeneration.vue` |
 | Analytics dashboard | MATCH | filters, revenue, forecast, distributions, export | `AnalyticsDashboard.vue` |
 | Earning overview | MATCH | per-kommun per-course | `EarningsOverview.vue` |
@@ -298,12 +300,52 @@ Legend: match / partial / diverged / missing.
 ---
 
 ## Cross-cutting defect list (from audit)
-- `chatbotService.js:127` references unimported `StudentEnrollment` (ReferenceError in `courseInstanceId` path).
-- `aplRoutes.js:37-42` reads fields (`color/period/workplace/supervisor/logbook/cvUrl`) absent from `AplRecord` → student landing Loggbok link never shows.
-- `completedComponents` (`StudentEnrollment.js:155-156`) is only ever read, never written → per-module ✓/✗ reports always empty.
-- `CertificateManager` workflow routers never mounted (`certificateRecordRoutes.js`/`certificateRoutes.js`) → its settings/templates/approve/generate cannot work.
-- `ExamGeneration.vue` orphaned + wrong methods (GET generate-exam, missing save-exam) → broken.
-- Action-plan questionnaire **POST** not systemadmin-gated (`actionPlanRoutes.js:115-120`) — any staff can wipe the form via direct API.
-- `examRooms.js` defines 9 rooms (spec says 7); room selection `v-model` never submitted/persisted.
-- Specped exam-accommodations UI missing in `RoleBasedAppointments.vue` (data/method present).
-- Fixture: duplicate grading paths (`Student.education` legacy vs `StudentEnrollment`) — risk of divergence.
+- ~~`chatbotService.js:127` references unimported `StudentEnrollment`~~ — **FIXED**: import added (`chatbotService.js:2`).
+- ~~`aplRoutes.js:37-42` reads fields (`color/period/workplace/supervisor/logbook/cvUrl`) absent from `AplRecord`~~ — **FIXED**: `/apl/my` returns real schema fields; student panel + logbook link wired.
+- ~~`completedComponents` (`StudentEnrollment.js:155-156`) is only ever read, never written~~ — **FIXED**: written on submission grading (`learningController.js:311-313`).
+- ~~`CertificateManager` workflow routers never mounted~~ — **FIXED**: `certificateRoutes.js` + `certificateRecordRoutes.js` mounted at `router.js:77-79`.
+- `ExamGeneration.vue` orphaned + wrong methods (GET generate-exam, missing save-exam) → broken. *(unchanged)*
+- ~~Action-plan questionnaire **POST** not systemadmin-gated~~ — **FIXED**: restricted to `systemadmin` (`actionPlanRoutes.js:85`).
+- `examRooms.js` defines 9 rooms (spec says 7); attendance records now persist `examRoom` (`examRoutes.js:1235,1262,2362`) — candidate for review.
+- Specped exam-accommodations UI missing in `RoleBasedAppointments.vue` (data/method present). *(unchanged)*
+- Fixture: duplicate grading paths (`Student.education` legacy vs `StudentEnrollment`) — risk of divergence. *(unchanged)*
+
+---
+
+## Addendum — M3 polish delta (2026-09-16, HEAD `22e81e4`, branch `feat/milestone-3`)
+
+### Items fixed since this audit (HEAD `4395f15`)
+
+| Item | What changed | Evidence |
+|---|---|---|
+| #22 Revidering student notify | `sendRevisionNotifications` now sends in-app `Notification` + email to the student, not just the teacher. | `revisionService.js:400-443` |
+| #24b Seeking field | New `AplRecord.isSeeking` boolean; student self-toggles via `PATCH /apl/my`; exposed to coordinator as "Söker" column + `mdi-briefcase-search` badge. | `AplRecord.js:48`, `aplRoutes.js`, `AplTab.vue` |
+| #24c CV student upload | Students can upload own CV via `POST /documents/upload` + `PATCH /apl/my { cvDocId }`. Upload authority enforced by `canUploadForStudent` (`documentRoutes.js`). | `AplTab.vue handleCvUpload`, `documentRoutes.js` |
+| #27 Course-end grading reminder | `gradingReminderScan.js` wired into `scheduler.js:17,61`; detects `endDate`, targets responsible teacher, idempotent, Sweden timezone. | `scheduler.js`, `gradingReminderScan.js` |
+| #36a Action-plan POST | POST to `/form-questions` now restricted to `systemadmin`. | `actionPlanRoutes.js:85` |
+| #61 Hidden-module filter | `utils/courseContentVisibility.js` now applied on `enrollmentService.buildCourseCards` and `learningController.getInstanceModules` (student branch). Hidden modules replaced by opaque "Innehåll dolt" overlay for students. | `enrollmentService.js`, `learningController.js` |
+| #62 completedComponents | Written on submission grading (`learningController.js:311-313`); per-module ✓/✗ reports now populate. "When set" column remains missing from `Reports.vue` UI. | `learningController.js:311-313` |
+| #64 APL landing link | `/apl/my` now returns real schema fields; `hasLogbook`/`hasCv`/`hasContract` wired; Dashboard APL panel and Loggbok link functional. | `aplRoutes.js`, `Dashboard.vue` |
+| #66 Diploma auto-email | `studyCertificateController.js` now calls `sendDiplomaEmail` + records `deliveredForReal` audit trail; `certificateRoutes.js`/`certificateRecordRoutes.js` now mounted (`router.js:77-79`). | `studyCertificateController.js:259-269`, `router.js:77-79` |
+| 3.1 Chatbot latent bug | `StudentEnrollment` import added to `chatbotService.js:2`; the `courseInstanceId` path no longer throws. | `chatbotService.js:2` |
+
+### Additional polish-pass fixes (cross-cutting)
+
+| Area | What | Files |
+|---|---|---|
+| Pace persistence | `StudentEnrollment.pace` (Number, min 10, max 200, default 100); `paceFactor = 100/paceValue` applied to duration scaling on package enrollment + `POST /placement/preview`. | `StudentEnrollment.js`, `placementRoutes.js`, `courseMatchingService.js` |
+| Pace UI | Student CoursePlacementWizard shows pace selector when "Kurspaket" selected; `POST /process-education` now sends `pace` + `studyDurationWeeks` based on courses chosen. | `CoursePlacementWizard.vue`, `courseMatchingController.js` |
+| Document upload authz | `documentRoutes.js` replaced broken `userIdStr !== studentIdStr` (compared JWT userId to Student doc id) with `canUploadForStudent(user, studentId)`: staff → always allowed, student → email-resolved Student doc match, teacher → own students. | `documentRoutes.js` |
+| Dead-code cleanup | 17 lint warnings removed: `studentController.js` (`processStudentEducation` return count), `examRoutes.js` (`attendanceRecord`), `chatbotService.js` (`student`), `courseMatchingService.js` (`Student`), `slutprovDateCalculator.js` (`getSlutprovDate`), 4 frontend vue files. | 5 backend + 4 frontend |
+
+### Open gaps unchanged by this pass (from original audit)
+
+- #24a Persisted RED auto-transition (still manual trigger only, no scheduled APL job).
+- #24c APL contract upload (still coordinator-only).
+- #62 "When set" column (backend data available; UI missing).
+- #67 Exam-generation UI orphaned/broken.
+- #48 examRooms 9 vs spec's 7.
+- Specped exam-accommodations UI missing.
+- Chatbot escalation/logging/push notification missing.
+
+*Addendum generated 2026-09-16 during the M3 polish pass.*

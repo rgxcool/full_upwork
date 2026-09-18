@@ -352,4 +352,73 @@ describe("searchRoutes handlers", () => {
             expect(res.body.length).toBeGreaterThanOrEqual(1);
         });
     });
+
+    describe("GET /search - tenant (kommun) scoping", () => {
+        const thenable = (resolveValue) => ({
+            then(resolve) {
+                resolve(resolveValue);
+                return this;
+            },
+            catch() {
+                return this;
+            },
+        });
+
+        it("applies municipality scope filter for a scoped coordinator", async () => {
+            const studentId = new mongoose.Types.ObjectId();
+            const studentObj = {
+                _id: studentId,
+                name: "Elev X",
+                email: "x@example.com",
+            };
+            vi.spyOn(Student, "find").mockReturnValue({
+                select: vi.fn(() => thenable([studentObj])),
+            });
+            vi.spyOn(User, "find").mockReturnValue({
+                select: vi.fn(() => thenable([])),
+            });
+
+            const handler = getRouteHandler("/search");
+            const req = {
+                user: { role: "coordinator", municipalities: ["Upplands-Bro"] },
+                query: { q: "test", type: "Användare" },
+            };
+            const res = buildRes();
+
+            await handler(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(res.body).toEqual([
+                { id: studentId, name: "Elev X", type: "Elev", extra: "Email: x@example.com" },
+            ]);
+            expect(Student.find).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    "municipality.type": { $in: ["Upplands-Bro"] },
+                })
+            );
+        });
+
+        it("does not restrict search for a global admin (no municipalities)", async () => {
+            vi.spyOn(Student, "find").mockReturnValue({
+                select: vi.fn(() => thenable([])),
+            });
+            vi.spyOn(User, "find").mockReturnValue({
+                select: vi.fn(() => thenable([])),
+            });
+
+            const handler = getRouteHandler("/search");
+            const req = {
+                user: { role: "admin", municipalities: [] },
+                query: { q: "test", type: "Användare" },
+            };
+            const res = buildRes();
+
+            await handler(req, res);
+
+            expect(res.statusCode).toBe(200);
+            expect(Student.find).toHaveBeenCalledWith(
+                expect.not.objectContaining({ "municipality.type": expect.anything() })
+            );
+        });
+    });
 });

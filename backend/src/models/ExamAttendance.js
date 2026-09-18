@@ -21,6 +21,7 @@ const examAttendanceSchema = new mongoose.Schema(
         examTime: String,
         examMunicipality: String,
         examLocation: String,
+        examRoom: String,
         
         // Academic details
         grade: String,
