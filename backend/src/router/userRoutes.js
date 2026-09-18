@@ -304,7 +304,7 @@ router.get(
                 student: ['viewOwnGrades', 'viewOwnSchedule', 'viewOwnProfile', 'viewCourseInfo', 'viewNotifications'],
             };
 
-            const ALL_RBAC_KEYS = [...new Set(Object.values(RBAC_PERMISSIONS).flat())].sort();
+            const ALL_RBAC_KEYS = [...new Set(Object.values(rbacPermissions).flat())].sort();
 
             const RBAC_LABELS = {
                 'users:create': 'Skapa användare',

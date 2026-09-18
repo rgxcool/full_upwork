@@ -214,7 +214,9 @@ export const createRateLimiter = (windowMs, max, message) => {
 // Specific rate limiters
 export const authRateLimiter = createRateLimiter(
     15 * 60 * 1000, // 15 minutes
-    5, // 5 attempts
+    process.env.AUTH_RATE_LIMIT_MAX
+        ? parseInt(process.env.AUTH_RATE_LIMIT_MAX, 10)
+        : (process.env.NODE_ENV === "production" ? 5 : 1000),
     "Too many login attempts, please try again later."
 );
 
