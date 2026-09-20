@@ -248,6 +248,26 @@ describe("questionBankRoutes", () => {
             expect(res.body.examAttemptId).toBe("attempt-1");
             expect(res.body.selectedCount).toBe(2);
         });
+
+        it("uses the client-provided title for the exam attempt", async () => {
+            Question.find.mockReturnValue(
+                makeChain([{ _id: "q1" }, { _id: "q2" }])
+            );
+
+            const res = await request(app)
+                .post("/api/question-bank/generate-exam")
+                .send({
+                    courseId: validObjectId,
+                    numberOfQuestions: 2,
+                    title: "Prov matematik",
+                })
+                .expect(200);
+
+            expect(ExamAttempt).toHaveBeenCalledWith(
+                expect.objectContaining({ title: "Prov matematik" })
+            );
+            expect(res.body.success).toBe(true);
+        });
     });
 
     describe("GET /exam-attempts", () => {

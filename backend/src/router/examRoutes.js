@@ -2560,6 +2560,100 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
     }
 });
 
+/**
+ * Reverse a previous "accept" decision: clear the student's finalExamDate and
+ * remove them from the teacher's slutprov (ExamAttendance + persisted calendar
+ * events) for the month the exam was last scheduled to. Surgical per-month
+ * cleanup; harmless when the exam was never accepted (studentId missing).
+ * Non-fatal — decision errors must never be masked by cleanup failures.
+ *
+ * @param {Object} exam The exam document as read before the decision update.
+ * @param {string} examId The exam's _id.
+ */
+async function reverseAcceptForStudent(exam, examId) {
+    const rawStudentId = exam.studentId;
+    if (!rawStudentId) return;
+
+    const studentObjId =
+        mongoose?.Types?.ObjectId?.isValid?.(rawStudentId)
+            ? new mongoose.Types.ObjectId(rawStudentId)
+            : rawStudentId;
+
+    try {
+        // The exam month that is now being voided (before `move` advances it).
+        const voidedMonth = exam.requestedMonth;
+        let monthWindow = null;
+        const examDate = calculateExamDate(voidedMonth);
+        if (examDate) {
+            const start = new Date(Date.UTC(examDate.getUTCFullYear(), examDate.getUTCMonth(), 1));
+            const end = new Date(Date.UTC(examDate.getUTCFullYear(), examDate.getUTCMonth() + 1, 1));
+            monthWindow = { start, end };
+        }
+
+        // Clear the shared finalExamDate only when no OTHER prövning for this
+        // student is still accepted (scheduled) — otherwise the date belongs
+        // to a live exam and must be kept.
+        const otherScheduled = await Exam.countDocuments({
+            studentId: studentObjId,
+            status: "scheduled",
+            _id: { $ne: examId },
+        });
+        if (otherScheduled === 0) {
+            await Student.updateOne({ _id: studentObjId }, { $unset: { finalExamDate: "" } });
+            // Fallback: the accept flow upserts by personalNumber; clear by
+            // personalNumber too so no stray date survives.
+            await Student.updateOne(
+                { personalNumber: exam.personalNumber, finalExamDate: { $ne: null } },
+                { $unset: { finalExamDate: "" } }
+            );
+        }
+
+        // Remove date/teacher-level ExamAttendance rows for the voided month.
+        if (monthWindow) {
+            await (await import("../models/ExamAttendance.js")).default.deleteMany({
+                studentId: studentObjId,
+                examDate: { $gte: monthWindow.start, $lt: monthWindow.end },
+            });
+        }
+
+        // Pull the student out of persisted slutprov calendar events in the
+        // voided month and delete events left empty (mirrors dropout cleanup).
+        const eventQuery = {
+            "extendedProps.type": "slutprov",
+            "extendedProps.students._id": studentObjId,
+        };
+        if (monthWindow) {
+            eventQuery.start = { $gte: monthWindow.start, $lt: monthWindow.end };
+        }
+        await CalendarEvent.updateMany(eventQuery, {
+            $pull: { "extendedProps.students": { _id: studentObjId } },
+        });
+        const emptyEvents = await CalendarEvent.find({
+            "extendedProps.type": "slutprov",
+            $or: [
+                { "extendedProps.students": { $size: 0 } },
+                { "extendedProps.students": { $exists: false } },
+                { "extendedProps.students": null },
+            ],
+            ...(monthWindow
+                ? { start: { $gte: monthWindow.start, $lt: monthWindow.end } }
+                : {}),
+        }).select("_id");
+        if (emptyEvents.length > 0) {
+            await CalendarEvent.deleteMany({
+                _id: { $in: emptyEvents.map((e) => e._id) },
+            });
+        }
+
+        logger.info(
+            { examId, studentId: studentObjId, voidedMonth },
+            "Reversed accepted prövning for student (cleared finalExamDate)"
+        );
+    } catch (cleanupErr) {
+        logger.error({ err: cleanupErr, examId }, "Error reversing accepted prövning");
+    }
+}
+
 router.put("/exams/:id/decision", isAuthenticated, hasRole(['admin', 'systemadmin', 'teacher']), async (req, res) => {
     try {
         const { decision, comment } = req.body;
@@ -2624,10 +2718,16 @@ router.put("/exams/:id/decision", isAuthenticated, hasRole(['admin', 'systemadmi
                 }
                 updateData.status = "moved";
                 updateData.requestedMonth = nextMonth;
+                // If the exam had been accepted before, void the old slot
+                // (finalExamDate + slutprov lists) before advancing the month.
+                await reverseAcceptForStudent(exam, examId);
                 break;
 
             case "deny":
                 updateData.status = "denied";
+                // Reverse a previous accept if this exam ever produced a
+                // scheduled slutprov slot (auto-remove on denial).
+                await reverseAcceptForStudent(exam, examId);
                 break;
 
             default:

@@ -8,10 +8,12 @@
             <v-select
               v-model="selectedCourse"
               :items="availableCourses"
+              item-title="courseName"
+              item-value="_id"
               label="Kurs"
               dense
               outlined
-              @change="filterQuestionsByCourse"
+              @update:model-value="loadQuestions"
             />
           </v-col>
           <v-col cols="12" sm="4">
@@ -21,7 +23,7 @@
               label="Ämne"
               dense
               outlined
-              @change="applyFilters"
+              @update:model-value="applyFilters"
             />
           </v-col>
           <v-col cols="12" sm="4">
@@ -31,7 +33,7 @@
               label="Frågetyp"
               dense
               outlined
-              @change="applyFilters"
+              @update:model-value="applyFilters"
             />
           </v-col>
         </v-row>
@@ -116,11 +118,11 @@
             <v-btn
               color="primary"
               size="large"
-              :disabled="selectedQuestions.length === 0 || !examTitle"
+              :disabled="selectedCount === 0 || !examTitle"
               @click="generateExam"
             >
               <v-icon left>mdi-format-list-numbers</v-icon>
-              Generera exam med {{ selectedQuestions.length }} frågor
+              Generera exam med {{ selectedCount }} frågor
             </v-btn>
             <v-spacer></v-spacer>
             <v-btn
@@ -223,6 +225,10 @@ export default {
       return colors[type] || "secondary";
     };
 
+    const selectedCount = computed(
+      () => Object.values(selectedQuestions.value).filter(Boolean).length
+    );
+
     // Load available courses
     const loadCourses = async () => {
       try {
@@ -279,6 +285,7 @@ export default {
             subject: selectedSubject.value,
             questionType: selectedType.value,
             numberOfQuestions: selectedIds.length,
+            title: examTitle.value || "Genererad exam",
           }
         );
 
@@ -368,6 +375,7 @@ export default {
       examTitle,
       numberOfQuestions,
       generatedExam,
+      selectedCount,
       typeLabel,
       difficultyLabel,
       difficultyColor,

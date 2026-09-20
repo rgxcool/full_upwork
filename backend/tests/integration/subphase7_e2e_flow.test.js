@@ -118,7 +118,7 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
             .expect(400);
 
         expect(badGradeRes.body).toEqual({
-            error: "Motivering krävs vid betyg F",
+            error: "Motivering krävs för betyg",
         });
 
         // 3. Teacher gives F grade with valid motivation -> 200 OK

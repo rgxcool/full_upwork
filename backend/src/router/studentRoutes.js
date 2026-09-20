@@ -588,6 +588,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
                         {
                             needsSupport: req.body.needsSupport,
                             examMode: req.body.examMode,
+                            pace: req.body.pace,
                         }
                     );
 

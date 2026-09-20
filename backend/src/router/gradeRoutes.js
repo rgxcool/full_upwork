@@ -693,8 +693,8 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
   const { studentId, courseId, grade, reason, comments, npScore, type } =
     req.body;
 
-  if (grade === "F" && (!reason || reason.trim() === "")) {
-    return res.status(400).json({ error: "Motivering krävs vid betyg F" });
+  if (grade && (!reason || reason.trim() === "")) {
+    return res.status(400).json({ error: "Motivering krävs för betyg" });
   }
 
   if (req.user?.role === "teacher") {
@@ -892,6 +892,11 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
         courseId: targetCourseId,
         enrollmentId: enrollmentId || null,
         teacherId: responsibleTeacherUser || undefined,
+        // Explicit admin/systemadmin routing: locked grades must be flagged for
+        // admins (who grade in the municipalities' systems). GET /notifications
+        // exposes all non-dropout notes to admin/systemadmin regardless of the
+        // teacher field, so this marker is the explicit routing contract.
+        routedTo: "admin/systemadmin",
       },
       resolved: false,
     });
@@ -1039,8 +1044,8 @@ router.put('/update-grade/:enrollmentId', authenticateUser, async (req, res) => 
     const userId = req.user?.userId;
     const userRole = req.user?.role;
 
-    if (grade === "F" && (!motivation || motivation.trim() === "")) {
-      return res.status(400).json({ error: "Motivering krävs vid betyg F" });
+    if (grade && (!motivation || motivation.trim() === "")) {
+      return res.status(400).json({ error: "Motivering krävs för betyg" });
     }
 
     const enrollment = await StudentEnrollment.findById(enrollmentId);
@@ -1062,8 +1067,8 @@ router.put('/update-grade/:enrollmentId', authenticateUser, async (req, res) => 
     // Support course-specific result type entry
     if (resultType === "final_grade") {
       if (value !== undefined) {
-        if (value === "F" && (!motivation || motivation.trim() === "")) {
-          return res.status(400).json({ error: "Motivering krävs vid betyg F" });
+        if (value && (!motivation || motivation.trim() === "")) {
+          return res.status(400).json({ error: "Motivering krävs för betyg" });
         }
         enrollment.grade = value;
       }

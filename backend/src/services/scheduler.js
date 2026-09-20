@@ -16,6 +16,7 @@ import { runInactivityScan } from "./inactivityScanner.js";
 import { runDiplomaNotificationScan } from "./diplomaNotificationScan.js";
 import { runGradingReminderScan } from "./gradingReminderScan.js";
 import { runTaskReminderScan } from "./taskReminderScan.js";
+import { autoTransitionStatuses } from "./aplService.js";
 
 const SCAN_HOUR_UTC = (() => {
     const raw = parseInt(process.env.INACTIVITY_SCAN_HOUR_UTC, 10);
@@ -62,6 +63,17 @@ const executeScan = async () => {
             logger.info({ summary: gradingSummary }, "Grading reminder scan completed");
         } catch (err) {
             logger.error({ err }, "Grading reminder scan failed");
+        }
+        try {
+            // Persisted APL status auto-transitions (RED near end / GREEN after
+            // end). Idempotent — only transitions students that still need it.
+            const aplTransitions = await autoTransitionStatuses();
+            logger.info(
+                { count: Array.isArray(aplTransitions) ? aplTransitions.length : 0 },
+                "APL status auto-transition scan completed"
+            );
+        } catch (err) {
+            logger.error({ err }, "APL status auto-transition scan failed");
         }
     } catch (error) {
         logger.error({ err: error }, "Scheduled inactivity scan failed");

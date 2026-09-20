@@ -205,6 +205,30 @@ export const buildCourseCards = async (studentId, { applyStudentVisibility = fal
         };
     }
 
+    // "Student's current module": the first module (by moduleNumber) that has
+    // not been accepted yet. Mirrors the persisted CourseInstance.sectionPositions
+    // map but is computed at read-time so it never goes stale.
+    for (const card of cards) {
+        const modules = [...(card.modules || [])].sort(
+            (a, b) => (a.moduleNumber ?? 0) - (b.moduleNumber ?? 0)
+        );
+        if (modules.length === 0) continue;
+        const accepted = new Set(
+            (submissionsByEnrollment.get(String(card.enrollmentId)) || [])
+                .filter((s) => s.feedback?.status === "godkänd")
+                .map((s) => s.moduleNumber)
+        );
+        const current =
+            modules.find((m) => !accepted.has(m.moduleNumber)) ||
+            modules[modules.length - 1];
+        card.currentModule = {
+            moduleNumber: current.moduleNumber,
+            title: current.title || `Modul ${current.moduleNumber}`,
+            status: accepted.size === modules.length ? "Slutförd" : "Pågår",
+        };
+        card.currentModuleNumber = current.moduleNumber;
+    }
+
     // Attach lastAccess: most recent of lastLoginAt or last submission per student
     try {
         const studentIds = [...new Set(cards.map((c) => c.students?.map((s) => s._id)).flat().filter(Boolean))];

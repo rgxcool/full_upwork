@@ -83,7 +83,7 @@
           <v-col v-if="showMaterialCheckbox" cols="12">
             <v-checkbox
               v-model="form.materialReceived.status"
-              label="Material hämtat (SVE 1 eller 3)"
+              label="Material hämtat (SVE/SVA nivå 1 eller 3)"
             />
           </v-col>
 
@@ -146,9 +146,20 @@
 
   const showMaterialCheckbox = computed(() => {
     const selected = availableCourses.value.find((c) => c.value === selectedCourse.value)
-    const title = selected?.title?.toLowerCase() || ''
-    return title.includes('sve')
+    return isMaterialEligibleCourse(selected?.title)
   })
+
+  // Material pickup only applies to SVE/SVA on level 1 or 3 — never level 2,
+  // and only for Swedish/Swedish-as-a-second-language courses. The course
+  // title is rendered as "<courseName> (<courseCode>)", so match both the code
+  // (e.g. SVE1/SVA3) and the Swedish course name (e.g. "Svenska 1").
+  const isMaterialEligibleCourse = (title) => {
+    const t = String(title || '').toLowerCase()
+    if (/(sve|sva)\s*[1|3]\b/.test(t)) return true
+    const isSveOrSva = /\bsvenska\b/.test(t) || /\bsvä\b/.test(t) || /\bsve\b/.test(t) || /\bsva\b/.test(t)
+    if (!isSveOrSva) return false
+    return /(?:svenska\s+som\s+andrasp[raa]k\s*|\bsvenska\b\s*|\bsve\b\s*|\bsva\b\s*)\s*([13])\b/.test(t)
+  }
 
   const canSubmit = computed(() => {
     return selectedStudent.value && form.value.requestedMonth && form.value.teacherId

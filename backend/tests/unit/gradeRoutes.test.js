@@ -413,7 +413,7 @@ describe("POST /grades/teacher/save-grade", () => {
     Student.updateOne.mockResolvedValue({ matchedCount: 1 });
     const res = await request(app)
       .post("/grades/teacher/save-grade")
-      .send({ studentId: "s", courseId: "c", grade: "A" });
+      .send({ studentId: "s", courseId: "c", grade: "A", reason: "utförligt" });
     expect(NotificationController.resolveNotification).toHaveBeenCalled();
     expect(res.status).toBe(200);
   });
@@ -422,8 +422,16 @@ describe("POST /grades/teacher/save-grade", () => {
     Student.updateOne.mockRejectedValueOnce(new Error("boom"));
     const res = await request(app)
       .post("/grades/teacher/save-grade")
-      .send({ studentId: "s", courseId: "c", grade: "B" });
+      .send({ studentId: "s", courseId: "c", grade: "B", reason: "motivering" });
     expect(res.status).toBe(500);
+  });
+
+  it("requires a justification for every grade, not just F", async () => {
+    const res = await request(app)
+      .post("/grades/teacher/save-grade")
+      .send({ studentId: "s", courseId: "c", grade: "C", reason: "" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("Motivering krävs");
   });
 });
 
@@ -626,7 +634,7 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
     const res = await request(app)
       .put("/grades/update-grade/missing")
       .set("x-user-role", "teacher")
-      .send({ grade: "B" });
+      .send({ grade: "B", motivation: "motivering" });
     expect(res.status).toBe(404);
   });
 
@@ -636,7 +644,7 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
     const res = await request(app)
       .put("/grades/update-grade/en1")
       .set("x-user-role", "teacher")
-      .send({ grade: "B" });
+      .send({ grade: "B", motivation: "motivering" });
     expect(res.status).toBe(403);
   });
 
@@ -645,7 +653,7 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
     const res = await request(app)
       .put("/grades/update-grade/en1")
       .set("x-user-role", "teacher")
-      .send({ grade: "B" });
+      .send({ grade: "B", motivation: "motivering" });
     expect(res.status).toBe(500);
   });
 
@@ -655,7 +663,7 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
     const res = await request(app)
       .put("/grades/update-grade/en1")
       .set("x-user-role", "teacher")
-      .send({ grade: "E", nationalTestPoints: 0 });
+      .send({ grade: "E", motivation: "motivering", nationalTestPoints: 0 });
     expect(enrollment.save).toHaveBeenCalled();
     expect(res.body.success).toBe(true);
     expect(enrollment.nationalTestPoints).toBe(0);
@@ -672,7 +680,7 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
     const res = await request(app)
       .put("/grades/update-grade/en1")
       .set("x-user-role", "teacher")
-      .send({ grade: "C" });
+      .send({ grade: "C", motivation: "motivering" });
     expect(res.status).toBe(403);
     expect(res.body.error).toContain("inte behörig");
   });
@@ -688,7 +696,7 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
     const res = await request(app)
       .put("/grades/update-grade/en1")
       .set("x-user-role", "teacher")
-      .send({ grade: "B" });
+      .send({ grade: "B", motivation: "motivering" });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
@@ -711,6 +719,15 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
       .put("/grades/update-grade/en1")
       .set("x-user-role", "teacher")
       .send({ grade: "F", motivation: "" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("Motivering krävs");
+  });
+
+  it("requires motivation for every grade, not just F", async () => {
+    const res = await request(app)
+      .put("/grades/update-grade/en1")
+      .set("x-user-role", "teacher")
+      .send({ grade: "B", motivation: "" });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("Motivering krävs");
   });
@@ -933,6 +950,7 @@ describe("Grading scales (/grades/grading-scale)", () => {
           studentId: "s-1",
           enrollmentId: "en-1",
           teacherId: "user123",
+          routedTo: "admin/systemadmin",
         })
       );
     });

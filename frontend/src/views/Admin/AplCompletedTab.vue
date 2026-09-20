@@ -48,9 +48,23 @@
               <v-icon size="16">{{ record.cvDocId ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}</v-icon>
               CV {{ record.cvDocId ? 'uppladdat' : 'saknas' }}
             </span>
-            <span :class="['document-status', record.contractDocId ? 'is-present' : 'is-missing']">
-              <v-icon size="16">{{ record.contractDocId ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}</v-icon>
-              Avtal {{ record.contractDocId ? 'uppladdat' : 'saknas' }}
+            <span class="document-status contract-cell">
+              <v-checkbox
+                :model-value="Boolean(record.contractDocId)"
+                :loading="uploadingContractId === record._id"
+                hide-details
+                dense
+                class="contract-checkbox"
+                :label="record.contractDocId ? 'Avtal mottaget' : 'Avtal ej mottaget'"
+                @update:model-value="(v) => toggleContract(record, v)"
+              />
+              <input
+                :ref="setContractInput(record._id)"
+                type="file"
+                accept=".pdf"
+                style="display: none"
+                @change="(e) => handleContractFile(record, e)"
+              />
             </span>
           </div>
           <div v-if="record.notes" class="info-row notes">
@@ -70,10 +84,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import client from '@/api/client.js'
+import { useToast } from '@/composables/useToast.js'
+
+const toast = useToast()
 
 const records = ref([])
 const loading = ref(false)
 const search = ref('')
+const uploadingContractId = ref(null)
+const contractInputs = ref({})
 
 const filteredRecords = computed(() => {
   let result = records.value
@@ -86,6 +105,66 @@ const filteredRecords = computed(() => {
   }
   return result
 })
+
+function studentIdOf(record) {
+  return record.studentId?._id || record.studentId || null
+}
+
+function setContractInput(id) {
+  return (el) => {
+    if (el) contractInputs.value[id] = el
+  }
+}
+
+async function toggleContract(record, checked) {
+  if (!record) return
+  const sid = studentIdOf(record)
+  if (!sid) return
+
+  if (checked) {
+    if (!record.contractDocId) {
+      const input = contractInputs.value[record._id]
+      if (input) input.click()
+      else toast.error('Kunde inte öppna filväljaren.')
+    }
+    return
+  }
+
+  uploadingContractId.value = record._id
+  try {
+    await client.put(`/apl/records/${sid}`, { contractDocId: null })
+    toast.success('Avtal borttaget.')
+    await loadCompleted()
+  } catch {
+    toast.error('Kunde inte ta bort avtalet.')
+  } finally {
+    uploadingContractId.value = null
+  }
+}
+
+async function handleContractFile(record, event) {
+  const file = event.target.files?.[0]
+  const sid = studentIdOf(record)
+  if (!file || !sid) return
+  uploadingContractId.value = record._id
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('type', 'APL_CONTRACT')
+    formData.append('studentId', sid)
+    const { data } = await client.post('/documents/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    await client.put(`/apl/records/${sid}`, { contractDocId: data.document?._id || data._id })
+    toast.success('Kontrakt uppladdat.')
+    await loadCompleted()
+  } catch (error) {
+    toast.error(error.response?.data?.error || 'Kunde inte ladda upp kontrakt.')
+  } finally {
+    uploadingContractId.value = null
+    event.target.value = ''
+  }
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return '—'
@@ -171,6 +250,13 @@ onMounted(loadCompleted)
 }
 .document-status.is-present { color: #2e7d32; }
 .document-status.is-missing { color: #b45309; }
+.contract-cell {
+  display: inline-flex;
+  align-items: center;
+}
+.contract-checkbox {
+  margin: 0;
+}
 .empty-state {
   text-align: center;
   padding: 40px;
