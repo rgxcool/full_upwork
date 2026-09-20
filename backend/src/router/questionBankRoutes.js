@@ -155,6 +155,7 @@ router.post(
                 questionType,
                 numberOfQuestions,
                 includeInactive = false,
+                title,
             } = req.body;
 
             if (!courseId) {
@@ -175,7 +176,7 @@ router.post(
                 filter.subject = subject;
             }
 
-            if (questionType) {
+            if (questionType && questionType !== "Alla") {
                 filter.questionType = questionType;
             }
 
@@ -195,7 +196,7 @@ router.post(
 
             // Save the generated exam attempt
             const examAttempt = new ExamAttempt({
-                title: `Exam - ${courseId}`,
+                title: (title && String(title).trim()) || `Exam - ${courseId}`,
                 courseId,
                 selectedQuestions: selectedQuestions.map((q) => q._id),
                 totalQuestions: questions.length,

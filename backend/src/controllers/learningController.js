@@ -196,6 +196,21 @@ export const submitAssignment = async (req, res) => {
             logger.warn({ err: completedError, enrollmentId: enrollment._id }, "Error resetting module completion on resubmission");
         }
 
+        // Persist the student's current section position on the instance so
+        // CourseInstance.sectionPositions reflects where the student is working
+        // (the freshly submitted module). Non-fatal — never blocks the submit.
+        try {
+            await CourseInstance.updateOne(
+                { _id: instance._id },
+                { $set: { [`sectionPositions.${String(student._id)}`]: moduleNumberInt } }
+            );
+        } catch (positionError) {
+            logger.warn(
+                { err: positionError, instanceId: instance._id, studentId: student._id },
+                "Error recording section position"
+            );
+        }
+
         logger.info(
             { studentId: student._id, enrollmentId: enrollment._id, moduleNumber: moduleNumberInt },
             "Assignment submitted"

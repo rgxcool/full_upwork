@@ -160,6 +160,43 @@
           />
         </div>
 
+        <!-- Course Package Pace -->
+        <div v-if="selectedCoursePackage" class="mb-3">
+          <label class="form-label">Studietakt för kurspaket:</label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input
+                v-model="studentForm.packagePace"
+                type="radio"
+                value="100"
+                class="form-check-input"
+              />
+              100%
+            </label>
+            <label class="radio-option">
+              <input
+                v-model="studentForm.packagePace"
+                type="radio"
+                value="50"
+                class="form-check-input"
+              />
+              50%
+            </label>
+            <label class="radio-option">
+              <input
+                v-model="studentForm.packagePace"
+                type="radio"
+                value="25"
+                class="form-check-input"
+              />
+              25%
+            </label>
+          </div>
+          <small class="text-muted">
+            Lägre studietakt förlänger varje kurs i paketet på motsvarande sätt.
+          </small>
+        </div>
+
         <!-- Individual Course Selection -->
         <div class="mb-3">
           <label for="individualCourse" class="form-label">Enskild kurs:</label>
@@ -404,6 +441,24 @@
           ></textarea>
         </div>
 
+        <!-- Support Needs Checkbox -->
+        <div class="mb-3">
+          <label class="form-label">Stödbehov:</label>
+          <div class="checkbox-group">
+            <label class="checkbox-option">
+              <input
+                v-model="studentForm.needsSupport"
+                type="checkbox"
+                class="form-check-input"
+              />
+              Eleven har stödbehov
+            </label>
+          </div>
+          <small class="text-muted">
+            Sätts på elevens kursinskrivningar och visas för berörd personal.
+          </small>
+        </div>
+
         <!-- Status Options -->
         <div class="mb-3">
           <label class="form-label">Status:</label>
@@ -508,6 +563,8 @@
     attendedExam: false,
     paidExamFee: false,
     priorAplCompleted: false,
+    needsSupport: false,
+    packagePace: 100,
   })
 
   // Options
@@ -918,6 +975,8 @@
       attendedExam: false,
       paidExamFee: false,
       priorAplCompleted: false,
+      needsSupport: false,
+      packagePace: 100,
     })
 
     selectedProgram.value = null
@@ -1050,6 +1109,8 @@
         attendedExam: studentForm.attendedExam,
         paidExamFee: studentForm.paidExamFee,
         priorAplCompleted: studentForm.priorAplCompleted,
+        needsSupport: studentForm.needsSupport,
+        pace: Number(studentForm.packagePace) || 100,
         program: selectedProgram.value,
         education: dedupedEducation,
       }

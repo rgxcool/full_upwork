@@ -148,7 +148,7 @@ export async function htmlToPdfBuffer(html, { orientation } = {}) {
  */
 export async function storePdfBuffer(buffer, { filename, recordId, contentType = "application/pdf" }) {
     const bucket = new GridFSBucket(mongoose.connection.db, { bucketName: "fs" });
-    const stream = Readable.from(buffer);
+    const stream = Readable.from([buffer]);
     const upload = bucket.openUploadStream(filename, {
         contentType,
         metadata: {
