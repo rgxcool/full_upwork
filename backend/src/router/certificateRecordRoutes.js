@@ -12,13 +12,14 @@ import {
     getEligibility,
     getCertificateCandidates,
     nextCertificateNumber,
+    getSettingsSnapshot,
 } from "../services/certificateService.js";
 import {
     buildCertificateHtml,
     htmlToPdfBuffer,
     storePdfBuffer,
 } from "../services/certificatePdf.js";
-import { CertificateSettings, CertificateTemplate } from "../models/certificateModel.js";
+import { CertificateTemplate } from "../models/certificateModel.js";
 
 const router = express.Router();
 
@@ -35,15 +36,6 @@ const STAFF_ROLES = [
 
 const pushHistory = (doc, action, userId, note = "") => {
     doc.history.push({ action, by: userId, at: new Date(), note });
-};
-
-const getSettingsSnapshot = async () => {
-    const s = await CertificateSettings.findOne({}).lean();
-    return {
-        signerName: s?.signerName || "",
-        signerTitle: s?.signerTitle || "Rektor",
-        schoolName: s?.schoolName || "Mindful Learning",
-    };
 };
 
 // ---------------------------------------------------------------------------
@@ -304,6 +296,28 @@ router.post(
         record.status = "generated";
         record.generatedBy = req.user.userId;
         record.generatedAt = new Date();
+        // Versioned config snapshot: the exact identity used to render this PDF,
+        // so later admin changes never rewrite history.
+        record.configVersion = settings.configVersion;
+        record.configSnapshot = {
+            signerName: settings.signerName,
+            signerTitle: settings.signerTitle,
+            signerDepartment: settings.signerDepartment,
+            signerContact: settings.signerContact,
+            schoolName: settings.schoolName,
+            organizationName: settings.organizationName,
+            organizationNumber: settings.organizationNumber,
+            address: settings.address,
+            phone: settings.phone,
+            email: settings.email,
+            website: settings.website,
+            secondSignerEnabled: settings.secondSignerEnabled,
+            secondSignerName: settings.secondSignerName,
+            secondSignerTitle: settings.secondSignerTitle,
+            secondSignatureFileId: settings.secondSignatureFileId,
+            logoFileId: settings.logoFileId,
+            signatureFileId: settings.signatureFileId,
+        };
         pushHistory(record, "generated", req.user.userId, `PDF genererad (${certNumber})`);
         await record.save();
 

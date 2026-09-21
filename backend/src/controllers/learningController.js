@@ -8,6 +8,7 @@ import StudentEnrollment from "../models/StudentEnrollment.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import logger from "../utils/logger.js";
 import { buildVisibleModules } from "../utils/courseContentVisibility.js";
+import { recordStudentLearningActivity } from "../utils/learningActivity.js";
 
 const STAFF_ROLES = ["systemadmin", "admin", "tester"];
 const SUBMITTABLE_STATUSES = ["enrolled", "active"];
@@ -33,6 +34,34 @@ const teacherOwnsInstance = (teacher, instance) => {
     if (!teacher || !instance) return false;
     const own = (id) => id && String(id) === String(teacher._id);
     return own(instance.responsibleTeacher) || own(instance.assistantTeacher);
+};
+
+// Return the most recent of named activity timestamps as { type, at }, or null.
+const pickMostRecent = (labels, dates) => {
+    let best = null;
+    let bestTime = -Infinity;
+    for (let i = 0; i < labels.length; i++) {
+        const d = dates[i];
+        if (d) {
+            const t = new Date(d).getTime();
+            if (t > bestTime) {
+                bestTime = t;
+                best = { type: labels[i], at: d };
+            }
+        }
+    }
+    return best;
+};
+
+// A module is "scheduled" when it carries its own start date (set during date
+// planning) or when the instance has a section date for its module index.
+// Unscheduled modules must not be reported as "Not completed".
+const getModuleScheduledDate = (module, instance, modules) => {
+    if (module && module.startDate) return new Date(module.startDate);
+    const sectionDates = instance?.sectionDates || [];
+    const idx = modules.findIndex((m) => m._id ? String(m._id) === String(module._id) : m.moduleNumber === module.moduleNumber);
+    const sectionDate = sectionDates[idx];
+    return sectionDate ? new Date(sectionDate) : null;
 };
 
 /**
@@ -91,6 +120,10 @@ export const getInstanceModules = async (req, res) => {
             if (!enrollment) {
                 return res.status(403).json({ error: "Du är inte inskriven på den här kursen" });
             }
+
+            // Lesson content access is meaningful learning activity for the
+            // inactive-student automation (never login alone).
+            await recordStudentLearningActivity(student._id).catch(() => {});
 
             const submissions = await AssignmentSubmission.find({
                 studentId: student._id,
@@ -470,11 +503,16 @@ export const getCourseInstanceReport = async (req, res) => {
             }
         }
 
-        // Determine status labels
+        // Determine status labels. A module without its own start date and
+        // without a scheduled section date is not expected to have been
+        // completed yet — it shows "not scheduled" instead of "not completed".
         const statuses = {};
         for (const module of modules) {
+            const scheduledDate = getModuleScheduledDate(module, instance, modules);
             statuses[module.moduleNumber] = {
                 completed: completedComponents[module.moduleNumber] === "✓",
+                scheduled: !!scheduledDate,
+                scheduledDate: scheduledDate ? scheduledDate.toISOString().split("T")[0] : null,
                 submitted: !!(assignmentStatus[module.moduleNumber]?.submitted),
                 statusText: assignmentStatus[module.moduleNumber]?.status || "",
             };
@@ -488,14 +526,20 @@ export const getCourseInstanceReport = async (req, res) => {
             completedModules,
             completionRate: totalModules > 0 ? (completedModules / totalModules * 100).toFixed(1) : 0,
             completedComponents,
-            modules: modules.map((m) => ({
-                moduleNumber: m.moduleNumber,
-                title: m.title,
-                isPartialExam: m.isPartialExam,
-                isCaseStudy: m.isCaseStudy,
-                completed: completedComponents[m.moduleNumber] === "✓",
-                assignment: assignmentStatus[m.moduleNumber],
-            })),
+            modules: modules.map((m) => {
+                const scheduledDate = getModuleScheduledDate(m, instance, modules);
+                return {
+                    moduleNumber: m.moduleNumber,
+                    title: m.title,
+                    isPartialExam: m.isPartialExam,
+                    isCaseStudy: m.isCaseStudy,
+                    completed: completedComponents[m.moduleNumber] === "✓",
+                    scheduled: !!scheduledDate,
+                    scheduleDate: scheduledDate ? scheduledDate.toISOString().split("T")[0] : null,
+                    submissionDate: assignmentStatus[m.moduleNumber]?.submittedAt || null,
+                    assignment: assignmentStatus[m.moduleNumber],
+                };
+            }),
             assignmentStatus,
             scheduledDates: instance.sectionDates?.map((d, i) => ({
                 moduleIndex: i,
@@ -509,11 +553,12 @@ export const getCourseInstanceReport = async (req, res) => {
             },
             participantCount: enrollment ? enrollment.students?.length || 0 : 0,
         });
-    } catch (error) {
+} catch (error) {
         logger.error({ err: error }, "Error fetching course instance report");
         res.status(500).json({ error: "Internal server error" });
     }
 };
+
 // Get participants for a course instance.
 // GET /learning/instances/:instanceId/participants
 export const getCourseInstanceParticipants = async (req, res) => {
@@ -535,13 +580,78 @@ export const getCourseInstanceParticipants = async (req, res) => {
             .populate("studentId", "name email")
             .lean();
 
-        const participants = enrollments.map((enrollment) => ({
-            participantId: enrollment.studentId._id,
-            name: enrollment.studentId.name,
-            email: enrollment.studentId.email,
-            role: "student",
-            status: enrollment.status,
-        }));
+        const studentIds = enrollments
+            .map((e) => e.studentId?._id)
+            .filter(Boolean);
+        const usersByStudentId = new Map(
+            (
+                await User.find({ _id: { $in: studentIds } })
+                    .select("lastLoginAt")
+                    .lean()
+            ).map((u) => [u._id.toString(), u.lastLoginAt || null])
+        );
+
+        // Latest submission per student gives the true "last course-card activity"
+        // when no login exists for the student account.
+        const submissions = await AssignmentSubmission.find({
+            studentId: { $in: studentIds },
+        })
+            .select("studentId submittedAt")
+            .lean();
+        const lastSubmissionById = new Map();
+        for (const sub of submissions) {
+            const current = lastSubmissionById.get(sub.studentId.toString());
+            if (!current || new Date(sub.submittedAt) > new Date(current)) {
+                lastSubmissionById.set(sub.studentId.toString(), sub.submittedAt);
+            }
+        }
+
+        const participants = enrollments.map((enrollment) => {
+            const studentId = enrollment.studentId._id;
+            const loginAt = usersByStudentId.get(studentId.toString()) || null;
+            const submissionAt = lastSubmissionById.get(studentId.toString()) || null;
+            const lastActivity = pickMostRecent(["login", "submission"], [loginAt, submissionAt]);
+            return {
+                participantId: studentId,
+                name: enrollment.studentId.name,
+                email: enrollment.studentId.email,
+                role: "student",
+                status: enrollment.status,
+                lastActivity,
+            };
+        });
+
+        // Staff participants: responsible + assistant teachers on the instance.
+        const teacherIds = [instance.responsibleTeacher, instance.assistantTeacher].filter(Boolean);
+        if (teacherIds.length > 0) {
+            const staffTeachers = await Teacher.find({ _id: { $in: teacherIds } })
+                .select("userId subject")
+                .lean();
+            const staffUserIds = staffTeachers
+                .map((t) => t.userId)
+                .filter(Boolean);
+            const usersByUser = new Map(
+                (
+                    await User.find({ _id: { $in: staffUserIds } })
+                        .select("name email lastLoginAt")
+                        .lean()
+                ).map((u) => [u._id.toString(), u])
+            );
+
+            for (const teacher of staffTeachers) {
+                const user = usersByUser.get(String(teacher.userId)) || {};
+                participants.push({
+                    participantId: teacher._id,
+                    userId: teacher.userId || null,
+                    name: user.name || "Lärare",
+                    email: user.email || null,
+                    role: "staff",
+                    staffRole: teacher.subject ? `Lärare (${teacher.subject})` : "Lärare",
+                    status: user.active === false ? "inactive" : "active",
+                    lastActivity: user.lastLoginAt ? { type: "login", at: user.lastLoginAt } : null,
+                });
+            }
+        }
 
         res.json({
             success: true,

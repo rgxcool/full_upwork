@@ -9,7 +9,22 @@ const certificateSettingsSchema = new mongoose.Schema(
         signatureFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
         signerName: { type: String, default: "" },
         signerTitle: { type: String, default: "Rektor" },
+        signerDepartment: { type: String, default: "" },
+        signerContact: { type: String, default: "" },
         schoolName: { type: String, default: "Mindful Learning" },
+        organizationName: { type: String, default: "" },
+        address: { type: String, default: "" },
+        phone: { type: String, default: "" },
+        email: { type: String, default: "" },
+        website: { type: String, default: "" },
+        organizationNumber: { type: String, default: "" },
+        secondSignerEnabled: { type: Boolean, default: false },
+        secondSignerName: { type: String, default: "" },
+        secondSignerTitle: { type: String, default: "" },
+        secondSignerDepartment: { type: String, default: "" },
+        secondSignerContact: { type: String, default: "" },
+        secondSignatureFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
+        configVersion: { type: Number, default: 1 },
         updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     },
     { timestamps: true }
@@ -87,6 +102,45 @@ const certificateRecordSchema = new mongoose.Schema(
 
         certificateNumber: { type: String, default: "" },
         pdfFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
+
+        // Config versioning (P4): the identity values that were in effect when
+        // this record was generated are snapshotted so the record is traceable
+        // even after admin configuration changes.
+        configVersion: { type: Number, default: 1 },
+        configSnapshot: {
+            type: new mongoose.Schema(
+                {
+                    signerName: { type: String, default: "" },
+                    signerTitle: { type: String, default: "Rektor" },
+                    signerDepartment: { type: String, default: "" },
+                    signerContact: { type: String, default: "" },
+                    schoolName: { type: String, default: "Mindful Learning" },
+                    organizationName: { type: String, default: "" },
+                    organizationNumber: { type: String, default: "" },
+                    address: { type: String, default: "" },
+                    phone: { type: String, default: "" },
+                    email: { type: String, default: "" },
+                    website: { type: String, default: "" },
+                    secondSignerEnabled: { type: Boolean, default: false },
+                    secondSignerName: { type: String, default: "" },
+                    secondSignerTitle: { type: String, default: "" },
+                    secondSignatureFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
+                    logoFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
+                    signatureFileId: { type: mongoose.Schema.Types.ObjectId, default: null },
+                },
+                { _id: false }
+            ),
+            default: () => ({}),
+        },
+
+        deliveredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        deliveredAt: { type: Date, default: null },
+        emailStatus: {
+            type: String,
+            enum: ["not_applicable", "sent", "not_delivered", "no_email"],
+            default: "not_applicable",
+        },
+        deliveryTransportMode: { type: String, default: "" },
 
         approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
         approvedAt: { type: Date, default: null },

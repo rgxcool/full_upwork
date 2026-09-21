@@ -7,6 +7,7 @@ import fs from 'fs';
 import mime from 'mime-types';
 import Document from '../models/Document.js';
 import { authenticateUser } from '../controllers/authController.js';
+import { getUserMunicipalities, hasGlobalScope, municipalityInScope } from '../utils/tenantScope.js';
 import logger from "../utils/logger.js";
 
 const router = express.Router();
@@ -164,6 +165,21 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
         return res.status(403).json({ message: 'Du har inte behörighet att ladda upp dokument för denna elev' });
       }
       
+      // Tenant scoping: students can only upload documents for their own municipality
+      // Staff (admin/coordinator) can upload for any student
+      const isStaff = user.role === 'admin' || user.role === 'systemadmin' || user.role === 'coordinator';
+      if (!isStaff && user.role !== 'student') {
+        // For teachers and other roles, check municipality scope
+        const Student = mongoose.model("Student");
+        const student = await Student.findById(studentId).select("municipality");
+        if (student && student.municipality) {
+          const userMunis = getUserMunicipalities(user);
+          if (userMunis.length > 0 && !userMunis.includes(student.municipality)) {
+            return res.status(403).json({ message: 'Du har inte behörighet att lagra dokument för elev i annan kommun' });
+          }
+        }
+      }
+      
       const doc = await Document.create({
         student: studentId,
         uploadedBy: user.userId,
@@ -217,7 +233,7 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
     
     // Handle validation errors specifically
     if (error.name === 'ValidationError' || error instanceof mongoose.Error.ValidationError || error.message?.includes('must be specified')) {
-      const errorMessages = error.errors ? Object.values(error.errors).map(e => e.message || e).join(', ') : '';
+      const errorMessages = error.errors ? Object.values(error.errors).map(e => e.message || e) : '';
       return res.status(400).json({ 
         message: 'Valideringsfel', 
         ...(errorMessages && { error: errorMessages })
@@ -247,12 +263,34 @@ router.get('/documents/:id', authenticateUser, async (req, res) => {
     const user = req.user;
 
     // Students can only access their own documents; staff can access any
-    if (user.role === 'student' && String(user.userId) !== String(id)) {
-      return res.status(403).json({ message: 'Du har inte behörighet att visa denna elevs dokument' });
+    if (user.role === 'student') {
+      // Students can only access documents uploaded by them (matched by email)
+      // Tenant scoping: students can only see documents from their own municipality
+      const Student = mongoose.model("Student");
+      const student = await Student.findOne({ email: user.email }).select("municipality");
+      if (student) {
+        const userMunis = getUserMunicipalities(user);
+        // Find documents for this student
+        let filter = { student: id };
+        if (type) filter.type = type;
+        if (enrollmentId) filter.enrollmentId = enrollmentId;
+        
+        const docs = await Document.find(filter).sort({ createdAt: -1 });
+        
+        // Filter documents to only those in the user's municipality
+        const accessibleDocs = docs.filter((doc) => {
+          // Admin documents have no municipality restriction
+          if (!doc.municipality) return true;
+          return userMunis.some((m) => m === doc.municipality);
+        });
+        
+        return res.json(accessibleDocs);
+      }
     }
 
+    // Staff (admin, systemadmin, coordinator) can access any documents
     let filter = {};
-
+    
     // Determine if this is for a student or teacher
     if (entityType === 'teacher' || entityType === 'Lärare') {
       filter.teacher = id;
@@ -290,6 +328,18 @@ router.delete('/documents/:id', authenticateUser, async (req, res) => {
     // Check permissions: user can delete their own uploads, admins can delete any
     if (!isAdmin && doc.uploadedBy?.toString() !== user.userId) {
       return res.status(403).json({ message: 'Du har inte behörighet att radera detta dokument' });
+    }
+
+    // Tenant scoping: non-admin users can only delete documents they uploaded
+    // and that are in their municipality scope
+    if (!isAdmin && doc.uploadedBy?.toString() === user.userId) {
+      // Check if the document's municipality is in the user's allowed municipalities
+      if (doc.municipality) {
+        const userMunis = getUserMunicipalities(user);
+        if (userMunis.length > 0 && !userMunis.includes(doc.municipality)) {
+          return res.status(403).json({ message: 'Du har inte behörighet att radera dokument från annan kommun' });
+        }
+      }
     }
 
     await Document.findByIdAndDelete(req.params.id);

@@ -27,6 +27,21 @@ const notificationSchema = new mongoose.Schema({
       }, // Kurspaket (diploma_ready notifications)
       documentId: { type: String }, // Scrive Document ID
       url: { type: String }, // för direktlänk i frontend
+      // Completion notifications (course_completed / diploma_ready)
+      completionDate: { type: Date },
+      completionType: { type: String }, // "course" | "course_package"
+      responsibleTeacher: { type: String },
+      responsibleTeacherEmail: { type: String },
+      studentMunicipality: { type: String },
+      // Inactivity review notifications (inactivity_review)
+      studentName: { type: String },
+      courseIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "CourseInstance" }],
+      courseNames: [{ type: String }],
+      scheduledDates: [{ type: Date }],
+      lastActivityAt: { type: Date },
+      daysInactive: { type: Number },
+      openSubmissions: { type: Number },
+      daysUntilWithdraw: { type: Number },
       // Att göra-påminnelser (task_reminder)
       userId: { type: String }, // Target user for the task reminder
       taskCount: { type: Number, default: 0 },

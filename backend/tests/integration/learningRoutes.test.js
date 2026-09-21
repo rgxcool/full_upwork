@@ -5,18 +5,60 @@ import {
     beforeAll,
     afterAll,
     beforeEach,
+    vi,
 } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import app from "../../index.js";
+import express from "express";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import User from "../../src/models/User.js";
+import learningRoutes from "../../src/router/learningRoutes.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+
+// Standalone router mount: mock the JWT middleware so we never import the full
+// app graph (which currently cannot boot in tests due to messagingRoutes).
+const mockAuthenticateUser = vi.hoisted(() => (req, _res, next) => {
+    const secret = process.env.JWT_SECRET || "test-secret";
+    const fallback = {
+        userId: "test-user",
+        role: "student",
+        roles: ["student"],
+        email: undefined,
+    };
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith("Bearer ")) {
+        req.user = fallback;
+        req.userId = fallback.userId;
+        return next();
+    }
+    try {
+        const decoded = jwt.verify(header.slice(7), secret) || {};
+        const roles = decoded.roles || [decoded.role || "student"];
+        req.user = {
+            userId: decoded.userId || fallback.userId,
+            role: decoded.role || roles[0],
+            roles,
+            email: decoded.email,
+            permissions: [],
+        };
+        req.userId = req.user.userId;
+    } catch {
+        req.user = fallback;
+        req.userId = fallback.userId;
+    }
+    next();
+});
+
+vi.mock("../../src/controllers/authController.js", () => ({
+    authenticateUser: mockAuthenticateUser,
+}));
+
+let app;
 
 const buildAuthHeader = (role = "admin", extra = {}) => {
     const token = jwt.sign(
@@ -41,6 +83,9 @@ describe("Learning Route Permission Tests", () => {
     beforeAll(async () => {
         await connectTestDatabase();
         process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
+        app = express();
+        app.use(express.json());
+        app.use("/api", learningRoutes);
     });
 
     afterAll(async () => {

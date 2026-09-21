@@ -8,10 +8,11 @@ import {
     afterEach,
     vi,
 } from "vitest";
+import express from "express";
 import request from "supertest";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
-import app from "../../index.js";
+import certificateRecordRoutes from "../../src/router/certificateRecordRoutes.js";
 import {
     CertificateSettings,
     CertificateTemplate,
@@ -20,10 +21,39 @@ import {
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import Course from "../../src/models/Course.js";
 import CoursePackage from "../../src/models/CoursePackage.js";
+import Student from "../../src/models/Student.js";
+import User from "../../src/models/User.js";
 import {
     connectTestDatabase,
     disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
+
+// The certificate record router is mounted standalone (no full index.js boot)
+// because the repo's baseline `messagingRoutes.js` references controller
+// exports removed by a refactor and breaks app-wide import (out of scope).
+// authenticateUser short-circuits when req.user is already set, so decoding
+// the Bearer JWT here replicates the real auth pipeline without booting the app.
+const buildApp = () => {
+    const app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+            try {
+                req.user = jwt.verify(
+                    authHeader.split(" ")[1],
+                    process.env.JWT_SECRET || "test-secret"
+                );
+                req.userId = req.user.userId;
+            } catch {
+                // leave req.user unset → authenticateUser returns 401
+            }
+        }
+        next();
+    });
+    app.use("/api", certificateRecordRoutes);
+    return app;
+};
 
 // Avoid launching a real Chrome browser in tests; the HTML→PDF layer is
 // exercised end-to-end separately (see certificatePdf tests / manual).
@@ -78,6 +108,8 @@ const createCompletedEnrollment = async (studentId, { course, coursePackage } = 
 };
 
 describe("Certificate Record Routes", () => {
+    let app;
+
     beforeAll(async () => {
         await connectTestDatabase();
     }, 60000);
@@ -87,6 +119,7 @@ describe("Certificate Record Routes", () => {
     }, 60000);
 
     beforeEach(async () => {
+        app = buildApp();
         await CertificateSettings.deleteMany({});
         await CertificateTemplate.deleteMany({});
         await CertificateRecord.deleteMany({});
@@ -194,6 +227,14 @@ describe("Certificate Record Routes", () => {
             expect(generated.body.certificateNumber).toMatch(/^ML-\d{4}-\d{5}$/);
             expect(generated.body.pdfFileId).toBeTruthy();
             expect(generated.body.generatedBy).toBeDefined();
+            // Config versioning: the identity snapshot used to render the PDF
+            // is stored on the record so later admin changes never rewrite it.
+            expect(generated.body.configVersion).toBe(1);
+            expect(generated.body.configSnapshot).toMatchObject({
+                schoolName: "Mindful",
+                signerName: "Rektor",
+                signerTitle: "Rektor",
+            });
         });
 
         it("blocks editing a generated certificate", async () => {

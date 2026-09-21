@@ -93,8 +93,73 @@
 
               <v-divider class="my-5" />
 
-              <v-card-title class="text-h5 pa-0">Signerare</v-card-title>
+              <v-card-title class="text-h5 pa-0">Skolorganisation</v-card-title>
               <v-form ref="settingsForm" @submit.prevent="saveSettings">
+                <v-row class="mt-2">
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.schoolName"
+                      label="Skolans namn"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.organizationName"
+                      label="Organisation / huvudman"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.organizationNumber"
+                      label="Organisationsnummer"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.website"
+                      label="Webbplats"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.address"
+                      label="Adress"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="3">
+                    <v-text-field
+                      v-model="settings.phone"
+                      label="Telefon"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="3">
+                    <v-text-field
+                      v-model="settings.email"
+                      label="E-post"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                </v-row>
+
+                <v-divider class="my-5" />
+
+                <v-card-title class="text-h5 pa-0">Behörig firmatecknare</v-card-title>
+                <p class="text-body-2 text-grey mt-2">
+                  Namn, titel och avdelning som visas på intyg och diplom tillsammans med signaturbilden.
+                </p>
                 <v-row class="mt-2">
                   <v-col cols="12" md="6">
                     <v-text-field
@@ -114,17 +179,109 @@
                   </v-col>
                   <v-col cols="12" md="6">
                     <v-text-field
-                      v-model="settings.schoolName"
-                      label="Skolans namn"
+                      v-model="settings.signerDepartment"
+                      label="Avdelning"
+                      density="compact"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.signerContact"
+                      label="Kontakt (t.ex. e-post)"
                       density="compact"
                       variant="outlined"
                     />
                   </v-col>
                 </v-row>
-                <div class="d-flex ga-2 mt-2">
+
+                <v-divider class="my-5" />
+
+                <v-card-title class="text-h5 pa-0">Andra undertecknare</v-card-title>
+                <p class="text-body-2 text-grey mt-2">
+                  Valfri medundertecknare. Aktivera för att visa ytterligare en underskrift på intyg och diplom.
+                </p>
+                <v-row class="mt-2">
+                  <v-col cols="12" md="4">
+                    <v-switch v-model="settings.secondSignerEnabled" label="Visa andra undertecknare" color="primary" hide-details />
+                  </v-col>
+                  <v-col cols="12" md="8">
+                    <v-file-input
+                      v-model="secondSignatureFile"
+                      accept=".png,image/png"
+                      label="Signaturbild 2 (PNG, transparent)"
+                      prepend-icon="mdi-pen"
+                      show-size
+                      :loading="uploading === 'second-signature'"
+                      :error-messages="uploadError"
+                      :disabled="!settings.secondSignerEnabled"
+                      @update:model-value="onSecondSignaturePicked"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.secondSignerName"
+                      label="Namn på underskrift 2"
+                      density="compact"
+                      variant="outlined"
+                      :disabled="!settings.secondSignerEnabled"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.secondSignerTitle"
+                      label="Titel (t.ex. Studiecoach)"
+                      density="compact"
+                      variant="outlined"
+                      :disabled="!settings.secondSignerEnabled"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.secondSignerDepartment"
+                      label="Avdelning"
+                      density="compact"
+                      variant="outlined"
+                      :disabled="!settings.secondSignerEnabled"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="settings.secondSignerContact"
+                      label="Kontakt"
+                      density="compact"
+                      variant="outlined"
+                      :disabled="!settings.secondSignerEnabled"
+                    />
+                  </v-col>
+                </v-row>
+
+                <div v-if="settings.secondSignatureUrl" class="mt-1 ms-1">
+                  <p class="text-caption mb-1">Nuvarande signatur 2:</p>
+                  <div class="preview-checkerboard">
+                    <img :src="settings.secondSignatureUrl" alt="Signatur 2" class="preview-signature" />
+                  </div>
+                  <v-btn
+                    size="small"
+                    variant="text"
+                    color="error"
+                    class="mt-2"
+                    :loading="deleting === 'second-signature'"
+                    @click="removeSecondSignature"
+                  >
+                    Ta bort signatur 2
+                  </v-btn>
+                </div>
+
+                <v-divider class="my-5" />
+
+                <div class="d-flex ga-2 align-center mt-2">
                   <v-btn color="primary" :loading="savingSettings" @click="saveSettings">
                     Spara
                   </v-btn>
+                  <p v-if="settings.configVersion" class="text-caption text-grey mb-0">
+                    Konfigurationsversion: v{{ settings.configVersion }}
+                  </p>
                 </div>
               </v-form>
             </v-card>
@@ -626,12 +783,28 @@ const bootError = ref(null)
 const settings = reactive({
   signerName: '',
   signerTitle: 'Rektor',
+  signerDepartment: '',
+  signerContact: '',
   schoolName: 'Mindful Learning',
+  organizationName: '',
+  organizationNumber: '',
+  address: '',
+  phone: '',
+  email: '',
+  website: '',
+  secondSignerEnabled: false,
+  secondSignerName: '',
+  secondSignerTitle: '',
+  secondSignerDepartment: '',
+  secondSignerContact: '',
   logoUrl: null,
   signatureUrl: null,
+  secondSignatureUrl: null,
+  configVersion: 1,
 })
 
 const signatureFile = ref(null)
+const secondSignatureFile = ref(null)
 const logoFile = ref(null)
 const uploading = ref(null)
 const deleting = ref(null)
@@ -896,9 +1069,24 @@ const loadAll = async () => {
     Object.assign(settings, {
       signerName: settingsRes.data.signerName || '',
       signerTitle: settingsRes.data.signerTitle || 'Rektor',
+      signerDepartment: settingsRes.data.signerDepartment || '',
+      signerContact: settingsRes.data.signerContact || '',
       schoolName: settingsRes.data.schoolName || 'Mindful Learning',
+      organizationName: settingsRes.data.organizationName || '',
+      organizationNumber: settingsRes.data.organizationNumber || '',
+      address: settingsRes.data.address || '',
+      phone: settingsRes.data.phone || '',
+      email: settingsRes.data.email || '',
+      website: settingsRes.data.website || '',
+      secondSignerEnabled: settingsRes.data.secondSignerEnabled === true,
+      secondSignerName: settingsRes.data.secondSignerName || '',
+      secondSignerTitle: settingsRes.data.secondSignerTitle || '',
+      secondSignerDepartment: settingsRes.data.secondSignerDepartment || '',
+      secondSignerContact: settingsRes.data.secondSignerContact || '',
       logoUrl: settingsRes.data.logoUrl || null,
       signatureUrl: settingsRes.data.signatureUrl || null,
+      secondSignatureUrl: settingsRes.data.secondSignatureUrl || null,
+      configVersion: settingsRes.data.configVersion || 1,
     })
     templates.value = templatesRes.data
     if (!templates.value.find((t) => t.key === selectedKey.value) && templates.value.length) {
@@ -918,9 +1106,24 @@ const loadSettings = async () => {
     Object.assign(settings, {
       signerName: data.signerName || '',
       signerTitle: data.signerTitle || 'Rektor',
+      signerDepartment: data.signerDepartment || '',
+      signerContact: data.signerContact || '',
       schoolName: data.schoolName || 'Mindful Learning',
+      organizationName: data.organizationName || '',
+      organizationNumber: data.organizationNumber || '',
+      address: data.address || '',
+      phone: data.phone || '',
+      email: data.email || '',
+      website: data.website || '',
+      secondSignerEnabled: data.secondSignerEnabled === true,
+      secondSignerName: data.secondSignerName || '',
+      secondSignerTitle: data.secondSignerTitle || '',
+      secondSignerDepartment: data.secondSignerDepartment || '',
+      secondSignerContact: data.secondSignerContact || '',
       logoUrl: data.logoUrl || null,
       signatureUrl: data.signatureUrl || null,
+      secondSignatureUrl: data.secondSignatureUrl || null,
+      configVersion: data.configVersion || 1,
     })
   } catch (err) {
     toast.error(normalizeError(err).message)
@@ -942,12 +1145,39 @@ const saveSettings = async () => {
     const { data } = await certificatesApi.updateSettings({
       signerName: settings.signerName,
       signerTitle: settings.signerTitle,
+      signerDepartment: settings.signerDepartment,
+      signerContact: settings.signerContact,
       schoolName: settings.schoolName,
+      organizationName: settings.organizationName,
+      organizationNumber: settings.organizationNumber,
+      address: settings.address,
+      phone: settings.phone,
+      email: settings.email,
+      website: settings.website,
+      secondSignerEnabled: settings.secondSignerEnabled,
+      secondSignerName: settings.secondSignerName,
+      secondSignerTitle: settings.secondSignerTitle,
+      secondSignerDepartment: settings.secondSignerDepartment,
+      secondSignerContact: settings.secondSignerContact,
     })
     Object.assign(settings, {
       signerName: data.signerName || '',
       signerTitle: data.signerTitle || 'Rektor',
+      signerDepartment: data.signerDepartment || '',
+      signerContact: data.signerContact || '',
       schoolName: data.schoolName || 'Mindful Learning',
+      organizationName: data.organizationName || '',
+      organizationNumber: data.organizationNumber || '',
+      address: data.address || '',
+      phone: data.phone || '',
+      email: data.email || '',
+      website: data.website || '',
+      secondSignerEnabled: data.secondSignerEnabled === true,
+      secondSignerName: data.secondSignerName || '',
+      secondSignerTitle: data.secondSignerTitle || '',
+      secondSignerDepartment: data.secondSignerDepartment || '',
+      secondSignerContact: data.secondSignerContact || '',
+      configVersion: data.configVersion || 1,
     })
     toast.success('Inställningar sparade.')
   } catch (err) {
@@ -1013,6 +1243,43 @@ const removeSignature = async () => {
   }
 }
 
+const onSecondSignaturePicked = async (file) => {
+  uploadError.value = ''
+  if (!file) return
+  if (file.type !== 'image/png') {
+    uploadError.value = 'Signatur måste vara en PNG-fil.'
+    secondSignatureFile.value = null
+    return
+  }
+  uploading.value = 'second-signature'
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const { data } = await certificatesApi.uploadSecondSignature(fd)
+    settings.secondSignatureUrl = data.secondSignatureUrl
+    toast.success('Signatur 2 uppladdad.')
+  } catch (err) {
+    uploadError.value = normalizeError(err).message
+    toast.error(uploadError.value)
+  } finally {
+    uploading.value = null
+    secondSignatureFile.value = null
+  }
+}
+
+const removeSecondSignature = async () => {
+  deleting.value = 'second-signature'
+  try {
+    const { data } = await certificatesApi.deleteSecondSignature()
+    settings.secondSignatureUrl = data.secondSignatureUrl || null
+    toast.success('Signatur 2 borttagen.')
+  } catch (err) {
+    toast.error(normalizeError(err).message)
+  } finally {
+    deleting.value = null
+  }
+}
+
 const removeLogo = async () => {
   deleting.value = 'logo'
   try {
@@ -1057,10 +1324,15 @@ const buildPreviewData = () => {
   return {
     ...preview,
     schoolName,
+    organizationName: settings.organizationName || '',
     signerName,
     signerTitle,
+    secondSignerEnabled: settings.secondSignerEnabled === true,
+    secondSignerName: settings.secondSignerName || '',
+    secondSignerTitle: settings.secondSignerTitle || '',
     logoUrl: settings.logoUrl || '',
     signatureUrl: settings.signatureUrl || '',
+    secondSignatureUrl: settings.secondSignatureUrl || '',
   }
 }
 
@@ -1070,6 +1342,7 @@ const previewDoc = computed(() => {
   const html = renderTemplate(currentTemplate.value.html, data, {
     showGrade: preview.showGrade,
     showApl: preview.showApl,
+    secondSignerEnabled: settings.secondSignerEnabled === true,
   })
   return html
 })
@@ -1097,7 +1370,7 @@ const refreshPreviewFrame = async () => {
 }
 
 watch(
-  () => [selectedKey.value, settings.logoUrl, settings.signatureUrl],
+  () => [selectedKey.value, settings.logoUrl, settings.signatureUrl, settings.secondSignatureUrl, settings.secondSignerEnabled],
   () => {
     if (tab.value === 'preview') refreshPreviewFrame()
   }

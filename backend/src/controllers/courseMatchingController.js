@@ -14,6 +14,7 @@ import { cloneModules } from "../models/courseModuleSchema.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import * as enrollmentService from "../services/enrollmentService.js";
+import { recordStudentLearningActivity } from "../utils/learningActivity.js";
 import { recordAudit } from "../utils/auditLog.js";
 
 /**
@@ -1490,6 +1491,9 @@ export const getMyCourseCards = async (req, res) => {
         const cards = await enrollmentService.buildCourseCards(student._id, {
             applyStudentVisibility: true,
         });
+        // Course-card access is meaningful learning activity for the inactive-
+        // student automation (fellowship login-only detection).
+        await recordStudentLearningActivity(student._id).catch(() => {});
         res.json({ success: true, student: { _id: student._id, name: student.name }, cards });
     } catch (error) {
         logger.error({ err: error }, "Error fetching my course cards");

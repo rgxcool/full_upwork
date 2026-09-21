@@ -37,6 +37,7 @@ import courseBankRoutes from "./courseBankRoutes.js";
 import questionBankRoutes from "./questionBankRoutes.js";
 import certificateRoutes from "./certificateRoutes.js";
 import certificateRecordRoutes from "./certificateRecordRoutes.js";
+import completionRoutes from "./completionRoutes.js";
 
 const router = Router();
 
@@ -77,6 +78,7 @@ router.use("/api/question-bank", questionBankRoutes);
  router.use("/api", studyCertificateRoutes);
  router.use("/api", certificateRoutes);
  router.use("/api", certificateRecordRoutes);
+router.use("/api", completionRoutes);
 router.use("/api/auditlogs", auditRoutes);
 router.use("/api", placementRoutes);
 router.use("/api", aplRoutes);

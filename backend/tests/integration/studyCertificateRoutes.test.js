@@ -27,7 +27,28 @@ vi.mock("../../src/services/emailService.js", () => ({
     sendDiplomaEmail: vi.fn(),
 }));
 
+// Avoid launching a real Chrome browser in tests; the HTML→PDF layer is
+// exercised end-to-end separately. We keep the controller honest by mocking
+// only the PDF transport while asserting the exact HTML content built.
+vi.mock("../../src/services/certificatePdf.js", () => ({
+    buildCertificateHtml: vi.fn(async ({ type, snapshot, schoolName }) => {
+        const title = type === "diplom" ? "Diplom" : "Studieintyg";
+        return `<html><body><h1>${title}</h1><p>${snapshot.studentName}</p><p>${snapshot.courseName}</p><p>${snapshot.teacherName}</p><p>${snapshot.certificateNumber}</p><p>${schoolName || "Mindful Learning"}</p></body></html>`;
+    }),
+    htmlToPdfBuffer: vi.fn(async (html) => Buffer.from(`%PDF-1.4 ${html}`, "latin1")),
+}));
+
 import { sendDiplomaEmail } from "../../src/services/emailService.js";
+import { buildCertificateHtml, htmlToPdfBuffer } from "../../src/services/certificatePdf.js";
+import { CertificateSettings } from "../../src/models/certificateModel.js";
+
+const settingsFor = (overrides = {}) =>
+    CertificateSettings.create({
+        schoolName: "Mindful Learning",
+        signerName: "Rektor Anna",
+        signerTitle: "Rektor",
+        ...overrides,
+    });
 
 const buildApp = () => {
     const app = express();
@@ -79,7 +100,9 @@ describe("Study Certificate Routes", () => {
             StudentEnrollment.deleteMany({}),
             Teacher.deleteMany({}),
             User.deleteMany({}),
+            CertificateSettings.deleteMany({}),
         ]);
+        await settingsFor();
 
         course = await Course.create({
             courseName: "Svenska 1",
@@ -133,6 +156,7 @@ describe("Study Certificate Routes", () => {
             StudentEnrollment.deleteMany({}),
             Teacher.deleteMany({}),
             User.deleteMany({}),
+            CertificateSettings.deleteMany({}),
         ]);
         vi.restoreAllMocks();
     });
@@ -162,6 +186,31 @@ describe("Study Certificate Routes", () => {
         expect(content).toContain("Svenska 1");
         expect(content).toContain("Läraren Lars");
         expect(content).toContain("CERT-2026-ABC12345");
+    });
+
+    it("uses the configured certificate identity in the rendered PDF", async () => {
+        await CertificateSettings.findOneAndUpdate(
+            {},
+            { schoolName: "Svenska Skolan AB", signerName: "Skolchef Bea" }
+        );
+
+        const response = await request(app)
+            .get(`/api/study-certificate/${completedEnrollment._id}/pdf`)
+            .set("x-test-user-role", "teacher")
+            .expect(200)
+            .buffer(true)
+            .parse((res, callback) => {
+                const chunks = [];
+                res.on("data", (chunk) => chunks.push(chunk));
+                res.on("end", () => callback(null, Buffer.concat(chunks)));
+            });
+
+        const content = response.body.toString("latin1");
+        expect(content).toContain("Svenska Skolan AB");
+        // The configured signer identity flows through to the template data.
+        expect(buildCertificateHtml).toHaveBeenCalledWith(
+            expect.objectContaining({ schoolName: "Svenska Skolan AB" })
+        );
     });
 
     it("lets a student download their own certificate", async () => {

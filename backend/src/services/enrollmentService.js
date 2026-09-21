@@ -155,6 +155,10 @@ export const buildCourseCards = async (studentId, { applyStudentVisibility = fal
                 weeks: Number.isFinite(weeks) ? Math.max(0, weeks) : 0,
                 studyPeriod: index + 1,
                 status: enrollment.status,
+                scheduledDates:
+                    instance?.sectionDates
+                        ?.filter(Boolean)
+                        .map((d) => d.toISOString().split("T")[0]) || [],
                 isCurrentlyActive:
                     enrollment.status === "active" &&
                     new Date(startDate) <= new Date() &&

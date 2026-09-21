@@ -7,6 +7,7 @@ import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import Conversation from "../models/Conversation.js";
 import Notification from "../models/Notification.js";
 import NOTIFICATION_TYPES from "./notificationTypes.js";
+import { municipalityInScope } from "../utils/tenantScope.js";
 import {
     ACTIVE_ENROLLMENT_STATUSES,
     INACTIVITY_WITHDRAW_DAYS,
@@ -108,7 +109,7 @@ export const getInactivityReport = async (req, res) => {
 
     const [students, courseInstances, submissions, teachers] = await Promise.all([
         Student.find({ _id: { $in: studentIds } })
-            .select("name personalNumber email municipality changeHistory")
+            .select("name personalNumber email municipality changeHistory lastLearningActivityAt")
             .lean(),
         CourseInstance.find({ _id: { $in: courseInstanceIds } })
             .select("courseName")
@@ -206,6 +207,7 @@ export const getInactivityReport = async (req, res) => {
             lastLoginAt: user?.lastLoginAt || null,
             enrollments: studentEnrollments,
             lastSubmissionAt: activity?.lastAt ? new Date(activity.lastAt) : null,
+            lastLearningActivityAt: student.lastLearningActivityAt || null,
             openSubmissions: activity?.open || 0,
             today,
         });
@@ -227,9 +229,13 @@ export const getInactivityReport = async (req, res) => {
             responsibleTeacherUserId: responsible?.teacherUserId || null,
             conversationId: threadByStudent.get(studentId)?.conversationId || null,
             lastLoginAt: user?.lastLoginAt || null,
+            lastLearningActivityAt: student.lastLearningActivityAt || null,
+lastLearningActivityAt: student.lastLearningActivityAt || null,
             daysSinceLastLogin: signal.daysSinceLastLogin,
             daysSinceLastSubmission: signal.daysSinceLastSubmission,
+            daysSinceLastLearningActivity: signal.daysSinceLastLearningActivity,
             daysSinceWindowStart: signal.daysSinceWindowStart,
+            activityBasis: signal.activityBasis,
             openSubmissions: signal.openSubmissions,
             mustWithdraw: signal.mustWithdraw,
             inactiveForWarning: signal.inactiveForWarning,
@@ -256,8 +262,14 @@ export const getInactivityReport = async (req, res) => {
         });
     }
 
+    // Tenant (kommun) isolation: a municipality-scoped staff user must only see
+    // students belonging to their own municipality. Global users see everyone.
+    const scopedRows = rows.filter(
+        (row) => municipalityInScope(req.user, row.municipality)
+    );
+
     const rank = { withdraw: 0, warning: 1, ok: 2 };
-    rows.sort(
+    scopedRows.sort(
         (a, b) => rank[a.level] - rank[b.level] || b.daysSinceLastLogin - a.daysSinceLastLogin
     );
 
@@ -268,12 +280,12 @@ export const getInactivityReport = async (req, res) => {
             warningDays: INACTIVITY_WARNING_DAYS,
         },
         summary: {
-            evaluated: rows.length,
-            mustWithdraw: rows.filter((r) => r.mustWithdraw).length,
-            inactiveForWarning: rows.filter((r) => r.inactiveForWarning).length,
-            ok: rows.filter((r) => r.level === "ok").length,
+            evaluated: scopedRows.length,
+            mustWithdraw: scopedRows.filter((r) => r.mustWithdraw).length,
+            inactiveForWarning: scopedRows.filter((r) => r.inactiveForWarning).length,
+            ok: scopedRows.filter((r) => r.level === "ok").length,
         },
-        students: rows,
+        students: scopedRows,
     });
 };
 
@@ -393,6 +405,15 @@ export const performInactivityWarning = async ({ studentId, actor }) => {
  */
 export const sendInactivityWarning = async (req, res) => {
     const { studentId } = req.params;
+
+    const scopeCheck = await Student.findById(studentId).select("municipality").lean();
+    if (!scopeCheck) {
+        return res.status(404).json({ error: "Student not found" });
+    }
+    if (!municipalityInScope(req.user, municipalityLabel(scopeCheck.municipality))) {
+        return res.status(403).json({ error: "Forbidden: student outside your municipality scope" });
+    }
+
     const result = await performInactivityWarning({
         studentId,
         actor: { userId: req.user.userId, role: req.user.role },
@@ -433,12 +454,26 @@ export const performInactivityNotificationAction = async (req, res) => {
     if (!notification) {
         return res.status(404).json({ error: "Notification not found" });
     }
-    if (notification.type !== NOTIFICATION_TYPES.INACTIVITY_ACTION) {
+    const inactivityTypes = [
+        NOTIFICATION_TYPES.INACTIVITY_ACTION,
+        NOTIFICATION_TYPES.INACTIVITY_REVIEW,
+    ];
+    if (!inactivityTypes.includes(notification.type)) {
         return res.status(400).json({ error: "Not an inactivity notification" });
     }
     const studentId = notification.meta?.studentId;
     if (!studentId) {
         return res.status(400).json({ error: "Notification has no linked student" });
+    }
+
+    // Tenant isolation: a municipality-scoped admin may only act on students
+    // within their own municipality.
+    const scopeCheck = await Student.findById(studentId).select("municipality").lean();
+    if (!scopeCheck) {
+        return res.status(404).json({ error: "Student not found" });
+    }
+    if (!municipalityInScope(req.user, municipalityLabel(scopeCheck.municipality))) {
+        return res.status(403).json({ error: "Forbidden: student outside your municipality scope" });
     }
 
     let result;
