@@ -46,4 +46,13 @@ const notificationSchema = new mongoose.Schema({
 notificationSchema.index({ createdAt: -1, _id: -1 });
 notificationSchema.index({ resolvedByUsers: 1, createdAt: -1 });
 
+// Per-role query patterns in GET /notifications (teacher filter, student
+// meta.studentUserId filter, admin dropout scoping) plus the action-plan
+// resolve/dedup lookups (type + studentId + courseId).
+notificationSchema.index({ teacher: 1, resolvedByUsers: 1, createdAt: -1 });
+notificationSchema.index({ "meta.studentUserId": 1, resolvedByUsers: 1, createdAt: -1 });
+notificationSchema.index({ createdByAdmin: 1, type: 1, createdAt: -1 });
+notificationSchema.index({ type: 1, studentId: 1, courseId: 1 });
+notificationSchema.index({ type: 1, "meta.studentId": 1, "meta.courseId": 1 });
+
 export default mongoose.model("Notification", notificationSchema, "notifications");
