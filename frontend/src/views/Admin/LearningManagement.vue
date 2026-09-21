@@ -214,7 +214,39 @@ const loadParticipants = async () => {
   partError.value = null
   try {
     const { data } = await client.get(`/learning/instances/${selectedInstanceId.value}/participants`)
-    participants.value = Array.isArray(data) ? data : data.participants || []
+    let list = Array.isArray(data) ? data : data.participants || []
+
+    // Enrich with per-student "last active on course" (backend data exists on
+    // /learning/instances/:instanceId/access-last/:studentId).
+    const ids = list
+      .map((p) => p.participantId || p.studentId || p._id)
+      .filter(Boolean)
+    if (ids.length > 0) {
+      const stamps = await Promise.all(
+        ids.map(async (sid) => {
+          try {
+            const { data: d } = await client.get(
+              `/learning/instances/${selectedInstanceId.value}/access-last/${sid}`
+            )
+            const last = d.lastSubmission || d.lastLogin
+            return { sid: String(sid), last }
+          } catch {
+            return { sid: String(sid), last: null }
+          }
+        })
+      )
+      const byId = {}
+      stamps.forEach((s) => { byId[s.sid] = s.last })
+      list = list.map((p) => {
+        const sid = String(p.participantId || p.studentId || p._id)
+        return {
+          ...p,
+          lastActiveOnCourse: byId[sid] || p.lastActiveOnCourse || p.lastActiveAt || p.courseLastActiveAt,
+        }
+      })
+    }
+
+    participants.value = list
   } catch (err) {
     partError.value = 'Kunde inte hämta deltagare.'
     toast.error(partError.value)

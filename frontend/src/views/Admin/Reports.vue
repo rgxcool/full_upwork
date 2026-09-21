@@ -238,15 +238,31 @@ export default {
           totalModules.value = data.totalModules || 0
           completedModules.value = data.completedModules || 0
           completionRate.value = parseFloat(data.completionRate) || 0
-          tableData.value = Object.entries(data.completedComponents || {}).map(
-            ([moduleNumber, value]) => ({
-              moduleNumber,
-              status: typeof value === 'object' ? (value.completed ? '✓' : '✗') : value,
-              moduleName: typeof value === 'object' ? value.moduleName : undefined,
-              scheduledDate: typeof value === 'object' ? value.scheduledDate : undefined,
-              submittedAt: typeof value === 'object' ? value.submittedAt : undefined,
-            })
-          )
+          const completed = data.completedComponents || {}
+          const schedMap = {}
+          ;(data.scheduledDates || []).forEach((sd) => {
+            schedMap[sd.moduleIndex] = sd.date
+          })
+          const modules = data.modules || []
+          if (modules.length > 0) {
+            tableData.value = modules.map((m, idx) => ({
+              moduleNumber: m.moduleNumber,
+              moduleName: m.title,
+              status: m.completed ? '✓' : '✗',
+              scheduledDate: schedMap[idx] || null,
+              submittedAt: m.assignment?.submittedAt || null,
+            }))
+          } else {
+            tableData.value = Object.entries(completed).map(
+              ([moduleNumber, value]) => ({
+                moduleNumber,
+                status: typeof value === 'object' ? (value.completed ? '✓' : '✗') : value,
+                moduleName: typeof value === 'object' ? value.moduleName : undefined,
+                scheduledDate: typeof value === 'object' ? value.scheduledDate : undefined,
+                submittedAt: typeof value === 'object' ? value.submittedAt : undefined,
+              })
+            )
+          }
         }
       } catch (err) {
         reportError.value = err.response?.data?.error || 'Nätverksfel'
@@ -261,17 +277,18 @@ export default {
       const rows = tableData.value.map(item => [
         item.moduleNumber,
         item.status === '✓' ? 'Klart' : item.status === '✗' ? 'Ej klart' : 'Ej valt',
-        item.updatedAt ? formatDate(item.updatedAt) : 'Ej uppfört',
+        item.scheduledDate ? formatDate(item.scheduledDate) : 'Ej planerat',
+        item.submittedAt ? formatDate(item.submittedAt) : 'Ej uppfört',
       ])
       exportToCSV(
         `rapport-${studentName}.csv`,
-        ['Modul', 'Status', 'Senast uppdaterad'],
+        ['Modul', 'Status', 'Planerat datum', 'Inlämnat'],
         rows,
       )
       exportToPDF(
         `rapport-${studentName}.pdf`,
         `Kompletionsrapport – ${studentName}`,
-        ['Modul', 'Status', 'Senast uppdaterad'],
+        ['Modul', 'Status', 'Planerat datum', 'Inlämnat'],
         rows,
       )
     }

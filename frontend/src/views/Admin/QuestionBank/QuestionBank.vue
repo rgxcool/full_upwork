@@ -269,7 +269,7 @@
       <div class="modal-card">
         <v-card>
           <v-card-title>
-            <span class="headline">Skapa ny fråga</span>
+            <span class="headline">{{ modalTitle }}</span>
             <v-btn
               class="ma-2"
               text
@@ -297,6 +297,16 @@
                     dense
                   />
                 </v-col>
+                <v-col cols="12">
+                  <v-select
+                    v-model="newQuestion.course"
+                    :items="availableCourses"
+                    item-title="courseName"
+                    item-value="_id"
+                    label="Kurs *"
+                    dense
+                  />
+                </v-col>
                 <v-col cols="6">
                   <v-select
                     v-model="newQuestion.subject"
@@ -309,6 +319,8 @@
                   <v-select
                     v-model="newQuestion.questionType"
                     :items="availableTypes"
+                    item-title="label"
+                    item-value="value"
                     label="Frågetyp"
                     dense
                   />
@@ -393,6 +405,7 @@ export default {
     });
     const newQuestion = ref({
       questionText: "",
+      course: "",
       subject: "Övrig",
       questionType: "multipleChoice",
       options: "",
@@ -400,6 +413,10 @@ export default {
       moduleNumber: 3,
       difficulty: "medium",
     });
+
+    const modalTitle = computed(() =>
+      newQuestion.value._id ? "Redigera fråga" : "Skapa ny fråga"
+    );
 
     // Computed
     const availableSubjects = ref([
@@ -457,10 +474,18 @@ export default {
       return colors[level] || "gray";
     };
 
+    const formatDate = (value) => {
+      if (!value) return "—";
+      const date = new Date(value);
+      if (isNaN(date.getTime())) return "—";
+      return date.toLocaleDateString("sv-SE");
+    };
+
     const filteredQuestions = computed(() => {
       return questions.value.filter((question) => {
         const matchesCourse =
-          !filterCourse.value || question.course === filterCourse.value;
+          !filterCourse.value ||
+          (question.course?._id || question.course) === filterCourse.value;
         const matchesSubject =
           !filterSubject.value || question.subject === filterSubject.value;
         const matchesType = !filterType.value || question.questionType === filterType.value;
@@ -576,8 +601,10 @@ export default {
     };
 
     const getCourseName = (courseId) => {
-      const course = availableCourses.value.find((c) => c._id === courseId);
-      return course ? course.courseName : courseId;
+      const id = courseId?._id || courseId;
+      if (!id) return "";
+      const course = availableCourses.value.find((c) => c._id === id);
+      return course ? course.courseName : id;
     };
 
     const loadAllCoursePdfs = async () => {
@@ -621,6 +648,7 @@ export default {
     const openCreateModal = () => {
       newQuestion.value = {
         questionText: "",
+        course: "",
         subject: "Övrig",
         questionType: "multipleChoice",
         options: "",
@@ -635,6 +663,7 @@ export default {
       // Pre-fill the form for editing
       newQuestion.value = {
         ...question,
+        course: question.course?._id || question.course || "",
         options: question.options ? question.options.join(", ") : "",
       };
       showCreateModal.value = true;
@@ -651,27 +680,57 @@ export default {
     };
 
     const createQuestion = async () => {
-      try {
-        const optionsArray = newQuestion.value.options
-          ? newQuestion.value.options.split(",").map((o) => o.trim())
-          : [];
+      const courseId = newQuestion.value.course
+      if (!courseId) {
+        toast.error("Välj en kurs");
+        return;
+      }
+      if (!newQuestion.value.questionText?.trim()) {
+        toast.error("Frågetext är obligatorisk");
+        return;
+      }
 
-        await client.post("/question-bank", {
+      const optionsArray = newQuestion.value.options
+        ? newQuestion.value.options.split(",").map((o) => o.trim())
+        : [];
+      const isChoiceType =
+        newQuestion.value.questionType === "multipleChoice" ||
+        newQuestion.value.questionType === "trueFalse";
+
+      if (isChoiceType && !newQuestion.value.correctAnswer?.trim()) {
+        toast.error("Rät svar krävs för multiple choice / sant-falskt");
+        return;
+      }
+      if (newQuestion.value.questionType === "multipleChoice" && optionsArray.length === 0) {
+        toast.error("Alternativ krävs för multiple choice");
+        return;
+      }
+
+      try {
+        const payload = {
           questionText: newQuestion.value.questionText,
-          course: "", // Course will be set by admin
           subject: newQuestion.value.subject,
           questionType: newQuestion.value.questionType,
           options: optionsArray.length > 0 ? optionsArray : undefined,
           correctAnswer: newQuestion.value.correctAnswer || undefined,
-          answerGuidelines: "",
+          answerGuidelines: newQuestion.value.answerGuidelines || "",
           moduleNumber: newQuestion.value.moduleNumber,
           difficulty: newQuestion.value.difficulty,
-        });
+        };
+
+        if (newQuestion.value._id) {
+          await client.put(`/question-bank/${newQuestion.value._id}`, payload);
+          toast.success("Fråga uppdaterad");
+        } else {
+          await client.post("/question-bank", { ...payload, course: courseId });
+          toast.success("Fråga skapad");
+        }
 
         loadQuestions();
         showCreateModal.value = false;
         newQuestion.value = {
           questionText: "",
+          course: "",
           subject: "Övrig",
           questionType: "multipleChoice",
           options: "",
@@ -679,9 +738,9 @@ export default {
           moduleNumber: 3,
           difficulty: "medium",
         };
-        toast.success("Fråga skapad");
       } catch (error) {
-        toast.error("Kunde inte skapa fråga");
+        const msg = error?.response?.data?.message;
+        toast.error(msg ? `Kunde inte spara frågan: ${msg}` : "Kunde inte spara fråga");
         console.error("Error creating question:", error);
       }
     };
@@ -698,6 +757,7 @@ export default {
       filterActive,
       showCreateModal,
       newQuestion,
+      modalTitle,
       questionPdfFile,
       answerPdfFile,
       pdfUploading,
@@ -712,6 +772,7 @@ export default {
       typeLabel,
       difficultyLabel,
       difficultyColor,
+      formatDate,
       getCourseName,
       loadQuestions,
       applyFilters,
