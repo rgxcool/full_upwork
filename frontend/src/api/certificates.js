@@ -10,6 +10,10 @@ export const certificatesApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   deleteSignature: () => client.delete('/certificates/settings/signature'),
+  uploadSecondSignature: (formData) => client.post('/certificates/settings/second-signature', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  deleteSecondSignature: () => client.delete('/certificates/settings/second-signature'),
   deleteLogo: () => client.delete('/certificates/settings/logo'),
   getTemplates: () => client.get('/certificates/templates'),
   getTemplate: (key) => client.get(`/certificates/templates/${key}`),

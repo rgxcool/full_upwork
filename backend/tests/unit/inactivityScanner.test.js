@@ -82,13 +82,19 @@ describe("inactivityScanner", () => {
         });
     });
 
-    const enrollStudent = async ({ email = "auto@elev.se", lastLoginDaysAgo = 20, startDaysAgo = 30, withEmail = true } = {}) => {
-        const user = await User.create({
-            email,
-            password: "hashed-placeholder",
-            roles: ["student"],
-            lastLoginAt: daysAgo(lastLoginDaysAgo),
-        });
+    const enrollStudent = async ({ email = "auto@elev.se", lastLoginDaysAgo = 20, startDaysAgo = 30, withEmail = true, createLogin = true } = {}) => {
+        let user = null;
+        if (createLogin) {
+            user = await User.create({
+                email,
+                password: "hashed-placeholder",
+                roles: ["student"],
+                lastLoginAt:
+                    lastLoginDaysAgo === null || lastLoginDaysAgo === undefined
+                        ? null
+                        : daysAgo(lastLoginDaysAgo),
+            });
+        }
         const student = await Student.create({
             name: "Auto Elev",
             personalNumber: `19980101-${Math.floor(Math.random() * 9000 + 1000)}`,
@@ -292,5 +298,147 @@ describe("inactivityScanner", () => {
         expect(summary.autoWithdrawn).toBe(0);
         expect(summary.withdrawPending).toBe(0);
         expect((await Student.findById(student._id).lean()).dropout).toBeFalsy();
+    });
+
+    it("creates an admin review notification for a new student with no login (first five days)", async () => {
+        const { student } = await enrollStudent({
+            lastLoginDaysAgo: null,
+            startDaysAgo: 7,
+            createLogin: false,
+        });
+
+        const summary = await runInactivityScan({ today });
+
+        expect(summary.reviewNotifications).toBe(1);
+
+        const notification = await Notification.findOne({
+            type: "inactivity_review",
+            "meta.studentId": student._id,
+        }).lean();
+        expect(notification).toBeTruthy();
+        expect(notification.teacher).toBeUndefined();
+        expect(notification.resolvedByUsers).toEqual([]);
+        expect(notification.message).toContain("Inaktivitetsgranskning krävs");
+        expect(notification.message).toContain("Matematik 1");
+        expect(notification.meta.studentName).toBe("Auto Elev");
+        expect(notification.meta.courseNames).toEqual(["Matematik 1"]);
+        expect(notification.meta.url).toBe("/admin/inactivity");
+        // Sensitivity: the notification must never carry the personnummer.
+        const serialized = JSON.stringify(notification);
+        expect(serialized).not.toContain(student.personalNumber);
+
+        // The student is NOT auto-withdrawn or warned by the scan.
+        expect(summary.autoWithdrawn).toBe(0);
+        expect(summary.autoSend).toBe(true);
+        expect(sendInactivityWarningEmail).not.toHaveBeenCalled();
+        expect((await Student.findById(student._id).lean()).dropout).toBeFalsy();
+    });
+
+    it("did not create a review notification for an active new student", async () => {
+        await enrollStudent({ lastLoginDaysAgo: 2, startDaysAgo: 7, createLogin: true });
+
+        const summary = await runInactivityScan({ today });
+
+        expect(summary.reviewNotifications).toBe(0);
+        expect(await Notification.countDocuments({ type: "inactivity_review" })).toBe(0);
+    });
+
+    it("never creates a duplicate review notification across repeated scans", async () => {
+        const { student } = await enrollStudent({
+            lastLoginDaysAgo: null,
+            startDaysAgo: 7,
+            createLogin: false,
+        });
+
+        const first = await runInactivityScan({ today });
+        expect(first.reviewNotifications).toBe(1);
+
+        const second = await runInactivityScan({ today });
+        expect(second.reviewNotifications).toBe(0);
+        expect(second.alreadyWarned).toBe(0);
+        expect(await Notification.countDocuments({ type: "inactivity_review" })).toBe(1);
+
+        const markers = (
+            await Student.findById(student._id).lean()
+        ).changeHistory.filter((e) => e.changes.includes("inactivity_review_notified"));
+        expect(markers).toHaveLength(1);
+    });
+
+    it("skips the review notification once a warning email has been sent", async () => {
+        const { student } = await enrollStudent({ lastLoginDaysAgo: 20 });
+        await Student.updateOne(
+            { _id: student._id },
+            {
+                $push: {
+                    changeHistory: {
+                        timestamp: today,
+                        changedBy: null,
+                        changedByRole: "system",
+                        changes: ["inactivity_warning_email", "auto"],
+                        newValues: { withdrawalDate: daysAgo(0) },
+                    },
+                },
+            }
+        );
+
+        const summary = await runInactivityScan({ today });
+
+        expect(summary.reviewNotifications).toBe(0);
+        expect(await Notification.countDocuments({ type: "inactivity_review" })).toBe(0);
+    });
+
+    it("stops pending review when the student becomes active", async () => {
+        const { user } = await enrollStudent({
+            lastLoginDaysAgo: null,
+            startDaysAgo: 7,
+            createLogin: false,
+        });
+        // First scan surfaces the review; afterwards the student logs in.
+        await runInactivityScan({ today });
+        await User.create({
+            email: "auto@elev.se",
+            password: "hashed-placeholder",
+            roles: ["student"],
+            lastLoginAt: daysAgo(1),
+        });
+
+        const summary = await runInactivityScan({ today });
+
+        expect(summary.reviewNotifications).toBe(0);
+        expect(await Notification.countDocuments({ type: "inactivity_review" })).toBe(1);
+        expect(summary.withdrawPending).toBe(0);
+        expect(summary.autoWithdrawn).toBe(0);
+    });
+
+    it("records a student-facing notification exactly once across repeated auto-withdrawals", async () => {
+        const { student } = await enrollStudent({ lastLoginDaysAgo: 20 });
+        await Student.updateOne(
+            { _id: student._id },
+            {
+                $push: {
+                    changeHistory: {
+                        timestamp: daysAgo(10),
+                        changedBy: null,
+                        changedByRole: "system",
+                        changes: ["inactivity_warning_email", "auto"],
+                        newValues: { withdrawalDate: daysAgo(5) },
+                    },
+                },
+            }
+        );
+
+        const first = await runInactivityScan({ today });
+        expect(first.autoWithdrawn).toBe(1);
+
+        const second = await runInactivityScan({ today });
+        expect(second.autoWithdrawn).toBe(0);
+
+        const studentNotifications = await Notification.find({ type: "dropout" }).lean();
+        const own = studentNotifications.filter(
+            (n) => n.meta && String(n.meta.studentId) === String(student._id)
+        );
+        expect(own).toHaveLength(1);
+        expect(own[0].meta.studentUserId).toBeTruthy();
+        expect(own[0].meta.url).toBe("/");
     });
 });

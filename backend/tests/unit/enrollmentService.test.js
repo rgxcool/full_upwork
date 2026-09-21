@@ -181,6 +181,13 @@ describe("buildCourseCards", () => {
             endDate: new Date("2026-02-09"),
             responsibleTeacher: { _id: "t1", name: "Mirsada", email: "mirsada@mindful.se" },
             mainCourseId: { _id: "c1", courseName: "Svenska 1", courseCode: "SVEENG01" },
+            sectionDates: [
+                new Date("2026-01-06"),
+                new Date("2026-01-13"),
+                new Date("2026-01-20"),
+                new Date("2026-01-27"),
+                new Date("2026-02-03"),
+            ],
             modules: [],
         };
         const ownEnrollments = [
@@ -214,6 +221,13 @@ describe("buildCourseCards", () => {
         expect(cards[0].weeks).toBe(5);
         expect(cards[0].responsibleTeacher).toBe("Mirsada");
         expect(cards[0].students.map((s) => s.name)).toEqual(["Anna Andersson", "Berta Berg"]);
+        expect(cards[0].scheduledDates).toEqual([
+            "2026-01-06",
+            "2026-01-13",
+            "2026-01-20",
+            "2026-01-27",
+            "2026-02-03",
+        ]);
         expect(StudentEnrollmentMock.find).toHaveBeenNthCalledWith(1, { studentId: STUDENT_1 });
         expect(StudentEnrollmentMock.find).toHaveBeenNthCalledWith(2, {
             courseInstanceId: { $in: [INSTANCE_1] },

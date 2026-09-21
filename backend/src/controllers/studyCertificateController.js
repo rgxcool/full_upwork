@@ -1,8 +1,9 @@
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import { ROLES } from "../config/permissions.js";
-import { buildStudyCertificatePdf } from "../services/studyCertificatePdf.js";
-import { PdfBuilder } from "../services/pdfGenerator.js";
 import { sendDiplomaEmail } from "../services/emailService.js";
+import { buildCertificateHtml, htmlToPdfBuffer } from "../services/certificatePdf.js";
+import { getSettingsSnapshot } from "../services/certificateService.js";
+import { CertificateTemplate } from "../models/certificateModel.js";
 import logger from "../utils/logger.js";
 
 const STAFF_ROLES = [
@@ -18,7 +19,7 @@ const STAFF_ROLES = [
  * Add audit trail entry for certificate/diploma generation.
  * Records who generated the document, when, and what type.
  */
-const addCertificateAuditTrail = async (studentId, enrollmentId, certificateType, user) => {
+const addCertificateAuditTrail = async (studentId, enrollmentId, certificateType, user, configVersion = 1) => {
     try {
         const studentModule = await import("../models/Student.js");
         const Student = studentModule?.default || studentModule;
@@ -36,6 +37,7 @@ const addCertificateAuditTrail = async (studentId, enrollmentId, certificateType
             newValues: {
                 ...(studentDoc.toObject ? studentDoc.toObject() : studentDoc),
                 [`${certificateType}Generated`]: true,
+                certificateConfigVersion: configVersion,
             },
         };
 
@@ -81,17 +83,26 @@ export const getStudyCertificatePdf = async (req, res) => {
             return res.status(403).json({ message: "Ej behörig" });
         }
 
-        const pdf = buildStudyCertificatePdf({
-            studentName: enrollment.studentId?.name || "",
-            personalNumber: enrollment.studentId?.personalNumber || "",
-            courseName: enrollment.mainCourseId?.courseName || "",
-            courseCode: enrollment.mainCourseId?.courseCode || "",
-            periodStart: enrollment.startDate,
-            periodEnd: enrollment.endDate,
-            completedAt: enrollment.completedAt,
-            teacherName: enrollment.teacherId?.userId?.username || "",
-            certificateNumber: enrollment.completionCertificate || "",
+        const settings = await getSettingsSnapshot();
+        const html = await buildCertificateHtml({
+            type: "studieintyg",
+            snapshot: {
+                studentName: enrollment.studentId?.name || "",
+                personalNumber: enrollment.studentId?.personalNumber || "",
+                courseName: enrollment.mainCourseId?.courseName || "",
+                courseCode: enrollment.mainCourseId?.courseCode || "",
+                periodStart: enrollment.startDate,
+                periodEnd: enrollment.endDate,
+                completedAt: enrollment.completedAt,
+                teacherName: enrollment.teacherId?.userId?.username || "",
+                certificateNumber: enrollment.completionCertificate || "",
+            },
+            ...settings,
+            issuedDate: new Date(),
         });
+
+        const template = await CertificateTemplate.findOne({ key: "studieintyg" }).lean();
+        const pdf = await htmlToPdfBuffer(html, { orientation: template?.orientation || "portrait" });
 
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
@@ -106,7 +117,8 @@ export const getStudyCertificatePdf = async (req, res) => {
                 enrollment.studentId._id,
                 enrollment._id,
                 "studieintyg",
-                req.user
+                req.user,
+                settings.configVersion
             );
         } catch (auditError) {
             // Audit trail is non-fatal
@@ -222,18 +234,29 @@ export const generateDiplomaPdf = async (req, res) => {
         }
 
         // Generate diploma PDF
-        const pdf = buildDiplomaPdf({
-            studentName: enrollment.studentId?.name || "",
-            personalNumber: enrollment.studentId?.personalNumber || "",
-            courseName: enrollment.mainCourseId?.courseName || "",
-            courseCode: enrollment.mainCourseId?.courseCode || "",
-            packageName: coursePackage?.coursePackageName || "",
-            packageCode: coursePackage?.coursePackageCode || "",
-            completedAt: enrollment.completedAt,
-            grade: enrollment.grade || "",
-            teacherName: enrollment.teacherId?.userId?.username || "",
-            certificateNumber: enrollment.completionCertificate || "",
+        const settings = await getSettingsSnapshot();
+        const html = await buildCertificateHtml({
+            type: "diplom",
+            snapshot: {
+                studentName: enrollment.studentId?.name || "",
+                personalNumber: enrollment.studentId?.personalNumber || "",
+                courseName: enrollment.mainCourseId?.courseName || "",
+                courseCode: enrollment.mainCourseId?.courseCode || "",
+                packageName: coursePackage?.coursePackageName || "",
+                packageCode: coursePackage?.coursePackageCode || "",
+                periodStart: enrollment.startDate,
+                periodEnd: enrollment.endDate,
+                completedAt: enrollment.completedAt,
+                grade: enrollment.grade || "",
+                teacherName: enrollment.teacherId?.userId?.username || "",
+                certificateNumber: enrollment.completionCertificate || "",
+            },
+            ...settings,
+            issuedDate: new Date(),
         });
+
+        const template = await CertificateTemplate.findOne({ key: "diplom" }).lean();
+        const pdf = await htmlToPdfBuffer(html, { orientation: template?.orientation || "landscape" });
 
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
@@ -275,7 +298,8 @@ export const generateDiplomaPdf = async (req, res) => {
                 enrollment.studentId._id,
                 enrollment._id,
                 `diplom${auditSuffix}`,
-                req.user
+                req.user,
+                settings.configVersion
             );
         } catch (auditError) {
             // Audit trail is non-fatal
@@ -285,72 +309,3 @@ export const generateDiplomaPdf = async (req, res) => {
         res.status(500).json({ message: "Något gick fel", error: error.message });
     }
 };
-
-/**
- * Build diploma PDF using the PdfBuilder.
- * Diploma has a different layout than study certificate.
- */
-function buildDiplomaPdf({
-    studentName,
-    personalNumber,
-    courseName,
-    courseCode,
-    packageName,
-    packageCode,
-    completedAt,
-    grade,
-    teacherName,
-    certificateNumber,
-}) {
-    const builder = new PdfBuilder();
-
-    builder.heading("Diplom");
-    builder.addText("Mindful Learning", { size: 12, bold: true, marginTop: 4 });
-
-    builder.label("Elev");
-    builder.paragraph(studentName || "-");
-
-    if (personalNumber) {
-        builder.label("Personnummer");
-        builder.paragraph(String(personalNumber));
-    }
-
-    builder.label("Utbildning");
-    builder.paragraph(packageName || "-");
-    if (packageCode) {
-        builder.paragraph(`Kod: ${packageCode}`);
-    }
-
-    builder.label("Huvudkurs");
-    builder.paragraph(courseName || "-");
-    if (courseCode) {
-        builder.paragraph(`Kurskod: ${courseCode}`);
-    }
-
-    builder.label("Slutförd");
-    builder.paragraph(completedAt ? new Date(completedAt).toISOString().slice(0, 10) : "-");
-
-    if (grade) {
-        builder.label("Betyg");
-        builder.paragraph(String(grade));
-    }
-
-    if (teacherName) {
-        builder.label("Ansvarig lärare");
-        builder.paragraph(String(teacherName));
-    }
-
-    if (certificateNumber) {
-        builder.label("Intygsnummer");
-        builder.paragraph(String(certificateNumber));
-    }
-
-    builder.addText("", { size: 12, marginTop: 32 });
-    builder.addText("Mindful Learning", { size: 12, bold: true });
-    builder.addText("____________________", { size: 12 });
-    builder.addText("Underskrift rektor", { size: 10 });
-    builder.addText("____________________", { size: 10 });
-    builder.addText("Datum", { size: 10 });
-
-    return builder.generate();
-}

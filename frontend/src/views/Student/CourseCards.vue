@@ -88,6 +88,17 @@
               </div>
             </div>
 
+            <div v-if="card.scheduledDates && card.scheduledDates.length > 0" class="scheduled-dates">
+              <span class="date-label">Inplanerade undervisningstillfällen</span>
+              <span class="scheduled-date-chips">
+                <span
+                  v-for="date in card.scheduledDates"
+                  :key="date"
+                  class="scheduled-date-chip"
+                >{{ date }}</span>
+              </span>
+            </div>
+
               <div v-if="card.progress" class="progress-block">
                 <span class="progress-label">
                   Framsteg: {{ card.progress.completed }}/{{ card.progress.total }}
@@ -567,6 +578,30 @@ onMounted(loadCourseCards)
 .teacher-block {
   margin-left: auto;
   text-align: right;
+}
+
+.scheduled-dates {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.scheduled-date-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.scheduled-date-chip {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
 }
 
 .course-card-modules {

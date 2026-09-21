@@ -127,9 +127,12 @@
                     <td>{{ item.studentName || selectedStudentName }}</td>
                     <td>{{ item.moduleName || item.moduleNumber }}</td>
                     <td>
-                      <span class="status-indicator" :class="item.status === '✓' ? 'is-complete' : 'is-incomplete'">
-                        <v-icon size="18">{{ item.status === '✓' ? 'mdi-check-circle' : 'mdi-close-circle-outline' }}</v-icon>
-                        {{ item.status === '✓' ? 'Klar' : 'Ej klar' }}
+                      <span
+                        class="status-indicator"
+                        :class="item.status === '✓' ? 'is-complete' : item.status === '–' ? 'is-unscheduled' : 'is-incomplete'"
+                      >
+                        <v-icon size="18">{{ item.status === '✓' ? 'mdi-check-circle' : item.status === '–' ? 'mdi-calendar-blank-outline' : 'mdi-close-circle-outline' }}</v-icon>
+                        {{ item.status === '✓' ? 'Klar' : item.status === '–' ? 'Ej schemalagd' : 'Ej klar' }}
                       </span>
                     </td>
                     <td>{{ item.scheduledDate ? formatDate(item.scheduledDate) : '–' }}</td>
@@ -248,15 +251,17 @@ export default {
             tableData.value = modules.map((m, idx) => ({
               moduleNumber: m.moduleNumber,
               moduleName: m.title,
-              status: m.completed ? '✓' : '✗',
-              scheduledDate: schedMap[idx] || null,
-              submittedAt: m.assignment?.submittedAt || null,
+              scheduled: !!m.scheduled,
+              status: m.completed ? '✓' : m.scheduled ? '✗' : '–',
+              scheduledDate: m.scheduled ? (m.scheduleDate || schedMap[idx] || null) : null,
+              submittedAt: m.submissionDate || m.assignment?.submittedAt || null,
             }))
           } else {
             tableData.value = Object.entries(completed).map(
               ([moduleNumber, value]) => ({
                 moduleNumber,
                 status: typeof value === 'object' ? (value.completed ? '✓' : '✗') : value,
+                scheduled: typeof value === 'object' ? !!value.scheduled : true,
                 moduleName: typeof value === 'object' ? value.moduleName : undefined,
                 scheduledDate: typeof value === 'object' ? value.scheduledDate : undefined,
                 submittedAt: typeof value === 'object' ? value.submittedAt : undefined,
@@ -276,7 +281,7 @@ export default {
       const studentName = student?.name || 'okänd'
       const rows = tableData.value.map(item => [
         item.moduleNumber,
-        item.status === '✓' ? 'Klart' : item.status === '✗' ? 'Ej klart' : 'Ej valt',
+        item.status === '✓' ? 'Klart' : item.status === '✗' ? 'Ej klart' : item.status === '–' ? 'Ej schemalagd' : 'Ej valt',
         item.scheduledDate ? formatDate(item.scheduledDate) : 'Ej planerat',
         item.submittedAt ? formatDate(item.submittedAt) : 'Ej uppfört',
       ])
@@ -389,5 +394,25 @@ export default {
 .gradient-blue {
   background: linear-gradient(135deg, #40a0f5, #3085d6);
   color: white;
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.status-indicator.is-complete {
+  color: #15803d;
+}
+
+.status-indicator.is-incomplete {
+  color: #b91c1c;
+}
+
+.status-indicator.is-unscheduled {
+  color: #6b7280;
 }
 </style>

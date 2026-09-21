@@ -187,6 +187,36 @@ export const deleteCourseTemplate = async (req, res) => {
     }
 };
 
+// Duplicate a template: creates a new, editable copy that keeps the module
+// structure (including partial exams and case-study flags) so teams can branch
+// a shared base template without mutating the original.
+export const duplicateCourseTemplate = async (req, res) => {
+    try {
+        const { templateId } = req.params;
+
+        const source = await CourseTemplate.findById(templateId).lean();
+        if (!source) {
+            return res.status(404).json({ error: "Course template not found" });
+        }
+
+        const template = await CourseTemplate.create({
+            templateName: `${source.templateName || "Mall"} (kopia)`,
+            courseId: source.courseId || undefined,
+            modules:
+                Array.isArray(source.modules) && source.modules.length > 0
+                    ? cloneModules(source.modules)
+                    : buildDefaultModules(),
+            createdBy: mongoose.isValidObjectId(req.user?.userId) ? req.user.userId : undefined,
+            isActive: true,
+        });
+
+        res.status(201).json({ success: true, template, isDuplicate: true });
+    } catch (error) {
+        logger.error({ err: error }, "Error duplicating course template");
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
 // Duplicate a template's module structure into a target collection (e.g. a course card / instance)
 export const duplicateTemplateIntoCourseInstance = async (templateId) => {
     if (!templateId) return [];

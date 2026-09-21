@@ -64,6 +64,7 @@ import {
     autoTransitionStatuses,
     findEligibleStudents,
     autoCreateRecords,
+    ensureAplLearningKit,
     getAplRecords,
     getAplRecordByStudent,
     updateAplRecordDetails,
@@ -266,7 +267,7 @@ describe("APL Status Transitions", () => {
             AplRecord.find.mockReturnValue({
                 populate: vi.fn().mockResolvedValue([record]),
             });
-            computeAplPeriod.mockReturnValueOnce({
+            computeAplPeriod.mockReturnValue({
                 aplStartDate: null,
                 aplEndDate: new Date(Date.now() + 10 * 86400000),
             });
@@ -300,7 +301,7 @@ describe("APL Status Transitions", () => {
             AplRecord.find.mockReturnValue({
                 populate: vi.fn().mockResolvedValue([record]),
             });
-            computeAplPeriod.mockReturnValueOnce({
+            computeAplPeriod.mockReturnValue({
                 aplStartDate: null,
                 aplEndDate: new Date(Date.now() - 3 * 86400000),
             });
@@ -406,6 +407,78 @@ describe("APL Status Transitions", () => {
             expect(result).toHaveLength(1);
             expect(result[0].status).toBe("GRAY");
             expect(result[0].statusHistory[0].changedBy).toBe("user-1");
+        });
+    });
+
+    describe("ensureAplLearningKit", () => {
+        const baseStudent = () => ({
+            _id: "s1",
+            name: "Anna Andersson",
+            education: [],
+            teacherId: { _id: "teacher-1" },
+            logbook: [],
+            save: vi.fn().mockResolvedValue({}),
+        });
+
+        it("returns null when the student does not exist", async () => {
+            Student.findById.mockResolvedValue(null);
+            const kit = await ensureAplLearningKit("s1");
+            expect(kit).toBeNull();
+        });
+
+        it("creates a personalized APL-lärkit entry once per student", async () => {
+            const student = baseStudent();
+            Student.findById.mockResolvedValue(student);
+            AplRecord.findOne.mockResolvedValue({ _id: "record-1", placementId: "p1" });
+            computeAplPeriod.mockReturnValue({
+                aplStartDate: new Date("2026-03-01"),
+                aplEndDate: new Date("2026-06-30"),
+            });
+
+            const first = await ensureAplLearningKit("s1");
+            expect(first.title).toBe("APL-lärkit");
+            expect(first.status).toBe("active");
+            expect(first.placementId).toBe("p1");
+            expect(first.description).toContain("Anna Andersson");
+            expect(first.description).toContain("2026-03-01");
+            expect(student.logbook).toHaveLength(1);
+            expect(student.save).toHaveBeenCalled();
+
+            // Idempotent: second call does not duplicate the kit.
+            const second = await ensureAplLearningKit("s1");
+            expect(second.title).toBe("APL-lärkit");
+            expect(student.logbook).toHaveLength(1);
+            expect(student.save).toHaveBeenCalledTimes(1);
+        });
+
+        it("does not duplicate when a kit already exists", async () => {
+            const student = baseStudent();
+            student.logbook = [
+                { title: "APL-lärkit", id: "existing-kit", description: "redan" },
+            ];
+            Student.findById.mockResolvedValue(student);
+
+            const kit = await ensureAplLearningKit("s1");
+            expect(kit.title).toBe("APL-lärkit");
+            expect(kit.id).toBe("existing-kit");
+            expect(student.save).not.toHaveBeenCalled();
+        });
+
+        it("is triggered from autoCreateRecords for a newly eligible student", async () => {
+            const student = baseStudent();
+            Student.find.mockReturnValue({
+                populate: vi.fn().mockReturnThis(),
+                lean: vi.fn().mockResolvedValue([
+                    { _id: "s1", education: [{ type: "CoursePackage" }], aplStatus: "GRAY" },
+                ]),
+            });
+            Student.findById.mockResolvedValue(student);
+            AplRecord.findOne.mockResolvedValue(null);
+
+            const result = await autoCreateRecords("user-1");
+            expect(result).toHaveLength(1);
+            expect(student.logbook).toHaveLength(1);
+            expect(student.logbook[0].title).toBe("APL-lärkit");
         });
     });
 

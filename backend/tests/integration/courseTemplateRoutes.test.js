@@ -161,6 +161,75 @@ describe("Course Template Routes", () => {
         });
     });
 
+    describe("POST /api/course-templates/:templateId/duplicate", () => {
+        it("creates a deep copy of the template with a (kopia) suffix", async () => {
+            const template = await CourseTemplate.create({
+                templateName: "Grundmall",
+                courseId: (await createCourse())._id,
+                modules: [
+                    {
+                        moduleNumber: 1,
+                        title: "Modul 1",
+                        isPartialExam: true,
+                        sections: [{ title: "A", description: "d", instructions: "i" }],
+                        assignment: { title: "Uppgift", description: "Skriv" },
+                    },
+                    {
+                        moduleNumber: 2,
+                        title: "Modul 2",
+                        isCaseStudy: true,
+                        sections: [],
+                    },
+                ],
+                createdBy: new mongoose.Types.ObjectId(),
+            });
+
+            const response = await request(app)
+                .post(`/api/course-templates/${template._id}/duplicate`)
+                .set("x-test-role", "teacher")
+                .expect(201);
+
+            expect(response.body.success).toBe(true);
+            expect(response.body.isDuplicate).toBe(true);
+            expect(response.body.template.templateName).toBe("Grundmall (kopia)");
+            expect(response.body.template.modules).toHaveLength(2);
+            expect(response.body.template.modules[0].isPartialExam).toBe(true);
+            expect(response.body.template.modules[1].isCaseStudy).toBe(true);
+            expect(response.body.template.modules[0].sections).toHaveLength(1);
+            expect(String(response.body.template.courseId)).toBe(String(template.courseId));
+            expect(String(response.body.template._id)).not.toBe(String(template._id));
+
+            const original = await CourseTemplate.findById(template._id);
+            expect(original.templateName).toBe("Grundmall");
+        });
+
+        it("clones the default 5-module structure for a default template", async () => {
+            const template = await CourseTemplate.create({
+                templateName: "Default Mall",
+                modules: [],
+                createdBy: new mongoose.Types.ObjectId(),
+            });
+
+            const response = await request(app)
+                .post(`/api/course-templates/${template._id}/duplicate`)
+                .set("x-test-role", "admin")
+                .expect(201);
+
+            expect(response.body.template.modules).toHaveLength(5);
+            expect(response.body.template.modules[2].isPartialExam).toBe(true);
+            expect(response.body.template.modules[4].isCaseStudy).toBe(true);
+        });
+
+        it("returns 404 for a missing template", async () => {
+            const response = await request(app)
+                .post(`/api/course-templates/${new mongoose.Types.ObjectId()}/duplicate`)
+                .set("x-test-role", "teacher")
+                .expect(404);
+
+            expect(response.body.error).toBe("Course template not found");
+        });
+    });
+
     describe("PUT /api/course-templates/:templateId", () => {
         it("updates the template", async () => {
             const template = await CourseTemplate.create({

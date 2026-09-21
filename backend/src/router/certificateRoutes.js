@@ -7,6 +7,7 @@ import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import { CertificateSettings, CertificateTemplate } from "../models/certificateModel.js";
+import { validateImageBuffer } from "../utils/imageDimensions.js";
 
 const router = express.Router();
 
@@ -59,7 +60,26 @@ const getSettings = async () => {
 
 const toMediaUrl = (fileId) => (fileId ? `/api/certificates/media/${fileId}` : null);
 
-const SETTINGS_FIELDS = ["signerName", "signerTitle", "schoolName"];
+// All editable certificate-identity fields exposed through the settings API.
+// Teachers must never be able to change these (roles are enforced above).
+const SETTINGS_FIELDS = [
+    "signerName",
+    "signerTitle",
+    "signerDepartment",
+    "signerContact",
+    "schoolName",
+    "organizationName",
+    "address",
+    "phone",
+    "email",
+    "website",
+    "organizationNumber",
+    "secondSignerEnabled",
+    "secondSignerName",
+    "secondSignerTitle",
+    "secondSignerDepartment",
+    "secondSignerContact",
+];
 
 const DEFAULTS = {
     diplom: {
@@ -171,6 +191,14 @@ const DIPLOM_HTML = `
           <div class="sign-role">{{signerTitle}}</div>
           <div class="sign-name">{{signerName}}</div>
         </div>
+        {{#secondSignerEnabled}}
+        <div class="sign-block">
+          <div class="sign-image-wrap"><img src="{{secondSignatureUrl}}" alt="Underskrift 2" /></div>
+          <div class="sign-line"></div>
+          <div class="sign-role">{{secondSignerTitle}}</div>
+          <div class="sign-name">{{secondSignerName}}</div>
+        </div>
+        {{/secondSignerEnabled}}
         <div class="sign-block">
           <div class="sign-image-wrap"></div>
           <div class="sign-line"></div>
@@ -178,7 +206,7 @@ const DIPLOM_HTML = `
           <div class="sign-name">{{issuedDate}}</div>
         </div>
       </div>
-      <p class="footer-bar"><span>Intygsnummer: {{certificateNumber}}</span><span>{{schoolName}}</span><span>{{issuedDate}}</span></p>
+      <p class="footer-bar"><span>Intygsnummer: {{certificateNumber}}</span><span>{{schoolName}}</span><span>{{organizationName}}</span><span>{{issuedDate}}</span></p>
     </div>
   </article>
 </body>
@@ -253,9 +281,17 @@ const STUDIEINTYG_HTML = `
           <div class="sign-role">{{signerTitle}}</div>
           <div class="sign-name">{{signerName}}</div>
         </div>
+        {{#secondSignerEnabled}}
+        <div class="sign-block">
+          <div class="sign-image-wrap"><img src="{{secondSignatureUrl}}" alt="Underskrift 2" /></div>
+          <div class="sign-line"></div>
+          <div class="sign-role">{{secondSignerTitle}}</div>
+          <div class="sign-name">{{secondSignerName}}</div>
+        </div>
+        {{/secondSignerEnabled}}
         <div class="sign-block"><div class="sign-image-wrap"></div><div class="sign-line"></div><div class="sign-role">Datum</div><div class="sign-name">{{issuedDate}}</div></div>
       </div>
-      <p class="footer-bar"><span>{{footerText}}</span><span>{{issuedDate}}</span></p>
+      <p class="footer-bar"><span>{{footerText}}</span><span>{{schoolName}}</span><span>{{organizationName}}</span><span>{{issuedDate}}</span></p>
     </div>
   </article>
 </body>
@@ -289,6 +325,7 @@ router.get(
             ...s,
             logoUrl: toMediaUrl(s.logoFileId),
             signatureUrl: toMediaUrl(s.signatureFileId),
+            secondSignatureUrl: toMediaUrl(s.secondSignatureFileId),
         });
     })
 );
@@ -298,13 +335,19 @@ router.put(
     authenticateUser,
     hasRole(ALLOWED_ADMIN_ROLES),
     asyncHandler(async (req, res) => {
-        const updates = {};
+        const filtered = {};
         for (const f of SETTINGS_FIELDS) {
-            if (req.body[f] !== undefined) updates[f] = req.body[f];
+            if (req.body[f] !== undefined) filtered[f] = req.body[f];
         }
-        updates.updatedBy = req.user.userId;
-        const s = await CertificateSettings.findOneAndUpdate({}, { $set: updates }, { new: true, upsert: true }).lean();
-        res.json({ ...s, logoUrl: toMediaUrl(s.logoFileId), signatureUrl: toMediaUrl(s.signatureFileId) });
+        const updates = { $set: { updatedBy: req.user.userId, ...filtered } };
+        if (Object.keys(filtered).length > 0) updates.$inc = { configVersion: 1 };
+        const s = await CertificateSettings.findOneAndUpdate({}, updates, { new: true, upsert: true }).lean();
+        res.json({
+            ...s,
+            logoUrl: toMediaUrl(s.logoFileId),
+            signatureUrl: toMediaUrl(s.signatureFileId),
+            secondSignatureUrl: toMediaUrl(s.secondSignatureFileId),
+        });
     })
 );
 
@@ -316,6 +359,8 @@ router.post(
     (req, res, next) => signatureUpload(req, res, (err) => handleMulterError(err, req, res, next)),
     asyncHandler(async (req, res) => {
         if (!req.file) return res.status(400).json({ message: "Ingen fil" });
+        const dimCheck = validateImageBuffer(req.file.buffer, { maxDimension: 2048 });
+        if (!dimCheck.ok) return res.status(400).json({ message: dimCheck.reason });
         const bucket = new GridFSBucket(mongoose.connection.db, { bucketName: "fs" });
         const s = await getSettings();
         // Remove previous file
@@ -332,10 +377,42 @@ router.post(
         });
         const updated = await CertificateSettings.findOneAndUpdate(
             {},
-            { $set: { signatureFileId: upload.id, updatedBy: req.user.userId } },
+            { $set: { signatureFileId: upload.id, updatedBy: req.user.userId }, $inc: { configVersion: 1 } },
             { new: true, upsert: true }
         ).lean();
         res.json({ signatureUrl: toMediaUrl(updated.signatureFileId) });
+    })
+);
+
+// Second signatory signature upload (PNG only)
+router.post(
+    "/certificates/settings/second-signature",
+    authenticateUser,
+    hasRole(ALLOWED_ADMIN_ROLES),
+    (req, res, next) => signatureUpload(req, res, (err) => handleMulterError(err, req, res, next)),
+    asyncHandler(async (req, res) => {
+        if (!req.file) return res.status(400).json({ message: "Ingen fil" });
+        const dimCheck = validateImageBuffer(req.file.buffer, { maxDimension: 2048 });
+        if (!dimCheck.ok) return res.status(400).json({ message: dimCheck.reason });
+        const bucket = new GridFSBucket(mongoose.connection.db, { bucketName: "fs" });
+        const s = await getSettings();
+        if (s.secondSignatureFileId) {
+            try { await bucket.delete(s.secondSignatureFileId); } catch { /* ignore */ }
+        }
+        const stream = Readable.from(req.file.buffer);
+        const upload = bucket.openUploadStream(req.file.originalname, {
+            contentType: "image/png",
+            metadata: { purpose: "certificate-second-signature", uploadedBy: req.user.userId },
+        });
+        await new Promise((resolve, reject) => {
+            stream.pipe(upload).on("error", reject).on("finish", resolve);
+        });
+        const updated = await CertificateSettings.findOneAndUpdate(
+            {},
+            { $set: { secondSignatureFileId: upload.id, updatedBy: req.user.userId }, $inc: { configVersion: 1 } },
+            { new: true, upsert: true }
+        ).lean();
+        res.json({ secondSignatureUrl: toMediaUrl(updated.secondSignatureFileId) });
     })
 );
 
@@ -347,6 +424,8 @@ router.post(
     (req, res, next) => logoUpload(req, res, (err) => handleMulterError(err, req, res, next)),
     asyncHandler(async (req, res) => {
         if (!req.file) return res.status(400).json({ message: "Ingen fil" });
+        const dimCheck = validateImageBuffer(req.file.buffer, { maxDimension: 2048 });
+        if (!dimCheck.ok) return res.status(400).json({ message: dimCheck.reason });
         const bucket = new GridFSBucket(mongoose.connection.db, { bucketName: "fs" });
         const s = await getSettings();
         if (s.logoFileId) {
@@ -362,7 +441,7 @@ router.post(
         });
         const updated = await CertificateSettings.findOneAndUpdate(
             {},
-            { $set: { logoFileId: upload.id, updatedBy: req.user.userId } },
+            { $set: { logoFileId: upload.id, updatedBy: req.user.userId }, $inc: { configVersion: 1 } },
             { new: true, upsert: true }
         ).lean();
         res.json({ logoUrl: toMediaUrl(updated.logoFileId) });
@@ -379,9 +458,31 @@ router.delete(
         const s = await getSettings();
         if (s.signatureFileId) {
             try { await bucket.delete(s.signatureFileId); } catch { /* ignore */ }
-            await CertificateSettings.findOneAndUpdate({}, { $set: { signatureFileId: null } });
+            await CertificateSettings.findOneAndUpdate(
+                {},
+                { $set: { signatureFileId: null }, $inc: { configVersion: 1 } }
+            );
         }
         res.json({ signatureUrl: null });
+    })
+);
+
+// Delete second signatory signature
+router.delete(
+    "/certificates/settings/second-signature",
+    authenticateUser,
+    hasRole(ALLOWED_ADMIN_ROLES),
+    asyncHandler(async (_req, res) => {
+        const bucket = new GridFSBucket(mongoose.connection.db, { bucketName: "fs" });
+        const s = await getSettings();
+        if (s.secondSignatureFileId) {
+            try { await bucket.delete(s.secondSignatureFileId); } catch { /* ignore */ }
+            await CertificateSettings.findOneAndUpdate(
+                {},
+                { $set: { secondSignatureFileId: null }, $inc: { configVersion: 1 } }
+            );
+        }
+        res.json({ secondSignatureUrl: null });
     })
 );
 
@@ -395,7 +496,10 @@ router.delete(
         const s = await getSettings();
         if (s.logoFileId) {
             try { await bucket.delete(s.logoFileId); } catch { /* ignore */ }
-            await CertificateSettings.findOneAndUpdate({}, { $set: { logoFileId: null } });
+            await CertificateSettings.findOneAndUpdate(
+                {},
+                { $set: { logoFileId: null }, $inc: { configVersion: 1 } }
+            );
         }
         res.json({ logoUrl: null });
     })

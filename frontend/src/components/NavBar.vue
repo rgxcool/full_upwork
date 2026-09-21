@@ -640,6 +640,8 @@
         global_action_plan_required: 'Handlingsplan krävs',
         signing_required: 'Signering krävs',
         diploma_ready: 'Diplom klart',
+        course_completed: 'Kurs avklarad',
+        package_completed: 'Kurspaket klart',
         grade_locked: 'Betyg låst',
         grade_unlocked: 'Betyg upplåst',
         task_reminder: 'Att göra',
@@ -852,6 +854,7 @@
         { name: 'Betygsrapporter', link: '/admin/betygsrapporter', role: ['admin', 'systemadmin'] },
         { name: 'Betygssignering', link: '/signering', role: ['teacher', 'admin', 'systemadmin'] },
         { name: 'Betygsskalor', link: '/admin/betygsskala', role: ['admin', 'systemadmin'] },
+        { name: 'Intyg & Diplom', link: '/admin/certificates', role: ['admin', 'systemadmin'] },
         { name: 'Rapporter & Analys', link: '/admin/analytics', role: ['admin', 'systemadmin'] },
         { name: 'APL', link: '/apl', role: ['admin', 'teacher', 'coordinator'] },
         {

@@ -90,6 +90,11 @@ const StudentSchema = new mongoose.Schema(
             ref: "Teacher",
         },
         dropout: { type: Boolean, default: false },
+
+        // Last time the student performed meaningful learning activity beyond a
+        // login — course-card access or lesson/module views. Used by the
+        // inactivity detection as an activity signal (never login alone).
+        lastLearningActivityAt: { type: Date, default: null },
         attendedExam: { type: Boolean, default: false },
         paidExamFee: { type: Boolean, default: false },
 

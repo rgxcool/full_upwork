@@ -1,7 +1,36 @@
 import mongoose from "mongoose";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CoursePackage from "../models/CoursePackage.js";
-import { CertificateRecord } from "../models/certificateModel.js";
+import { CertificateRecord, CertificateSettings } from "../models/certificateModel.js";
+
+/**
+ * Load the current certificate-identity configuration as a plain settings
+ * snapshot. Shared by both generation pipelines so the study certificate /
+ * one-click routes and the record flow render with identical values.
+ */
+export async function getSettingsSnapshot() {
+    const s = await CertificateSettings.findOne({}).lean();
+    return {
+        signerName: s?.signerName || "",
+        signerTitle: s?.signerTitle || "Rektor",
+        signerDepartment: s?.signerDepartment || "",
+        signerContact: s?.signerContact || "",
+        schoolName: s?.schoolName || "Mindful Learning",
+        organizationName: s?.organizationName || "",
+        organizationNumber: s?.organizationNumber || "",
+        address: s?.address || "",
+        phone: s?.phone || "",
+        email: s?.email || "",
+        website: s?.website || "",
+        secondSignerEnabled: s?.secondSignerEnabled === true,
+        secondSignerName: s?.secondSignerName || "",
+        secondSignerTitle: s?.secondSignerTitle || "",
+        secondSignatureFileId: s?.secondSignatureFileId || null,
+        logoFileId: s?.logoFileId || null,
+        signatureFileId: s?.signatureFileId || null,
+        configVersion: s?.configVersion || 1,
+    };
+}
 
 /**
  * Resolve the set of roles for a user, honoring the `roles[]` array while
