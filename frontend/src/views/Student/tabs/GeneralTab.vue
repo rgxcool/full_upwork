@@ -255,7 +255,7 @@
     </div>
 
     <!-- Support Contacts Card -->
-    <div class="card">
+    <div class="card" v-if="canViewSupportDeviations">
       <div class="card-header">
         <h3>Stödkontakter</h3>
         <button
@@ -286,7 +286,7 @@
     </div>
 
     <!-- Deviations Card -->
-    <div class="card">
+    <div class="card" v-if="canViewSupportDeviations">
       <div class="card-header">
         <h3>Avvikelser & Undantag</h3>
         <button
@@ -634,7 +634,11 @@ export default {
     ];
 
     const isAdmin = computed(() => store.getters.isAdmin);
+    const isSyv = computed(() => userRole.value === 'syv');
     const isSpecped = computed(() => userRole.value === 'specped');
+    const canViewSupportDeviations = computed(
+        () => isAdmin.value || isSyv.value || isSpecped.value,
+    )
     const userRole = computed(() => store.getters.userRole);
     const userId = computed(() => store.getters.userId);
     const specpedAccommodationMode = ref(false);
