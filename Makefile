@@ -91,6 +91,18 @@ test-frontend:
 
 test: test-backend test-frontend
 
+# Phase 1 API-svit (kräver igång backend på 5010 + Mongo). Se PHASE1-HARDENING-TEST-PLAN.md §14.
+api-test:
+	@test -x postman/node_modules/.bin/newman || (cd postman && npm install --silent)
+	cd postman && node build-collection.mjs && node setup.mjs && \
+	  (npm run --silent run; status=$$?; node teardown.mjs; exit $$status)
+
+api-test-node:
+	cd postman && node run-tests.mjs
+
+validate-doc:
+	node postman/validate-doc.mjs PHASE1-HARDENING-TEST-PLAN.md
+
 stop:
 	$(DC) down
 

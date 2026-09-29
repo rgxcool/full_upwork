@@ -5,10 +5,16 @@ import FormQuestions from "../models/ActionPlanQuestions.js"
 import Student from "../models/Student.js";
 import Course from "../models/Course.js";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { buildActionPlanPdf, getOrBuildActionPlanPdf } from "../services/actionPlanPdf.js";
 import { evaluateActionPlanStatusAndNotify } from "../controllers/notificationController.js";
 import logger from "../utils/logger.js";
 const router = Router();
+
+router.use(
+    ["/actionplan", "/actionplans", "/form-questions", "/save-actionplan"],
+    requireFeature("ACTION_PLANS")
+);
 
 const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"];
 

@@ -9,6 +9,7 @@ import path from 'path'
 import { uploadXlsx } from '../controllers/studentController.js'
 import { authenticateUser } from '../controllers/authController.js'
 import { hasRole } from '../middleware/auth.js'
+import { municipalityInScope } from '../utils/tenantScope.js'
 import { uploadRateLimiter } from '../middleware/security.js'
 import logger from "../utils/logger.js";
 
@@ -112,7 +113,7 @@ async function checkStudentAccess(req, res, next) {
 }
 
 // Middleware to authorize file-specific actions (download, delete)
-async function checkFileAccess(req, res, next) {
+export async function checkFileAccess(req, res, next) {
   try {
     const fileId = req.params.fileId;
     const user = req.user;
@@ -148,6 +149,18 @@ async function checkFileAccess(req, res, next) {
       }
       req.fileRecord = file;
       return next();
+    }
+
+    // Tenant check: a staff member restricted to specific municipalities must not
+    // read files belonging to a student in another municipality. `studentId`
+    // alone is not an authorization boundary. Unscoped users (including students)
+    // short-circuit inside municipalityInScope, so this only bites scoped staff.
+    // A missing student document yields `undefined`, which fails closed for
+    // scoped users and stays open for global ones.
+    const TenantStudent = mongoose.model("Student");
+    const ownerStudent = await TenantStudent.findById(studentId).select("municipality").lean();
+    if (!municipalityInScope(user, ownerStudent?.municipality?.type)) {
+      return res.status(403).json({ error: "Forbidden: You do not have access to files for this student." });
     }
 
     // A student may only download (GET) files belonging to their own profile.

@@ -80,8 +80,18 @@ export const hasFeaturePermission = (user, feature) => {
  *    not hard-fail the whole request (the JWT is still cryptographically valid).
  */
 export async function refreshUserAuthorization(req) {
+    // `authenticateUser` already hydrates this for every request, so the
+    // follow-up hasRole()/can() calls must not re-query. Without the guard a
+    // typical route would issue two identical User lookups per request.
+    if (req.__authorizationRefreshed) {
+        return;
+    }
+
     const userId = req.user?.userId || req.user?._id || req.user?.id;
     if (!userId) return;
+
+    req.__authorizationRefreshed = true;
+
     try {
         const fresh = await User.findById(userId)
             .select('roles permissions active municipalities')

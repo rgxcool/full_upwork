@@ -6,10 +6,13 @@ import { Readable } from "stream";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/errorHandler.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { CertificateSettings, CertificateTemplate } from "../models/certificateModel.js";
 import { validateImageBuffer } from "../utils/imageDimensions.js";
 
 const router = express.Router();
+
+router.use("/certificates", requireFeature("CERTIFICATES"));
 
 const ALLOWED_ADMIN_ROLES = ["systemadmin", "admin"];
 const PNG_MAX_SIZE = 1 * 1024 * 1024;

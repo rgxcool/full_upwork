@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { isAuthenticated } from "../middleware/auth.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { can } from "../middleware/authorization.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import {
@@ -13,6 +14,8 @@ import {
 } from "../controllers/analyticsController.js";
 
 const router = Router();
+
+router.use(requireFeature("ANALYTICS"));
 
 router.get("/filters", isAuthenticated, can("analytics:read"), asyncHandler(getFilters));
 router.get("/revenue", isAuthenticated, can("analytics:read"), asyncHandler(getRevenue));

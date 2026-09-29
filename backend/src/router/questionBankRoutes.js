@@ -8,10 +8,13 @@ import ExamAttempt from "../models/ExamAttempt.js";
 import QuestionBankPdf from "../models/QuestionBankPdf.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
+
+router.use(requireFeature("QUESTION_BANK"));
 
 const STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"];
 

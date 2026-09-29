@@ -1,16 +1,32 @@
 import express from "express";
 import mongoose from "mongoose";
-const router = express.Router();
 import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
 import Exam from "../models/Provning.js";
 import CalendarEvent from "../models/Event.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
 import Notification from "../models/Notification.js";
 import logger from "../utils/logger.js";
+
+const router = express.Router();
+
+router.use(
+    [
+        "/exams",
+        "/exam-rooms",
+        "/admin/exams",
+        "/calendar-events",
+        "/update-exam",
+        "/mark-attendance",
+        "/examtime-location",
+        "/attendance-stats",
+    ],
+    requireFeature("PROVNINGAR")
+);
 
 const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"];
 

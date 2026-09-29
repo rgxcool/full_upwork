@@ -284,7 +284,8 @@ describe("backend/index.js", () => {
 
     expect(corsMock).toHaveBeenCalledWith(securityMocks.corsConfig);
     expect(cookieParserMock).toHaveBeenCalled();
-    expect(expressMock.static).toHaveBeenCalled();
+    expect(expressMock.static).not.toHaveBeenCalled();
+    expect(appInstance.get.mock.calls.some(([route]) => route === "/uploads/:filename")).toBe(true);
   });
 
   it("connects to MongoDB when not in test mode and handles shutdown hooks", async () => {
@@ -297,7 +298,7 @@ describe("backend/index.js", () => {
     const appInstance = currentApp;
 
     expect(dbOptimizer.configurePool).toHaveBeenCalled();
-    expect(expressMock.static).toHaveBeenCalled();
+    expect(expressMock.static).not.toHaveBeenCalled();
 
     await thenHandler?.();
     await Promise.resolve();
@@ -384,7 +385,7 @@ describe("backend/index.js", () => {
     await Promise.resolve();
     await catchHandler?.(new Error("prod failure"));
 
-    expect(expressMock.static).toHaveBeenCalled();
+    expect(expressMock.static).not.toHaveBeenCalled();
     expect(routerMock).toBeDefined();
   });
 });

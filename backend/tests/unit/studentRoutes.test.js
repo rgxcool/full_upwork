@@ -282,8 +282,9 @@ describe("studentRoutes router", () => {
                 additionalInfo: "notes",
             },
         ]);
-        const req = { params: { teacherId: "teacher-1" } };
-    const res = createRes();
+        const req = { params: { teacherId: "teacher-1" }, user: { role: "teacher" } };
+        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-1" });
+        const res = createRes();
 
         sendDropoutNotification.mockResolvedValue({ id: "notif" });
 
@@ -1526,7 +1527,7 @@ describe("GET /student/:id", () => {
         const selectChain = createSelectChain(studentDoc);
         Student.findById.mockReturnValue(selectChain);
 
-        const req = { params: { id: "stu-11" } };
+        const req = { params: { id: "stu-11" }, user: { role: "admin" } };
         const res = createRes();
 
         await handler(req, res);
@@ -1555,7 +1556,7 @@ describe("GET /student/:id/basic", () => {
         const selectChain = createSelectChain(studentDoc);
         Student.findById.mockReturnValue(selectChain);
 
-        const req = { params: { id: "basic-1" } };
+        const req = { params: { id: "basic-1" }, user: { role: "admin" } };
         const res = createRes();
 
         await handler(req, res);

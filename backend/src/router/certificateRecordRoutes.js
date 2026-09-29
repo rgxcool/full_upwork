@@ -4,6 +4,7 @@ import { GridFSBucket } from "mongodb";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/errorHandler.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { CertificateRecord } from "../models/certificateModel.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import {
@@ -22,6 +23,8 @@ import {
 import { CertificateTemplate } from "../models/certificateModel.js";
 
 const router = express.Router();
+
+router.use("/certificates", requireFeature("CERTIFICATES"));
 
 const ADMIN_ROLES = ["systemadmin", "admin"];
 const STAFF_ROLES = [
