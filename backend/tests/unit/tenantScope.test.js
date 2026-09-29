@@ -5,6 +5,8 @@ import {
     isValidMunicipality,
     studentScopeFilter,
     municipalityInScope,
+    userScopeFilter,
+    sharesTenant,
 } from "../../src/utils/tenantScope.js";
 
 describe("tenantScope utilities", () => {
@@ -71,6 +73,47 @@ describe("tenantScope utilities", () => {
 
         it("denies scoped users operating on null municipality", () => {
             expect(municipalityInScope({ municipalities: ["Sollentuna"] }, null)).toBe(false);
+        });
+    });
+
+    describe("userScopeFilter", () => {
+        it("returns an empty filter for global users", () => {
+            expect(userScopeFilter({})).toEqual({});
+        });
+
+        it("restricts the User query to the user's municipalities", () => {
+            expect(userScopeFilter({ municipalities: ["Sollentuna", "Solna"] })).toEqual({
+                municipalities: { $in: ["Sollentuna", "Solna"] },
+            });
+        });
+
+        it("ignores blank municipality entries", () => {
+            expect(userScopeFilter({ municipalities: ["Sollentuna", ""] })).toEqual({
+                municipalities: { $in: ["Sollentuna"] },
+            });
+        });
+    });
+
+    describe("sharesTenant", () => {
+        it("is true when a global account is involved", () => {
+            expect(sharesTenant({}, { municipalities: ["Sollentuna"] })).toBe(true);
+            expect(sharesTenant({ municipalities: ["Sollentuna"] }, {})).toBe(true);
+            expect(sharesTenant({}, {})).toBe(true);
+        });
+
+        it("is true when the accounts share at least one municipality", () => {
+            expect(
+                sharesTenant(
+                    { municipalities: ["Sollentuna", "Solna"] },
+                    { municipalities: ["Solna", "Nacka"] }
+                )
+            ).toBe(true);
+        });
+
+        it("is false when the accounts are in different municipalities", () => {
+            expect(
+                sharesTenant({ municipalities: ["Sollentuna"] }, { municipalities: ["Nacka"] })
+            ).toBe(false);
         });
     });
 });

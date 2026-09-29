@@ -3,6 +3,8 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
 import { validateParticipants, dispatchMessageEmailCopies } from "../services/messagingService.js";
+import { userScopeFilter } from "../utils/tenantScope.js";
+import { escapeRegExp } from "../utils/escapeRegExp.js";
 import logger from "../utils/logger.js";
 
 const getCurrentUserId = (req) => req.userId || req.user?.userId || req.user?._id || req.user?.id;
@@ -238,27 +240,39 @@ export const getUnreadCount = async (req, res) => {
 export const getRecipients = async (req, res) => {
   try {
     const user = req.user;
-    const userRole = user.role || (user.roles && user.roles[0]);
+    const userRoles = user.roles || (user.role ? [user.role] : []);
+    const userRole = user.role || userRoles[0];
     const staffRoles = ["admin", "systemadmin", "teacher", "syv", "specped", "coordinator"];
 
     let query = { _id: { $ne: user._id } };
 
     if (staffRoles.includes(userRole)) {
       query.roles = { $in: [...staffRoles, "student"] };
-    } else if (userRole === "student") {
-      query.roles = { $in: staffRoles };
     } else {
       query.roles = { $in: staffRoles };
     }
 
+    // P17: tenant (kommun) isolation. Without this, any scoped staff account
+    // could enumerate every user — name and email — in every other municipality
+    // simply by listing the recipients they may message.
+    const scope = userScopeFilter(user);
+    if (Object.keys(scope).length > 0) {
+      query.municipalities = { ...(query.municipalities || {}), ...scope.municipalities };
+    }
+
     const search = (req.query?.search || "").trim();
     if (search) {
+      // Escape user input: an unescaped term is treated as a regex pattern and
+      // can be used to match every account (e.g. ".*") or to stall the query.
+      const safe = escapeRegExp(search);
       query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
+        { name: { $regex: safe, $options: "i" } },
+        { email: { $regex: safe, $options: "i" } },
       ];
     }
 
+    // `municipalities` is deliberately NOT selected: the filter is applied
+    // server-side, and the client has no need to learn a colleague's tenant.
     const recipients = await User.find(query).select("name email roles").sort({ name: 1 });
     res.json(recipients);
   } catch (error) {
