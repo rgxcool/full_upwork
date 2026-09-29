@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated Playwright feature-verification screenshots (see scripts/capture-feature-screenshots.mjs)
+docs/feature-verification/
