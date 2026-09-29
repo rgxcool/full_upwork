@@ -94,11 +94,41 @@ describe('CertificateManager.vue - Intyg & Diplom', () => {
         client.put.mockResolvedValue({ data: { ...settingsFixture(), signerName: 'Ny Rektor' } })
         wrapper.vm.settings.signerName = 'Ny Rektor'
         await wrapper.vm.saveSettings()
-        expect(client.put).toHaveBeenCalledWith('/certificates/settings', {
-            signerName: 'Ny Rektor',
-            signerTitle: 'Rektor',
-            schoolName: 'Mindful',
-        })
+
+        // saveSettings() posts the whole settings contract, not just the three
+        // original fields — assert the key set so a field cannot be silently
+        // dropped from the payload.
+        const SETTINGS_KEYS = [
+            'address',
+            'email',
+            'organizationName',
+            'organizationNumber',
+            'phone',
+            'schoolName',
+            'secondSignerContact',
+            'secondSignerDepartment',
+            'secondSignerEnabled',
+            'secondSignerName',
+            'secondSignerTitle',
+            'signerContact',
+            'signerDepartment',
+            'signerName',
+            'signerTitle',
+            'website',
+        ]
+
+        expect(client.put).toHaveBeenCalledWith(
+            '/certificates/settings',
+            expect.objectContaining({
+                signerName: 'Ny Rektor',
+                signerTitle: 'Rektor',
+                schoolName: 'Mindful',
+            })
+        )
+
+        const [url, payload] = client.put.mock.calls.at(-1)
+        expect(url).toBe('/certificates/settings')
+        expect(Object.keys(payload).sort()).toEqual([...SETTINGS_KEYS].sort())
     })
 
     it('saves a template', async () => {
