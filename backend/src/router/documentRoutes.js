@@ -7,7 +7,8 @@ import fs from 'fs';
 import mime from 'mime-types';
 import Document from '../models/Document.js';
 import { authenticateUser } from '../controllers/authController.js';
-import { getUserMunicipalities, hasGlobalScope, municipalityInScope } from '../utils/tenantScope.js';
+import { hasGlobalScope, municipalityInScope } from '../utils/tenantScope.js';
+import { canAccessDocument, canAccessStudentDocuments, canAccessTeacherDocuments } from "../utils/documentAuthorization.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
@@ -83,30 +84,59 @@ const upload = multer({
   }
 });
 
-// Staff roles that may upload documents for any student (APL coordinator included).
-const STAFF_UPLOAD_ROLES = ["systemadmin", "admin", "coordinator", "tester"];
+const STAFF_UPLOAD_ROLES = new Set(["systemadmin", "admin", "coordinator", "tester"]);
 
-// Resolve the student document a caller may upload for. Students are linked to
-// their login account by email (the same linkage used across the app); teachers
-// may upload for their own students; staff may upload for any student.
+const getUserRoles = (user) => {
+  const roles = Array.isArray(user?.roles)
+    ? [...user.roles]
+    : user?.roles
+      ? [user.roles]
+      : [];
+  if (user?.role) roles.push(user.role);
+  return new Set(
+    roles
+      .filter((role) => typeof role === "string")
+      .map((role) => role.toLowerCase())
+  );
+};
+
+const getStudentMunicipality = (student) =>
+  typeof student?.municipality === "string"
+    ? student.municipality
+    : student?.municipality?.type;
+
 async function canUploadForStudent(user, studentId) {
-  const roles = user.roles || (user.role ? [user.role] : []);
-  if (roles.some((role) => STAFF_UPLOAD_ROLES.includes(role))) return true;
-
-  if (roles.includes("student")) {
-    const Student = mongoose.model("Student");
-    const student = await Student.findOne({ email: user.email }).select("_id");
-    return Boolean(student && String(student._id) === String(studentId));
+  if (!user || !studentId) {
+    return false;
   }
 
-  if (roles.includes("teacher")) {
-    const Student = mongoose.model("Student");
+  const roles = getUserRoles(user);
+  if ([...roles].some((role) => STAFF_UPLOAD_ROLES.has(role)) && hasGlobalScope(user)) {
+    return true;
+  }
+
+  const Student = mongoose.model("Student");
+  const student = await Student.findById(studentId).select("municipality teacherId");
+  if (!student || !municipalityInScope(user, getStudentMunicipality(student))) {
+    return false;
+  }
+
+  if ([...roles].some((role) => STAFF_UPLOAD_ROLES.has(role))) {
+    return true;
+  }
+
+  if (roles.has("student")) {
+    const ownStudent = await Student.findOne({ email: user.email }).select("_id");
+    if (ownStudent && String(ownStudent._id) === String(studentId)) {
+      return true;
+    }
+  }
+
+  if (roles.has("teacher")) {
     const Teacher = mongoose.model("Teacher");
     const teacher = await Teacher.findOne({ userId: user.userId }).select("_id");
-    const student = await Student.findById(studentId).select("teacherId");
     return Boolean(
       teacher &&
-        student &&
         student.teacherId &&
         String(student.teacherId) === String(teacher._id)
     );
@@ -148,7 +178,8 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
       return res.status(401).json({ message: 'User not authenticated' });
     }
     
-    const isAdmin = user.role === 'admin' || user.role === 'systemadmin';
+    const userRoles = getUserRoles(user);
+    const isAdmin = userRoles.has('admin') || userRoles.has('systemadmin');
 
     // Determine if this is for a student or teacher
     if (studentId) {
@@ -158,28 +189,11 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
         return res.status(400).json({ message: 'studentId is required' });
       }
       
-      // Permission check: students can upload for themselves (matched by email),
-      // teachers for their own students, staff (admin/coordinator) for any student.
       const allowed = await canUploadForStudent(user, studentId);
       if (!allowed) {
         return res.status(403).json({ message: 'Du har inte behörighet att ladda upp dokument för denna elev' });
       }
-      
-      // Tenant scoping: students can only upload documents for their own municipality
-      // Staff (admin/coordinator) can upload for any student
-      const isStaff = user.role === 'admin' || user.role === 'systemadmin' || user.role === 'coordinator';
-      if (!isStaff && user.role !== 'student') {
-        // For teachers and other roles, check municipality scope
-        const Student = mongoose.model("Student");
-        const student = await Student.findById(studentId).select("municipality");
-        if (student && student.municipality) {
-          const userMunis = getUserMunicipalities(user);
-          if (userMunis.length > 0 && !userMunis.includes(student.municipality)) {
-            return res.status(403).json({ message: 'Du har inte behörighet att lagra dokument för elev i annan kommun' });
-          }
-        }
-      }
-      
+
       const doc = await Document.create({
         student: studentId,
         uploadedBy: user.userId,
@@ -197,7 +211,8 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
       
       logger.debug({ userIdStr, teacherIdStr, isAdmin }, "Permission check for teacher document")
       
-      if (!isAdmin && userIdStr !== teacherIdStr) {
+      const teacherAllowed = await canAccessTeacherDocuments(user, teacherId);
+      if (!teacherAllowed) {
         return res.status(403).json({ message: 'Du har inte behörighet att ladda upp dokument för denna lärare' });
       }
 
@@ -259,56 +274,29 @@ router.get('/documents/:id', authenticateUser, async (req, res) => {
   try {
     const { type, enrollmentId, entityType } = req.query;
     const id = req.params.id;
-
     const user = req.user;
+    const isTeacherEntity = ["teacher", "lärare"].includes(
+      String(entityType || "").toLowerCase()
+    );
 
-    // Students can only access their own documents; staff can access any
-    if (user.role === 'student') {
-      // Students can only access documents uploaded by them (matched by email)
-      // Tenant scoping: students can only see documents from their own municipality
-      const Student = mongoose.model("Student");
-      const student = await Student.findOne({ email: user.email }).select("municipality");
-      if (student) {
-        const userMunis = getUserMunicipalities(user);
-        // Find documents for this student
-        let filter = { student: id };
-        if (type) filter.type = type;
-        if (enrollmentId) filter.enrollmentId = enrollmentId;
-        
-        const docs = await Document.find(filter).sort({ createdAt: -1 });
-        
-        // Filter documents to only those in the user's municipality
-        const accessibleDocs = docs.filter((doc) => {
-          // Admin documents have no municipality restriction
-          if (!doc.municipality) return true;
-          return userMunis.some((m) => m === doc.municipality);
-        });
-        
-        return res.json(accessibleDocs);
-      }
+    const filter = isTeacherEntity
+      ? { teacher: id }
+      : { student: id };
+    const allowed = isTeacherEntity
+      ? await canAccessTeacherDocuments(user, id)
+      : await canAccessStudentDocuments(user, id);
+
+    if (!allowed) {
+      return res.status(403).json({
+        message: 'Du har inte behörighet att komma åt dokumenten'
+      });
     }
 
-    // Staff (admin, systemadmin, coordinator) can access any documents
-    let filter = {};
-    
-    // Determine if this is for a student or teacher
-    if (entityType === 'teacher' || entityType === 'Lärare') {
-      filter.teacher = id;
-    } else {
-      // Default to student for backward compatibility
-      filter.student = id;
-    }
-
-    if (type) {
-      filter.type = type;
-    }
-
-    if (enrollmentId) {
-      filter.enrollmentId = enrollmentId;
-    }
+    if (type) filter.type = type;
+    if (enrollmentId) filter.enrollmentId = enrollmentId;
 
     const docs = await Document.find(filter).sort({ createdAt: -1 });
-    res.json(docs);
+    return res.json(docs);
   } catch (error) {
     logger.error({ err: error }, "Error fetching documents")
     res.status(500).json({ message: 'Kunde inte hämta dokument' });
@@ -323,23 +311,12 @@ router.delete('/documents/:id', authenticateUser, async (req, res) => {
     }
 
     const user = req.user;
-    const isAdmin = user.role === 'admin' || user.role === 'systemadmin';
+    const userRoles = getUserRoles(user);
+    const isAdmin = userRoles.has('admin') || userRoles.has('systemadmin');
+    const allowed = await canAccessDocument(user, doc);
 
-    // Check permissions: user can delete their own uploads, admins can delete any
-    if (!isAdmin && doc.uploadedBy?.toString() !== user.userId) {
+    if (!allowed || (!isAdmin && String(doc.uploadedBy ?? '') !== String(user.userId))) {
       return res.status(403).json({ message: 'Du har inte behörighet att radera detta dokument' });
-    }
-
-    // Tenant scoping: non-admin users can only delete documents they uploaded
-    // and that are in their municipality scope
-    if (!isAdmin && doc.uploadedBy?.toString() === user.userId) {
-      // Check if the document's municipality is in the user's allowed municipalities
-      if (doc.municipality) {
-        const userMunis = getUserMunicipalities(user);
-        if (userMunis.length > 0 && !userMunis.includes(doc.municipality)) {
-          return res.status(403).json({ message: 'Du har inte behörighet att radera dokument från annan kommun' });
-        }
-      }
     }
 
     await Document.findByIdAndDelete(req.params.id);

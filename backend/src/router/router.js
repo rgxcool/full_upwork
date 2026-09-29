@@ -38,10 +38,15 @@ import questionBankRoutes from "./questionBankRoutes.js";
 import certificateRoutes from "./certificateRoutes.js";
 import certificateRecordRoutes from "./certificateRecordRoutes.js";
 import completionRoutes from "./completionRoutes.js";
+import { getPublicFeatureFlags } from "../config/featureFlags.js";
 
 const router = Router();
 
 logger.info("Registering API routes...");
+
+router.get("/api/features", (_req, res) => {
+    res.json(getPublicFeatureFlags());
+});
 
 //  Log before mounting each route
 router.use("/api", examRoutes);

@@ -121,11 +121,14 @@ router.get(
 
 // ─── Support Info Endpoints ─────────────────────────────────────────────────
 
-// Get support contacts for a student
+// Get support contacts for a student.
+// The allowed roles must mirror `projectStudentForViewer` in
+// utils/studentSerializer.js: staff who are stripped of `supportInfo` there
+// (teacher, coordinator) must not be able to read it back from this endpoint.
 router.get(
     "/student-details/:id/support",
     isAuthenticated,
-    hasRole(["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"]),
+    hasRole(["systemadmin", "admin", "syv", "specped"]),
     asyncHandler(getSupportInfo)
 );
 
@@ -139,11 +142,13 @@ router.put(
 
 // ─── Deviation Endpoints ────────────────────────────────────────────────────
 
-// Get all deviations for a student
+// Get all deviations for a student.
+// Same rule as /support: only roles that keep `deviations` in the projection
+// (admin/systemadmin, syv, specped) may read them here.
 router.get(
     "/student-details/:id/deviations",
     isAuthenticated,
-    hasRole(["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"]),
+    hasRole(["systemadmin", "admin", "syv", "specped"]),
     asyncHandler(getDeviations)
 );
 

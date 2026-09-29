@@ -1,9 +1,15 @@
 import express from "express";
 import { isAuthenticated } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/errorHandler.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { getStudyCertificatePdf, generateDiplomaPdf } from "../controllers/studyCertificateController.js";
 
 const router = express.Router();
+
+router.use(
+    ["/study-certificate", "/diploma"],
+    requireFeature("CERTIFICATES")
+);
 
 // One-click study certificate PDF download for a completed enrollment
 // GET /api/study-certificate/:enrollmentId/pdf

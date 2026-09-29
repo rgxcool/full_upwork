@@ -384,13 +384,29 @@ describe("studentDetailsController — remaining handlers", () => {
             expect(res.statusCode).toBe(404);
         });
 
-        it("returns 403 when the user has a restricted municipality scope", async () => {
+        it("returns 200 for a scoped user whose municipality matches the student", async () => {
+            // Regression: the tenant check reads student.municipality.type, so
+            // the projection must keep `municipality`. Dropping it made this
+            // return 403 for users who were entitled to the data (AV-12).
             const student = await createStudent({ municipality: { type: "Sollentuna" } });
             const res = buildRes();
             await getSupportInfo(
                 buildReq({
                     params: { id: student._id.toString() },
                     user: { ...ADMIN, municipalities: ["Sollentuna"] },
+                }),
+                res
+            );
+            expect(res.statusCode).toBe(200);
+        });
+
+        it("returns 403 when the student is outside the user's municipality scope", async () => {
+            const student = await createStudent({ municipality: { type: "Sollentuna" } });
+            const res = buildRes();
+            await getSupportInfo(
+                buildReq({
+                    params: { id: student._id.toString() },
+                    user: { ...ADMIN, municipalities: ["Stockholm"] },
                 }),
                 res
             );

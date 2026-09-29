@@ -49,6 +49,18 @@ const app = express();
 app.use(express.json());
 app.use(router);
 
+// The two call sites chain differently — the router's findSelfStudent() does
+// `.lean()`, the PATCH /apl/my controller does `.select("_id")` — so the mock
+// has to answer both and still resolve to the document when awaited.
+const studentProfile = (doc) => {
+    const query = {
+        select: () => query,
+        lean: () => query,
+        then: (resolve, reject) => Promise.resolve(doc).then(resolve, reject),
+    };
+    return query;
+};
+
 describe("aplController", () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -103,7 +115,7 @@ describe("aplController", () => {
         it("lets a student read their own record (email-linked profile)", async () => {
             const studentId = new mongoose.Types.ObjectId();
             h.currentUser = { userId: "user-9", role: "student", email: "elev@mindful.se" };
-            h.studentFindOne.mockResolvedValue({ _id: studentId, name: "Anna" });
+            h.studentFindOne.mockReturnValue(studentProfile({ _id: studentId, name: "Anna" }));
             getAplRecordByStudent.mockResolvedValue({ status: "YELLOW" });
 
             const res = await request(app).get(`/apl/records/${studentId.toString()}`);
@@ -128,7 +140,7 @@ describe("aplController", () => {
 
         it("updates the caller's own record via their email-linked profile", async () => {
             const studentId = new mongoose.Types.ObjectId();
-            h.studentFindOne.mockResolvedValue({ _id: studentId });
+            h.studentFindOne.mockReturnValue(studentProfile({ _id: studentId }));
             updateOwnAplRecord.mockResolvedValue({ isSeeking: true });
 
             const res = await request(app).patch("/apl/my").send({ isSeeking: true });
@@ -142,7 +154,7 @@ describe("aplController", () => {
         });
 
         it("returns 404 when no student profile matches", async () => {
-            h.studentFindOne.mockResolvedValue(null);
+            h.studentFindOne.mockReturnValue(studentProfile(null));
 
             const res = await request(app).patch("/apl/my").send({ isSeeking: true });
 
@@ -153,7 +165,7 @@ describe("aplController", () => {
 
         it("returns 500 on service failure", async () => {
             const studentId = new mongoose.Types.ObjectId();
-            h.studentFindOne.mockResolvedValue({ _id: studentId });
+            h.studentFindOne.mockReturnValue(studentProfile({ _id: studentId }));
             updateOwnAplRecord.mockRejectedValue(new Error("boom"));
 
             const res = await request(app).patch("/apl/my").send({ isSeeking: true });

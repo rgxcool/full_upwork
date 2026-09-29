@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { can } from "../middleware/authorization.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import {
@@ -11,6 +12,8 @@ import {
 } from "../controllers/inactivityController.js";
 
 const router = Router();
+
+router.use(requireFeature("INACTIVITY"));
 
 router.get(
     "/report",

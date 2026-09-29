@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ALL_MUNICIPALITIES } from "../config/municipalities.js";
 
 // REMOVED: EducationEntrySchema - Using StudentEnrollment system instead
 
@@ -45,37 +46,22 @@ const StudentSchema = new mongoose.Schema(
             },
         ],
 
+        // `municipality` must be declared as an explicit sub-schema: `type` is a
+        // reserved key, so an inline `{ type: { type: String, ... } }` would be
+        // registered as the nested path `municipality.type` and the object
+        // itself would never be created. That silently dropped every
+        // municipality written as a plain string (see scripts/seedE2EData.js).
         municipality: {
-            type: {
-                type: String,
-                enum: [
-                    "Botkyrka",
-                    "Danderyd",
-                    "Göteborg",
-                    "Huddinge",
-                    "Järfälla",
-                    "KCNO",
-                    "Lidingö",
-                    "Norrtälje",
-                    "Nykvarn",
-                    "Privat kunder",
-                    "Salem",
-                    "Sigtuna",
-                    "Sollentuna",
-                    "Solna",
-                    "Stockholm",
-                    "Sundbyberg",
-                    "Södertälje",
-                    "Täby",
-                    "Upplands Bro",
-                    "Upplands Väsby",
-                    "Vallentuna",
-                    "Vaxholm",
-                    "Växjö",
-                    "Österåker",
-                ],
-                // No default value; must be set explicitly
-            },
+            type: new mongoose.Schema(
+                {
+                    // No default value; must be set explicitly
+                    type: {
+                        type: String,
+                        enum: ALL_MUNICIPALITIES,
+                    },
+                },
+                { _id: false }
+            ),
         },
 
         phone: String,

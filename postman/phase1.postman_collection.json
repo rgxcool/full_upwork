@@ -1,0 +1,2021 @@
+{
+  "info": {
+    "name": "Mindful – Phase 1 Hardening (P15)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 – Server",
+      "item": [
+        {
+          "name": "GET /api/features (opublik, ingen auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/features",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "features"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"11 nycklar\", () => { pm.expect(Object.keys(pm.response.json()).length).to.eql(11); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/okänd-route → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/no-such-route-zzz",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "no-such-route-zzz"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"404\", () => { pm.expect(pm.response.code).to.eql(404); });",
+                  "pm.test(\"Route not found\", () => { pm.expect(pm.response.json().error.message).to.eql('Route not found'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A – P15 rollprojektion",
+      "item": [
+        {
+          "name": "A: GET /student-details/:id [admin]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"inga lösenord\", () => { pm.expect(pm.response.text()).to.not.match(/\"(hashed|Password|password)\"\\s*:\\s*\"[^\"]/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A: GET /student-details/:id [sysadmin]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_sysadmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"inga lösenord\", () => { pm.expect(pm.response.text()).to.not.match(/\"(hashed|Password|password)\"\\s*:\\s*\"[^\"]/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A: GET /student-details/:id [teacher]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_teacher}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"inga lösenord\", () => { pm.expect(pm.response.text()).to.not.match(/\"(hashed|Password|password)\"\\s*:\\s*\"[^\"]/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A: GET /student-details/:id [coord]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_coord}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"inga lösenord\", () => { pm.expect(pm.response.text()).to.not.match(/\"(hashed|Password|password)\"\\s*:\\s*\"[^\"]/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A: GET /student-details/:id [syv]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_syv}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"inga lösenord\", () => { pm.expect(pm.response.text()).to.not.match(/\"(hashed|Password|password)\"\\s*:\\s*\"[^\"]/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A: GET /student-details/:id [specped]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_specped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"inga lösenord\", () => { pm.expect(pm.response.text()).to.not.match(/\"(hashed|Password|password)\"\\s*:\\s*\"[^\"]/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A: GET /students har/har inte personalNumber [admin]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/students",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"personalNumber finns\", () => { pm.expect(Array.isArray(pm.response.json())?pm.response.json():pm.response.json().students).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AV-2 – Stöd & avvikelser (rollgränser)",
+      "item": [
+        {
+          "name": "AV-2: GET /support [teacher] ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_teacher}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/support",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "support"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-2 STÖDKONTAKT: 403 (har 200 → läcka)\", () => { pm.expect(pm.response.code, \"AV-2: stödkontakt läcks till förbehållslösa roller\").to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-2: GET /deviations [teacher] ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_teacher}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/deviations",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "deviations"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-2 AVVIKELSE: 403 (har 200 → läcka)\", () => { pm.expect(pm.response.code, \"AV-2: avvikelser läcks till förbehållslösa roller\").to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-2: GET /support [coord] ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_coord}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/support",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "support"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-2 STÖDKONTAKT: 403 (har 200 → läcka)\", () => { pm.expect(pm.response.code, \"AV-2: stödkontakt läcks till förbehållslösa roller\").to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-2: GET /deviations [coord] ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_coord}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/deviations",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "deviations"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-2 AVVIKELSE: 403 (har 200 → läcka)\", () => { pm.expect(pm.response.code, \"AV-2: avvikelser läcks till förbehållslösa roller\").to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-2: GET /support [syv] ska ge 200 (behåller supportInfo)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_syv}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/support",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "support"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"stödkontakt närvarande\", () => { pm.expect(pm.response.json()).to.have.property('supportInfo'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-2: GET /deviations [syv] ska ge 200 (behåller deviations)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_syv}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/deviations",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "deviations"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-2: GET /support [specped] ska ge 200 (behåller supportInfo)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_specped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/support",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "support"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"stödkontakt närvarande\", () => { pm.expect(pm.response.json()).to.have.property('supportInfo'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-2: GET /deviations [specped] ska ge 200 (behåller deviations)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_specped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/deviations",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "deviations"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-2: /support utesluter student [anna]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_anna}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/support",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "support"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403\", () => { pm.expect(pm.response.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AV-12 – Tenant-projektionsfel",
+      "item": [
+        {
+          "name": "AV-12: GET /student-details/:id/support [scoped syv, IN scope] ska ge 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_syv}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/support",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "support"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-12 PROJEKTIONSFEL: 403 trots in-scope\", () => { pm.expect(pm.response.code, \"AV-12: projektionen kastar bort municipality → alla scoped användare låses ute\").to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-12-kontroll: GET /student-details/:id/support [unscoped admin] ska ge 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student-details/{{anna}}/support",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student-details",
+                "{{anna}}",
+                "support"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-12: GET /student/:id/basic [scoped syv, IN scope] ska ge 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_syv}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student/{{anna}}/basic",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "{{anna}}",
+                "basic"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-12 PROJEKTIONSFEL: 403 trots in-scope\", () => { pm.expect(pm.response.code, \"AV-12: projektionen kastar bort municipality → alla scoped användare låses ute\").to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-12-kontroll: GET /student/:id/basic [unscoped admin] ska ge 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/student/{{anna}}/basic",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "{{anna}}",
+                "basic"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C – Dokument tenant scope",
+      "item": [
+        {
+          "name": "C: admin → Doris (Uppl. Bro) = 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: admin → Anna (Stockholm) = 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: sysadmin → Doris (Uppl. Bro) = 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_sysadmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: sysadmin → Anna (Stockholm) = 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_sysadmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: teacher → Doris (Uppl. Bro) = 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_teacher}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: teacher → Anna (Stockholm) = 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_teacher}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: doris → Doris (Uppl. Bro) = 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_doris}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: doris → Anna (Stockholm) = 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_doris}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403\", () => { pm.expect(pm.response.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: anna → Doris (Uppl. Bro) = 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_anna}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403\", () => { pm.expect(pm.response.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: anna → Anna (Stockholm) = 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_anna}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: berta → Doris (Uppl. Bro) = 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_berta}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403\", () => { pm.expect(pm.response.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: berta → Anna (Stockholm) = 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_berta}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{anna}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{anna}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403\", () => { pm.expect(pm.response.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-1: scoped coord → Doris ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_coord}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-1 TENANT-BYPASS: 200 (har 403 → cross-tenant)\", () => { pm.expect(pm.response.code, \"AV-1: scoped staff behandlas som global på dokumentendpoints\").to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-1: scoped syv → Doris ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_syv}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-1 TENANT-BYPASS: 200 (har 403 → cross-tenant)\", () => { pm.expect(pm.response.code, \"AV-1: scoped staff behandlas som global på dokumentendpoints\").to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-1: scoped specped → Doris ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_specped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/{{doris}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{doris}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-1 TENANT-BYPASS: 200 (har 403 → cross-tenant)\", () => { pm.expect(pm.response.code, \"AV-1: scoped staff behandlas som global på dokumentendpoints\").to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C: uppladdning till annan elev [doris → anna] = 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_doris}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/upload",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "upload"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{probe_file}}"
+                },
+                {
+                  "key": "studentId",
+                  "value": "{{anna}}",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "GENERAL",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"C SKRIV-IDOR: 403 (korrekt — elev får inte skriva till annan elev)\", () => { pm.expect(pm.response.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-1: scoped coordinator laddar upp till Doris ska ge 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_coord}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/documents/upload",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "upload"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{probe_file}}"
+                },
+                {
+                  "key": "studentId",
+                  "value": "{{doris}}",
+                  "type": "text"
+                },
+                {
+                  "key": "type",
+                  "value": "GENERAL",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-1 SKRIV-BYPASS: 201 (har 403)\", () => { pm.expect(pm.response.code).to.eql(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AV-10 – GridFS tenant scope",
+      "item": [
+        {
+          "name": "AV-10: skapa GridFS-fil för Doris (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/students",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-10: GridFS scoped coord → Doris fil ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_coord}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/students",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-10 GRIDFS-BYPASS (förberedelse)\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-10: GridFS scoped syv → Doris fil ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_syv}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/students",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-10 GRIDFS-BYPASS (förberedelse)\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AV-10: GridFS scoped specped → Doris fil ska ge 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_specped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/students",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"AV-10 GRIDFS-BYPASS (förberedelse)\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "D – Meddelanden (PII)",
+      "item": [
+        {
+          "name": "D: GET /conversations [admin]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/conversations",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "conversations"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"studentId endast _id+name\", () => { const c=(pm.response.json()||[]).find(x=>x.subject===pm.environment.get('subject'))||{};pm.expect(Object.keys(c.studentId||{}).sort().join(',')).to.eql('_id,name'); });",
+                  "pm.test(\"personnummer saknas\", () => { pm.expect(pm.response.text()).to.not.include('19900101-1234'); });",
+                  "pm.test(\"personalNumber-nyckel saknas\", () => { pm.expect(pm.response.text()).to.not.include('personalNumber'); });",
+                  "pm.test(\"participants saknar municipalities\", () => { const c=(pm.response.json()||[]).find(x=>x.subject===pm.environment.get('subject'))||{};const k=[...new Set((c.participants||[]).flatMap(p=>Object.keys(p)))];pm.expect(k).to.not.include('municipalities'); });",
+                  "pm.test(\"participants saknar userId\", () => { const c=(pm.response.json()||[]).find(x=>x.subject===pm.environment.get('subject'))||{};const k=[...new Set((c.participants||[]).flatMap(p=>Object.keys(p)))];pm.expect(k).to.not.include('userId'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D: GET /unread-count [admin] PII-fri",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/unread-count",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "unread-count"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"inget personnummer\", () => { pm.expect(pm.response.text()).to.not.include('19900101-1234'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D: GET /recipients [admin] PII-fri",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/recipients",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "recipients"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"inget personnummer\", () => { pm.expect(pm.response.text()).to.not.include('19900101-1234'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D: POST /messages tom body = 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/messages",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"body\": \"  \" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400\", () => { pm.expect(pm.response.code).to.eql(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D: POST /messages utan participantIds = 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/messages",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"body\": \"hej\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400\", () => { pm.expect(pm.response.code).to.eql(400); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "E – Feature flags",
+      "item": [
+        {
+          "name": "E: GET /features publik",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/features",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "features"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"alla 11 defaults ON\", () => { pm.expect(Object.values(pm.response.json()).filter(v=>!v).length).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E: /students opåverkad av flaggor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/students",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F – Session / utloggning",
+      "item": [
+        {
+          "name": "F: GET /auth/session [teacher]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_teacher}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/auth/session",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "session"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "F: GET /auth/session utan cookie = 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/auth/session",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "session"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => { pm.expect(pm.response.code).to.eql(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "F: POST /auth/login fel lösenord = 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/auth/login",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"admin@mindful.se\",\"password\":\"Wrong123!\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => { pm.expect(pm.response.code).to.eql(401); });",
+                  "pm.test(\"felmeddelande\", () => { pm.expect(pm.response.json().error).to.eql('Fel email eller lösenord'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "F: POST /auth/logout [teacher]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_teacher}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/auth/logout",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test(\"logout-body\", () => { pm.expect(pm.response.json().message).to.eql('Logout successful'); });",
+                  "pm.test(\"cookie utgången\", () => { const c=pm.response.headers.get('Set-Cookie')||'';pm.expect(c).to.match(/token=;/); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Övrigt",
+      "item": [
+        {
+          "name": "Ö: GET /students [admin]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{tok_admin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/students",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200\", () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ö: GET /students utan auth = 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/students",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "students"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401\", () => { pm.expect(pm.response.code).to.eql(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:5010"
+    }
+  ]
+}

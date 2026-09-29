@@ -1,8 +1,9 @@
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import jwtLib from "jsonwebtoken";
-import { AUTH_COOKIE_NAME } from "./src/config/cookies.js";
+import fs from "node:fs";
+import { authenticateUser } from "./src/controllers/authController.js";
+import { canAccessDocument } from "./src/utils/documentAuthorization.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,6 +115,50 @@ import router from "./src/router/router.js";
 
 const PORT = process.env.PORT || 5010;
 
+const serveUpload = async (req, res, next) => {
+    try {
+        const filename = req.params.filename;
+        const uploadsRoot = path.resolve(__dirname, "public/uploads");
+        const filePath = path.resolve(uploadsRoot, filename || "");
+
+        if (
+            typeof filename !== "string" ||
+            filename.length === 0 ||
+            path.basename(filename) !== filename ||
+            path.dirname(filePath) !== uploadsRoot
+        ) {
+            return res.status(404).json({ error: "File not found" });
+        }
+
+        const Document = mongoose.model("Document");
+        const document = await Document.findOne({ filename });
+        if (!document) {
+            return res.status(404).json({ error: "File not found" });
+        }
+
+        const allowed = await canAccessDocument(req.user, document);
+        if (!allowed) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: "File not found" });
+        }
+
+        if (typeof res.sendFile === "function") {
+            return res.sendFile(filePath, (error) => {
+                if (error && !res.headersSent) {
+                    next(error);
+                }
+            });
+        }
+
+        return res.end(fs.readFileSync(filePath));
+    } catch (error) {
+        return next(error);
+    }
+};
+
 // Middleware setup
 app.use(express.json({ limit: process.env.MAX_FILE_SIZE || "10mb" }));
 app.use(
@@ -205,18 +250,7 @@ logger.info("Router mounted");
 // Ensure preflight (OPTIONS) requests are handled
 app.options(/.*/, cors());
 
-app.use("/uploads", (req, res, next) => {
-    const token = req.cookies?.[AUTH_COOKIE_NAME];
-    if (!token) {
-        return res.status(401).json({ error: "Authentication required" });
-    }
-    try {
-        jwtLib.verify(token, process.env.JWT_SECRET);
-        next();
-    } catch {
-        return res.status(401).json({ error: "Invalid or expired token" });
-    }
-}, express.static(path.join(__dirname, "public/uploads")));
+app.get("/uploads/:filename", authenticateUser, serveUpload);
 
 // 404 handler — any request that reaches here has no matching route
 app.use((_req, res) => {

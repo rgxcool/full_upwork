@@ -61,19 +61,24 @@ router.post(
             examMode || CourseMatchingService.getDefaultExamMode(resolvedMunicipality);
 
         // Helper: next Monday
+        // Calendar dates are computed in UTC on purpose. Using the local-time
+        // accessors (getDay/setDate/setHours) made the returned start/end dates
+        // depend on the server's timezone — the same request produced
+        // 2026-11-29T18:15Z on a UTC+05:45 host and 2026-11-30T00:00Z on a UTC
+        // host, because the value is serialized back as an ISO/UTC string.
         const getNextMonday = (d) => {
             const date = new Date(d);
-            const day = date.getDay();
+            const day = date.getUTCDay();
             const diff = day === 1 ? 0 : (8 - day) % 7;
-            date.setDate(date.getDate() + diff);
-            date.setHours(0, 0, 0, 0);
+            date.setUTCDate(date.getUTCDate() + diff);
+            date.setUTCHours(0, 0, 0, 0);
             return date;
         };
 
         // Helper: add weeks
         const addWeeks = (d, weeks) => {
             const date = new Date(d);
-            date.setDate(date.getDate() + weeks * 7);
+            date.setUTCDate(date.getUTCDate() + weeks * 7);
             return date;
         };
 
@@ -182,8 +187,8 @@ router.post(
                 }
                 if (!slutprovDate) {
                     slutprovDate = new Date(courseStart);
-                    slutprovDate.setDate(slutprovDate.getDate() + 3 * 7 + ((3 - slutprovDate.getDay() + 7) % 7));
-                    slutprovDate.setHours(0, 0, 0, 0);
+                    slutprovDate.setUTCDate(slutprovDate.getUTCDate() + 3 * 7 + ((3 - slutprovDate.getUTCDay() + 7) % 7));
+                    slutprovDate.setUTCHours(0, 0, 0, 0);
                 }
 
                 results.push({
