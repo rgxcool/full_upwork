@@ -12,7 +12,7 @@ module.exports = {
             env_production: {
                 NODE_ENV: "production",
                 PORT: 5010,
-                MONGODB_URI: process.env.MONGODB_URI || "mongodb://localhost:27017/mindfullearning",
+                MONGODB_URI: process.env.MONGODB_URI,
                 JWT_SECRET: process.env.JWT_SECRET,
                 GOOGLE_PWD: process.env.GOOGLE_PWD,
                 CLIENT_URL: process.env.CLIENT_URL || "https://mindfullearning.se",

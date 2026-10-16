@@ -65,7 +65,7 @@ export default {
     const toast = useToast();
     const documents = ref([]);
     const selectedFile = ref(null);
-    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    const baseURL = import.meta.env.VITE_API_URL || '';
 
     // Determine if this is a student
     const isStudent = computed(() => {
