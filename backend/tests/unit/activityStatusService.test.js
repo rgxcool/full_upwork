@@ -255,6 +255,73 @@ describe("activityStatusService", () => {
             expect(result.studentActivity.lastActivity.type).toBe("login");
             expect(result.studentActivity.lastActivity.daysAgo).toBe(5);
         });
+
+        it("reports inactive when the course is in progress and the student is idle", async () => {
+            CourseInstance.findById.mockResolvedValue({
+                _id: validId,
+                courseName: "Samhällskunskap 1",
+                modules: makeModules(5),
+                startDate: new Date(Date.now() - 10 * 86400000),
+                endDate: new Date(Date.now() + 30 * 86400000),
+            });
+            StudentEnrollment.findOne.mockReturnValue(
+                makeChain({
+                    _id: "e1",
+                    studentId: { _id: validId, name: "Anna", personalNumber: "1" },
+                    completedComponents: new Map([[1, "✓"]]),
+                })
+            );
+            TeacherScheduleParameters.findOne.mockResolvedValue(null);
+            User.findById.mockReturnValue(
+                makeChain({
+                    _id: validId,
+                    lastLoginAt: new Date(Date.now() - 20 * 86400000),
+                }).select()
+            );
+            AssignmentSubmission.findOne.mockReturnValue(makeChain(null));
+
+            const result = await calculateActivityStatus({
+                studentId: validId,
+                courseInstanceId: validId,
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.overallStatus).toBe("inactive");
+            expect(result.studentActivity.daysSinceLastActivity).toBeGreaterThanOrEqual(14);
+            expect(result.studentActivity.inactivityThresholdDays).toBe(14);
+        });
+
+        it("keeps behind/on-schedule status when the student is still active", async () => {
+            CourseInstance.findById.mockResolvedValue({
+                _id: validId,
+                courseName: "Samhällskunskap 1",
+                modules: makeModules(5),
+                startDate: new Date(Date.now() - 60 * 86400000),
+                endDate: new Date(Date.now() + 30 * 86400000),
+            });
+            StudentEnrollment.findOne.mockReturnValue(
+                makeChain({
+                    _id: "e1",
+                    studentId: { _id: validId, name: "Anna", personalNumber: "1" },
+                    completedComponents: new Map([[1, "✓"]]),
+                })
+            );
+            TeacherScheduleParameters.findOne.mockResolvedValue(null);
+            User.findById.mockReturnValue(
+                makeChain({
+                    _id: validId,
+                    lastLoginAt: new Date(Date.now() - 2 * 86400000),
+                }).select()
+            );
+            AssignmentSubmission.findOne.mockReturnValue(makeChain(null));
+
+            const result = await calculateActivityStatus({
+                studentId: validId,
+                courseInstanceId: validId,
+            });
+
+            expect(result.overallStatus).toBe("behind");
+        });
     });
 
     describe("calculateBatchActivityStatus", () => {

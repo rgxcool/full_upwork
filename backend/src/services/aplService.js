@@ -1,5 +1,6 @@
 import logger from "../utils/logger.js";
 import { AppError } from "../utils/errorHandler.js";
+import mongoose from "mongoose";
 import AplRecord from "../models/AplRecord.js";
 import Student from "../models/Student.js";
 import User from "../models/User.js";
@@ -82,9 +83,79 @@ export async function autoCreateRecords(userId) {
         });
         await record.save();
         created.push(record);
+
+        await ensureAplLearningKit(student._id);
     }
 
     return created;
+}
+
+/**
+ * Personalized APL learning kit.
+ *
+ * Creates (once, idempotently) a logbook entry on the student's profile the
+ * first time their APL record exists — i.e. when the student is placed into
+ * APL. The entry is titled "APL-lärkit" and carries the student's name plus
+ * the APL period, and links back to the APL record so the student's first page
+ * (which reads logbook presence) immediately shows the kit.
+ *
+ * No external dependency (mail stays optional — see notifyAplKit).
+ */
+export const APL_LEARNING_KIT_TITLE = "APL-lärkit";
+
+export async function ensureAplLearningKit(studentId) {
+    const student = await Student.findById(studentId);
+    if (!student) return null;
+
+    const existing = (student.logbook || []).find(
+        (kit) => kit.title && kit.title === APL_LEARNING_KIT_TITLE
+    );
+    if (existing) return existing;
+
+    const record = await AplRecord.findOne({ studentId });
+    const period = computeAplPeriod(student.education || []);
+    const fmt = (date) => (date ? new Date(date).toISOString().split("T")[0] : "ej fastställd");
+
+    const kit = {
+        id: new mongoose.Types.ObjectId(),
+        title: APL_LEARNING_KIT_TITLE,
+        description: `Personligt APL-lärkit för ${student.name}. APL-period: ${fmt(
+            period.aplStartDate
+        )} – ${fmt(period.aplEndDate)}.`,
+        startDate: new Date(),
+        endDate: period.aplEndDate ? new Date(period.aplEndDate) : null,
+        status: "active",
+        placementId: record?.placementId || null,
+    };
+
+    if (!student.logbook) student.logbook = [];
+    student.logbook.unshift(kit);
+    await student.save();
+
+    await notifyAplKit(student, kit);
+    return kit;
+}
+
+/**
+ * Non-fatal notification that an APL learning kit was created. In-app only —
+ * no external mailer required.
+ */
+async function notifyAplKit(student, kit) {
+    try {
+        await Notification.create({
+            type: "apl_kit_created",
+            message: `APL-lärkit skapades för ${student.name}`,
+            teacher: student.teacherId?._id || student.teacherId || undefined,
+            meta: {
+                studentId: student._id,
+                studentName: student.name,
+                kitId: kit.id,
+                kitTitle: kit.title,
+            },
+        });
+    } catch (notifError) {
+        logger.error({ err: notifError }, "Error creating APL kit notification (non-fatal)");
+    }
 }
 
 /**
@@ -181,6 +252,10 @@ export async function autoTransitionStatuses() {
     for (const record of records) {
         const student = record.studentId;
         if (!student || student.dropout) continue;
+
+        // Personalized APL learning kit appears on the student's first page as
+        // soon as their APL period has started (record exists).
+        await ensureAplLearningKit(student._id);
 
         const aplPeriod = computeAplPeriod(student.education || []);
         if (!aplPeriod.aplEndDate) continue;
@@ -332,8 +407,39 @@ export async function updateAplRecordDetails({ studentId, updates, userId: _user
         "requirements",
         "cvDocId",
         "contractDocId",
+        "isSeeking",
     ];
 
+    for (const field of allowedFields) {
+        if (updates[field] !== undefined) {
+            record[field] = updates[field];
+        }
+    }
+
+    await record.save();
+    return record;
+}
+
+/**
+ * Student self-service updates for their own APL record. Students may declare
+ * that they are actively seeking a placement and attach their own CV document,
+ * nothing else (placement details remain coordinator-managed).
+ */
+export async function updateOwnAplRecord({ studentId, updates }) {
+    let record = await AplRecord.findOne({ studentId });
+    if (!record) {
+        const student = await Student.findById(studentId);
+        if (!student) throw new AppError("Student not found", 404);
+        const aplPeriod = computeAplPeriod(student.education || []);
+        record = new AplRecord({
+            studentId,
+            status: student.aplStatus || "GRAY",
+            internshipStartDate: aplPeriod.aplStartDate || null,
+            internshipEndDate: aplPeriod.aplEndDate || null,
+        });
+    }
+
+    const allowedFields = ["isSeeking", "cvDocId"];
     for (const field of allowedFields) {
         if (updates[field] !== undefined) {
             record[field] = updates[field];

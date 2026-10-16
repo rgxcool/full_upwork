@@ -42,6 +42,16 @@ export const GRADE_STATUS = {
   F: { label: 'F', hue: HUE_DANGER },
 }
 
+// Activity statuses (backend activityStatusService) per course instance.
+// Student is "inactive" when the course is still running but no activity was
+// registered for more than INACTIVITY_THRESHOLD_DAYS (14) days.
+export const ACTIVITY_STATUS = {
+  'on schedule': { label: 'I fas', hue: HUE_INFO },
+  behind: { label: 'Efter', hue: HUE_WARNING },
+  inactive: { label: 'Inaktiv', hue: HUE_DANGER },
+  completed: { label: 'Klar', hue: HUE_SUCCESS },
+}
+
 // Legacy helper: APL status → Vuetify color name, resolved through the
 // registered theme colors (see main.js) so it lands on the shared hues.
 export function aplStatusColor(status) {
@@ -54,4 +64,9 @@ export function aplStatusColor(status) {
     GREEN: 'green',
   }
   return map[status] || 'gray'
+}
+
+// Resolve an activity status key to its { label, hue } (fallback = neutral).
+export function getActivityStatus(status) {
+  return ACTIVITY_STATUS[status] || { label: status || 'Okänt', hue: HUE_NEUTRAL }
 }

@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import logger from "../utils/logger.js";
 import { AUTH_COOKIE_NAME, setAuthCookie, clearAuthCookie } from "../config/cookies.js";
+import { refreshUserAuthorization } from "../middleware/authorization.js";
 
 /**
  * Authentication Controller
@@ -134,7 +135,7 @@ export const login = async (req, res) => {
  * @param {import('express').Response} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-export const authenticateUser = (req, res, next) => {
+export const authenticateUser = async (req, res, next) => {
     if (req.user) {
         req.userId = req.userId || req.user.userId || req.user._id || req.user.id;
         return next();
@@ -171,6 +172,13 @@ export const authenticateUser = (req, res, next) => {
                 .status(401)
                 .json({ error: "Autentisering saknas (No userId in token)." });
         }
+
+        // The JWT payload carries no `municipalities`, so without this the
+        // tenant helpers in utils/tenantScope.js see an empty scope and treat a
+        // municipality-restricted staff member as global. Endpoints guarded only
+        // by `authenticateUser` (document metadata, uploads) then leaked
+        // cross-tenant data. Hydrating here also picks up role revocations.
+        await refreshUserAuthorization(req);
 
         next();
     } catch (error) {

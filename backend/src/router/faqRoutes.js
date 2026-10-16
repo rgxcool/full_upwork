@@ -11,12 +11,15 @@
 //                 FAQs and edit/deactivate/delete only their own.
 import { Router } from "express";
 import { isAuthenticated } from "../middleware/auth.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { validateId } from "../middleware/validation.js";
 import { recordAudit } from "../utils/auditLog.js";
 import logger from "../utils/logger.js";
 import faqService, { FaqValidationError } from "../services/faqService.js";
 
 const router = Router();
+
+router.use("/chatbot/faq", requireFeature("FAQ"));
 
 const ADMIN_ROLES = ["admin", "systemadmin"];
 const STAFF_ROLES = [...ADMIN_ROLES, "teacher"];

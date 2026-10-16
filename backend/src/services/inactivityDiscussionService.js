@@ -12,6 +12,7 @@ import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import Notification from "../models/Notification.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
+import Student from "../models/Student.js";
 import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
@@ -23,6 +24,117 @@ import {
     INACTIVITY_WITHDRAW_DAYS,
     computeInactivitySignal,
 } from "../utils/inactivityStatus.js";
+
+const REVIEW_MARKER = "inactivity_review_notified";
+
+const hasReviewNotification = (student) =>
+    (student.changeHistory || []).some(
+        (entry) => entry.changes && entry.changes.includes(REVIEW_MARKER)
+    );
+
+export const hasSentInactivityWarning = (student) =>
+    (student.changeHistory || []).some(
+        (entry) => entry.changes && entry.changes.includes("inactivity_warning_email")
+    );
+
+const formatDateLine = (value) => {
+    if (!value) return "aldrig";
+    const d = value instanceof Date ? value : new Date(value);
+    if (isNaN(d.getTime())) return "aldrig";
+    return d.toLocaleDateString("sv-SE", { year: "numeric", month: "long", day: "numeric" });
+};
+
+/**
+ * Create the administrator "withdrawal review" notification for a student who
+ * has been inactive during the first five days (compliance rule) but has not
+ * yet received a warning email. Idempotent: a student is only notified once
+ * (marker in changeHistory), and never after a warning email has been sent.
+ *
+ * The notification carries everything an administrator needs to decide
+ * (requirement: student, course, activity status, last activity date, days
+ * inactive, relevant scheduled dates, assignment status, available actions)
+ * WITHOUT exposing personnummer or other sensitive data. The decision itself
+ * is performed by the admin from the notification (withdraw / warning email).
+ *
+ * @param {{ studentId: string, student: Object, signal: Object, enrollmentMeta?: Array<{courseName: string, scheduledDates: Date[]}>, lastActivityAt?: Date|null }} params
+ * @returns {Promise<"created"|"already_reviewed"|"warning_sent">}
+ */
+export const createInactivityReviewNotification = async ({
+    studentId,
+    student,
+    signal,
+    enrollmentMeta = [],
+    lastActivityAt = null,
+}) => {
+    if (hasSentInactivityWarning(student)) return "warning_sent";
+    if (hasReviewNotification(student)) return "already_reviewed";
+    if (!studentId) return "already_reviewed";
+
+    const courseNames = enrollmentMeta.map((e) => e.courseName).filter(Boolean);
+    const scheduledDates = enrollmentMeta
+        .flatMap((e) => e.scheduledDates || [])
+        .filter(Boolean)
+        .slice(0, 10);
+
+    const daysInactive = Math.min(
+        ...[
+            signal.daysSinceLastLogin,
+            signal.daysSinceLastSubmission,
+            signal.daysSinceLastLearningActivity,
+        ].filter((v) => v !== null)
+    );
+
+    const meta = {
+        studentId,
+        studentName: student.name || "",
+        courseIds: enrollmentMeta
+            .map((e) => e.courseInstanceId)
+            .filter(Boolean),
+        courseNames,
+        scheduledDates,
+        lastActivityAt: lastActivityAt || null,
+        daysInactive: Number.isFinite(daysInactive) ? daysInactive : null,
+        openSubmissions: signal.openSubmissions || 0,
+        daysUntilWithdraw: signal.daysUntilWithdraw,
+        url: "/admin/inactivity",
+    };
+
+    const coursesLine = courseNames.length > 0 ? courseNames.join(", ") : "Okända kurser";
+    const datesLine = scheduledDates.length > 0
+        ? scheduledDates.map(formatDateLine).join(", ")
+        : "inga inplanerade tillfällen";
+    const message =
+        `Inaktivitetsgranskning krävs: ${student.name || "Eleven"}. ` +
+        `Kurser: ${coursesLine}. ` +
+        `Senast aktivitet: ${formatDateLine(lastActivityAt)} (${Number.isFinite(daysInactive) ? `${daysInactive} dagar sedan` : "okänd"}). ` +
+        `Öppna inlämningar: ${signal.openSubmissions || 0}. ` +
+        `Inplanerade tillfällen: ${datesLine}. ` +
+        `Åtgärder: skicka varningsmail eller avsluta omedelbart.`;
+
+    await Notification.create({
+        type: NOTIFICATION_TYPES.INACTIVITY_REVIEW,
+        message,
+        meta,
+        resolvedByUsers: [],
+    });
+
+    await Student.updateOne(
+        { _id: studentId, "changeHistory.changes": { $nin: [REVIEW_MARKER] } },
+        {
+            $push: {
+                changeHistory: {
+                    timestamp: new Date(),
+                    changedBy: null,
+                    changedByRole: "system",
+                    changes: [REVIEW_MARKER, "auto"],
+                    newValues: { createdAt: new Date() },
+                },
+            },
+        }
+    );
+
+    return "created";
+};
 
 /**
  * Resolve the responsible teacher (first enrollment with a teacherId) for a
@@ -65,6 +177,10 @@ export async function computeLiveInactivitySignal({ studentId, email, today = ne
         ? await User.findOne({ email }).select("lastLoginAt").lean()
         : null;
 
+    const studentDoc = await Student.findById(studentId)
+        .select("lastLearningActivityAt")
+        .lean();
+
     const submissions = await AssignmentSubmission.find({
         enrollmentId: { $in: enrollments.map((e) => e._id) },
     })
@@ -91,6 +207,7 @@ export async function computeLiveInactivitySignal({ studentId, email, today = ne
         lastLoginAt: user?.lastLoginAt || null,
         enrollments,
         lastSubmissionAt: lastSubmissionAt ? new Date(lastSubmissionAt) : null,
+        lastLearningActivityAt: studentDoc?.lastLearningActivityAt || null,
         openSubmissions,
         today,
     });
@@ -111,6 +228,7 @@ const daysOrNever = (days) => (days === null || days === undefined ? "aldrig" : 
 export function summarizeInactivitySignal(signal, studentName = "eleven") {
     const parts = [
         `Senast inloggning: ${daysOrNever(signal.daysSinceLastLogin)}`,
+        `Senast kurs-/lektionaktivitet: ${daysOrNever(signal.daysSinceLastLearningActivity)}`,
         `Senast inlämning: ${daysOrNever(signal.daysSinceLastSubmission)}`,
     ];
     if (signal.openSubmissions > 0) {

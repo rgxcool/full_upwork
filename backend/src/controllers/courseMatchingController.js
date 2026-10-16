@@ -14,6 +14,7 @@ import { cloneModules } from "../models/courseModuleSchema.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import * as enrollmentService from "../services/enrollmentService.js";
+import { recordStudentLearningActivity } from "../utils/learningActivity.js";
 import { recordAudit } from "../utils/auditLog.js";
 
 /**
@@ -1187,7 +1188,7 @@ export const uploadStudentsForMatching = async (req, res) => {
 
 export const processStudentEducation = async (req, res) => {
     try {
-        const { studentId, educationEntries, needsSupport, examMode } = req.body;
+        const { studentId, educationEntries, needsSupport, examMode, pace } = req.body;
         const userId = req.user?.userId;
 
         if (!studentId || !educationEntries) {
@@ -1207,7 +1208,7 @@ export const processStudentEducation = async (req, res) => {
             studentId,
             educationEntries,
             userId,
-            { needsSupport, examMode }
+            { needsSupport, examMode, pace }
         );
 
         res.json({
@@ -1487,7 +1488,12 @@ export const getMyCourseCards = async (req, res) => {
             return res.status(404).json({ error: "Ingen elevprofil hittades för kontot" });
         }
 
-        const cards = await enrollmentService.buildCourseCards(student._id);
+        const cards = await enrollmentService.buildCourseCards(student._id, {
+            applyStudentVisibility: true,
+        });
+        // Course-card access is meaningful learning activity for the inactive-
+        // student automation (fellowship login-only detection).
+        await recordStudentLearningActivity(student._id).catch(() => {});
         res.json({ success: true, student: { _id: student._id, name: student.name }, cards });
     } catch (error) {
         logger.error({ err: error }, "Error fetching my course cards");
@@ -1524,7 +1530,9 @@ export const getStudentCourseCards = async (req, res) => {
             }
         }
 
-        const cards = await enrollmentService.buildCourseCards(studentId);
+        const cards = await enrollmentService.buildCourseCards(studentId, {
+            applyStudentVisibility: userRoles.includes("student"),
+        });
         res.json({ success: true, cards });
     } catch (error) {
         logger.error({ err: error }, "Error fetching student course cards");

@@ -20,6 +20,7 @@ const NOTIFICATION_TYPES = {
 
     // 📵 Inaktivitet
     INACTIVITY_ACTION: "inactivity_action", // Lärare/admin hanterar en inaktiv elev
+    INACTIVITY_REVIEW: "inactivity_review", // Admin ska granska en ny/oregistrerad elev inför ev. avbrott
   
     // 📆 Slutprov
     FINAL_EXAM_SOON: "final_exam_soon", // Elev har slutprov inom 14 dagar
@@ -40,6 +41,8 @@ const NOTIFICATION_TYPES = {
 
     // 🎓 Diploma
     DIPLOMA_READY: "diploma_ready", // Alla kurser + APL klara — diplom kan genereras
+    COURSE_COMPLETED: "course_completed", // En enskild kurs är slutförd och godkänd
+    PACKAGE_COMPLETED: "package_completed", // Ett helt kurspaket är slutfört och godkänt
   
     // 🧹 Annat/metodiskt
     SYSTEM_ALERT: "system_alert", // För generella systemmeddelanden

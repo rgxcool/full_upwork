@@ -70,3 +70,37 @@ export function municipalityInScope(user, municipality) {
     if (municipality === null || municipality === undefined) return false;
     return getUserMunicipalities(user).includes(municipality);
 }
+
+/**
+ * Mongo filter restricting a *User* query to the requesting user's tenant scope.
+ *
+ * A User is visible when its own `municipalities` overlaps the requester's. A
+ * recipient with no `municipalities` (global/system account) is treated as
+ * visible to everyone, mirroring `hasGlobalScope` in the other direction.
+ *
+ * @param {object} user
+ * @returns {object}
+ */
+export function userScopeFilter(user) {
+    if (hasGlobalScope(user)) return {};
+    const muns = getUserMunicipalities(user);
+    // `hasGlobalScope` already covers the empty case; keep the guard for clarity.
+    if (muns.length === 0) return { _id: { $exists: false } };
+    return { municipalities: { $in: muns } };
+}
+
+/**
+ * True if two accounts share at least one municipality, i.e. they belong to the
+ * same tenant. Two global accounts share everything; a global account shares
+ * with anyone.
+ *
+ * @param {object} a
+ * @param {object} b
+ * @returns {boolean}
+ */
+export function sharesTenant(a, b) {
+    if (hasGlobalScope(a) || hasGlobalScope(b)) return true;
+    const aMuns = getUserMunicipalities(a);
+    const bMuns = getUserMunicipalities(b);
+    return aMuns.some((m) => bMuns.includes(m));
+}

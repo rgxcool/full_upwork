@@ -88,6 +88,17 @@
               </div>
             </div>
 
+            <div v-if="card.scheduledDates && card.scheduledDates.length > 0" class="scheduled-dates">
+              <span class="date-label">Inplanerade undervisningstillfällen</span>
+              <span class="scheduled-date-chips">
+                <span
+                  v-for="date in card.scheduledDates"
+                  :key="date"
+                  class="scheduled-date-chip"
+                >{{ date }}</span>
+              </span>
+            </div>
+
               <div v-if="card.progress" class="progress-block">
                 <span class="progress-label">
                   Framsteg: {{ card.progress.completed }}/{{ card.progress.total }}
@@ -150,6 +161,7 @@
               </div>
               <details v-for="module in card.modules" :key="'d' + module.moduleNumber" class="module-details">
                 <summary>{{ module.title }}</summary>
+                <p v-if="module.instructions" class="module-instructions">{{ module.instructions }}</p>
                 <ul class="section-list">
                   <li v-for="(section, i) in module.sections || []" :key="i" class="section-item">
                     <span class="section-title">{{ section.title || 'Sektion ' + (i + 1) }}</span>
@@ -568,6 +580,30 @@ onMounted(loadCourseCards)
   text-align: right;
 }
 
+.scheduled-dates {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.scheduled-date-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.scheduled-date-chip {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
 .course-card-modules {
   margin-top: 0.9rem;
 }
@@ -622,6 +658,13 @@ onMounted(loadCourseCards)
   font-weight: 600;
   font-size: 0.85rem;
   color: #374151;
+}
+
+.module-instructions {
+  margin: 0.4rem 0 0 1rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+  white-space: pre-wrap;
 }
 
 .section-list {

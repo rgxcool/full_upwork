@@ -61,6 +61,28 @@
       </article>
     </section>
 
+    <section v-if="role === 'admin' || role === 'systemadmin'" class="completions-panel">
+      <div class="panel-heading">
+        <div><p class="eyebrow">Kursgenomförande</p><h2>Nyligen avslutade</h2></div>
+        <router-link class="panel-link" to="/admin/completions">Visa alla →</router-link>
+      </div>
+      <p class="panel-copy">Kurser och kurspaket som nyligen markerats som avklarade — upptäckt automatiskt av genomförandescanen.</p>
+      <div v-if="completions.length === 0" class="completions-empty">Inga avslutade kurser än. De visas här när kurser och paket fullföljts och godkänts.</div>
+      <ul v-else class="completion-list">
+        <li v-for="event in completions" :key="event._id" class="completion-row">
+          <span class="completion-type" :title="event.completionType === 'course_package' ? 'Kurspaket' : 'Kurs'">{{ event.completionType === 'course_package' ? 'Paket' : 'Kurs' }}</span>
+          <span class="completion-body">
+            <strong>{{ event.completionType === 'course_package' ? event.packageName : event.courseName }}</strong>
+            <small>{{ event.studentName }} · {{ formatDate(event.completionDate) }}</small>
+          </span>
+          <span class="completion-meta">
+            <small v-if="event.teacherName || event.teacherUserId">Ansv. lärare: {{ event.teacherName || 'Se detaljer' }}</small>
+            <small>{{ event.municipality || 'Intern' }}</small>
+          </span>
+        </li>
+      </ul>
+    </section>
+
     <section class="role-note" aria-label="Rollinformation">
       <div><p class="eyebrow">Rollbaserad vy</p><h2>Allt du behöver, utan brus.</h2><p>Menyn och snabbvägarna anpassas efter dina behörigheter. Befintliga elev-, lärar-, APL-, rapport- och administrationsflöden finns kvar och nås från sina respektive arbetsytor.</p></div>
       <router-link class="secondary-action" to="/profile">Visa min profil</router-link>
@@ -85,6 +107,7 @@ export default {
     const loadError = ref('')
     const unreadCount = ref(null)
     const aplStatus = ref(null)
+    const completions = ref([])
     // Map the real GET /apl/my fields onto the panel. /apl/my returns
     // status (color word), placementCompany (workplace), placementContact
     // (supervisor), and internshipStartDate/EndDate (period) — NOT the old
@@ -129,6 +152,14 @@ export default {
             aplStatus.value = apl
           } catch { aplStatus.value = null }
         }
+        if (role.value === 'admin' || role.value === 'systemadmin') {
+          try {
+            const { data: res } = await client.get('/completions/overview', { params: { limit: 8 } })
+            completions.value = res.events || []
+          } catch {
+            completions.value = []
+          }
+        }
       } catch (error) {
         loadError.value = error.message || 'Försök igen eller kontakta skoladministrationen.'
       } finally {
@@ -142,9 +173,10 @@ export default {
     ] : [
       { to: '/students', label: 'Elever', description: 'Sök och följ upp studerande', icon: '01' }, { to: '/larare/kurser', label: 'Mina kurser', description: 'Undervisning och kursarbete', icon: '02' }, { to: '/betyg', label: 'Betyg', description: 'Bedöm och följ resultat', icon: '03' }, { to: '/kalender', label: 'Kalender', description: 'Planera möten och prov', icon: '04' },
     ])
+    const formatDate = (value) => (value ? new Date(value).toLocaleDateString('sv-SE') : '')
     onMounted(loadDashboard)
 
-    return { displayName, roleLabel, greeting, primaryAction, stats, quickLinks, loading, refreshing, loadError, loadDashboard, aplStatus, aplColor, aplStatusLabel, aplPeriod, aplWorkplace, aplSupervisor }
+    return { displayName, role, roleLabel, greeting, primaryAction, stats, quickLinks, loading, refreshing, loadError, loadDashboard, aplStatus, aplColor, aplStatusLabel, aplPeriod, aplWorkplace, aplSupervisor, completions, formatDate }
   },
 }
 </script>
@@ -154,7 +186,7 @@ export default {
 .dashboard-hero { display: flex; justify-content: space-between; gap: 2rem; align-items: end; max-width: 1400px; margin: 0 auto; padding: 2.5rem clamp(1rem, 3vw, 3rem); border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary-hover) 100%); color: var(--color-primary-contrast); }
 .eyebrow { margin: 0 0 .5rem; color: var(--color-secondary-light); text-transform: uppercase; letter-spacing: .12em; font-size: .72rem; font-weight: 800; }
 h1,h2,p { margin-top: 0; } h1 { max-width: 700px; margin-bottom: .75rem; font-size: clamp(2rem, 5vw, 4.5rem); line-height: .98; letter-spacing: -.05em; } h2 { margin-bottom: .4rem; font-size: 1.3rem; letter-spacing: -.02em; }.hero-copy { max-width: 600px; margin-bottom: 0; color: rgba(255,255,255,.85); line-height: 1.6; }.hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; }.primary-action,.secondary-action { display: inline-flex; align-items: center; justify-content: center; min-height: 2.7rem; padding: .7rem 1rem; border-radius: var(--radius-sm); text-decoration: none; font-weight: 800; font-size: .82rem; transition: background var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease); }.primary-action { background: var(--color-surface); color: var(--color-primary-hover); }.primary-action:hover { background: var(--color-primary-light); }.secondary-action { border: 1px solid rgba(255,255,255,.55); color: inherit; }.dashboard-hero .secondary-action:hover { border-color: rgba(255,255,255,.9); background: rgba(255,255,255,.12); }
-.stat-grid,.workspace-grid,.role-note { max-width: 1400px; margin: 1.25rem auto 0; }.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--color-border); border: 1px solid var(--color-border); border-radius: var(--radius-card); overflow: hidden; }.stat-card { display: flex; flex-direction: column; gap: .35rem; padding: 1.25rem; background: var(--color-surface); }.stat-label,.stat-note { color: var(--color-text-muted); font-size: .75rem; }.stat-card strong { font-size: 1.35rem; }.workspace-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 1.25rem; }.panel,.role-note { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 1.5rem; }.panel-heading { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem; }.status-pill { padding: .4rem .6rem; border-radius: var(--radius-pill); background: var(--color-primary-light); color: var(--color-primary-hover); font-size: .72rem; font-weight: 800; }.quick-links { display: grid; gap: .55rem; }.quick-link { display: grid; grid-template-columns: 2rem 1fr auto; gap: .8rem; align-items: center; padding: .85rem; border-radius: var(--radius-sm); color: var(--color-ink); text-decoration: none; border: 1px solid var(--color-border); transition: border-color var(--motion-duration) var(--motion-ease), background var(--motion-duration) var(--motion-ease); }.quick-link:hover,.quick-link:focus-visible { border-color: var(--color-secondary); background: var(--color-secondary-light); }.quick-link strong,.quick-link small { display: block; }.quick-link small,.check-list small { margin-top: .2rem; color: var(--color-text-muted); font-size: .75rem; }.quick-icon,.check-dot { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: var(--radius-sm); background: var(--color-primary-light); color: var(--color-primary-hover); font-size: .7rem; font-weight: 900; }.check-list { display: grid; gap: 1.1rem; padding: 0; margin: 1.5rem 0 0; list-style: none; }.check-list li { display: flex; gap: .8rem; align-items: start; }.check-dot { flex: 0 0 auto; border-radius: 50%; }.check-list strong { display: block; font-size: .86rem; }.role-note { display: flex; justify-content: space-between; align-items: center; gap: 2rem; margin-top: 1.25rem; background: var(--color-primary-light); }.role-note p:not(.eyebrow) { max-width: 720px; margin-bottom: 0; color: var(--color-text-secondary); line-height: 1.6; }.role-note .secondary-action { border-color: var(--color-border-strong); color: var(--color-primary-hover); white-space: nowrap; }.role-note .secondary-action:hover { border-color: var(--color-primary); background: var(--color-surface); }
+.stat-grid,.workspace-grid,.role-note { max-width: 1400px; margin: 1.25rem auto 0; }.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--color-border); border: 1px solid var(--color-border); border-radius: var(--radius-card); overflow: hidden; }.stat-card { display: flex; flex-direction: column; gap: .35rem; padding: 1.25rem; background: var(--color-surface); }.stat-label,.stat-note { color: var(--color-text-muted); font-size: .75rem; }.stat-card strong { font-size: 1.35rem; }.workspace-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 1.25rem; }.panel,.role-note { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 1.5rem; }.panel-heading { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem; }.status-pill { padding: .4rem .6rem; border-radius: var(--radius-pill); background: var(--color-primary-light); color: var(--color-primary-hover); font-size: .72rem; font-weight: 800; }.quick-links { display: grid; gap: .55rem; }.quick-link { display: grid; grid-template-columns: 2rem 1fr auto; gap: .8rem; align-items: center; padding: .85rem; border-radius: var(--radius-sm); color: var(--color-ink); text-decoration: none; border: 1px solid var(--color-border); transition: border-color var(--motion-duration) var(--motion-ease), background var(--motion-duration) var(--motion-ease); }.quick-link:hover,.quick-link:focus-visible { border-color: var(--color-secondary); background: var(--color-secondary-light); }.quick-link strong,.quick-link small { display: block; }.quick-link small,.check-list small { margin-top: .2rem; color: var(--color-text-muted); font-size: .75rem; }.quick-icon,.check-dot { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: var(--radius-sm); background: var(--color-primary-light); color: var(--color-primary-hover); font-size: .7rem; font-weight: 900; }.completions-panel { max-width: 1400px; margin: 1.25rem auto 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 1.5rem; }.completions-panel .panel-heading { display: flex; justify-content: space-between; align-items: start; margin-bottom: .75rem; }.completions-panel .panel-link { color: var(--color-secondary); text-decoration: none; font-weight: 800; font-size: .8rem; }.completions-panel .panel-copy { margin-bottom: 1rem; color: var(--color-text-muted); font-size: .85rem; }.completions-empty { padding: 1.5rem; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); color: var(--color-text-muted); font-size: .85rem; }.completion-list { display: grid; gap: .6rem; margin: 0; padding: 0; list-style: none; }.completion-row { display: grid; grid-template-columns: auto 1fr auto; gap: .9rem; align-items: center; padding: .8rem .9rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }.completion-type { display: grid; place-items: center; min-width: 3.2rem; padding: .3rem .5rem; border-radius: var(--radius-pill); background: var(--color-primary-light); color: var(--color-primary-hover); font-size: .68rem; font-weight: 900; text-transform: uppercase; }.completion-body strong,.completion-body small { display: block; }.completion-body small,.completion-meta small { color: var(--color-text-muted); font-size: .75rem; }.completion-meta { display: grid; justify-items: end; gap: .2rem; }.check-list { display: grid; gap: 1.1rem; padding: 0; margin: 1.5rem 0 0; list-style: none; }.check-list li { display: flex; gap: .8rem; align-items: start; }.check-dot { flex: 0 0 auto; border-radius: 50%; }.check-list strong { display: block; font-size: .86rem; }.role-note { display: flex; justify-content: space-between; align-items: center; gap: 2rem; margin-top: 1.25rem; background: var(--color-primary-light); }.role-note p:not(.eyebrow) { max-width: 720px; margin-bottom: 0; color: var(--color-text-secondary); line-height: 1.6; }.role-note .secondary-action { border-color: var(--color-border-strong); color: var(--color-primary-hover); white-space: nowrap; }.role-note .secondary-action:hover { border-color: var(--color-primary); background: var(--color-surface); }
 @media (max-width: 800px) { .dashboard-hero,.role-note { flex-direction: column; align-items: stretch; }.workspace-grid { grid-template-columns: 1fr; }.stat-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 480px) { .dashboard-page { padding: 1rem .75rem 2rem; }.dashboard-hero { padding: 1.5rem; }.hero-actions { flex-direction: column; }.hero-actions a { width: 100%; }.stat-card { padding: .9rem; }.panel,.role-note { padding: 1rem; } }
 </style>

@@ -51,6 +51,14 @@ vi.mock("../../src/models/User.js", () => {
     },
   };
 });
+vi.mock("../../src/models/Student.js", () => {
+  return {
+    __esModule: true,
+    default: {
+      findOne: vi.fn(),
+    },
+  };
+});
 vi.mock("../../src/services/emailService.js", () => ({
   __esModule: true,
   sendEmail: vi.fn(),
@@ -66,6 +74,7 @@ vi.mock("../../src/services/emailService.js", () => ({
 import Conversation from "../../src/models/Conversation.js";
 import Message from "../../src/models/Message.js";
 import User from "../../src/models/User.js";
+import Student from "../../src/models/Student.js";
 import {
   getConversations,
   getMessages,
@@ -74,7 +83,7 @@ import {
   getUnreadCount,
   getRecipients,
 } from "../../src/controllers/messagingController.js";
-import { canMessage, dispatchMessageEmailCopies, sendEmailCopyOfMessage } from "../../src/services/messagingService.js";
+import { canMessage, dispatchMessageEmailCopies, sendEmailCopyOfMessage, validateParticipants } from "../../src/services/messagingService.js";
 import { sendEmail, renderMessageCopyEmail } from "../../src/services/emailService.js";
 
 const createRes = () => {
@@ -115,6 +124,12 @@ describe("Messaging Service & Controller", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: a student resolves to no municipality. Every test that exercises
+    // tenant enforcement sets this explicitly; role-only tests keep the
+    // previous "allowed" behaviour because staffUser has global scope.
+    Student.findOne.mockReturnValue({
+      select: () => Promise.resolve(null),
+    });
   });
 
   describe("messagingService.canMessage", () => {
@@ -643,6 +658,198 @@ describe("Messaging Service & Controller", () => {
         })
       );
       expect(res.json).toHaveBeenCalledWith(mockRecipients);
+    });
+
+    it("escapes regex metacharacters in the search term", async () => {
+      const selectQuery = {
+        select: vi.fn().mockReturnThis(),
+        sort: vi.fn().mockResolvedValue([]),
+      };
+      User.find.mockReturnValue(selectQuery);
+
+      const res = createRes();
+      await getRecipients({ user: staffUser, query: { search: ".*" } }, res);
+
+      // ".*" must be treated as literal text, not as a match-everything pattern.
+      expect(User.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          $or: [
+            { name: { $regex: "\\.\\*", $options: "i" } },
+            { email: { $regex: "\\.\\*", $options: "i" } },
+          ],
+        })
+      );
+    });
+  });
+
+  describe("P17 messaging tenant isolation", () => {
+    const ALFA = "Almstad";
+    const BETA = "Betanäs";
+
+    const scopedTeacher = {
+      _id: new mongoose.Types.ObjectId(),
+      name: "Tobias Timme",
+      email: "tobias@alfa.se",
+      roles: ["teacher"],
+      role: "teacher",
+      municipalities: [ALFA],
+    };
+
+    const sameTenantStaff = {
+      _id: new mongoose.Types.ObjectId(),
+      name: "Anna Lärare",
+      email: "anna@alfa.se",
+      roles: ["syv"],
+      role: "syv",
+      municipalities: [ALFA],
+    };
+
+    const otherTenantStaff = {
+      _id: new mongoose.Types.ObjectId(),
+      name: "Bo Rektor",
+      email: "bo@beta.se",
+      roles: ["admin"],
+      role: "admin",
+      municipalities: [BETA],
+    };
+
+    /** Make the mocked Student lookup resolve a specific municipality by email. */
+    const studentInMunicipality = (email, municipality) => {
+      Student.findOne.mockImplementation(({ email: matchEmail }) => ({
+        select: () => Promise.resolve(
+          matchEmail === email ? { municipality: { type: municipality } } : null
+        ),
+      }));
+    };
+
+    describe("canMessage", () => {
+      it("allows staff to message staff in the same municipality", async () => {
+        expect(await canMessage(scopedTeacher, sameTenantStaff)).toBe(true);
+      });
+
+      it("blocks staff from messaging staff in another municipality", async () => {
+        expect(await canMessage(scopedTeacher, otherTenantStaff)).toBe(false);
+      });
+
+      it("allows a global-scope admin to message staff in any municipality", async () => {
+        expect(await canMessage(staffUser, otherTenantStaff)).toBe(true);
+      });
+
+      it("allows scoped staff to message a student in their municipality", async () => {
+        studentInMunicipality("erik@elev.se", ALFA);
+        expect(await canMessage(scopedTeacher, studentUser)).toBe(true);
+      });
+
+      it("blocks scoped staff from messaging a student in another municipality", async () => {
+        studentInMunicipality("erik@elev.se", BETA);
+        expect(await canMessage(scopedTeacher, studentUser)).toBe(false);
+      });
+
+      it("blocks scoped staff from messaging a student with no known municipality", async () => {
+        studentInMunicipality("erik@elev.se", null);
+        expect(await canMessage(scopedTeacher, studentUser)).toBe(false);
+      });
+
+      it("allows a global-scope admin to message a student with no known municipality", async () => {
+        studentInMunicipality("erik@elev.se", null);
+        expect(await canMessage(staffUser, studentUser)).toBe(true);
+      });
+
+      it("allows a student to message staff in their own municipality", async () => {
+        studentInMunicipality("erik@elev.se", ALFA);
+        expect(await canMessage(studentUser, scopedTeacher)).toBe(true);
+      });
+
+      it("blocks a student from messaging staff in another municipality", async () => {
+        studentInMunicipality("erik@elev.se", BETA);
+        expect(await canMessage(studentUser, scopedTeacher)).toBe(false);
+      });
+    });
+
+    describe("validateParticipants", () => {
+      it("rejects a batch that includes a participant from another tenant", async () => {
+        studentInMunicipality("erik@elev.se", ALFA);
+        User.findById.mockImplementation(async (id) => {
+          const byId = String(id);
+          if (byId === String(sameTenantStaff._id)) return sameTenantStaff;
+          if (byId === String(otherTenantStaff._id)) return otherTenantStaff;
+          return null;
+        });
+
+        const ok = await validateParticipants(scopedTeacher, [
+          String(sameTenantStaff._id),
+          String(otherTenantStaff._id),
+        ]);
+        expect(ok).toBe(false);
+      });
+
+      it("accepts a batch where every participant shares the tenant", async () => {
+        studentInMunicipality("erik@elev.se", ALFA);
+        User.findById.mockImplementation(async (id) => {
+          const byId = String(id);
+          if (byId === String(sameTenantStaff._id)) return sameTenantStaff;
+          if (byId === String(studentUser._id)) return studentUser;
+          return null;
+        });
+
+        const ok = await validateParticipants(scopedTeacher, [
+          String(sameTenantStaff._id),
+          String(studentUser._id),
+        ]);
+        expect(ok).toBe(true);
+      });
+    });
+
+    describe("getRecipients", () => {
+      it("restricts the recipient list to the requester's municipalities", async () => {
+        const selectQuery = {
+          select: vi.fn().mockReturnThis(),
+          sort: vi.fn().mockResolvedValue([]),
+        };
+        User.find.mockReturnValue(selectQuery);
+
+        const res = createRes();
+        await getRecipients({ user: scopedTeacher, query: {} }, res);
+
+        expect(User.find).toHaveBeenCalledWith(
+          expect.objectContaining({ municipalities: { $in: [ALFA] } })
+        );
+      });
+
+      it("does not add a municipality filter for a global-scope user", async () => {
+        const selectQuery = {
+          select: vi.fn().mockReturnThis(),
+          sort: vi.fn().mockResolvedValue([]),
+        };
+        User.find.mockReturnValue(selectQuery);
+
+        const res = createRes();
+        await getRecipients({ user: staffUser, query: {} }, res);
+
+        const passedQuery = User.find.mock.calls[0][0];
+        expect(passedQuery).not.toHaveProperty("municipalities");
+      });
+
+      it("applies both the tenant filter and the escaped search term", async () => {
+        const selectQuery = {
+          select: vi.fn().mockReturnThis(),
+          sort: vi.fn().mockResolvedValue([]),
+        };
+        User.find.mockReturnValue(selectQuery);
+
+        const res = createRes();
+        await getRecipients({ user: scopedTeacher, query: { search: "a+b" } }, res);
+
+        expect(User.find).toHaveBeenCalledWith(
+          expect.objectContaining({
+            municipalities: { $in: [ALFA] },
+            $or: [
+              { name: { $regex: "a\\+b", $options: "i" } },
+              { email: { $regex: "a\\+b", $options: "i" } },
+            ],
+          })
+        );
+      });
     });
   });
 });

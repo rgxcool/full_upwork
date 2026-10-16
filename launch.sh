@@ -91,6 +91,8 @@ log "Loading education data (dropData + updateEducation)..."
   cd "$ROOT/backend"
   node scripts/dropData.js
   node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
+  node scripts/seedE2EData.js
+  node scripts/seedMindfulFaq.js
 ) || {
   err "Failed to load education data. Check the script output above."
   exit 1

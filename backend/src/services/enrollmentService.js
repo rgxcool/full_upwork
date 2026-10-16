@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import { AppError } from "../utils/errorHandler.js";
 import CourseMatchingService from "../utils/courseMatchingService.js";
+import { buildVisibleModules } from "../utils/courseContentVisibility.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
@@ -51,7 +52,7 @@ export const fetchStudentEnrollments = async ({ studentId, status, startDate, en
  * comes from the course instance, which already holds the duplicated template
  * modules created at admission.
  */
-export const buildCourseCards = async (studentId) => {
+export const buildCourseCards = async (studentId, { applyStudentVisibility = false } = {}) => {
     const enrollments = await StudentEnrollment.find({ studentId })
         .populate({
             path: "courseInstanceId",
@@ -154,11 +155,17 @@ export const buildCourseCards = async (studentId) => {
                 weeks: Number.isFinite(weeks) ? Math.max(0, weeks) : 0,
                 studyPeriod: index + 1,
                 status: enrollment.status,
+                scheduledDates:
+                    instance?.sectionDates
+                        ?.filter(Boolean)
+                        .map((d) => d.toISOString().split("T")[0]) || [],
                 isCurrentlyActive:
                     enrollment.status === "active" &&
                     new Date(startDate) <= new Date() &&
                     new Date(endDate) >= new Date(),
-                modules: instance?.modules || [],
+                modules: buildVisibleModules(instance?.modules, instance?.content, {
+                    applyStudentVisibility,
+                }),
             };
         });
 
@@ -200,6 +207,30 @@ export const buildCourseCards = async (studentId) => {
             total,
             percent: Math.round((accepted / total) * 100),
         };
+    }
+
+    // "Student's current module": the first module (by moduleNumber) that has
+    // not been accepted yet. Mirrors the persisted CourseInstance.sectionPositions
+    // map but is computed at read-time so it never goes stale.
+    for (const card of cards) {
+        const modules = [...(card.modules || [])].sort(
+            (a, b) => (a.moduleNumber ?? 0) - (b.moduleNumber ?? 0)
+        );
+        if (modules.length === 0) continue;
+        const accepted = new Set(
+            (submissionsByEnrollment.get(String(card.enrollmentId)) || [])
+                .filter((s) => s.feedback?.status === "godkänd")
+                .map((s) => s.moduleNumber)
+        );
+        const current =
+            modules.find((m) => !accepted.has(m.moduleNumber)) ||
+            modules[modules.length - 1];
+        card.currentModule = {
+            moduleNumber: current.moduleNumber,
+            title: current.title || `Modul ${current.moduleNumber}`,
+            status: accepted.size === modules.length ? "Slutförd" : "Pågår",
+        };
+        card.currentModuleNumber = current.moduleNumber;
     }
 
     // Attach lastAccess: most recent of lastLoginAt or last submission per student

@@ -16,9 +16,10 @@
       <div class="card-body">
         <div class="info-grid">
           <div class="info-item">
-            <label>APL-status:</label>
+            <label for="apl-status">APL-status:</label>
             <select
               v-if="editMode && isAdmin"
+              id="apl-status"
               v-model="editData.aplStatus"
               class="form-control"
             >
@@ -255,7 +256,7 @@
     </div>
 
     <!-- Support Contacts Card -->
-    <div class="card">
+    <div v-if="canViewSupportDeviations" class="card">
       <div class="card-header">
         <h3>Stödkontakter</h3>
         <button
@@ -286,7 +287,7 @@
     </div>
 
     <!-- Deviations Card -->
-    <div class="card">
+    <div v-if="canViewSupportDeviations || canCreateDeviation" class="card">
       <div class="card-header">
         <h3>Avvikelser & Undantag</h3>
         <button
@@ -298,7 +299,12 @@
         </button>
       </div>
       <div class="card-body">
-        <div v-if="loadingDeviations" class="loading-small">
+        <!-- Teachers may file a deviation but the API denies them read access,
+             so the existing list stays hidden for them. -->
+        <div v-if="!canViewSupportDeviations" class="empty-state">
+          Du kan rapportera en avvikelse, men inte se tidigare avvikelser.
+        </div>
+        <div v-else-if="loadingDeviations" class="loading-small">
           <span>Laddar avvikelser...</span>
         </div>
         <div v-else-if="deviations.length > 0" class="deviations-list">
@@ -634,7 +640,11 @@ export default {
     ];
 
     const isAdmin = computed(() => store.getters.isAdmin);
+    const isSyv = computed(() => userRole.value === 'syv');
     const isSpecped = computed(() => userRole.value === 'specped');
+    const canViewSupportDeviations = computed(
+        () => isAdmin.value || isSyv.value || isSpecped.value,
+    )
     const userRole = computed(() => store.getters.userRole);
     const userId = computed(() => store.getters.userId);
     const specpedAccommodationMode = ref(false);
@@ -901,6 +911,7 @@ export default {
     // ─── Support Info ─────────────────────────────────────────────────────────
 
     const loadSupportInfo = async () => {
+      if (!canViewSupportDeviations.value) return;
       try {
         const response = await client.get(`/student-details/${route.params.id}/support`);
         supportInfo.value = response.data.supportInfo || [];
@@ -953,6 +964,7 @@ export default {
     // ─── Deviations ───────────────────────────────────────────────────────────
 
     const loadDeviations = async () => {
+      if (!canViewSupportDeviations.value) return;
       loadingDeviations.value = true;
       try {
         const response = await client.get(`/student-details/${route.params.id}/deviations`);
@@ -1092,7 +1104,9 @@ export default {
       editingComment,
       localStudent,
       isAdmin,
+      isSyv,
       isSpecped,
+      canViewSupportDeviations,
       specpedAccommodationMode,
       canComment,
       activeComments,

@@ -83,9 +83,10 @@ export async function buildCertificateHtml({
     const template = templateDoc || {};
     const settings = await CertificateSettings.findOne({}).lean();
 
-    const [logoDataUrl, signatureDataUrl] = await Promise.all([
+    const [logoDataUrl, signatureDataUrl, secondSignatureDataUrl] = await Promise.all([
         fetchFileAsDataUrl(settings?.logoFileId, ["image/png", "image/jpeg", "image/webp"]),
         fetchFileAsDataUrl(settings?.signatureFileId, ["image/png"]),
+        fetchFileAsDataUrl(settings?.secondSignatureFileId, ["image/png"]),
     ]);
 
     const data = {
@@ -104,18 +105,25 @@ export async function buildCertificateHtml({
         teacherName: snapshot.teacherName || "",
         grade: template.showGrade !== false ? snapshot.grade || "" : "",
         schoolName: schoolName || settings?.schoolName || "Mindful Learning",
+        organizationName: settings?.organizationName || "",
         certificateNumber: snapshot.certificateNumber || "",
         issuedDate: fmtDate(issuedDate) || new Date().toISOString().slice(0, 10),
         signerName: signerName || settings?.signerName || "",
         signerTitle: signerTitle || settings?.signerTitle || "Rektor",
+        secondSignerEnabled: settings?.secondSignerEnabled === true,
+        secondSignerName: settings?.secondSignerName || "",
+        secondSignerTitle: settings?.secondSignerTitle || "",
         logoUrl: logoDataUrl || "",
         signatureUrl: signatureDataUrl || "",
+        secondSignatureUrl: secondSignatureDataUrl || "",
+        configVersion: settings?.configVersion || 1,
     };
 
     return renderTemplate(template.html || "<h1>{{title}}</h1>", data, {
         showGrade: template.showGrade !== false && !!snapshot.grade,
         showApl: template.showApl === true,
         showPackage: template.showPackage === true && !!snapshot.packageName,
+        secondSignerEnabled: settings?.secondSignerEnabled === true,
     });
 }
 
@@ -148,7 +156,7 @@ export async function htmlToPdfBuffer(html, { orientation } = {}) {
  */
 export async function storePdfBuffer(buffer, { filename, recordId, contentType = "application/pdf" }) {
     const bucket = new GridFSBucket(mongoose.connection.db, { bucketName: "fs" });
-    const stream = Readable.from(buffer);
+    const stream = Readable.from([buffer]);
     const upload = bucket.openUploadStream(filename, {
         contentType,
         metadata: {

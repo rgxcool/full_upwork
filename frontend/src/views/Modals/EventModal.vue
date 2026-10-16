@@ -393,6 +393,13 @@
           const studentDetails = await client.get(`/student-details/${student._id}`);
           const education = studentDetails.data?.education || [];
           
+          // Capture exam accommodations so the "Ackommodationer" column shows
+          // which students need extra time/computer/separate room.
+          const acc = studentDetails.data?.examAccommodations
+          if (acc) {
+            student.examAccommodations = acc
+          }
+          
           // Format course instances for dropdown - use courseInstance from enrollment data
           const courseInstances = education
             .filter(edu => {
@@ -521,6 +528,7 @@
           examLocation: s.examLocation || '',
           examRoom: s.examRoom || '',
           finalExamDate: s.finalExamDate || null,
+          examAccommodations: s.examAccommodations || s.accommodations || null,
           availableCourseInstances: [],
           selectedCourseInstance: null
         }))

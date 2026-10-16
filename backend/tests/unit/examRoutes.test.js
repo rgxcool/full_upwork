@@ -80,17 +80,20 @@ vi.mock("../../src/controllers/notificationController.js", () => ({
 vi.mock("../../src/models/ExamAttendance.js", () => {
   const findOne = vi.fn();
   const find = vi.fn();
+  const deleteMany = vi.fn();
   const save = vi.fn().mockResolvedValue({ _id: "attendance-1" });
   const constructor = vi.fn(function (data) {
     return { ...data, save };
   });
   constructor.find = find;
   constructor.findOne = findOne;
+  constructor.deleteMany = deleteMany;
   return {
     __esModule: true,
     default: constructor,
     find,
     findOne,
+    deleteMany,
   };
 });
 
@@ -129,6 +132,8 @@ vi.mock("../../src/models/Event.js", () => {
   constructor.find = vi.fn();
   constructor.findById = vi.fn();
   constructor.findByIdAndUpdate = vi.fn();
+  constructor.updateMany = vi.fn();
+  constructor.deleteMany = vi.fn();
   return {
     __esModule: true,
     default: constructor,
@@ -140,6 +145,7 @@ vi.mock("../../src/models/Provning.js", () => {
   const findById = vi.fn();
   const findByIdAndDelete = vi.fn();
   const findByIdAndUpdate = vi.fn();
+  const countDocuments = vi.fn();
   const constructor = vi.fn(function (data) {
     return {
       ...data,
@@ -150,6 +156,7 @@ vi.mock("../../src/models/Provning.js", () => {
   constructor.findById = findById;
   constructor.findByIdAndDelete = findByIdAndDelete;
   constructor.findByIdAndUpdate = findByIdAndUpdate;
+  constructor.countDocuments = countDocuments;
   return {
     __esModule: true,
     default: constructor,
@@ -166,6 +173,7 @@ vi.mock("../../src/models/Student.js", () => ({
     findByIdAndUpdate: vi.fn(),
     findOneAndUpdate: vi.fn(),
     updateMany: vi.fn(),
+    updateOne: vi.fn(),
   },
 }));
 
@@ -1670,6 +1678,58 @@ describe("examRoutes", () => {
       .set("x-user-role", "admin")
       .send({ decision: "unknown" });
     expect(invalidRes.status).toBe(400);
+  });
+
+  it("reverses a previous accept when the exam is denied (reverse-clearing)", async () => {
+    const examDoc = {
+      _id: "decision-deny-accepted",
+      requestedMonth: "Augusti",
+      personalNumber: "444",
+      teacherId: teacherDoc,
+      studentId: "s-accepted",
+    };
+    Exam.findById.mockReturnValueOnce(createQueryChain(examDoc));
+    Exam.countDocuments.mockResolvedValueOnce(0);
+    Exam.findByIdAndUpdate.mockResolvedValueOnce({
+      _id: "decision-deny-accepted",
+      status: "denied",
+    });
+    CalendarEvent.find.mockReturnValueOnce(createQueryChain([]));
+
+    const res = await request(app)
+      .put("/api/exams/decision-deny-accepted/decision")
+      .set("x-user-role", "admin")
+      .send({ decision: "deny", comment: "Nope" });
+
+    expect(res.status).toBe(200);
+    expect(Student.updateOne).toHaveBeenCalledWith(
+      { _id: "s-accepted" },
+      { $unset: { finalExamDate: "" } }
+    );
+  });
+
+  it("keeps finalExamDate when another prövning for the student is still scheduled", async () => {
+    const examDoc = {
+      _id: "decision-deny-shared",
+      requestedMonth: "Augusti",
+      personalNumber: "555",
+      teacherId: teacherDoc,
+      studentId: "s-shared",
+    };
+    Exam.findById.mockReturnValueOnce(createQueryChain(examDoc));
+    Exam.countDocuments.mockResolvedValueOnce(1);
+    Exam.findByIdAndUpdate.mockResolvedValueOnce({
+      _id: "decision-deny-shared",
+      status: "denied",
+    });
+
+    const res = await request(app)
+      .put("/api/exams/decision-deny-shared/decision")
+      .set("x-user-role", "admin")
+      .send({ decision: "deny", comment: "Nope" });
+
+    expect(res.status).toBe(200);
+    expect(Student.updateOne).not.toHaveBeenCalled();
   });
 
   it("rejects exam accept when requestedMonth is invalid", async () => {

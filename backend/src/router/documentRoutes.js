@@ -7,6 +7,8 @@ import fs from 'fs';
 import mime from 'mime-types';
 import Document from '../models/Document.js';
 import { authenticateUser } from '../controllers/authController.js';
+import { hasGlobalScope, municipalityInScope } from '../utils/tenantScope.js';
+import { canAccessDocument, canAccessStudentDocuments, canAccessTeacherDocuments } from "../utils/documentAuthorization.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
@@ -82,6 +84,67 @@ const upload = multer({
   }
 });
 
+const STAFF_UPLOAD_ROLES = new Set(["systemadmin", "admin", "coordinator", "tester"]);
+
+const getUserRoles = (user) => {
+  const roles = Array.isArray(user?.roles)
+    ? [...user.roles]
+    : user?.roles
+      ? [user.roles]
+      : [];
+  if (user?.role) roles.push(user.role);
+  return new Set(
+    roles
+      .filter((role) => typeof role === "string")
+      .map((role) => role.toLowerCase())
+  );
+};
+
+const getStudentMunicipality = (student) =>
+  typeof student?.municipality === "string"
+    ? student.municipality
+    : student?.municipality?.type;
+
+async function canUploadForStudent(user, studentId) {
+  if (!user || !studentId) {
+    return false;
+  }
+
+  const roles = getUserRoles(user);
+  if ([...roles].some((role) => STAFF_UPLOAD_ROLES.has(role)) && hasGlobalScope(user)) {
+    return true;
+  }
+
+  const Student = mongoose.model("Student");
+  const student = await Student.findById(studentId).select("municipality teacherId");
+  if (!student || !municipalityInScope(user, getStudentMunicipality(student))) {
+    return false;
+  }
+
+  if ([...roles].some((role) => STAFF_UPLOAD_ROLES.has(role))) {
+    return true;
+  }
+
+  if (roles.has("student")) {
+    const ownStudent = await Student.findOne({ email: user.email }).select("_id");
+    if (ownStudent && String(ownStudent._id) === String(studentId)) {
+      return true;
+    }
+  }
+
+  if (roles.has("teacher")) {
+    const Teacher = mongoose.model("Teacher");
+    const teacher = await Teacher.findOne({ userId: user.userId }).select("_id");
+    return Boolean(
+      teacher &&
+        student.teacherId &&
+        String(student.teacherId) === String(teacher._id)
+    );
+  }
+
+  return false;
+}
+
 // Error handling middleware for multer
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -115,7 +178,8 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
       return res.status(401).json({ message: 'User not authenticated' });
     }
     
-    const isAdmin = user.role === 'admin' || user.role === 'systemadmin';
+    const userRoles = getUserRoles(user);
+    const isAdmin = userRoles.has('admin') || userRoles.has('systemadmin');
 
     // Determine if this is for a student or teacher
     if (studentId) {
@@ -125,14 +189,11 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
         return res.status(400).json({ message: 'studentId is required' });
       }
       
-      // Permission check: students can upload for themselves, admins/systemadmins can upload for any student
-      const userIdStr = String(user.userId);
-      const studentIdStr = String(studentId);
-      
-      if (!isAdmin && userIdStr !== studentIdStr) {
+      const allowed = await canUploadForStudent(user, studentId);
+      if (!allowed) {
         return res.status(403).json({ message: 'Du har inte behörighet att ladda upp dokument för denna elev' });
       }
-      
+
       const doc = await Document.create({
         student: studentId,
         uploadedBy: user.userId,
@@ -150,7 +211,8 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
       
       logger.debug({ userIdStr, teacherIdStr, isAdmin }, "Permission check for teacher document")
       
-      if (!isAdmin && userIdStr !== teacherIdStr) {
+      const teacherAllowed = await canAccessTeacherDocuments(user, teacherId);
+      if (!teacherAllowed) {
         return res.status(403).json({ message: 'Du har inte behörighet att ladda upp dokument för denna lärare' });
       }
 
@@ -186,7 +248,7 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
     
     // Handle validation errors specifically
     if (error.name === 'ValidationError' || error instanceof mongoose.Error.ValidationError || error.message?.includes('must be specified')) {
-      const errorMessages = error.errors ? Object.values(error.errors).map(e => e.message || e).join(', ') : '';
+      const errorMessages = error.errors ? Object.values(error.errors).map(e => e.message || e) : '';
       return res.status(400).json({ 
         message: 'Valideringsfel', 
         ...(errorMessages && { error: errorMessages })
@@ -212,34 +274,29 @@ router.get('/documents/:id', authenticateUser, async (req, res) => {
   try {
     const { type, enrollmentId, entityType } = req.query;
     const id = req.params.id;
-
     const user = req.user;
+    const isTeacherEntity = ["teacher", "lärare"].includes(
+      String(entityType || "").toLowerCase()
+    );
 
-    // Students can only access their own documents; staff can access any
-    if (user.role === 'student' && String(user.userId) !== String(id)) {
-      return res.status(403).json({ message: 'Du har inte behörighet att visa denna elevs dokument' });
+    const filter = isTeacherEntity
+      ? { teacher: id }
+      : { student: id };
+    const allowed = isTeacherEntity
+      ? await canAccessTeacherDocuments(user, id)
+      : await canAccessStudentDocuments(user, id);
+
+    if (!allowed) {
+      return res.status(403).json({
+        message: 'Du har inte behörighet att komma åt dokumenten'
+      });
     }
 
-    let filter = {};
-
-    // Determine if this is for a student or teacher
-    if (entityType === 'teacher' || entityType === 'Lärare') {
-      filter.teacher = id;
-    } else {
-      // Default to student for backward compatibility
-      filter.student = id;
-    }
-
-    if (type) {
-      filter.type = type;
-    }
-
-    if (enrollmentId) {
-      filter.enrollmentId = enrollmentId;
-    }
+    if (type) filter.type = type;
+    if (enrollmentId) filter.enrollmentId = enrollmentId;
 
     const docs = await Document.find(filter).sort({ createdAt: -1 });
-    res.json(docs);
+    return res.json(docs);
   } catch (error) {
     logger.error({ err: error }, "Error fetching documents")
     res.status(500).json({ message: 'Kunde inte hämta dokument' });
@@ -254,10 +311,11 @@ router.delete('/documents/:id', authenticateUser, async (req, res) => {
     }
 
     const user = req.user;
-    const isAdmin = user.role === 'admin' || user.role === 'systemadmin';
+    const userRoles = getUserRoles(user);
+    const isAdmin = userRoles.has('admin') || userRoles.has('systemadmin');
+    const allowed = await canAccessDocument(user, doc);
 
-    // Check permissions: user can delete their own uploads, admins can delete any
-    if (!isAdmin && doc.uploadedBy?.toString() !== user.userId) {
+    if (!allowed || (!isAdmin && String(doc.uploadedBy ?? '') !== String(user.userId))) {
       return res.status(403).json({ message: 'Du har inte behörighet att radera detta dokument' });
     }
 

@@ -85,6 +85,7 @@ describe("GET /apl/my", () => {
         expect(res.body).toEqual({
             status: "BLUE",
             aplStatus: "GREEN",
+            isSeeking: false,
             placementCompany: "Acme AB",
             placementContact: "Kalle",
             placementAddress: "Storgatan 1",

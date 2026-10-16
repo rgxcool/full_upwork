@@ -20,6 +20,10 @@ const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "
 
 const dedupeById = (docs) => Array.from(new Map(docs.map(d => [d._id.toString(), d])).values());
 
+/**
+ * Builds a text search clause from a query string.
+ * Splits on whitespace and creates a $search clause.
+ */
 const buildTextSearchClause = (q) => {
     const tokens = String(q)
         .trim()
@@ -29,6 +33,83 @@ const buildTextSearchClause = (q) => {
         .join(" ");
     if (!tokens) return null;
     return { $text: { $search: tokens, $language: "none" } };
+};
+
+/**
+ * Parses a name search query into parts and creates a regex that matches
+ * all parts against the student name field.
+ * 
+ * For example, "Anna Maria Svensson" will create a regex that matches
+ * if the student name contains all three parts as substrings.
+ * 
+ * @param {String} q - The search query string
+ * @returns {Object} - A mongoDB query object for name search, or null
+ */
+const buildNameSearchClause = (q) => {
+    if (!q || q.trim().length === 0) return null;
+    
+    const trimmed = q.trim();
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    
+    // For 1-2 word queries, use simple regex search (backward compatible)
+    if (parts.length <= 2) {
+        const regexStr = escapeRegExp(parts.join("|"));
+        return { name: { $regex: regexStr, $options: "i" } };
+    }
+    
+    // For 3+ word queries, parse as potential name parts
+    // and create a regex that requires all parts to be present in the name
+    const escapedParts = parts.map(p => escapeRegExp(p)).join(".*");
+    const regexStr = `^.*${escapedParts}.*$`;
+    return { name: { $regex: regexStr, $options: "i" } };
+};
+
+/**
+ * Search for students by name, supporting first/middle/last name parsing.
+ * For 1-2 word queries, performs substring match (backward compatible).
+ * For 3+ word queries, requires all name parts to be present in the full name.
+ */
+const buildStudentNameQuery = (q) => {
+    // Try name part parsing first (for 3+ word queries)
+    const nameClause = buildNameSearchClause(q);
+    if (nameClause) return nameClause;
+    
+    // Fall back to simple regex search (backward compatible for 1-2 word queries)
+    const regexStr = escapeRegExp(q);
+    return { name: { $regex: regexStr, $options: "i" } };
+};
+
+/**
+ * Search for users by name, supporting first/middle/last name parsing.
+ */
+const buildUserNameQuery = (q) => {
+    if (!q || q.trim().length === 0) return null;
+    
+    const trimmed = q.trim();
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    
+    // For 1-2 word queries, use simple regex search on username/email/name
+    if (parts.length <= 2) {
+        const regexStr = escapeRegExp(q);
+        return {
+            $or: [
+                { username: { $regex: regexStr, $options: "i" } },
+                { email: { $regex: regexStr, $options: "i" } },
+                { name: { $regex: regexStr, $options: "i" } },
+            ],
+        };
+    }
+    
+    // For 3+ word queries, search for all name parts
+    const escapedParts = parts.map(p => escapeRegExp(p)).join(".*");
+    const regexStr = `^.*${escapedParts}.*$`;
+    return {
+        $or: [
+            { username: { $regex: regexStr, $options: "i" } },
+            { email: { $regex: regexStr, $options: "i" } },
+            { name: { $regex: regexStr, $options: "i" } },
+        ],
+    };
 };
 
 router.get("/course-enrollments", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_USERS), async (req, res) => {
@@ -169,7 +250,8 @@ router.get("/search", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_US
             ["Kurs", "Alla"].includes(type) && q && q.length >= 3;
 
         if (shouldSearchUsers) {
-            const textClause = buildTextSearchClause(q);
+            // Use improved name search that supports first/middle/last name parsing
+            const studentNameQuery = buildStudentNameQuery(q);
             const regexQuery = escapeRegExp(q);
             const regexOptions = { $regex: regexQuery, $options: "i" };
 
@@ -185,11 +267,12 @@ router.get("/search", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_US
                 ],
             }).select("_id username name email role roles");
 
-            const studentText = textClause
-                ? Student.find({ ...studentQuery, ...textClause }).select("_id name email")
+            const studentText = buildTextSearchClause(q)
+                ? Student.find({ ...studentQuery, ...buildTextSearchClause(q) }).select("_id name email")
                 : Promise.resolve([]);
-            const userText = textClause
-                ? User.find(textClause).select("_id username name email role roles")
+
+            const userText = buildTextSearchClause(q)
+                ? User.find(buildTextSearchClause(q)).select("_id username name email role roles")
                 : Promise.resolve([]);
 
             const [students, users] = await Promise.all([
@@ -223,7 +306,8 @@ router.get("/search", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_US
                             (Array.isArray(user.roles) ? user.roles[0] : null) ||
                             "Användare",
                         extra: `Email: ${user.email}`,
-                    }))
+                    })
+                ),
             );
         }
 
@@ -499,13 +583,13 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                         }
                     }
 
-                    const uniqueStudents = Array.from(
+                    const courseUniqueStudents = Array.from(
                         new Map(students.map((s) => [s._id.toString(), s])).values()
                     );
 
                     result = {
                         ...course,
-                        students: uniqueStudents,
+                        students: courseUniqueStudents,
                         teachers: Array.from(teachersMap.values()),
                         courseInstances: courseInstances.map(ci => ({
                             _id: ci._id,
@@ -513,7 +597,8 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                             courseCode: ci.courseCode,
                             startDate: ci.startDate,
                             endDate: ci.endDate,
-                            isActive: ci.isActive,
+                            isCourseInstance: true,
+                            mainCourseId: ci.mainCourseId,
                         })),
                         isCourseTemplate: true,
                     };
@@ -550,7 +635,7 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                         .map((e) => e.studentId)
                         .filter(Boolean);
 
-                    const uniqueStudents = Array.from(
+                    const instanceUniqueStudents = Array.from(
                         new Map(students.map((s) => [s._id.toString(), s])).values()
                     );
 
@@ -603,7 +688,7 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                     result = {
                         ...courseInstance,
                         courseName: courseInstance.courseName,
-                        students: uniqueStudents,
+                        students: instanceUniqueStudents,
                         teacher: teacher,
                         teachers: teachers,
                         isCourseInstance: true,

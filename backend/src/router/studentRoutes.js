@@ -26,6 +26,7 @@ import {
     removeStudentDropoutRecord,
 } from "../services/dropoutService.js";
 import { studentScopeFilter, municipalityInScope } from "../utils/tenantScope.js";
+import { projectStudentForViewer, projectStudentsForViewer } from "../utils/studentSerializer.js";
 import { getRevenueReport } from "../services/analyticsService.js";
 
 const router = Router();
@@ -48,8 +49,9 @@ const studentUpdateSchema = {
 
 router.get("/students/by-teacher/:teacherId", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
-        // Teachers can only view their own students
-        if (req.user?.role === "teacher") {
+        const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
+        const staffRoles = ["admin", "systemadmin", "coordinator", "syv", "specped", "tester"];
+        if (userRoles.includes("teacher") && !userRoles.some((role) => staffRoles.includes(role))) {
             const teacher = await (await import("../models/Teacher.js")).default.findOne({ userId: req.user.userId });
             if (!teacher || teacher._id.toString() !== req.params.teacherId) {
                 return res.status(403).json({ error: "Teachers can only view their own students" });
@@ -61,13 +63,17 @@ router.get("/students/by-teacher/:teacherId", authenticateUser, hasRole(ALLOWED_
             dropout: { $ne: true },
         });
 
+        const projectedStudents = projectStudentsForViewer(students, req.user);
         res.json(
-            students.map((s) => ({
+            projectedStudents.map((s) => ({
                 _id: s._id,
                 name: s.name,
-                personalNumber: s.personalNumber,
+                ...(s.personalNumber !== undefined ? { personalNumber: s.personalNumber } : {}),
                 attended: s.attendedExam || false,
                 additionalInfo: s.additionalInfo || "",
+                ...(s.examAccommodations !== undefined ? { examAccommodations: s.examAccommodations } : {}),
+                ...(s.specialNeeds !== undefined ? { specialNeeds: s.specialNeeds } : {}),
+                ...(s.supportInfo !== undefined ? { supportInfo: s.supportInfo } : {}),
             }))
         );
     } catch (error) {
@@ -432,7 +438,7 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
             student.aplStartDate = aplPeriod.aplStartDate;
             student.aplEndDate = aplPeriod.aplEndDate;
         }
-        res.status(200).json(students);
+        res.status(200).json(projectStudentsForViewer(students, req.user));
     } catch (error) {
         logger.error({ err: error }, "Error fetching students");
         res.status(500).json({ error: "Server error" });
@@ -488,7 +494,9 @@ router.get(
                     : s.updatedAt,
             }));
 
-            res.status(200).json(enriched);
+            res.status(200).json(
+                projectStudentsForViewer(enriched, req.user)
+            );
         } catch (error) {
             logger.error({ err: error }, "Error fetching inactive students");
             res.status(500).json({ error: "Failed to fetch inactive students" });
@@ -588,6 +596,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
                         {
                             needsSupport: req.body.needsSupport,
                             examMode: req.body.examMode,
+                            pace: req.body.pace,
                         }
                     );
 
@@ -784,7 +793,7 @@ router.get("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async
             return res.status(403).json({ error: "Forbidden" });
         }
 
-        res.json(student);
+        res.json(projectStudentForViewer(student, req.user));
     } catch (error) {
         logger.error({ err: error }, "Error fetching student");
         res.status(500).json({ error: "Failed to fetch student details" });
@@ -798,9 +807,12 @@ router.get("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async
  */
 router.get("/student/:id/basic", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
+        // `municipality` must stay in the projection: the tenant check below
+        // reads `student.municipality.type`. Without it every scoped user got a
+        // 403 even for students inside their own municipality.
         const student = await Student.findById(req.params.id)
             .select(
-                "name personalNumber teacherId aplStatus startDate endDate finalExamDate examTime examMunicipality examLocation dropout"
+                "name personalNumber teacherId aplStatus startDate endDate finalExamDate examTime examMunicipality examLocation dropout municipality"
             )
             .lean();
 
@@ -811,7 +823,7 @@ router.get("/student/:id/basic", authenticateUser, hasRole(ALLOWED_STAFF_ROLES),
             return res.status(403).json({ error: "Forbidden" });
         }
 
-        res.json(student);
+        res.json(projectStudentForViewer(student, req.user));
     } catch (error) {
         logger.error({ err: error }, "Error fetching basic student");
         res.status(500).json({
