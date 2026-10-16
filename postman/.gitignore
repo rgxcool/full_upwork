@@ -1,0 +1,8 @@
+node_modules/
+newman/
+newman-report.json
+results.json
+.probe.txt
+.run-state.json
+# Genereras av setup.mjs och innehåller giltiga session-token — får ALDRIG spåras.
+phase1.postman_environment.json

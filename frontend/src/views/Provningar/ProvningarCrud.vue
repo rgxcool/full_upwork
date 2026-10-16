@@ -38,6 +38,7 @@
         <v-col cols="12" md="2" class="d-flex align-center gap-2">
           <v-btn color="primary" @click="openForm()">Registrera Ny</v-btn>
           <v-btn color="secondary" variant="outlined" @click="showImport = true">Importera</v-btn>
+          <v-btn color="secondary" variant="outlined" @click="exportExams">Exportera</v-btn>
         </v-col>
       </v-row>
 
@@ -86,6 +87,7 @@
             <v-text-field v-model="currentExam.name" label="Namn" required />
             <v-text-field v-model="currentExam.personalNumber" label="Personnummer" required />
             <v-text-field v-model="currentExam.course" label="Kurs" required />
+            <v-text-field v-model="currentExam.address" label="Adress" />
             <v-select v-model="currentExam.requestedMonth" :items="months" label="Önskad månad" required />
             <v-text-field v-model="currentExam.municipality" label="Kommun" />
             <v-checkbox v-model="currentExam.materialReceived.status" label="Material hämtat" />
@@ -154,6 +156,7 @@ import { ref, computed, onMounted } from 'vue'
 import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
 import ConfirmDialog from '@/components/base/ConfirmDialog.vue'
+import { exportToCSV } from '@/utils/exportUtils.js'
 
 const toast = useToast()
 
@@ -225,6 +228,30 @@ const fetchExams = async () => {
   } catch (error) {
     toast.error('Kunde inte hämta provningar')
   }
+}
+
+// Bulk download of the current (filtered) registrations as CSV, mirroring the
+// import columns so an export can be re-imported unchanged.
+const exportExams = () => {
+  const headers = [
+    'Namn', 'Personnummer', 'Telefon', 'E-post', 'Adress', 'Kurs',
+    'Önskad månad', 'Kommun', 'Lärare', 'Betalningsdatum', 'Material hämtat', 'Status',
+  ]
+  const rows = filteredExams.value.map((exam) => [
+    exam.name || '',
+    exam.personalNumber || '',
+    exam.phone || '',
+    exam.email || '',
+    exam.address || '',
+    exam.course || '',
+    exam.requestedMonth || '',
+    exam.municipality || '',
+    exam.teacherId?.userId?.username || exam.teacherName || '',
+    exam.paymentDate ? new Date(exam.paymentDate).toLocaleDateString('sv-SE') : '',
+    exam.materialReceived?.status ? 'Ja' : 'Nej',
+    exam.status || '',
+  ])
+  exportToCSV('provningar-export.csv', headers, rows)
 }
 
 const openForm = (exam = {}) => {

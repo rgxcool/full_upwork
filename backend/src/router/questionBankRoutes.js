@@ -8,10 +8,13 @@ import ExamAttempt from "../models/ExamAttempt.js";
 import QuestionBankPdf from "../models/QuestionBankPdf.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
+
+router.use(requireFeature("QUESTION_BANK"));
 
 const STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"];
 
@@ -155,6 +158,7 @@ router.post(
                 questionType,
                 numberOfQuestions,
                 includeInactive = false,
+                title,
             } = req.body;
 
             if (!courseId) {
@@ -175,7 +179,7 @@ router.post(
                 filter.subject = subject;
             }
 
-            if (questionType) {
+            if (questionType && questionType !== "Alla") {
                 filter.questionType = questionType;
             }
 
@@ -195,7 +199,7 @@ router.post(
 
             // Save the generated exam attempt
             const examAttempt = new ExamAttempt({
-                title: `Exam - ${courseId}`,
+                title: (title && String(title).trim()) || `Exam - ${courseId}`,
                 courseId,
                 selectedQuestions: selectedQuestions.map((q) => q._id),
                 totalQuestions: questions.length,

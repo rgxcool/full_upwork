@@ -1,16 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
+import mongoose from "mongoose";
 
 vi.mock("../../src/middleware/auth.js", () => ({
     isAuthenticated: (req, _res, next) => {
-        req.user = { userId: "user-1", role: "admin" };
+        req.user = h.currentUser;
         next();
     },
     hasRole: () => (_req, _res, next) => next(),
 }));
 
 const h = vi.hoisted(() => ({
+    currentUser: { userId: "user-1", role: "admin", email: "admin@mindful.se" },
     findEligibleStudents: vi.fn(),
     autoCreateRecords: vi.fn(),
     updateAplStatus: vi.fn(),
@@ -18,7 +20,14 @@ const h = vi.hoisted(() => ({
     getAplRecords: vi.fn(),
     getAplRecordByStudent: vi.fn(),
     updateAplRecordDetails: vi.fn(),
+    updateOwnAplRecord: vi.fn(),
     getAplStatistics: vi.fn(),
+    studentFindOne: vi.fn(),
+}));
+
+vi.mock("../../src/models/Student.js", () => ({
+    __esModule: true,
+    default: { findOne: h.studentFindOne },
 }));
 
 vi.mock("../../src/services/aplService.js", () => h);
@@ -32,12 +41,25 @@ import {
     getAplRecords,
     getAplRecordByStudent,
     updateAplRecordDetails,
+    updateOwnAplRecord,
     getAplStatistics,
 } from "../../src/services/aplService.js";
 
 const app = express();
 app.use(express.json());
 app.use(router);
+
+// The two call sites chain differently — the router's findSelfStudent() does
+// `.lean()`, the PATCH /apl/my controller does `.select("_id")` — so the mock
+// has to answer both and still resolve to the document when awaited.
+const studentProfile = (doc) => {
+    const query = {
+        select: () => query,
+        lean: () => query,
+        then: (resolve, reject) => Promise.resolve(doc).then(resolve, reject),
+    };
+    return query;
+};
 
 describe("aplController", () => {
     beforeEach(() => {
@@ -87,6 +109,67 @@ describe("aplController", () => {
         it("returns 500 on failure", async () => {
             getAplRecordByStudent.mockRejectedValue(new Error("boom"));
             const res = await request(app).get("/apl/records/s1");
+            expect(res.status).toBe(500);
+        });
+
+        it("lets a student read their own record (email-linked profile)", async () => {
+            const studentId = new mongoose.Types.ObjectId();
+            h.currentUser = { userId: "user-9", role: "student", email: "elev@mindful.se" };
+            h.studentFindOne.mockReturnValue(studentProfile({ _id: studentId, name: "Anna" }));
+            getAplRecordByStudent.mockResolvedValue({ status: "YELLOW" });
+
+            const res = await request(app).get(`/apl/records/${studentId.toString()}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ status: "YELLOW" });
+            expect(h.studentFindOne).toHaveBeenCalledWith({ email: "elev@mindful.se" });
+            h.currentUser = { userId: "user-1", role: "admin", email: "admin@mindful.se" };
+        });
+    });
+
+    describe("PATCH /apl/my", () => {
+        beforeEach(() => {
+            h.currentUser = { userId: "user-9", role: "student", email: "elev@mindful.se" };
+            h.studentFindOne.mockReset();
+            updateOwnAplRecord.mockClear();
+        });
+
+        afterEach(() => {
+            h.currentUser = { userId: "user-1", role: "admin", email: "admin@mindful.se" };
+        });
+
+        it("updates the caller's own record via their email-linked profile", async () => {
+            const studentId = new mongoose.Types.ObjectId();
+            h.studentFindOne.mockReturnValue(studentProfile({ _id: studentId }));
+            updateOwnAplRecord.mockResolvedValue({ isSeeking: true });
+
+            const res = await request(app).patch("/apl/my").send({ isSeeking: true });
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ success: true, record: { isSeeking: true } });
+            expect(updateOwnAplRecord).toHaveBeenCalledWith({
+                studentId: studentId,
+                updates: { isSeeking: true },
+            });
+        });
+
+        it("returns 404 when no student profile matches", async () => {
+            h.studentFindOne.mockReturnValue(studentProfile(null));
+
+            const res = await request(app).patch("/apl/my").send({ isSeeking: true });
+
+            expect(res.status).toBe(404);
+            expect(res.body).toEqual({ error: "Ingen elevprofil hittad." });
+            expect(updateOwnAplRecord).not.toHaveBeenCalled();
+        });
+
+        it("returns 500 on service failure", async () => {
+            const studentId = new mongoose.Types.ObjectId();
+            h.studentFindOne.mockReturnValue(studentProfile({ _id: studentId }));
+            updateOwnAplRecord.mockRejectedValue(new Error("boom"));
+
+            const res = await request(app).patch("/apl/my").send({ isSeeking: true });
+
             expect(res.status).toBe(500);
         });
     });

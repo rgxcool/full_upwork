@@ -84,6 +84,40 @@ async function resolveResponsibleTeacherForDropout(student) {
 }
 
 /**
+ * Create a student-facing notification when the dropout cascade runs, so the
+ * student knows their studies were discontinued. Keyed to the student's login
+ * account (meta.studentUserId) — the same channel the student notification
+ * feed reads. Skipped when the student has no login account, and never
+ * duplicated for an already-dropped student (idempotency).
+ * @param {Object} student - the (preferably populated) Student document.
+ * @param {ObjectId|string|null} actorUserId
+ */
+async function ensureDropoutStudentNotification(student, actorUserId) {
+    if (!student || !student.email) return null;
+    const user = await User.findOne({ email: student.email }).select("_id").lean();
+    if (!user) return null;
+
+    const existing = await Notification.findOne({
+        type: "dropout",
+        "meta.studentUserId": user._id,
+        "meta.studentId": student._id,
+    });
+    if (existing) return existing;
+
+    return Notification.create({
+        type: "dropout",
+        message: `Din kursregistrering har avslutats på grund av inaktivitet. Kontakta din skola om du har frågor.`,
+        meta: {
+            studentUserId: user._id,
+            studentId: student._id,
+            url: "/",
+        },
+        createdByAdmin: actorUserId || null,
+        resolvedByUsers: [],
+    });
+}
+
+/**
  * Create (or reset) the dropout notification for the responsible teacher.
  * @param {Object} student
  * @param {ObjectId|string|null} teacherRecordId
@@ -166,6 +200,15 @@ export const performStudentDropout = async ({ studentId, userId, role, reason })
         });
     }
     await student.save();
+
+    // Notify the student that their enrollment was discontinued — once per
+    // student (idempotent); skipped again on repeat dropout runs.
+    if (!wasAlreadyDropout) {
+        await safeInactivitySideEffect(
+            () => ensureDropoutStudentNotification(student, userId),
+            "dropout_student_notification"
+        );
+    }
 
     // Snapshot the live inactivity signal before the cascade drops the
     // enrollments so the discussion thread shows the triggering status.

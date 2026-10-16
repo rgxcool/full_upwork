@@ -1,5 +1,11 @@
 import logger from "../utils/logger.js";
 import User from "../models/User.js";
+import Student from "../models/Student.js";
+import {
+  hasGlobalScope,
+  municipalityInScope,
+  sharesTenant,
+} from "../utils/tenantScope.js";
 import { sendEmail, renderMessageCopyEmail } from "./emailService.js";
 
 /**
@@ -81,7 +87,37 @@ export const dispatchMessageEmailCopies = async ({
 };
 
 /**
+ * Resolve the municipality a student belongs to.
+ *
+ * A student's tenant lives on their Student record (`municipality.type`), not
+ * on the User document, so messaging has to look it up before deciding whether
+ * a cross-tenant conversation is allowed.
+ *
+ * @param {Object} recipient - The recipient user object
+ * @returns {Promise<string|null>}
+ */
+const resolveStudentMunicipality = async (recipient) => {
+  // Students are linked to their login account by email, not by a `user` ref —
+  // the same convention used by documentRoutes, aplRoutes, uploadRoutes etc.
+  const email = recipient?.email;
+  if (!email) return null;
+  try {
+    const student = await Student.findOne({ email }).select("municipality");
+    return student?.municipality?.type || null;
+  } catch (err) {
+    logger.error({ err, email }, "Could not resolve student municipality for messaging");
+    return null;
+  }
+};
+
+/**
  * Check if a sender can message a recipient.
+ *
+ * Role permissions are checked first, then tenant (kommun) isolation: two
+ * accounts may only correspond if they share at least one municipality, unless
+ * either has global scope. A student recipient is resolved through their
+ * Student record because a student User carries no `municipalities`.
+ *
  * @param {Object} sender - The sender user object
  * @param {Object} recipient - The recipient user object
  * @returns {Promise<boolean>}
@@ -94,27 +130,48 @@ export const canMessage = async (sender, recipient) => {
 
   // Staff to Staff
   if (staffRoles.includes(senderRole) && staffRoles.includes(recipientRole)) {
+    // P17: tenant isolation. Scoped staff may only reach staff that share one
+    // of their municipalities; a global account may reach anyone.
+    if (!sharesTenant(sender, recipient)) {
+      logger.warn(
+        { senderRole, recipientRole },
+        "Blocked cross-tenant staff-to-staff message"
+      );
+      return false;
+    }
     return true;
   }
 
   // Staff to Student
   if (staffRoles.includes(senderRole) && recipientRole === "student") {
-    // Admins can message any student
-    if (["admin", "systemadmin"].includes(senderRole)) {
-      return true;
+    // A global (unscoped) staff account may message any student.
+    if (hasGlobalScope(sender)) return true;
+
+    // Everyone else is limited to students inside their own municipalities.
+    // A student whose municipality cannot be resolved is not contactable.
+    const municipality = await resolveStudentMunicipality(recipient);
+    if (!municipality || !municipalityInScope(sender, municipality)) {
+      logger.warn(
+        { senderRole, municipality },
+        "Blocked staff-to-student message outside the sender's tenant"
+      );
+      return false;
     }
-    
-    // Teachers/SYV/Specped can message students they are linked to
-    // For now, let's allow them to message any student if they are staff, 
-    // but we can tighten this by checking enrollments if needed.
-    // The spec says "school-to-student", implying staff-to-student.
-    return true; 
+    return true;
   }
 
   // Student to Staff
   if (senderRole === "student" && staffRoles.includes(recipientRole)) {
-    // For now, allow students to message any staff (e.g. their SYV or Teacher)
-    // In a real system, we'd check if they are actually 'their' staff.
+    // A global (unscoped) staff recipient is contactable from any tenant.
+    if (hasGlobalScope(recipient)) return true;
+
+    // P17: otherwise a student may only reach staff belonging to the student's
+    // own municipality.
+    const municipality = await resolveStudentMunicipality(sender);
+    if (!municipality || !municipalityInScope(recipient, municipality)) {
+      logger.warn({ recipientRole, municipality }, "Blocked student-to-staff message outside tenant");
+      return false;
+    }
     return true;
   }
 

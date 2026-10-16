@@ -7,13 +7,23 @@ import User from "../models/User.js";
 
 /**
  * Calculate activity status for a student in a course instance.
- * Statuses: on schedule, behind, completed
- * 
+ * Statuses:
+ *  - "on schedule": course in progress, no module behind, engaged recently
+ *  - "behind": at least one scheduled module has passed without completion
+ *  - "inactive": course in progress but the student has shown no activity for
+ *    INACTIVITY_THRESHOLD_DAYS (default 14) — used to spot students who have
+ *    disengaged entirely, independent of how far behind they are
+ *  - "completed": every module completed
+ *
+ * Status resolution order: completed > inactive > behind > on schedule
+ *
  * @param {Object} params
  * @param {string} params.studentId - Student ID
  * @param {string} params.courseInstanceId - Course instance ID
  * @returns {Object} Activity status result
  */
+export const INACTIVITY_THRESHOLD_DAYS = 14;
+
 export const calculateActivityStatus = async (params) => {
     try {
         const { studentId, courseInstanceId } = params;
@@ -135,38 +145,47 @@ export const calculateActivityStatus = async (params) => {
         // If some modules are behind, status is "behind"
         // Otherwise "on schedule"
 
-        // Get student's last activity
+        // Get student's last activity (login wins when present, else latest submission)
         let lastActivity = null;
-        let daysSinceLastActivity = 0;
+        let daysSinceLastActivity = null;
 
-        // Check user last login
         const user = await User.findById(enrollment.studentId._id).select("lastLoginAt");
-        if (user && user.lastLoginAt) {
-            daysSinceLastActivity = Math.floor((now - user.lastLoginAt) / 86400000);
+        const lastSub = await AssignmentSubmission.findOne({
+            studentId: enrollment.studentId._id,
+            enrollmentId: enrollment._id,
+        }).sort({ submittedAt: -1 });
+
+        const loginDate = user && user.lastLoginAt ? new Date(user.lastLoginAt) : null;
+        const submissionDate = lastSub && lastSub.submittedAt ? new Date(lastSub.submittedAt) : null;
+
+        if (loginDate) {
+            daysSinceLastActivity = Math.floor((now - loginDate) / 86400000);
             lastActivity = {
                 type: "login",
                 date: user.lastLoginAt,
                 daysAgo: daysSinceLastActivity,
             };
+        } else if (submissionDate) {
+            daysSinceLastActivity = Math.floor((now - submissionDate) / 86400000);
+            lastActivity = {
+                type: "submission",
+                date: lastSub.submittedAt,
+                daysAgo: daysSinceLastActivity,
+            };
         }
 
-        // Check last submission
-        if (!lastActivity) {
-            const lastSub = await AssignmentSubmission.findOne({
-                studentId: enrollment.studentId._id,
-                enrollmentId: enrollment._id,
-            }).sort({ submittedAt: -1 });
-            if (lastSub && lastSub.submittedAt) {
-                daysSinceLastActivity = Math.floor((now - lastSub.submittedAt) / 86400000);
-                // Only update if we don't have a login-based activity yet, or if submission is more recent
-                if (!lastActivity || daysSinceLastActivity < (lastActivity.daysAgo || 999)) {
-                    lastActivity = {
-                        type: "submission",
-                        date: lastSub.submittedAt,
-                        daysAgo: daysSinceLastActivity,
-                    };
-                }
-            }
+        // Inactive = course still in progress (not over), not completed, and no
+        // activity for at least INACTIVITY_THRESHOLD_DAYS. Takes precedence over
+        // "behind" so disengaged students surface as a distinct category.
+        const courseOver = instance.endDate && new Date(instance.endDate) < now;
+        const inactive =
+            overallStatus !== "completed" &&
+            !courseOver &&
+            daysSinceLastActivity !== null &&
+            daysSinceLastActivity >= INACTIVITY_THRESHOLD_DAYS;
+
+        if (inactive) {
+            overallStatus = "inactive";
         }
 
         return {
@@ -177,12 +196,13 @@ export const calculateActivityStatus = async (params) => {
             totalModules,
             completedModules,
             completionRate: totalModules > 0 ? (completedModules / totalModules * 100).toFixed(1) : 0,
-            overallStatus, // "on schedule", "behind", or "completed"
+            overallStatus, // "on schedule", "behind", "inactive", or "completed"
             moduleStatuses,
             sectionDates: sectionDates.map(d => d.toISOString().split("T")[0]),
             studentActivity: {
                 lastActivity,
                 daysSinceLastActivity,
+                inactivityThresholdDays: INACTIVITY_THRESHOLD_DAYS,
             },
             courseTimeline: {
                 courseStart: courseStart.toISOString().split("T")[0],

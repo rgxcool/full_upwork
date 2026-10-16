@@ -124,13 +124,6 @@ export async function calculateSlutprovDate(teacher, courseEndDate) {
     };
 
     // Helper function to get the day before
-     
-    const getDayBefore = (date) => {
-        const d = new Date(date);
-        d.setDate(d.getDate() - 1);
-        d.setHours(0, 0, 0, 0);
-        return d;
-    };
 
     // Check teacher name and apply appropriate rule
     // Get the first word of the name (in case it's "Allan Smith" or "Maja Andersson")

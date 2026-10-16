@@ -1,11 +1,14 @@
 import express from "express";
 import { authenticateUser } from '../controllers/authController.js'; // om du har detta
+import { requireFeature } from "../middleware/featureGate.js";
 import Meeting from "../models/Meeting.js";
 import Student from "../models/Student.js";
 import logger from "../utils/logger.js";
 
 
 const router = express.Router();
+
+router.use("/meetings", requireFeature("APPOINTMENTS"));
 
 // Sanitize exam-accommodation payloads before persisting. Accepts
 // strings/form-data values (e.g. "on", "true") as well as booleans/numbers,

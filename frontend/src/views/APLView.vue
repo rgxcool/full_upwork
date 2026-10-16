@@ -3,6 +3,9 @@
     <h1>APL-status</h1>
     <v-alert v-if="loadError" type="error" variant="tonal" class="mb-4">
       {{ loadError }}
+      <template #append>
+        <v-btn variant="text" size="small" @click="fetchStudents">Försök igen</v-btn>
+      </template>
     </v-alert>
     <v-tabs v-model="activeTab" grow>
       <v-tab value="ongoing">Pågående</v-tab>
@@ -12,7 +15,13 @@
     <v-window v-model="activeTab">
       <v-window-item value="ongoing">
         <APLBoard v-if="students.length" :students="students" filter-type="active" @student-updated="fetchStudents" />
-        <div v-else class="loading-text">Laddar pågående APL...</div>
+        <!-- Distinguish "still loading" from "failed" and "loaded but empty",
+             otherwise a failure leaves a permanent loading message. -->
+        <div v-else-if="loadError" class="loading-text">
+          Kunde inte visa pågående APL.
+        </div>
+        <div v-else-if="!loaded" class="loading-text">Laddar pågående APL...</div>
+        <div v-else class="loading-text">Inga pågående APL-elever.</div>
       </v-window-item>
       <v-window-item value="completed">
         <AplCompletedTab />
@@ -34,6 +43,7 @@ import AplCompletedTab from './Admin/AplCompletedTab.vue';
 const activeTab = ref('ongoing');
 const students = ref([]);
 const loadError = ref('');
+const loaded = ref(false);
 
 const fetchStudents = async () => {
   loadError.value = '';
@@ -41,7 +51,9 @@ const fetchStudents = async () => {
     const res = await client.get('/students');
     students.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
-    loadError.value = 'Kunde inte hämta APL-elever. Försök igen.';
+    loadError.value = 'Kunde inte hämta APL-elever.';
+  } finally {
+    loaded.value = true;
   }
 };
 

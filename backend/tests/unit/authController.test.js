@@ -218,20 +218,76 @@ describe("authController", () => {
         expect(res.body).toEqual({ error: "Server error" });
     });
 
-    it("authenticates token from cookie", () => {
+    it("authenticates token from cookie", async () => {
         const token = "token";
         const decoded = { userId: "id", role: "user" };
         vi.spyOn(jwt, "verify").mockReturnValueOnce(decoded);
+        // authenticateUser hydrates roles/permissions/municipalities from the DB
+        // so that tenant-scoped staff are not mistaken for global users.
+        vi.spyOn(User, "findById").mockReturnValueOnce({
+            select: () => ({
+                lean: async () => ({ roles: ["user"], permissions: {}, active: true, municipalities: [] }),
+            }),
+        });
 
         const req = { cookies: { [AUTH_COOKIE_NAME]: token }, headers: {} };
         const res = buildRes();
         const next = vi.fn();
 
-        authController.authenticateUser(req, res, next);
+        await authController.authenticateUser(req, res, next);
 
         expect(req.user).toMatchObject(decoded);
         expect(req.user).toHaveProperty("roles", ["user"]);
         expect(req.userId).toBe(decoded.userId);
+        expect(next).toHaveBeenCalled();
+    });
+
+    it("hydrates the tenant scope from the database, not from the JWT", async () => {
+        const decoded = { userId: "id", role: "coordinator" };
+        vi.spyOn(jwt, "verify").mockReturnValueOnce(decoded);
+        vi.spyOn(User, "findById").mockReturnValueOnce({
+            select: () => ({
+                lean: async () => ({
+                    roles: ["coordinator"],
+                    permissions: {},
+                    active: true,
+                    municipalities: ["Stockholm"],
+                }),
+            }),
+        });
+
+        const req = { cookies: { [AUTH_COOKIE_NAME]: "token" }, headers: {} };
+        const res = buildRes();
+        const next = vi.fn();
+
+        await authController.authenticateUser(req, res, next);
+
+        expect(req.user.municipalities).toEqual(["Stockholm"]);
+        expect(next).toHaveBeenCalled();
+    });
+
+    it("clears authorization for a deactivated account", async () => {
+        const decoded = { userId: "id", role: "admin" };
+        vi.spyOn(jwt, "verify").mockReturnValueOnce(decoded);
+        vi.spyOn(User, "findById").mockReturnValueOnce({
+            select: () => ({
+                lean: async () => ({
+                    roles: ["admin"],
+                    permissions: {},
+                    active: false,
+                    municipalities: ["Stockholm"],
+                }),
+            }),
+        });
+
+        const req = { cookies: { [AUTH_COOKIE_NAME]: "token" }, headers: {} };
+        const res = buildRes();
+        const next = vi.fn();
+
+        await authController.authenticateUser(req, res, next);
+
+        expect(req.user.roles).toEqual([]);
+        expect(req.user.municipalities).toEqual([]);
         expect(next).toHaveBeenCalled();
     });
 

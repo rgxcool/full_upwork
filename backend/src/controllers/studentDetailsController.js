@@ -8,6 +8,7 @@ import Deviation from "../models/Deviation.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import { municipalityInScope } from "../utils/tenantScope.js";
+import { projectStudentForViewer } from "../utils/studentSerializer.js";
 import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
 import {
     performStudentDropout,
@@ -151,7 +152,15 @@ export const getStudentDetails = async (req, res) => {
         populatedStudent.aplStartDate = aplPeriod.aplStartDate;
         populatedStudent.aplEndDate = aplPeriod.aplEndDate;
 
-        res.json(populatedStudent);
+        const isOwner = Boolean(
+            typeof req.user?.email === "string" &&
+            typeof student.email === "string" &&
+            req.user.email.trim().toLowerCase() === student.email.trim().toLowerCase()
+        );
+
+        res.json(
+            projectStudentForViewer(populatedStudent, req.user, { isOwner })
+        );
     } catch (error) {
         logger.error({ err: error }, "Error fetching student details");
         res.status(500).json({ error: "Failed to fetch student details" });
@@ -720,7 +729,10 @@ export const getSupportInfo = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const student = await Student.findById(id).select("supportInfo name email");
+        // `municipality` must stay in the projection: the tenant check below
+        // reads `student.municipality.type`, and dropping it made every scoped
+        // user fail closed with 403 — even for students in their own municipality.
+        const student = await Student.findById(id).select("supportInfo name email municipality");
         if (!student) {
             return res.status(404).json({ error: "Student not found" });
         }

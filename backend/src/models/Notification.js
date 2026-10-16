@@ -21,8 +21,27 @@ const notificationSchema = new mongoose.Schema({
       teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // User ID for reference
       studentUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // User ID of the student's login account
       catalogId: { type: mongoose.Schema.Types.ObjectId, ref: "GradeCatalog" }, // Betygskatalog (Scrive)
+      coursePackageId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "CoursePackage",
+      }, // Kurspaket (diploma_ready notifications)
       documentId: { type: String }, // Scrive Document ID
       url: { type: String }, // för direktlänk i frontend
+      // Completion notifications (course_completed / diploma_ready)
+      completionDate: { type: Date },
+      completionType: { type: String }, // "course" | "course_package"
+      responsibleTeacher: { type: String },
+      responsibleTeacherEmail: { type: String },
+      studentMunicipality: { type: String },
+      // Inactivity review notifications (inactivity_review)
+      studentName: { type: String },
+      courseIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "CourseInstance" }],
+      courseNames: [{ type: String }],
+      scheduledDates: [{ type: Date }],
+      lastActivityAt: { type: Date },
+      daysInactive: { type: Number },
+      openSubmissions: { type: Number },
+      daysUntilWithdraw: { type: Number },
       // Att göra-påminnelser (task_reminder)
       userId: { type: String }, // Target user for the task reminder
       taskCount: { type: Number, default: 0 },
@@ -41,5 +60,14 @@ const notificationSchema = new mongoose.Schema({
 // Sorting is newest-first so cover the sort key and the $nin filter.
 notificationSchema.index({ createdAt: -1, _id: -1 });
 notificationSchema.index({ resolvedByUsers: 1, createdAt: -1 });
+
+// Per-role query patterns in GET /notifications (teacher filter, student
+// meta.studentUserId filter, admin dropout scoping) plus the action-plan
+// resolve/dedup lookups (type + studentId + courseId).
+notificationSchema.index({ teacher: 1, resolvedByUsers: 1, createdAt: -1 });
+notificationSchema.index({ "meta.studentUserId": 1, resolvedByUsers: 1, createdAt: -1 });
+notificationSchema.index({ createdByAdmin: 1, type: 1, createdAt: -1 });
+notificationSchema.index({ type: 1, studentId: 1, courseId: 1 });
+notificationSchema.index({ type: 1, "meta.studentId": 1, "meta.courseId": 1 });
 
 export default mongoose.model("Notification", notificationSchema, "notifications");

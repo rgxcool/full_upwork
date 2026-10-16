@@ -8,12 +8,22 @@ import {
     createCourseTemplate,
     updateCourseTemplate,
     deleteCourseTemplate,
+    duplicateCourseTemplate,
 } from "../controllers/courseTemplateController.js";
 
 const router = express.Router();
 
 // List templates (teachers: own + shared; admins: all)
 router.get("/course-templates", isAuthenticated, can("courseTemplates:read"), getCourseTemplates);
+
+// Duplicate a template (must precede the :templateId GET so the verb wins)
+router.post(
+    "/course-templates/:templateId/duplicate",
+    isAuthenticated,
+    can("courseTemplates:create"),
+    validateId("templateId"),
+    duplicateCourseTemplate
+);
 
 // Single template
 router.get(

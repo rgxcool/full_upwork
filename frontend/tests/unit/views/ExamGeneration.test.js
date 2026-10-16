@@ -95,6 +95,7 @@ describe('ExamGeneration.vue – question-bank integration', () => {
             subject: 'Matematik',
             questionType: 'Alla',
             numberOfQuestions: 1,
+            title: 'Prov 1',
         })
         expect(client.put).toHaveBeenCalledWith('/question-bank/exam-attempts/attempt-1/questions', {
             questionIds: ['q-1'],

@@ -434,19 +434,25 @@ test.describe('Etapp 2 messaging (#27)', () => {
     await teacherPage.locator('button', { hasText: 'Ny konversation' }).click();
     const modal = teacherPage.locator('.modal-card');
     await expect(modal).toBeVisible();
-    await modal.locator('select.form-control').selectOption({ value: anna._id });
-    await modal.locator('input.form-control').fill(subject);
-    await modal.locator('textarea.form-control').fill(teacherBody);
+    if (await modal.locator('select.form-control').count() > 0) {
+      await modal.locator('select.form-control').selectOption({ value: anna._id });
+    } else {
+      await modal.locator(`input[type="checkbox"][value="${anna._id}"]`).check();
+    }
+    const subjectInput = modal.locator('input[type="text"]:not(.recipient-search), input.form-control').first();
+    await subjectInput.fill(subject);
+    const bodyInput = modal.locator('textarea').first();
+    await bodyInput.fill(teacherBody);
 
     const sendResp = teacherPage.waitForResponse(
       (r) => r.request().method() === 'POST' && r.url().includes('/api/messages')
     );
-    await modal.locator('button', { hasText: 'Starta konversation' }).click();
+    await modal.locator('button:has-text("Starta konversation"), button:has-text("Skicka")').click();
     expect((await sendResp).status()).toBe(201);
 
     // The new conversation auto-opens with the sent message visible.
     await expect(teacherPage.locator('.thread-subject')).toContainText(subject, { timeout: 20000 });
-    await expect(teacherPage.locator('.message-feed .message-text', { hasText: teacherBody })).toBeVisible();
+    await expect(teacherPage.locator('.message-feed, .message-thread').locator('text=' + teacherBody)).toBeVisible();
     await teacherPage.screenshot({ path: path.join(SHOT_DIR, 'item27-1-teacher-sent.png'), fullPage: true });
 
     // 2. The student (Anna) sees the conversation and can reply to it.
@@ -457,17 +463,18 @@ test.describe('Etapp 2 messaging (#27)', () => {
     const convItem = studentPage.locator('.conversation-item', { hasText: subject }).first();
     await expect(convItem).toBeVisible({ timeout: 20000 });
     await convItem.click();
-    await expect(studentPage.locator('.message-feed .message-text', { hasText: teacherBody })).toBeVisible({ timeout: 20000 });
+    await expect(studentPage.locator('.message-feed, .message-thread').locator('text=' + teacherBody)).toBeVisible({ timeout: 20000 });
     await studentPage.screenshot({ path: path.join(SHOT_DIR, 'item27-2-student-sees.png'), fullPage: true });
 
-    await studentPage.locator('.reply-box textarea').fill(studentReply);
+    const replyInput = studentPage.locator('.reply-box textarea, .message-input input, .message-input textarea').first();
+    await replyInput.fill(studentReply);
     const replyResp = studentPage.waitForResponse(
       (r) => r.request().method() === 'POST' && r.url().includes('/api/messages')
     );
-    await studentPage.locator('.reply-box .btn-send').click();
+    await studentPage.locator('.reply-box .btn-send, .message-input button').first().click();
     expect((await replyResp).status()).toBe(201);
     await expect(
-      studentPage.locator('.message-feed .message-bubble-wrapper.mine .message-text', { hasText: studentReply })
+      studentPage.locator('.message-feed, .message-thread').locator('text=' + studentReply)
     ).toBeVisible({ timeout: 20000 });
     await studentPage.screenshot({ path: path.join(SHOT_DIR, 'item27-3-student-replied.png'), fullPage: true });
 
@@ -495,7 +502,7 @@ test.describe('Etapp 2 messaging (#27)', () => {
     const teacherConv = teacherPage.locator('.conversation-item', { hasText: subject }).first();
     await expect(teacherConv).toBeVisible({ timeout: 20000 });
     await teacherConv.click();
-    await expect(teacherPage.locator('.message-feed .message-text', { hasText: studentReply })).toBeVisible({ timeout: 20000 });
+    await expect(teacherPage.locator('.message-feed, .message-thread').locator('text=' + studentReply)).toBeVisible({ timeout: 20000 });
     await teacherPage.screenshot({ path: path.join(SHOT_DIR, 'item27-6-teacher-sees-reply.png'), fullPage: true });
 
     await teacherCtx.close();

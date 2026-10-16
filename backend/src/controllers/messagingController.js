@@ -3,27 +3,17 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
 import { validateParticipants, dispatchMessageEmailCopies } from "../services/messagingService.js";
+import { userScopeFilter } from "../utils/tenantScope.js";
+import { escapeRegExp } from "../utils/escapeRegExp.js";
 import logger from "../utils/logger.js";
 
-// Resolve the authenticated user's id across the shapes the app produces:
-// req.userId / req.user.userId (JWT, set by authenticateUser) or req.user._id
-// (plain-object mocks and legacy flows).
 const getCurrentUserId = (req) => req.userId || req.user?.userId || req.user?._id || req.user?.id;
 
-// Aggregation pipelines do NOT schema-cast query values, so a string userId
-// must be converted to an ObjectId before matching against _id/readBy.userId.
 const toObjectId = (value) =>
   typeof value === "string" && mongoose.Types.ObjectId.isValid(value)
     ? new mongoose.Types.ObjectId(value)
     : value;
 
-/**
- * Get all conversations for the authenticated user.
- *
- * Unread counts and newest-message previews are loaded with two batched
- * aggregations instead of a per-conversation query pair, so the endpoint stays
- * O(1) in the number of conversations (important at ~1000+ users).
- */
 export const getConversations = async (req, res) => {
   try {
     const userId = getCurrentUserId(req);
@@ -32,7 +22,7 @@ export const getConversations = async (req, res) => {
       participants: userId,
     })
       .populate("participants", "name email roles")
-      .populate("studentId", "name personalNumber")
+      .populate("studentId", "name")
       .sort({ lastMessageAt: -1 });
 
     if (conversations.length === 0) {
@@ -42,7 +32,6 @@ export const getConversations = async (req, res) => {
     const conversationIds = conversations.map((c) => c._id);
     const userIdObjectId = toObjectId(userId);
 
-    // One batched query: unread count per conversation.
     const unreadRows = await Message.aggregate([
       {
         $match: {
@@ -54,7 +43,6 @@ export const getConversations = async (req, res) => {
       { $group: { _id: "$conversationId", count: { $sum: 1 } } },
     ]);
 
-    // One batched query: the newest message per conversation.
     const lastRows = await Message.aggregate([
       { $match: { conversationId: { $in: conversationIds } } },
       { $sort: { createdAt: -1 } },
@@ -84,14 +72,6 @@ export const getConversations = async (req, res) => {
   }
 };
 
-/**
- * Get messages for a specific conversation.
- *
- * Keyset-paginated: pass ?before=<oldest loaded message _id> and ?limit=N to
- * page backwards through long threads. Without any params the newest
- * DEFAULT_MESSAGE_PAGE_SIZE messages are returned (the full-thread behavior is
- * removed so a huge thread can never be loaded into memory unboundedly).
- */
 const DEFAULT_MESSAGE_PAGE_SIZE = 50;
 const MAX_MESSAGE_PAGE_SIZE = 200;
 
@@ -124,7 +104,6 @@ export const getMessages = async (req, res) => {
       query._id = { $lt: cursorMessage._id };
     }
 
-    // Fetch limit+1 so we can report whether older messages exist.
     const page = await Message.find(query)
       .populate("senderId", "name email roles")
       .sort({ _id: -1 })
@@ -144,9 +123,6 @@ export const getMessages = async (req, res) => {
   }
 };
 
-/**
- * Send a message. Creates a conversation if one doesn't exist.
- */
 export const sendMessage = async (req, res) => {
   try {
     const { participantIds, body, studentId, subject, conversationId } = req.body;
@@ -159,7 +135,6 @@ export const sendMessage = async (req, res) => {
     let conversation;
 
     if (conversationId) {
-      // Send to existing conversation
       conversation = await Conversation.findOne({
         _id: conversationId,
         participants: senderId,
@@ -169,22 +144,16 @@ export const sendMessage = async (req, res) => {
         return res.status(404).json({ message: "Konversationen hittades inte eller så har du inte tillgång till den" });
       }
     } else {
-      // Create new conversation
       if (!participantIds || !Array.isArray(participantIds) || participantIds.length === 0) {
         return res.status(400).json({ message: "Deltagare måste anges" });
       }
 
-      // Ensure sender is included in participants
       const allParticipantIds = [...new Set([...participantIds, senderId.toString()])];
-
-      // Validate participants (RBAC)
       const isValid = await validateParticipants(req.user, allParticipantIds);
       if (!isValid) {
         return res.status(403).json({ message: "Du har inte behörighet att starta en konversation med dessa deltagare" });
       }
 
-      // Check if conversation already exists between these EXACT participants (ignoring studentId/subject for now)
-      // Actually, let's just create a new one if it's a new thread.
       conversation = new Conversation({
         participants: allParticipantIds,
         studentId: studentId || null,
@@ -201,13 +170,9 @@ export const sendMessage = async (req, res) => {
     });
 
     await newMessage.save();
-
-    // Update conversation's lastMessageAt
     conversation.lastMessageAt = new Date();
     await conversation.save();
 
-    // Email copies to student recipients (best-effort; never blocks the
-    // in-platform message from being saved).
     await dispatchMessageEmailCopies({
       message: newMessage,
       conversation,
@@ -221,9 +186,6 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-/**
- * Mark messages in a conversation as read.
- */
 export const markAsRead = async (req, res) => {
   try {
     const { conversationId } = req.params;
@@ -238,7 +200,6 @@ export const markAsRead = async (req, res) => {
       return res.status(404).json({ message: "Konversationen hittades inte" });
     }
 
-    // Update all messages in this conversation where this user is NOT the sender and hasn't read it yet
     await Message.updateMany(
       {
         conversationId,
@@ -257,16 +218,11 @@ export const markAsRead = async (req, res) => {
   }
 };
 
-/**
- * Get total unread message count for the authenticated user.
- */
 export const getUnreadCount = async (req, res) => {
   try {
     const userId = getCurrentUserId(req);
-
-    // Find all conversations the user is part of
     const conversations = await Conversation.find({ participants: userId }).select("_id");
-    const conversationIds = conversations.map(c => c._id);
+    const conversationIds = conversations.map((c) => c._id);
 
     const unreadCount = await Message.countDocuments({
       conversationId: { $in: conversationIds },
@@ -281,37 +237,42 @@ export const getUnreadCount = async (req, res) => {
   }
 };
 
-/**
- * Get available recipients for the authenticated user based on RBAC rules.
- * Accepts an optional ?search= term that filters server-side by name/email so
- * the dropdown stays responsive at ~1000+ users.
- */
 export const getRecipients = async (req, res) => {
   try {
     const user = req.user;
-    const userRole = user.role || (user.roles && user.roles[0]);
+    const userRoles = user.roles || (user.role ? [user.role] : []);
+    const userRole = user.role || userRoles[0];
     const staffRoles = ["admin", "systemadmin", "teacher", "syv", "specped", "coordinator"];
 
     let query = { _id: { $ne: user._id } };
 
     if (staffRoles.includes(userRole)) {
-      // Staff can message staff or students
       query.roles = { $in: [...staffRoles, "student"] };
-    } else if (userRole === "student") {
-      // Students can only message staff
-      query.roles = { $in: staffRoles };
     } else {
       query.roles = { $in: staffRoles };
     }
 
+    // P17: tenant (kommun) isolation. Without this, any scoped staff account
+    // could enumerate every user — name and email — in every other municipality
+    // simply by listing the recipients they may message.
+    const scope = userScopeFilter(user);
+    if (Object.keys(scope).length > 0) {
+      query.municipalities = { ...(query.municipalities || {}), ...scope.municipalities };
+    }
+
     const search = (req.query?.search || "").trim();
     if (search) {
+      // Escape user input: an unescaped term is treated as a regex pattern and
+      // can be used to match every account (e.g. ".*") or to stall the query.
+      const safe = escapeRegExp(search);
       query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
+        { name: { $regex: safe, $options: "i" } },
+        { email: { $regex: safe, $options: "i" } },
       ];
     }
 
+    // `municipalities` is deliberately NOT selected: the filter is applied
+    // server-side, and the client has no need to learn a colleague's tenant.
     const recipients = await User.find(query).select("name email roles").sort({ name: 1 });
     res.json(recipients);
   } catch (error) {
@@ -319,4 +280,3 @@ export const getRecipients = async (req, res) => {
     res.status(500).json({ message: "Internt serverfel vid hämtning av mottagare" });
   }
 };
-

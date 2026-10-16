@@ -301,6 +301,18 @@ const routes = [
     component: () => import('@/views/Admin/GradingScaleAdmin.vue'),
     meta: { title: 'Betygsskalor', role: ['admin', 'systemadmin'] },
   },
+  {
+    path: '/admin/certificates',
+    name: 'CertificateManager',
+    component: () => import('@/views/Admin/CertificateManager.vue'),
+    meta: { title: 'Intyg & Diplom', role: ['admin', 'systemadmin'] },
+  },
+  {
+    path: '/admin/completions',
+    name: 'AdminCompletions',
+    component: () => import('@/views/Admin/Completions.vue'),
+    meta: { title: 'Kursgenomförande', role: ['admin', 'systemadmin'] },
+  },
 
   {
     path: '/provningar',

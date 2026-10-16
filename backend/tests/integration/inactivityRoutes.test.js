@@ -2,7 +2,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
-import app from "../../index.js";
+import express from "express";
+import inertiaRoutes from "../../src/router/inactivityRoutes.js";
+import studentDetailsRoutes from "../../src/router/studentDetailsRoutes.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
@@ -19,19 +21,49 @@ const dayMs = 24 * 60 * 60 * 1000;
 const daysAgo = (days) => new Date(Date.now() - days * dayMs);
 const daysAhead = (days) => new Date(Date.now() + days * dayMs);
 
-const buildAuthHeader = (role, userId = null) => {
+const buildAuthHeader = (role, userId = null, extra = {}) => {
     const token = jwt.sign(
         {
             userId: userId || new mongoose.Types.ObjectId().toString(),
             role,
             roles: [role],
+            ...extra,
         },
         process.env.JWT_SECRET || "test-secret"
     );
     return { Authorization: `Bearer ${token}` };
 };
 
+// Standalone router mount: replicate the authenticateUser JWT decoding inline
+// (it short-circuits when req.user is already set) so we never import the full
+// app graph, which currently cannot boot in tests due to messagingRoutes.
+const buildApp = () => {
+    const app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+            try {
+                const decoded = jwt.verify(
+                    authHeader.split(" ")[1],
+                    process.env.JWT_SECRET || "test-secret"
+                );
+                const roles = decoded.roles || (decoded.role ? [decoded.role] : []);
+                req.user = { ...decoded, roles, role: decoded.role || roles[0] || null };
+                req.userId = req.user.userId;
+            } catch {
+                // leave req.user unset → authenticateUser returns 401
+            }
+        }
+        next();
+    });
+    app.use("/api/inactivity", inertiaRoutes);
+    app.use("/api", studentDetailsRoutes);
+    return app;
+};
+
 describe("Inactivity Report Routes Integration Tests", () => {
+    let app;
     let studentA;
     let studentB;
     let course;
@@ -40,6 +72,7 @@ describe("Inactivity Report Routes Integration Tests", () => {
     beforeAll(async () => {
         await connectTestDatabase();
         process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
+        app = buildApp();
     });
 
     afterAll(async () => {
@@ -633,6 +666,188 @@ describe("Inactivity Report Routes Integration Tests", () => {
             expect(reloaded.resolvedByUsers.map((u) => u.toString())).toContain(
                 adminUser._id.toString()
             );
+        });
+    });
+
+    describe("Part 6 — review flow, tenant isolation, package cascade", () => {
+        it("treats recent learning activity as activity even when the login is stale", async () => {
+            await User.updateOne(
+                { email: "anna@elev.se" },
+                { $set: { lastLoginAt: daysAgo(20) } }
+            );
+            await Student.updateOne(
+                { _id: studentA._id },
+                { $set: { lastLearningActivityAt: daysAgo(2) } }
+            );
+
+            const res = await request(app)
+                .get("/api/inactivity/report")
+                .set(buildAuthHeader("admin"))
+                .expect(200);
+
+            const anna = res.body.students.find(
+                (s) => s.studentId === studentA._id.toString()
+            );
+            expect(anna).toBeDefined();
+            expect(anna.mustWithdraw).toBe(false);
+            expect(anna.inactiveForWarning).toBe(false);
+            expect(anna.level).toBe("ok");
+            expect(anna.daysSinceLastLearningActivity).toBe(2);
+        });
+
+        it("reports the learning-activity signal when it drives the inactivity window", async () => {
+            await User.updateOne(
+                { email: "anna@elev.se" },
+                { $set: { lastLoginAt: daysAgo(10) } }
+            );
+            await Student.updateOne(
+                { _id: studentA._id },
+                { $set: { lastLearningActivityAt: daysAgo(6) } }
+            );
+
+            const res = await request(app)
+                .get("/api/inactivity/report")
+                .set(buildAuthHeader("admin"))
+                .expect(200);
+
+            const anna = res.body.students.find(
+                (s) => s.studentId === studentA._id.toString()
+            );
+            expect(anna).toBeDefined();
+            expect(anna.mustWithdraw).toBe(true);
+            expect(anna.daysSinceLastLearningActivity).toBe(6);
+            expect(anna.daysSinceLastLogin).toBe(10);
+            expect(anna.activityBasis).toBeDefined();
+        });
+
+        it("scopes the report to the admin's municipality (tenant isolation)", async () => {
+            const scopedAdmin = await User.create({
+                email: "sollentuna-admin@mindful.se",
+                password: "hashed-placeholder",
+                roles: ["admin"],
+                municipalities: ["Sollentuna"],
+            });
+
+            const res = await request(app)
+                .get("/api/inactivity/report")
+                .set(buildAuthHeader("admin", scopedAdmin._id.toString()))
+                .expect(200);
+
+            const ids = res.body.students.map((s) => s.studentId);
+            expect(ids).toContain(studentA._id.toString());
+            expect(ids).not.toContain(
+                (
+                    await Student.create({
+                        name: "Täby Elev",
+                        personalNumber: "19990101-9999",
+                        email: "taby@elev.se",
+                        municipality: { type: "Täby" },
+                    })
+                )._id.toString()
+            );
+        });
+
+        it("blocks a scoped admin from acting on a student outside their municipality", async () => {
+            const scopedAdmin = await User.create({
+                email: "sollentuna-admin2@mindful.se",
+                password: "hashed-placeholder",
+                roles: ["admin"],
+                municipalities: ["Sollentuna"],
+            });
+
+            await request(app)
+                .post(`/api/inactivity/${studentB._id}/warning-email`)
+                .set(buildAuthHeader("admin", scopedAdmin._id.toString()))
+                .expect(403);
+        });
+
+        it("lets an admin resolve an inactivity_review notification with a warning email", async () => {
+            const adminUser = await User.create({
+                email: "review-admin@mindful.se",
+                password: "hashed-placeholder",
+                roles: ["admin"],
+            });
+            const review = await Notification.create({
+                type: "inactivity_review",
+                message: "Inaktivitetsgranskning krävs",
+                meta: {
+                    studentId: studentA._id,
+                    studentName: "Anna Svensson",
+                    courseNames: ["Matematik 1"],
+                    url: "/admin/inactivity",
+                },
+                resolvedByUsers: [],
+            });
+
+            const res = await request(app)
+                .post(`/api/inactivity/notifications/${review._id}/action`)
+                .set(buildAuthHeader("admin", adminUser._id.toString()))
+                .send({ action: "warning" })
+                .expect(200);
+
+            expect(res.body.success).toBe(true);
+            expect(res.body.action).toBe("warning");
+
+            const reloaded = await Notification.findById(review._id).lean();
+            expect(reloaded.resolvedByUsers.map((u) => u.toString())).toContain(
+                adminUser._id.toString()
+            );
+
+            const student = await Student.findById(studentA._id).lean();
+            expect(
+                student.changeHistory.some((e) =>
+                    e.changes.includes("inactivity_warning_email")
+                )
+            ).toBe(true);
+        });
+
+        it("withdraws through the review notification and cascades the course package", async () => {
+            const packageId = new mongoose.Types.ObjectId();
+            await StudentEnrollment.create({
+                studentId: studentA._id,
+                courseInstanceId: instance._id,
+                mainCourseId: course._id,
+                coursePackageId: packageId,
+                startDate: daysAgo(40),
+                endDate: daysAhead(20),
+                status: "active",
+            });
+
+            const adminUser = await User.create({
+                email: "review-admin2@mindful.se",
+                password: "hashed-placeholder",
+                roles: ["admin"],
+            });
+            const review = await Notification.create({
+                type: "inactivity_review",
+                message: "Inaktivitetsgranskning krävs",
+                meta: { studentId: studentA._id, studentName: "Anna Svensson", url: "/admin/inactivity" },
+                resolvedByUsers: [],
+            });
+
+            const res = await request(app)
+                .post(`/api/inactivity/notifications/${review._id}/action`)
+                .set(buildAuthHeader("admin", adminUser._id.toString()))
+                .send({ action: "withdraw" })
+                .expect(200);
+
+            expect(res.body.success).toBe(true);
+
+            const student = await Student.findById(studentA._id).lean();
+            expect(student.dropout).toBe(true);
+
+            // Course package cascade: every non-terminal enrollment of the
+            // package (and the standalone one) is dropped.
+            const enrollments = await StudentEnrollment.find({ studentId: studentA._id }).lean();
+            expect(enrollments.length).toBeGreaterThanOrEqual(2);
+            expect(enrollments.every((e) => e.status === "dropped")).toBe(true);
+
+            // Student is notified of the avbrott (meta.studentUserId channel).
+            const studentNotif = await Notification.findOne({ type: "dropout" }).lean();
+            expect(studentNotif).toBeTruthy();
+            expect(studentNotif.meta && studentNotif.meta.studentUserId).toBeTruthy();
+            expect(String(studentNotif.meta.studentId)).toBe(String(studentA._id));
+            expect(studentNotif.meta.url).toBe("/");
         });
     });
 });

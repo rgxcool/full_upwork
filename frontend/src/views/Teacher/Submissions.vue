@@ -78,16 +78,17 @@
         <!-- Comment thread -->
         <div v-if="submissionComments[submission._id]?.length > 0" class="comment-thread">
           <h4 class="thread-title">Kommentarer</h4>
-          <div v-for="comment in submissionComments[submission._id]" :key="comment.id" class="thread-comment">
-            <span class="thread-meta">{{ formatDateTime(comment.at) }}</span>
-            <p class="thread-text">{{ comment.text }}</p>
-          </div>
+          <SubmissionsCommentThread
+            :comments="commentTree(submissionComments[submission._id])"
+            :saving="!!commentSaving[submission._id]"
+            @reply="({ parentCommentId, text }) => postSubmissionComment(submission, parentCommentId, text)"
+          />
         </div>
         <div class="comment-thread-form">
           <input
             v-model="newSubmissionComment[submission._id]"
             class="comment-input"
-            placeholder="Lägg till kommentar..."
+            placeholder="Lägg till en ny kommentar..."
             @keyup.enter="postSubmissionComment(submission)"
           />
           <button
@@ -106,6 +107,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import client from '@/api/client.js'
+import SubmissionsCommentThread from '@/components/SubmissionsCommentThread.vue'
 
 const loading = ref(false)
 const error = ref('')
@@ -216,6 +218,25 @@ const loadSubmissions = async () => {
   }
 }
 
+const commentTree = (comments) => {
+  const nodes = (comments || []).map((comment) => ({ ...comment, children: [] }))
+  const byId = new Map(nodes.map((node) => [String(node.id), node]))
+  const roots = []
+  for (const node of nodes) {
+    const parent = node.parentCommentId ? byId.get(String(node.parentCommentId)) : null
+    if (parent) {
+      parent.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+  const sortByDate = (list) =>
+    list.sort((a, b) => new Date(a.at || 0) - new Date(b.at || 0))
+  sortByDate(roots)
+  for (const node of nodes) sortByDate(node.children)
+  return roots
+}
+
 const loadSubmissionComments = async (submissionId) => {
   try {
     const { data } = await client.get(`/learning/submissions/${submissionId}/comments`)
@@ -225,13 +246,15 @@ const loadSubmissionComments = async (submissionId) => {
   }
 }
 
-const postSubmissionComment = async (submission) => {
+const postSubmissionComment = async (submission, parentCommentId = null, explicitText = null) => {
   const id = submission._id
-  const text = (newSubmissionComment[id] || '').trim()
+  const text = (explicitText ?? newSubmissionComment[id] ?? '').trim()
   if (!text) return
   commentSaving[id] = true
   try {
-    const { data } = await client.post(`/learning/submissions/${id}/comments`, { text })
+    const body = { text }
+    if (parentCommentId) body.parentCommentId = parentCommentId
+    const { data } = await client.post(`/learning/submissions/${id}/comments`, body)
     submissionComments[id] = data.comments || []
     newSubmissionComment[id] = ''
   } catch {

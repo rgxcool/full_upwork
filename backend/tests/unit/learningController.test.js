@@ -17,7 +17,7 @@ vi.mock("../../src/models/Student.js", () => ({
 }));
 vi.mock("../../src/models/Teacher.js", () => ({
     __esModule: true,
-    default: { findOne: vi.fn() },
+    default: { findOne: vi.fn(), find: vi.fn() },
 }));
 vi.mock("../../src/models/CourseInstance.js", () => ({
     __esModule: true,
@@ -38,7 +38,7 @@ vi.mock("../../src/models/AssignmentSubmission.js", () => ({
 }));
 vi.mock("../../src/models/User.js", () => ({
     __esModule: true,
-    default: { findById: vi.fn() },
+    default: { findById: vi.fn(), find: vi.fn() },
 }));
 
 import Student from "../../src/models/Student.js";
@@ -69,6 +69,7 @@ const INSTANCE_ID = "333333333333333333333333";
 const SUBMISSION_ID = "444444444444444444444444";
 const TEACHER_ID = "555555555555555555555555";
 const USER_ID = "666666666666666666666666";
+const ASSISTANT_TEACHER_ID = "777777777777777777777777";
 
 // Makes a mongoose-style chainable query resolve to `data` when awaited.
 const chainable = (data) => {
@@ -163,6 +164,32 @@ describe("learningController", () => {
             );
             const payload = res.json.mock.calls[0][0];
             expect(payload.submissions[1]).toMatchObject({ submittedText: "svar" });
+        });
+
+        it("overlays teacher content and hides hidden modules for students", async () => {
+            const withContent = {
+                ...instance,
+                content: new Map([
+                    [1, { title: "Startmodul", instructions: "Börja här." }],
+                    [2, { title: "Hemlig", instructions: "Hemligt.", isHiddenFromStudent: true }],
+                ]),
+            };
+            Student.findOne.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            StudentEnrollment.findOne.mockResolvedValue(enrollment);
+            CourseInstance.findById.mockResolvedValue(withContent);
+            AssignmentSubmission.find.mockReturnValue(chainable([]));
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID } });
+            const res = makeRes();
+            await getInstanceModules(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.modules[0]).toMatchObject({ title: "Startmodul", instructions: "Börja här." });
+            expect(payload.modules[1]).toMatchObject({
+                title: "Innehåll dolt",
+                instructions: "Detta innehåll döljs för studenter.",
+                isHiddenFromStudent: true,
+            });
         });
 
         it("forbids a student who is not enrolled", async () => {
@@ -575,9 +602,52 @@ describe("learningController", () => {
             expect(payload.completedModules).toBe(1);
             expect(payload.completionRate).toBe("50.0");
             expect(payload.modules[0].completed).toBe(true);
+            expect(payload.moduleStatusesCount).toBe(undefined);
             expect(payload.assignmentStatus[1].status).toBe("godkänd");
             expect(payload.scheduledDates).toHaveLength(2);
             expect(payload.studentActivity.lastAccess).toBeInstanceOf(Date);
+        });
+
+        it("flags unscheduled modules instead of reporting them as not completed", async () => {
+            CourseInstance.findById.mockResolvedValue({
+                _id: INSTANCE_ID,
+                courseName: "Svenska 1",
+                modules: [
+                    { moduleNumber: 1, title: "Modul 1", isPartialExam: false, isCaseStudy: false },
+                    // Module 2 has no startDate and no matching section date below.
+                    { moduleNumber: 2, title: "Modul 2", isPartialExam: true, isCaseStudy: true },
+                    { moduleNumber: 3, title: "Modul 3", startDate: new Date("2026-10-10"), isPartialExam: false, isCaseStudy: false },
+                ],
+                sectionDates: [new Date("2026-09-21")],
+            });
+            Student.findById.mockResolvedValue({ _id: STUDENT_ID, name: "Anna" });
+            StudentEnrollment.findOne.mockResolvedValue({
+                _id: ENROLLMENT_ID,
+                studentId: STUDENT_ID,
+                completedComponents: new Map([["1", "✗"]]),
+                students: [],
+            });
+            AssignmentSubmission.find.mockReturnValue(chainable([]));
+            AssignmentSubmission.findOne.mockReturnValue(chainable(null));
+            User.findById.mockReturnValue({
+                select: vi.fn().mockResolvedValue({ lastLoginAt: null }),
+            });
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID, studentId: STUDENT_ID } });
+            const res = makeRes();
+            await getCourseInstanceReport(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            // Module 1 is scheduled (section date) but not completed → real "not completed".
+            expect(payload.modules[0].scheduled).toBe(true);
+            expect(payload.modules[0].completed).toBe(false);
+            // Module 2 is neither scheduled nor completed → must not read as "not completed".
+            expect(payload.modules[1].scheduled).toBe(false);
+            expect(payload.modules[1].completed).toBe(false);
+            expect(payload.modules[1].scheduleDate).toBeNull();
+            // Module 3 is scheduled via its own startDate.
+            expect(payload.modules[2].scheduled).toBe(true);
+            expect(payload.modules[2].scheduleDate).toBe("2026-10-10");
         });
 
         it("returns 400 for invalid ids", async () => {
@@ -635,7 +705,7 @@ describe("learningController", () => {
     });
 
     describe("getCourseInstanceParticipants", () => {
-        it("returns participants from enrollments", async () => {
+        it("returns participants from enrollments with last activity", async () => {
             CourseInstance.findById.mockResolvedValue(instance);
             StudentEnrollment.find.mockReturnValue(
                 chainable([
@@ -646,6 +716,11 @@ describe("learningController", () => {
                     },
                 ])
             );
+            User.find.mockReturnValue(
+                chainable([{ _id: STUDENT_ID, lastLoginAt: new Date("2026-01-02") }])
+            );
+            AssignmentSubmission.find.mockReturnValue(chainable([]));
+            Teacher.find.mockReturnValue(chainable([]));
 
             const req = reqFor({ params: { instanceId: INSTANCE_ID } });
             const res = makeRes();
@@ -660,8 +735,91 @@ describe("learningController", () => {
                     email: "anna@x.se",
                     role: "student",
                     status: "active",
+                    lastActivity: { type: "login", at: new Date("2026-01-02") },
                 },
             ]);
+        });
+
+        it("includes staff (responsible/assistant teacher) with their last login", async () => {
+            CourseInstance.findById.mockResolvedValue({
+                ...instance,
+                responsibleTeacher: TEACHER_ID,
+                assistantTeacher: ASSISTANT_TEACHER_ID,
+            });
+            StudentEnrollment.find.mockReturnValue(chainable([]));
+            User.find.mockReturnValueOnce(
+                chainable([])
+            ).mockReturnValueOnce(
+                chainable([
+                    {
+                        _id: USER_ID,
+                        name: "Läraren",
+                        email: "teach@x.se",
+                        lastLoginAt: new Date("2026-01-05"),
+                        active: true,
+                    },
+                ])
+            );
+            Teacher.find.mockReturnValue(
+                chainable([
+                    { _id: TEACHER_ID, userId: USER_ID, subject: "Matematik" },
+                    { _id: ASSISTANT_TEACHER_ID, userId: null, subject: null },
+                ])
+            );
+            AssignmentSubmission.find.mockReturnValue(chainable([]));
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID } });
+            const res = makeRes();
+            await getCourseInstanceParticipants(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.success).toBe(true);
+            const staff = payload.participants.filter((p) => p.role === "staff");
+            expect(staff).toHaveLength(2);
+            expect(staff[0]).toMatchObject({
+                participantId: TEACHER_ID,
+                name: "Läraren",
+                email: "teach@x.se",
+                role: "staff",
+                staffRole: "Lärare (Matematik)",
+                status: "active",
+            });
+            expect(staff[0].lastActivity.type).toBe("login");
+            expect(staff[1].name).toBe("Lärare");
+            expect(staff[1].lastActivity).toBeNull();
+        });
+
+        it("favors the newest submission when no login exists", async () => {
+            CourseInstance.findById.mockResolvedValue(instance);
+            StudentEnrollment.find.mockReturnValue(
+                chainable([
+                    {
+                        _id: ENROLLMENT_ID,
+                        studentId: { _id: STUDENT_ID, name: "Anna", email: "anna@x.se" },
+                        status: "active",
+                    },
+                ])
+            );
+            User.find.mockReturnValue(
+                chainable([{ _id: STUDENT_ID, lastLoginAt: null }])
+            );
+            AssignmentSubmission.find.mockReturnValue(
+                chainable([
+                    { studentId: STUDENT_ID, submittedAt: new Date("2026-02-10") },
+                    { studentId: STUDENT_ID, submittedAt: new Date("2026-01-20") },
+                ])
+            );
+            Teacher.find.mockReturnValue(chainable([]));
+
+            const req = reqFor({ params: { instanceId: INSTANCE_ID } });
+            const res = makeRes();
+            await getCourseInstanceParticipants(req, res);
+
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.participants[0].lastActivity).toEqual({
+                type: "submission",
+                at: new Date("2026-02-10"),
+            });
         });
 
         it("returns 400 for invalid input", async () => {

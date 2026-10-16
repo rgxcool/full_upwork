@@ -33,6 +33,8 @@ import {
 } from "../utils/inactivityStatus.js";
 import { sendInactivityWarningEmail } from "./emailService.js";
 import {
+    createInactivityReviewNotification,
+    hasSentInactivityWarning,
     notifyInactivityAction,
     safeInactivitySideEffect,
     summarizeInactivitySignal,
@@ -98,12 +100,12 @@ async function evaluateActiveStudents(today) {
     const enrollmentIds = enrollments.map((e) => e._id);
     const enrollmentTeacherIds = uniq(enrollments.map((e) => e.teacherId));
 
-    const [students, , submissions, teachers] = await Promise.all([
+    const [students, courseInstances, submissions, teachers] = await Promise.all([
         Student.find({ _id: { $in: studentIds } })
-            .select("name email changeHistory")
+            .select("name email changeHistory lastLearningActivityAt")
             .lean(),
         CourseInstance.find({ _id: { $in: courseInstanceIds } })
-            .select("courseName")
+            .select("courseName sectionDates")
             .lean(),
         AssignmentSubmission.find({ enrollmentId: { $in: enrollmentIds } })
             .select("studentId submittedAt feedback revisionDecision")
@@ -134,6 +136,17 @@ async function evaluateActiveStudents(today) {
     );
     const teacherIdToUser = new Map(
         teachers.map((t) => [t._id.toString(), t.userId?.toString()])
+    );
+    const instanceById = new Map(
+        courseInstances.map((c) => [
+            c._id.toString(),
+            {
+                courseName: c.courseName || "",
+                scheduledDates: Array.isArray(c.sectionDates)
+                    ? c.sectionDates.map((d) => d).filter(Boolean)
+                    : [],
+            },
+        ])
     );
 
     const submissionsByStudent = new Map();
@@ -173,6 +186,7 @@ async function evaluateActiveStudents(today) {
             lastLoginAt: user?.lastLoginAt || null,
             enrollments: studentEnrollments,
             lastSubmissionAt: activity?.lastAt ? new Date(activity.lastAt) : null,
+            lastLearningActivityAt: student.lastLearningActivityAt || null,
             openSubmissions: activity?.open || 0,
             today,
         });
@@ -192,6 +206,20 @@ async function evaluateActiveStudents(today) {
             }
         }
 
+        const enrollmentMeta = studentEnrollments
+            .map((enrollment) => {
+                const meta = instanceById.get(enrollment.courseInstanceId?.toString()) || {
+                    courseName: "",
+                    scheduledDates: [],
+                };
+                return {
+                    courseInstanceId: enrollment.courseInstanceId,
+                    courseName: meta.courseName,
+                    scheduledDates: meta.scheduledDates,
+                };
+            })
+            .filter((e) => e.courseName);
+
         rows.push({
             studentId,
             student,
@@ -200,6 +228,7 @@ async function evaluateActiveStudents(today) {
             teacherId,
             teacherUserId,
             teacherName,
+            enrollmentMeta,
         });
     }
     return rows;
@@ -349,11 +378,12 @@ async function withdrawStudent(row) {
  * so a scheduled run cannot crash the process.
  *
  * @param {{ today?: Date, autoSend?: boolean }} [options]
- * @returns {Promise<{ evaluated: number, inactiveForWarning: number, warned: number, alreadyWarned: number, noEmail: number, autoWithdrawn: number, withdrawPending: number, failed: number, autoSend: boolean, autoWithdraw: boolean, failures: Array<{studentId: string, reason: string}> }>}
+ * @returns {Promise<{ evaluated: number, reviewNotifications: number, inactiveForWarning: number, warned: number, alreadyWarned: number, noEmail: number, autoWithdrawn: number, withdrawPending: number, failed: number, autoSend: boolean, autoWithdraw: boolean, failures: Array<{studentId: string, reason: string}> }>}
  */
 export async function runInactivityScan({ today = new Date(), autoSend = AUTO_WARNING_ENABLED } = {}) {
     const summary = {
         evaluated: 0,
+        reviewNotifications: 0,
         inactiveForWarning: 0,
         warned: 0,
         alreadyWarned: 0,
@@ -369,6 +399,31 @@ export async function runInactivityScan({ today = new Date(), autoSend = AUTO_WA
     try {
         const rows = await evaluateActiveStudents(today);
         summary.evaluated = rows.length;
+
+        // First-five-days pass: a student flagged for withdrawal (no login in
+        // INACTIVITY_WITHDRAW_DAYS days, or never logged in within that window)
+        // who has not been warned yet surfaces an ADMIN REVIEW notification so
+        // the authorized administrator decides (warning email / immediate
+        // withdrawal) — the scan never auto-withdraws this group.
+        for (const row of rows) {
+            const { studentId, student, signal, enrollmentMeta } = row;
+            if (!signal.mustWithdraw) continue;
+            if (hasSentInactivityWarning(student)) continue;
+            try {
+                const result = await createInactivityReviewNotification({
+                    studentId,
+                    student,
+                    signal,
+                    enrollmentMeta,
+                    lastActivityAt: student.lastLearningActivityAt || row.user?.lastLoginAt || null,
+                });
+                if (result === "created") summary.reviewNotifications += 1;
+            } catch (error) {
+                summary.failed += 1;
+                summary.failures.push({ studentId, reason: error.message });
+                logger.error({ err: error, studentId }, "Inactivity review notification failed (non-fatal)");
+            }
+        }
 
         const candidates = rows.filter((row) => row.signal.inactiveForWarning);
         summary.inactiveForWarning = candidates.length;

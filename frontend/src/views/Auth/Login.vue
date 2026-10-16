@@ -23,7 +23,7 @@
               required
               autocomplete="username"
               class="form-input"
-              :class="{ 'error': message && message.includes('email') }"
+              :class="{ 'error': message && /email|e‑postadress/i.test(message) }"
             />
           </div>
 
@@ -37,7 +37,7 @@
               required
               autocomplete="current-password"
               class="form-input"
-              :class="{ 'error': message && message.includes('lösenord') }"
+              :class="{ 'error': message && /lösenord/i.test(message) }"
             />
           </div>
 

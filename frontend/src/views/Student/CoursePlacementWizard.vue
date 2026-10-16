@@ -327,13 +327,13 @@ import FileUploaderDownloader from '@/components/FileUploaderDownloader.vue';
 
 export default {
   name: 'CoursePlacementWizard',
+  components: { FileUploaderDownloader },
   props: {
     student: { type: Object, required: true },
     preselectedCourseId: { type: String, default: null },
     preselectedInstanceId: { type: String, default: null },
   },
   emits: ['close', 'placed'],
-  components: { FileUploaderDownloader },
   setup(props, { emit }) {
     const toast = useToast();
 

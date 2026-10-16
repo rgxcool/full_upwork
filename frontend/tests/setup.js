@@ -3,6 +3,9 @@ import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import { config } from '@vue/test-utils'
+import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/vue'
+import { afterEach } from 'vitest'
 
 global.confirm = vi.fn(() => true) // Always return "true" for confirm dialogs
 
@@ -47,3 +50,9 @@ if (!global.__vuetify) {
   })
   config.global.plugins = [global.__vuetify] // ✅ Assign config inside initialization block
 }
+
+// Testing Library mounts its own container per test; unmount it afterwards so
+// queries only ever see the current test's DOM.
+afterEach(() => {
+  cleanup()
+})

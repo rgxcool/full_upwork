@@ -1,5 +1,6 @@
 import express from "express";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireFeature } from "../middleware/featureGate.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import {
     getInstanceModules,
@@ -22,6 +23,8 @@ import {
 } from "../services/activityStatusService.js";
 
 const router = express.Router();
+
+router.use("/learning", requireFeature("LMS"));
 const STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"];
 
 // Lesson content + assignment for a course instance (student sees own submissions)

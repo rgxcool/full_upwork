@@ -9,6 +9,7 @@ import path from 'path'
 import { uploadXlsx } from '../controllers/studentController.js'
 import { authenticateUser } from '../controllers/authController.js'
 import { hasRole } from '../middleware/auth.js'
+import { municipalityInScope } from '../utils/tenantScope.js'
 import { uploadRateLimiter } from '../middleware/security.js'
 import logger from "../utils/logger.js";
 
@@ -59,6 +60,14 @@ async function checkStudentAccess(req, res, next) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    // Never attempt a DB cast on a malformed id — return a clear 400 instead
+    // of letting Mongoose throw a CastError (500). Literal one-segment paths
+    // such as /uploads/file-counts are matched before this route in practice,
+    // this guard is defense-in-depth.
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({ error: "Invalid student ID" });
+    }
+
     const userRoles = user.roles || (user.role ? [user.role] : []);
     const isStaff = userRoles.some(r => ["systemadmin", "admin", "coordinator", "syv", "specped", "tester"].includes(r));
     const isTeacher = userRoles.includes("teacher");
@@ -104,7 +113,7 @@ async function checkStudentAccess(req, res, next) {
 }
 
 // Middleware to authorize file-specific actions (download, delete)
-async function checkFileAccess(req, res, next) {
+export async function checkFileAccess(req, res, next) {
   try {
     const fileId = req.params.fileId;
     const user = req.user;
@@ -140,6 +149,18 @@ async function checkFileAccess(req, res, next) {
       }
       req.fileRecord = file;
       return next();
+    }
+
+    // Tenant check: a staff member restricted to specific municipalities must not
+    // read files belonging to a student in another municipality. `studentId`
+    // alone is not an authorization boundary. Unscoped users (including students)
+    // short-circuit inside municipalityInScope, so this only bites scoped staff.
+    // A missing student document yields `undefined`, which fails closed for
+    // scoped users and stays open for global ones.
+    const TenantStudent = mongoose.model("Student");
+    const ownerStudent = await TenantStudent.findById(studentId).select("municipality").lean();
+    if (!municipalityInScope(user, ownerStudent?.municipality?.type)) {
+      return res.status(403).json({ error: "Forbidden: You do not have access to files for this student." });
     }
 
     // A student may only download (GET) files belonging to their own profile.
@@ -273,6 +294,45 @@ router.post('/:studentId', authenticateUser, checkStudentAccess, uploadRateLimit
   } catch (err) {
     logger.error({ err }, "Unexpected upload crash")
     res.status(500).json({ error: 'Unexpected error during upload' })
+  }
+})
+
+// Bulk endpoint: get file counts for a list of student IDs (for APL board badges)
+router.get('/file-counts', authenticateUser, async (req, res) => {
+  try {
+    const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
+    const isStaff = userRoles.some(r => ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"].includes(r));
+    if (!isStaff) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { studentIds } = req.query;
+    if (!studentIds) {
+      return res.status(400).json({ error: "studentIds query param required" });
+    }
+
+    const ids = studentIds.split(',').filter(Boolean);
+    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'fs' });
+
+    const counts = {};
+    for (const id of ids) {
+      try {
+        const files = await bucket.find({ 'metadata.studentId': id }).toArray();
+        counts[id] = files.length;
+      } catch {
+        counts[id] = 0;
+      }
+    }
+
+    // Always return counts for every requested id, even after a partial failure.
+    for (const id of ids) {
+      if (!(id in counts)) counts[id] = 0;
+    }
+
+    res.json(counts);
+  } catch (err) {
+    logger.error({ err }, "Failed to get file counts")
+    res.status(500).json({ error: 'Failed to get file counts' })
   }
 })
 
@@ -465,45 +525,6 @@ router.delete('/cleanup/orphaned', authenticateUser, hasRole(ALLOWED_ADMIN_ROLES
   } catch (err) {
     logger.error({ err }, "Failed to cleanup orphaned files")
     res.status(500).json({ error: 'Failed to cleanup orphaned files' })
-  }
-})
-
-// Bulk endpoint: get file counts for a list of student IDs (for APL board badges)
-router.get('/file-counts', authenticateUser, async (req, res) => {
-  try {
-    const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
-    const isStaff = userRoles.some(r => ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"].includes(r));
-    if (!isStaff) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
-    const { studentIds } = req.query;
-    if (!studentIds) {
-      return res.status(400).json({ error: "studentIds query param required" });
-    }
-
-    const ids = studentIds.split(',').filter(Boolean);
-    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'fs' });
-
-    const counts = {};
-    for (const id of ids) {
-      try {
-        const files = await bucket.find({ 'metadata.studentId': id }).toArray();
-        counts[id] = files.length;
-      } catch {
-        counts[id] = 0;
-      }
-    }
-
-    // Always return counts for every requested id, even after a partial failure.
-    for (const id of ids) {
-      if (!(id in counts)) counts[id] = 0;
-    }
-
-    res.json(counts);
-  } catch (err) {
-    logger.error({ err }, "Failed to get file counts")
-    res.status(500).json({ error: 'Failed to get file counts' })
   }
 })
 
