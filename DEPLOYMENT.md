@@ -88,12 +88,13 @@ The server handles `SIGTERM` and `SIGINT`:
 
 ## Frontend Build
 
+The project uses a pnpm workspace. For production builds:
+
 ```sh
-cd frontend
-VITE_API_URL="" pnpm build   # empty = relative /api paths (proxied)
+VITE_API_URL="" NODE_OPTIONS="--max-old-space-size=4096" pnpm --filter frontend run build
 ```
 
-The frontend expects `/api` to be proxied to the backend. Configure this in your reverse proxy (nginx, Caddy, etc.).
+The frontend expects `/api` to be proxied to the backend. Configure this in your reverse proxy (nginx, Caddy, etc.). The default API port is `5010` (see `backend/index.js`), but must align with your Nginx upstream configuration.
 
 ## Troubleshooting
 
@@ -121,3 +122,78 @@ password when running the script:
 ```sh
 SYSTEM_ADMIN_PASSWORD="<strong-password>" node backend/scripts/createSystemAdmin.js
 ```
+
+## Production Environment Variables (names only - never share values)
+
+Required for production (backend/.env.production, loaded at boot when NODE_ENV=production):
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `MONGODB_URI` | Yes | MongoDB connection string (mongodb://...) |
+| `JWT_SECRET` | Yes | Must be >= 32 characters, strong random value. Rotation invalidates existing sessions. |
+
+Optional:
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `PORT` | `5010` | Backend listen port. Must match Nginx upstream. |
+| `NODE_ENV` | - | Must be `production` |
+| `CLIENT_URL` | `https://mindfullearning.se` | CORS origin |
+| `RATE_LIMIT_MAX_REQUESTS` | `100` | Requests per 15-min window |
+| `MAX_FILE_SIZE` | `10mb` | Upload size limit |
+
+**Security notes:**
+- Keep production `.env.production` outside the Git repository with restrictive permissions (600). Git is configured to ignore `.env*` files.
+- PM2 reads environment variables at runtime. Do not embed secrets in `ecosystem.config.cjs` or tracked files.
+- `/health*` and `/metrics` endpoints are unauthenticated by design - restrict access via Nginx allowlist/firewall (do not expose publicly).
+
+## Rollback Procedure (Manual)
+
+**IMPORTANT:** The deployment script does not perform automatic rollback. If deployment fails or health checks fail, follow this manual procedure:
+
+### If deployment failed during build/install
+1. Do not modify production `.env.production` or backup files.
+2. Revert to the previous commit on the production server: `git log --oneline -5` and `git checkout <previous-commit>` (or restore from backup).
+3. Restart PM2 with the previous build: `pm2 restart ML-Backend` or reload previous version.
+4. Verify health checks.
+
+### If backend starts but is unhealthy
+1. Check logs: `pm2 logs ML-Backend` (do not share log contents containing secrets).
+2. Verify environment variables are correctly set (without printing values).
+3. Check MongoDB connectivity: `mongo` or `mongosh` if available.
+4. Rollback to previous commit and restart services.
+
+### Pre-deployment backups (must be preserved)
+- `deploy.sh.20261016.bak` (preserve as-is)
+- `/home/mindful.se/mindful-predeploy-20261016/` (preserve as-is)
+
+### Health check commands
+```bash
+curl -f http://localhost:<PORT>/health/live  # liveness
+curl -f http://localhost:<PORT>/health/ready # readiness (DB connectivity)
+```
+
+**Note:** `/health*` and `/metrics` must be restricted via Nginx allowlist/firewall - do not expose publicly.
+
+## Unresolved Production Decisions (BLOCKERS - do not deploy until resolved)
+
+1. **Nginx upstream / Backend port alignment**
+- Backend listens on PORT (default 5010). Production Nginx currently proxies `/api/` to `localhost:5001` (from Phase 2).
+- Must verify and align: either change backend to 5001 or update Nginx to proxy to 5010.
+- Do not modify Nginx config as part of this repo deployment.
+
+2. **Node.js compatibility strategy**
+- Repo targets Node 25.2.1 (Volta/CI/Docker). Production has Node 22.17.0.
+- Need approval: upgrade production Node to 25.x, or verify compatibility on 22.x first.
+
+3. **JWT secret rotation**
+- Production `.env` must have strong JWT_SECRET (>= 32 chars, not weak). Rotation invalidates existing sessions.
+- Requires administrator approval and user notification plan.
+
+4. **Health & metrics endpoint restrictions**
+- `/health*` and `/metrics` are unauthenticated. Must be restricted via Nginx allowlist/firewall (trusted networks only).
+- Do not expose publicly.
+
+5. **Production environment-file preservation**
+- `.env.production` must remain outside Git repo with restrictive permissions (600).
+- Preserve existing backups: `deploy.sh.20261016.bak` and `/home/mindful.se/mindful-predeploy-20261016/`.
