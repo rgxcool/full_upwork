@@ -75,6 +75,7 @@
           <v-card-text>
             <v-form @submit.prevent="saveScale">
               <v-autocomplete
+                class="grading-scale-term-select"
                 v-model="form.term"
                 :items="terms"
                 label="Termin * (t.ex. HT24)"
@@ -83,6 +84,9 @@
                 :menu-props="{
                   location: 'bottom',
                   origin: 'top',
+                  locationStrategy: gradingScaleLocationStrategy,
+                  attach: 'body',
+                  target: '.grading-scale-term-select .v-field',
                   contentClass: 'grading-scale-term-menu',
                   zIndex: 10000,
                   maxHeight: 300,
@@ -90,6 +94,7 @@
                 @update:search="onTermSearch"
               />
               <v-select
+                class="grading-scale-subject-select"
                 v-model="form.subject"
                 :items="nationalSubjects"
                 label="Ämne *"
@@ -97,6 +102,9 @@
                 :menu-props="{
                   location: 'bottom',
                   origin: 'top',
+                  locationStrategy: gradingScaleLocationStrategy,
+                  attach: 'body',
+                  target: '.grading-scale-subject-select .v-field',
                   contentClass: 'grading-scale-subject-menu',
                   zIndex: 10000,
                   maxHeight: 300,
@@ -129,7 +137,7 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+  import { ref, computed, onMounted, onScopeDispose, watch } from 'vue'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
 
@@ -145,8 +153,29 @@
   const showDialog = ref(false)
   const editingId = ref(null)
   const form = ref({ term: '', subject: '', thresholds: {} })
-  const termSelect = ref(null)
-  const subjectSelect = ref(null)
+
+  const gradingScaleLocationStrategy = (data, _props, contentStyles) => {
+    const updateLocation = () => {
+      const target = data.target.value
+      const content = data.contentEl.value
+      if (!target || Array.isArray(target) || !content) return
+
+      const rect = target.getBoundingClientRect()
+      Object.assign(contentStyles.value, {
+        position: 'fixed',
+        top: `${rect.bottom}px`,
+        left: `${rect.left}px`,
+        minWidth: `${rect.width}px`,
+        maxWidth: `${Math.max(0, window.innerWidth - rect.left - 12)}px`,
+      })
+    }
+
+    watch([data.target, data.contentEl], updateLocation, { immediate: true })
+    window.addEventListener('scroll', updateLocation, true)
+    onScopeDispose(() => window.removeEventListener('scroll', updateLocation, true))
+
+    return { updateLocation }
+  }
 
   const sortedScales = computed(() =>
     [...scales.value].sort(
