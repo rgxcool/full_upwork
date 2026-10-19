@@ -4,12 +4,15 @@
       <v-card class="pa-5">
         <div class="d-flex align-center justify-space-between">
           <v-card-title class="text-h4 font-weight-bold pa-0">Kursmallar</v-card-title>
-          <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">
-            Ny kursmall
-          </v-btn>
+          <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Ny kursmall</v-btn>
         </div>
 
-        <v-progress-linear v-if="loading" indeterminate color="primary" class="my-5"></v-progress-linear>
+        <v-progress-linear
+          v-if="loading"
+          indeterminate
+          color="primary"
+          class="my-5"
+        ></v-progress-linear>
 
         <v-alert v-else-if="error" type="error" class="my-3">{{ error }}</v-alert>
 
@@ -76,6 +79,7 @@
               label="Kurs (valfritt)"
               item-title="title"
               item-value="value"
+              :menu-props="{ attach: true, maxHeight: 300 }"
               clearable
             />
 
@@ -83,20 +87,23 @@
 
             <div class="d-flex align-center justify-space-between mb-2">
               <h4 class="text-subtitle-1 font-weight-bold">Moduler (5 × 2 sektioner)</h4>
-              <div class="text-caption text-grey">
-                Modul 3 = delprov, Modul 5 = case study
-              </div>
+              <div class="text-caption text-grey">Modul 3 = delprov, Modul 5 = case study</div>
             </div>
 
             <div
               v-for="(module, moduleIndex) in form.modules"
               :key="moduleIndex"
               class="module-block pa-3 mb-3"
-              :class="{ 'module-partial-exam': module.isPartialExam, 'module-case-study': module.isCaseStudy }"
+              :class="{
+                'module-partial-exam': module.isPartialExam,
+                'module-case-study': module.isCaseStudy,
+              }"
             >
               <div class="d-flex align-center justify-space-between">
                 <div class="d-flex align-center ga-3">
-                  <v-chip size="small" color="primary" variant="tonal">Modul {{ module.moduleNumber }}</v-chip>
+                  <v-chip size="small" color="primary" variant="tonal">
+                    Modul {{ module.moduleNumber }}
+                  </v-chip>
                   <v-text-field
                     v-model="module.title"
                     label="Modultitel"
@@ -106,12 +113,8 @@
                   />
                 </div>
                 <div class="d-flex ga-2">
-                  <v-chip v-if="module.isPartialExam" size="small" color="warning">
-                    Delprov
-                  </v-chip>
-                  <v-chip v-if="module.isCaseStudy" size="small" color="info">
-                    Case study
-                  </v-chip>
+                  <v-chip v-if="module.isPartialExam" size="small" color="warning">Delprov</v-chip>
+                  <v-chip v-if="module.isCaseStudy" size="small" color="info">Case study</v-chip>
                 </div>
               </div>
 
@@ -198,7 +201,8 @@
       <v-card>
         <v-card-title>Ta bort kursmall</v-card-title>
         <v-card-text>
-          Är du säker på att du vill ta bort "{{ pendingDelete?.templateName }}"? Detta kan inte ångras.
+          Är du säker på att du vill ta bort "{{ pendingDelete?.templateName }}"? Detta kan inte
+          ångras.
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -361,7 +365,9 @@
     deleting.value = true
     try {
       await client.delete(`/course-templates/${pendingDelete.value._id}`)
-      templates.value = templates.value.filter((template) => template._id !== pendingDelete.value._id)
+      templates.value = templates.value.filter(
+        (template) => template._id !== pendingDelete.value._id
+      )
       showDeleteModal.value = false
       toast.success('Kursmallen togs bort.')
     } catch (err) {
