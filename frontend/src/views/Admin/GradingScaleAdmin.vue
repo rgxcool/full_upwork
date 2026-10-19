@@ -7,10 +7,11 @@
         </v-card-title>
         <v-card-subtitle class="pb-4">
           Hantera poänggränser (min-poäng → betyg) per termin (t.ex. HT24) och ämne
-          (Engelska/Svenska/Matematik). 
-
-          Skalan ändras årligen och visas som
-          förslag när en lärare sätter nationella prov-poäng.
+          (Engelska/Svenska/Matematik).
+          <br />
+          Skalan ändras årligen och visas som förslag
+          <br />
+          när en lärare sätter nationella prov-poäng.
         </v-card-subtitle>
 
         <v-alert v-if="error" type="error" class="mb-4" dense>{{ error }}</v-alert>
@@ -68,7 +69,9 @@
 
       <v-dialog v-model="showDialog" max-width="560px">
         <v-card>
-          <v-card-title>{{ editingId ? 'Redigera betygsskala' : 'Lägg till betygsskala' }}</v-card-title>
+          <v-card-title>
+            {{ editingId ? 'Redigera betygsskala' : 'Lägg till betygsskala' }}
+          </v-card-title>
           <v-card-text>
             <v-form @submit.prevent="saveScale">
               <v-autocomplete
@@ -132,7 +135,9 @@
   const form = ref({ term: '', subject: '', thresholds: {} })
 
   const sortedScales = computed(() =>
-    [...scales.value].sort((a, b) => a.term.localeCompare(b.term) || a.subject.localeCompare(b.subject))
+    [...scales.value].sort(
+      (a, b) => a.term.localeCompare(b.term) || a.subject.localeCompare(b.subject)
+    )
   )
 
   const sortedScaleRows = (scale) =>
@@ -175,7 +180,9 @@
   }
 
   const onTermSearch = (text) => {
-    const candidate = String(text || '').trim().toUpperCase()
+    const candidate = String(text || '')
+      .trim()
+      .toUpperCase()
     if (/^(HT|VT)\d{2}$/.test(candidate) && !terms.value.includes(candidate)) {
       terms.value = [...terms.value, candidate].sort()
     }
@@ -190,12 +197,10 @@
   }
 
   const buildScalePayload = () => {
-    const scale = GRADE_ORDER
-      .map((grade) => ({
-        grade,
-        min: form.value.thresholds[grade],
-      }))
-      .filter((row) => typeof row.min === 'number' && row.min >= 0)
+    const scale = GRADE_ORDER.map((grade) => ({
+      grade,
+      min: form.value.thresholds[grade],
+    })).filter((row) => typeof row.min === 'number' && row.min >= 0)
     return {
       term: String(form.value.term).trim().toUpperCase(),
       subject: form.value.subject,
@@ -221,7 +226,11 @@
   }
 
   const confirmDelete = async (scale) => {
-    if (!confirm(`Är du säker på att du vill ta bort betygsskalan för ${scale.term} ${scale.subject}?`)) {
+    if (
+      !confirm(
+        `Är du säker på att du vill ta bort betygsskalan för ${scale.term} ${scale.subject}?`
+      )
+    ) {
       return
     }
     try {
