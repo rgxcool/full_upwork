@@ -80,10 +80,10 @@
               item-title="title"
               item-value="value"
               :menu-props="{
-                attach: true,
                 location: 'bottom',
                 origin: 'top',
-                offset: -48,
+                locationStrategy: 'connected',
+                contentClass: 'course-template-menu',
                 zIndex: 10000,
                 maxHeight: 300,
               }"
