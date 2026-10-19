@@ -160,7 +160,7 @@
     if (!activeDropdown || !activeAnchor) return false
     const anchorRoot = activeAnchor.$el || activeAnchor
     const anchor = anchorRoot.querySelector?.('.v-field')
-    const menu = document.querySelector(`.${activeDropdown}`)
+    const menu = document.querySelector(`.v-overlay__content.${activeDropdown}`)
     if (!anchor || !menu) return false
 
     const rect = anchor.getBoundingClientRect()
