@@ -1,35 +1,29 @@
 #Requires -Version 5.1
 $ErrorActionPreference = "Stop"
-
-# ── Colours & Logging ────────────────────────────────
-function Write-Log([string]$msg)   { Write-Host "[✔] $msg" -ForegroundColor Green }
+function Write-Log([string]$msg)   { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Write-Warn([string]$msg)  { Write-Host "[!] $msg" -ForegroundColor Yellow }
-function Write-Err([string]$msg)   { Write-Host "[✘] $msg" -ForegroundColor Red }
-
-$Root = $PSScriptRoot$BackendPort = 5010
-$FrontendPort = 5173$MongoPort = 27017
-
-# Derive the backend port from backend/.env.development
-$EnvFile = Join-Path$Root "backend\.env.development"
+function Write-Err([string]$msg)   { Write-Host "[X] $msg" -ForegroundColor Red }
+$Root = $PSScriptRoot
+$BackendPort = 5010
+$FrontendPort = 5173
+$MongoPort = 27017
+$EnvFile = Join-Path $Root "backend\.env.development"
 if (Test-Path $EnvFile) {
-    $content = Get-Content$EnvFile -Raw
+    $content = Get-Content $EnvFile -Raw
     if ($content -match '(?m)^PORT=([0-9]+)') {
         $BackendPort = [int]$Matches[1]
         Write-Log "Using PORT=$BackendPort from backend/.env.development"
     }
 }
-
-# ── 0. Generate JWT_SECRET if placeholder ───────────
 if (Test-Path $EnvFile) {
-    $content = Get-Content$EnvFile -Raw
-    if ($content -match 'REPLACE_WITH_GENERATED_SECRET') {$secret = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+    $content = Get-Content $EnvFile -Raw
+    if ($content -match 'REPLACE_WITH_GENERATED_SECRET') {
+        $secret = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
         $content = $content -replace 'REPLACE_WITH_GENERATED_SECRET_MIN_32_CHARS',$secret.Trim()
         Set-Content -Path $EnvFile -Value$content
         Write-Log "Generated new JWT_SECRET"
     }
 }
-
-# ── 1. Check / start MongoDB ────────────────────────
 $mongoRunning =$false
 try {
     $tcp = New-Object System.Net.Sockets.TcpClient
@@ -37,7 +31,6 @@ try {
     $tcp.Close()
     $mongoRunning =$true
 } catch {}
-
 if ($mongoRunning) {
     Write-Log "MongoDB already running on port $MongoPort"
 } elseif (Get-Command mongod -ErrorAction SilentlyContinue) {
@@ -50,7 +43,8 @@ if ($mongoRunning) {
 } elseif (Get-Command docker -ErrorAction SilentlyContinue) {
     $dockerRunning =$false
     try { docker info *>&1 | Out-Null; $dockerRunning =$true } catch {}
-    if ($dockerRunning) {$containers = docker ps --format '{{.Names}}'
+    if ($dockerRunning) {
+        $containers = docker ps --format '{{.Names}}'
         if ($containers -match 'mindful_mongo') {
             Write-Log "MongoDB container already running"
         } else {
@@ -68,8 +62,6 @@ if ($mongoRunning) {
     Write-Err "No running MongoDB, mongod binary, or Docker found. Start MongoDB manually and retry."
     exit 1
 }
-
-# ── 2. Install dependencies ─────────────────────────
 Write-Log "Checking dependencies..."
 if (-not (Test-Path "$Root\node_modules")) {
     Write-Warn "Installing root dependencies..."
@@ -90,8 +82,6 @@ if (-not (Test-Path "$Root\frontend\node_modules")) {
     Pop-Location
 }
 Write-Log "Dependencies ready"
-
-# ── 3. Load education data ───────────────────────────
 Write-Log "Loading education data (dropData + updateEducation)..."
 try {
     Push-Location "$Root\backend"
@@ -113,11 +103,9 @@ try {
     Write-Err "Failed to load education data. Check the script output above."
     exit 1
 }
-
-# ── 4. Kill any existing processes on our ports ──────
 foreach ($port in @($BackendPort,$FrontendPort)) {
     $connections = Get-NetTCPConnection -LocalPort$port -ErrorAction SilentlyContinue
-    foreach ($conn in$connections) {
+    foreach ($conn in $connections) {
         $pidToKill =$conn.OwningProcess
         if ($pidToKill) {
             Write-Warn "Killing process on port $port (PID$pidToKill)"
@@ -126,18 +114,15 @@ foreach ($port in @($BackendPort,$FrontendPort)) {
         }
     }
 }
-
-# ── 5. Start backend ────────────────────────────────
 Write-Log "Starting backend on port $BackendPort..."
 $backendLog = "$Root\backend.log"
 $backendProcess = Start-Process node -ArgumentList "index.js" -WorkingDirectory "$Root\backend" -RedirectStandardOutput $backendLog -RedirectStandardError$backendLog -PassThru
 Start-Sleep -Seconds 3
-
 if (!$backendProcess.HasExited) {
     try {
         $response = Invoke-WebRequest -Uri "http://localhost:$BackendPort/health/live" -UseBasicParsing -TimeoutSec 2
         if ($response.StatusCode -eq 200) {
-            Write-Log "Backend running (PID $($backendProcess.Id)) → http://localhost:$BackendPort"
+            Write-Log "Backend running (PID $($backendProcess.Id)) -> http://localhost:$BackendPort"
         } else {
             Write-Warn "Backend started but health check pending..."
         }
@@ -149,18 +134,15 @@ if (!$backendProcess.HasExited) {
     if (Test-Path $backendLog) { Get-Content$backendLog -Tail 20 }
     exit 1
 }
-
-# ── 6. Start frontend ───────────────────────────────
 Write-Log "Starting frontend on port $FrontendPort..."
 $frontendLog = "$Root\frontend.log"
 $frontendProcess = Start-Process cmd -ArgumentList "/c npx vite --host > `"$frontendLog`" 2>&1" -WorkingDirectory "$Root\frontend" -PassThru
 Start-Sleep -Seconds 4
-
 if (!$frontendProcess.HasExited) {
     try {
         $response = Invoke-WebRequest -Uri "http://localhost:$FrontendPort" -UseBasicParsing -TimeoutSec 2
         if ($response.StatusCode -eq 200) {
-            Write-Log "Frontend running (PID $($frontendProcess.Id)) → http://localhost:$FrontendPort"
+            Write-Log "Frontend running (PID $($frontendProcess.Id)) -> http://localhost:$FrontendPort"
         } else {
             Write-Warn "Frontend started but still compiling..."
         }
@@ -172,33 +154,21 @@ if (!$frontendProcess.HasExited) {
     if (Test-Path $frontendLog) { Get-Content$frontendLog -Tail 20 }
     exit 1
 }
-
-# ── 7. Print summary ────────────────────────────────
 Write-Host ""
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-Write-Host "  Mindful Learning — App is running!" -ForegroundColor Cyan
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "--------------------------------------------------" -ForegroundColor Cyan
+Write-Host "  Mindful Learning - App is running!" -ForegroundColor Cyan
+Write-Host "--------------------------------------------------" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Frontend:  " -NoNewline; Write-Host "http://localhost:$FrontendPort" -ForegroundColor Green
 Write-Host "  Backend:   " -NoNewline; Write-Host "http://localhost:$BackendPort" -ForegroundColor Green
 Write-Host "  MongoDB:   " -NoNewline; Write-Host "localhost:$MongoPort" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Test Accounts:" -ForegroundColor Yellow
-Write-Host "  ┌──────────────┬────────────────────┬──────────────┐"
-Write-Host "  │ Role         │ Email              │ Password     │"
-Write-Host "  ├──────────────┼────────────────────┼──────────────┤"
-Write-Host "  │ Admin        │ admin@mindful.se   │ Admin123!    │"
-Write-Host "  │ Teacher      │ teacher@mindful.se │ Teacher123!  │"
-Write-Host "  │ User         │ user@mindful.se    │ User12345!   │"
-Write-Host "  └──────────────┴────────────────────┴──────────────┘"
 Write-Host ""
 Write-Host "  Logs:      $Root\backend.log"
 Write-Host "             $Root\frontend.log"
 Write-Host ""
 Write-Host "  Press Ctrl+C to stop all services" -ForegroundColor Yellow
-Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-
-# ── 8. Cleanup on exit ──────────────────────────────
+Write-Host "--------------------------------------------------" -ForegroundColor Cyan
 try {
     while ($true) {
         Start-Sleep -Seconds 1
