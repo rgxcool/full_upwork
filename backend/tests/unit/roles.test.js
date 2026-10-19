@@ -35,4 +35,13 @@ describe("roles utilities", () => {
         expect(getPrimaryRole({ role: "admin", roles: [] })).toBe("admin");
         expect(getPrimaryRole({ roles: [] })).toBe("guest");
     });
+
+    it("getPrimaryRole prefers a stored Mongo role over default roles[0]", () => {
+        expect(getPrimaryRole({ roles: ["user"], role: "systemadmin" })).toBe("systemadmin");
+        expect(getPrimaryRole({
+            roles: ["user"],
+            role: "user",
+            _doc: { role: "systemadmin", roles: ["user"] },
+        })).toBe("systemadmin");
+    });
 });
