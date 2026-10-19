@@ -81,10 +81,10 @@
                 variant="outlined"
                 hint="HT = hösttermin, VT = vårtermin"
                 :menu-props="{
-                  attach: true,
                   location: 'bottom',
                   origin: 'top',
-                  offset: -48,
+                  locationStrategy: 'connected',
+                  contentClass: 'grading-scale-menu',
                   zIndex: 10000,
                   maxHeight: 300,
                 }"
@@ -95,10 +95,10 @@
                 :items="nationalSubjects"
                 label="Ämne *"
                 :menu-props="{
-                  attach: true,
                   location: 'bottom',
                   origin: 'top',
-                  offset: -48,
+                  locationStrategy: 'connected',
+                  contentClass: 'grading-scale-menu',
                   zIndex: 10000,
                   maxHeight: 300,
                 }"
