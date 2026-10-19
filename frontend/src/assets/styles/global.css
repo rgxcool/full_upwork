@@ -164,8 +164,12 @@ label[for] {
 /* === Vuetify v-select / v-autocomplete dropdown menu styling === */
 
 /* Vuetify's overlay root can disable pointer events; keep menu content interactive. */
+<<<<<<< HEAD
 .grading-scale-term-menu,
 .grading-scale-subject-menu,
+=======
+.grading-scale-menu,
+>>>>>>> 45bbbbae1b2966398dd25755535aff78201c1499
 .course-template-menu {
   pointer-events: auto !important;
   opacity: 1 !important;

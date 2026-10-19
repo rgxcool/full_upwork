@@ -85,7 +85,11 @@
                   location: 'bottom',
                   origin: 'top',
                   locationStrategy: 'connected',
+<<<<<<< HEAD
                   contentClass: 'grading-scale-term-menu',
+=======
+                  contentClass: 'grading-scale-menu',
+>>>>>>> 45bbbbae1b2966398dd25755535aff78201c1499
                   zIndex: 10000,
                   maxHeight: 300,
                 }"
@@ -103,7 +107,11 @@
                   location: 'bottom',
                   origin: 'top',
                   locationStrategy: 'connected',
+<<<<<<< HEAD
                   contentClass: 'grading-scale-subject-menu',
+=======
+                  contentClass: 'grading-scale-menu',
+>>>>>>> 45bbbbae1b2966398dd25755535aff78201c1499
                   zIndex: 10000,
                   maxHeight: 300,
                 }"
