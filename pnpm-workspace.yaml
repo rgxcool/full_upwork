@@ -12,3 +12,9 @@ allowBuilds:
 overrides:
   brace-expansion: ">=5.0.8"
   uuid: ">=11.1.1"
+permissions:
+  dotenv:
+    skills: true
+skills:
+  dirs:
+    - .claude/skills

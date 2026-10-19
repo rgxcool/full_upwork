@@ -20,12 +20,12 @@
         <main class="profile-content">
           <!-- Min profil -->
           <div v-if="activeSection === 'info'" class="card">
-            <div class="card-header"><h3>Kontouppgififter</h3></div>
+            <div class="card-header"><h3>Kontouppgifter</h3></div>
             <div class="card-body">
               <div class="info-grid">
                 <div class="info-item">
                   <label>Namn</label>
-                  <span>{{ user?.name || user?.userId || 'Ej angivet' }}</span>
+                  <span>{{ user?.username || user?.userId || 'Ej angivet' }}</span>
                 </div>
                 <div class="info-item">
                   <label>E-post</label>
