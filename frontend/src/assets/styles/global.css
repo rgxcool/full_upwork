@@ -165,7 +165,8 @@ label[for] {
 
 /* Keep visual styling on the menu surface, not the positioned overlay wrapper. */
 .v-overlay-container .v-list {
-  background-color: var(--color-surface) !important;
+  background-color: #fff !important;
+  opacity: 1;
   border: 2px solid var(--color-border-strong) !important;
   border-radius: var(--radius-overlay) !important;
   box-shadow: var(--shadow-overlay) !important;
