@@ -58,7 +58,7 @@
             <v-select
               v-model="filters.teacherId"
               :items="teacherItems"
-              item-title="username"
+              item-title="name"
               item-value="id"
               label="Lärare"
               clearable
@@ -537,7 +537,12 @@
 
   const filterOptions = ref({ municipalities: [], courses: [], teachers: [] })
   const courseItems = computed(() => filterOptions.value.courses || [])
-  const teacherItems = computed(() => filterOptions.value.teachers || [])
+  const teacherItems = computed(() =>
+    (filterOptions.value.teachers || []).map((teacher) => ({
+      id: teacher._id || teacher.id,
+      name: teacher.userId?.username || teacher.userId?.name || 'Okänd lärare',
+    }))
+  )
 
   const forecastMonths = ref(3)
   const studentGroupBy = ref('month')
