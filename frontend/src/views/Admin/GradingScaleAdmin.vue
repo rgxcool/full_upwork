@@ -75,7 +75,6 @@
           <v-card-text>
             <v-form @submit.prevent="saveScale">
               <v-autocomplete
-                ref="termSelect"
                 v-model="form.term"
                 :items="terms"
                 label="Termin * (t.ex. HT24)"
@@ -86,27 +85,22 @@
                   origin: 'top',
                   locationStrategy: 'connected',
                   contentClass: 'grading-scale-term-menu',
-                  zIndex: 10000,
                   maxHeight: 300,
                 }"
                 @update:search="onTermSearch"
-                @update:menu="positionDropdown($event, termSelect, 'grading-scale-term-menu')"
               />
               <v-select
-                ref="subjectSelect"
                 v-model="form.subject"
                 :items="nationalSubjects"
                 label="Ämne *"
+                variant="outlined"
                 :menu-props="{
                   location: 'bottom',
                   origin: 'top',
                   locationStrategy: 'connected',
                   contentClass: 'grading-scale-subject-menu',
-                  zIndex: 10000,
                   maxHeight: 300,
                 }"
-                variant="outlined"
-                @update:menu="positionDropdown($event, subjectSelect, 'grading-scale-subject-menu')"
               />
               <p class="text-body-2 mb-2">Min-poäng för respektive betyg (F = under E:s gräns):</p>
               <div v-for="g in ['A', 'B', 'C', 'D', 'E']" :key="g" class="threshold-row">
@@ -135,7 +129,7 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+  import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
 
@@ -153,57 +147,6 @@
   const form = ref({ term: '', subject: '', thresholds: {} })
   const termSelect = ref(null)
   const subjectSelect = ref(null)
-  let activeDropdown = null
-  let activeAnchor = null
-
-  const updateDropdownPosition = () => {
-    if (!activeDropdown || !activeAnchor) return false
-    const anchorRoot = activeAnchor.$el || activeAnchor
-    const anchor = anchorRoot.querySelector?.('.v-field')
-    const menu = document.querySelector(`.v-overlay__content.${activeDropdown}`)
-    if (!anchor || !menu) return false
-
-    const rect = anchor.getBoundingClientRect()
-    menu.style.setProperty('position', 'fixed', 'important')
-    menu.style.setProperty('top', `${rect.bottom}px`, 'important')
-    menu.style.setProperty('left', `${rect.left}px`, 'important')
-    menu.style.setProperty('width', `${rect.width}px`, 'important')
-    menu.style.setProperty('margin', '0', 'important')
-    menu.style.setProperty('transform', 'none', 'important')
-    menu.style.setProperty('pointer-events', 'auto', 'important')
-    menu.style.setProperty('z-index', '10000', 'important')
-    return true
-  }
-
-  const positionWhenRendered = (attempts = 10) => {
-    if (!activeDropdown) return
-    if (updateDropdownPosition() || attempts === 0) return
-    requestAnimationFrame(() => positionWhenRendered(attempts - 1))
-  }
-
-  const positionDropdown = async (open, anchor, menuClass) => {
-    if (!open) {
-      if (activeDropdown === menuClass) {
-        activeDropdown = null
-        activeAnchor = null
-        window.removeEventListener('scroll', updateDropdownPosition, true)
-        window.removeEventListener('resize', updateDropdownPosition)
-      }
-      return
-    }
-
-    activeDropdown = menuClass
-    activeAnchor = anchor
-    await nextTick()
-    requestAnimationFrame(() => positionWhenRendered())
-    window.addEventListener('scroll', updateDropdownPosition, true)
-    window.addEventListener('resize', updateDropdownPosition)
-  }
-
-  onBeforeUnmount(() => {
-    window.removeEventListener('scroll', updateDropdownPosition, true)
-    window.removeEventListener('resize', updateDropdownPosition)
-  })
 
   const sortedScales = computed(() =>
     [...scales.value].sort(
