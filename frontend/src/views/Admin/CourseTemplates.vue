@@ -83,7 +83,8 @@
                 attach: true,
                 location: 'bottom',
                 origin: 'top',
-                offset: 0,
+                offset: -48,
+                zIndex: 10000,
                 maxHeight: 300,
               }"
               clearable

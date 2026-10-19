@@ -84,7 +84,8 @@
                   attach: true,
                   location: 'bottom',
                   origin: 'top',
-                  offset: 0,
+                  offset: -48,
+                  zIndex: 10000,
                   maxHeight: 300,
                 }"
                 @update:search="onTermSearch"
@@ -97,7 +98,8 @@
                   attach: true,
                   location: 'bottom',
                   origin: 'top',
-                  offset: 0,
+                  offset: -48,
+                  zIndex: 10000,
                   maxHeight: 300,
                 }"
                 variant="outlined"

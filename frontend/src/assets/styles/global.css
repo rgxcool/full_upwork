@@ -164,7 +164,7 @@ label[for] {
 /* === Vuetify v-select / v-autocomplete dropdown menu styling === */
 
 /* Keep visual styling on the menu surface, not the positioned overlay wrapper. */
-.v-overlay-container .v-list {
+.v-list {
   background-color: #fff !important;
   opacity: 1;
   border: 2px solid var(--color-border-strong) !important;
