@@ -157,10 +157,11 @@
   let activeAnchor = null
 
   const updateDropdownPosition = () => {
-    if (!activeDropdown || !activeAnchor) return
-    const anchor = activeAnchor.$el?.querySelector('.v-field')
+    if (!activeDropdown || !activeAnchor) return false
+    const anchorRoot = activeAnchor.$el || activeAnchor
+    const anchor = anchorRoot.querySelector?.('.v-field')
     const menu = document.querySelector(`.${activeDropdown}`)
-    if (!anchor || !menu) return
+    if (!anchor || !menu) return false
 
     const rect = anchor.getBoundingClientRect()
     menu.style.setProperty('position', 'fixed', 'important')
@@ -171,6 +172,13 @@
     menu.style.setProperty('transform', 'none', 'important')
     menu.style.setProperty('pointer-events', 'auto', 'important')
     menu.style.setProperty('z-index', '10000', 'important')
+    return true
+  }
+
+  const positionWhenRendered = (attempts = 10) => {
+    if (!activeDropdown) return
+    if (updateDropdownPosition() || attempts === 0) return
+    requestAnimationFrame(() => positionWhenRendered(attempts - 1))
   }
 
   const positionDropdown = async (open, anchor, menuClass) => {
@@ -187,7 +195,7 @@
     activeDropdown = menuClass
     activeAnchor = anchor
     await nextTick()
-    requestAnimationFrame(updateDropdownPosition)
+    requestAnimationFrame(() => positionWhenRendered())
     window.addEventListener('scroll', updateDropdownPosition, true)
     window.addEventListener('resize', updateDropdownPosition)
   }
