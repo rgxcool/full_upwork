@@ -74,6 +74,7 @@
             />
 
             <v-select
+              ref="courseSelect"
               v-model="form.courseId"
               :items="courseOptions"
               label="Kurs (valfritt)"
@@ -88,6 +89,7 @@
                 maxHeight: 300,
               }"
               clearable
+              @update:menu="(open) => positionDropdown(open, courseSelect)"
             />
 
             <v-divider class="my-4"></v-divider>
@@ -222,7 +224,7 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted } from 'vue'
+  import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
 
@@ -233,6 +235,43 @@
   const loading = ref(true)
   const error = ref(null)
   const showModal = ref(false)
+  const courseSelect = ref(null)
+  let courseMenuOpen = false
+
+  const updateCourseMenuPosition = () => {
+    if (!courseMenuOpen) return
+    const anchor = courseSelect.value?.$el?.querySelector('.v-field')
+    const menu = document.querySelector('.course-template-menu')
+    if (!anchor || !menu) return
+
+    const rect = anchor.getBoundingClientRect()
+    menu.style.setProperty('position', 'fixed', 'important')
+    menu.style.setProperty('top', `${rect.bottom}px`, 'important')
+    menu.style.setProperty('left', `${rect.left}px`, 'important')
+    menu.style.setProperty('width', `${rect.width}px`, 'important')
+    menu.style.setProperty('margin', '0', 'important')
+    menu.style.setProperty('transform', 'none', 'important')
+    menu.style.setProperty('pointer-events', 'auto', 'important')
+    menu.style.setProperty('z-index', '10000', 'important')
+  }
+
+  const positionDropdown = async (open) => {
+    courseMenuOpen = open
+    if (!open) {
+      window.removeEventListener('scroll', updateCourseMenuPosition, true)
+      window.removeEventListener('resize', updateCourseMenuPosition)
+      return
+    }
+    await nextTick()
+    requestAnimationFrame(updateCourseMenuPosition)
+    window.addEventListener('scroll', updateCourseMenuPosition, true)
+    window.addEventListener('resize', updateCourseMenuPosition)
+  }
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('scroll', updateCourseMenuPosition, true)
+    window.removeEventListener('resize', updateCourseMenuPosition)
+  })
   const showDeleteModal = ref(false)
   const editing = ref(null)
   const pendingDelete = ref(null)
