@@ -80,14 +80,14 @@
                 label="Termin * (t.ex. HT24)"
                 variant="outlined"
                 hint="HT = hösttermin, VT = vårtermin"
-                :menu-props="{ location: 'bottom', origin: 'top', offset: 4, maxHeight: 300 }"
+                :menu-props="{ attach: true, maxHeight: 300 }"
                 @update:search="onTermSearch"
               />
               <v-select
                 v-model="form.subject"
                 :items="nationalSubjects"
                 label="Ämne *"
-                :menu-props="{ location: 'bottom', origin: 'top', offset: 4, maxHeight: 300 }"
+                :menu-props="{ attach: true, maxHeight: 300 }"
                 variant="outlined"
               />
               <p class="text-body-2 mb-2">Min-poäng för respektive betyg (F = under E:s gräns):</p>
