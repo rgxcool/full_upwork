@@ -104,7 +104,7 @@ try {
     exit 1
 }
 foreach ($port in @($BackendPort,$FrontendPort)) {
-    $connections = Get-NetTCPConnection -LocalPort$port -ErrorAction SilentlyContinue
+    $connections = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
     foreach ($conn in $connections) {
         $pidToKill =$conn.OwningProcess
         if ($pidToKill) {
@@ -116,7 +116,7 @@ foreach ($port in @($BackendPort,$FrontendPort)) {
 }
 Write-Log "Starting backend on port $BackendPort..."
 $backendLog = "$Root\backend.log"
-$backendProcess = Start-Process node -ArgumentList "index.js" -WorkingDirectory "$Root\backend" -RedirectStandardOutput $backendLog -RedirectStandardError$backendLog -PassThru
+$backendProcess = Start-Process node -ArgumentList "index.js" -WorkingDirectory "$Root\backend" -RedirectStandardOutput $backendLog -PassThru
 Start-Sleep -Seconds 3
 if (!$backendProcess.HasExited) {
     try {
@@ -131,7 +131,7 @@ if (!$backendProcess.HasExited) {
     }
 } else {
     Write-Err "Backend failed to start. Check $Root\backend.log"
-    if (Test-Path $backendLog) { Get-Content$backendLog -Tail 20 }
+    if (Test-Path $backendLog) { Get-Content $backendLog -Tail 20 }
     exit 1
 }
 Write-Log "Starting frontend on port $FrontendPort..."
@@ -180,7 +180,7 @@ try {
 } finally {
     Write-Host ""
     Write-Warn "Shutting down..."
-    if ($backendProcess -and !$backendProcess.HasExited) { Stop-Process -Id$backendProcess.Id -Force -ErrorAction SilentlyContinue }
-    if ($frontendProcess -and !$frontendProcess.HasExited) { Stop-Process -Id$frontendProcess.Id -Force -ErrorAction SilentlyContinue }
+    if ($backendProcess -and !$backendProcess.HasExited) { Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue }
+    if ($frontendProcess -and !$frontendProcess.HasExited) { Stop-Process -Id $frontendProcess.Id -Force -ErrorAction SilentlyContinue }
     Write-Log "Stopped"
 }
