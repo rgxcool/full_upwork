@@ -663,7 +663,7 @@ export const getFilterOptions = async () => {
         Student.distinct("municipality.type"),
         Course.find({}, { courseName: 1, courseCode: 1 }).sort({ courseName: 1 }).lean(),
         Teacher.find({}, { subject: 1, userId: 1 })
-            .populate({ path: "userId", select: "name" })
+            .populate({ path: "userId", select: "name username email" })
             .lean(),
     ]);
 
