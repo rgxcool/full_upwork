@@ -3,6 +3,7 @@ import rolesConfig from '../config/roles.js';
 import { PERMISSION_FEATURES, hasPermission as roleHasPermission } from '../config/permissions.js';
 import { logger } from '../utils/errorHandler.js';
 import User from '../models/User.js';
+import { getPrimaryRole } from '../utils/roles.js';
 
 const SUPERUSER_ROLES = ['systemadmin', 'admin', 'tester'];
 
@@ -105,7 +106,7 @@ export async function refreshUserAuthorization(req) {
             return;
         }
         req.user.roles = fresh.roles && fresh.roles.length ? fresh.roles : (req.user.roles || []);
-        req.user.role = fresh.roles && fresh.roles[0] ? fresh.roles[0] : (req.user.role || null);
+        req.user.role = getPrimaryRole(fresh);
         req.user.permissions = fresh.permissions || {};
         req.user.active = fresh.active;
         req.user.municipalities = Array.isArray(fresh.municipalities) ? fresh.municipalities : [];
