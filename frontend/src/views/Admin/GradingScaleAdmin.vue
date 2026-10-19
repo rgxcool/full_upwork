@@ -83,8 +83,8 @@
                 :menu-props="{
                   location: 'bottom',
                   origin: 'top',
-                  locationStrategy: 'connected',
                   contentClass: 'grading-scale-term-menu',
+                  zIndex: 10000,
                   maxHeight: 300,
                 }"
                 @update:search="onTermSearch"
@@ -97,8 +97,8 @@
                 :menu-props="{
                   location: 'bottom',
                   origin: 'top',
-                  locationStrategy: 'connected',
                   contentClass: 'grading-scale-subject-menu',
+                  zIndex: 10000,
                   maxHeight: 300,
                 }"
               />
