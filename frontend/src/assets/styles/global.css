@@ -163,9 +163,20 @@ label[for] {
 
 /* === Vuetify v-select / v-autocomplete dropdown menu styling === */
 
+/* Vuetify's overlay root can disable pointer events; keep menu content interactive. */
+.grading-scale-term-menu,
+.grading-scale-subject-menu,
+.course-template-menu {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  background-color: #fff !important;
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2) !important;
+}
+
 /* Keep visual styling on the menu surface, not the positioned overlay wrapper. */
-.v-overlay-container .v-list {
-  background-color: var(--color-surface) !important;
+.v-list {
+  background-color: #fff !important;
+  opacity: 1;
   border: 2px solid var(--color-border-strong) !important;
   border-radius: var(--radius-overlay) !important;
   box-shadow: var(--shadow-overlay) !important;
@@ -173,6 +184,8 @@ label[for] {
 
 /* Style the dropdown items */
 .v-overlay-container .v-list-item {
+  pointer-events: auto !important;
+  cursor: pointer !important;
   font-size: var(--font-size-base);
   padding: 12px 16px !important;
   line-height: 1.5;
