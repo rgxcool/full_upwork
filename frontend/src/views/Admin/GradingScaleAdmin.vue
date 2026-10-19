@@ -86,6 +86,9 @@
                   origin: 'top',
                   locationStrategy: 'connected',
                   contentClass: 'grading-scale-term-menu',
+                  zIndex: 10000,
+                  maxHeight: 300,
+                }"
                 @update:search="onTermSearch"
                 @update:menu="
                   (open) => positionDropdown(open, termSelect, 'grading-scale-term-menu')
