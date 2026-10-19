@@ -67,6 +67,17 @@ UserSchema.virtual("role")
         }
     });
 
+// Compass / legacy docs often store `role: "systemadmin"` while `roles` stays
+// the schema default `["user"]`. The virtual above then hides the stored field.
+UserSchema.post("init", function mergeLegacyRoleField() {
+    const stored = this._doc?.role;
+    if (typeof stored !== "string" || !stored) return;
+    const current = Array.isArray(this.roles) ? this.roles.slice() : [];
+    if (!current.includes(stored)) {
+        this.set("roles", [...current, stored]);
+    }
+});
+
 UserSchema.index({ lastLoginAt: 1 });
 UserSchema.index({ name: 1 });
 UserSchema.index({ username: "text", name: "text", email: "text" });

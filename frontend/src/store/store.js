@@ -28,38 +28,29 @@ const store = createStore({
     isLoggedIn: (state) => !!state.user,
     requiresPasswordChange: (state) => !!state.requiresPasswordChange,
     userRole: (state) => {
-      const roles = state.user?.roles;
-      if (Array.isArray(roles) && roles.length > 0) {
-        let best = null;
-        let bestIndex = -1;
-        for (const role of roles) {
-          const index = ROLE_HIERARCHY.indexOf(role);
-          if (index > bestIndex) {
-            bestIndex = index;
-            best = role;
-          }
+      const collected = [];
+      if (Array.isArray(state.user?.roles)) collected.push(...state.user.roles);
+      if (state.user?.role) collected.push(state.user.role);
+      let best = null;
+      let bestIndex = -1;
+      for (const role of collected) {
+        const index = ROLE_HIERARCHY.indexOf(role);
+        if (index > bestIndex) {
+          bestIndex = index;
+          best = role;
         }
-        if (best) return best;
       }
-      if (state.user?.role) return state.user.role;
-      return 'guest';
+      return best || 'guest';
     },
-    isAdmin: (state) => {
-      const role = state.user?.role || (state.user?.roles && state.user.roles[0]) || 'guest';
-      return ['admin', 'systemadmin'].includes(role);
-    },
-    isSystemAdmin: (state) => {
-      const role = state.user?.role || (state.user?.roles && state.user.roles[0]) || 'guest';
-      return role === 'systemadmin';
-    },
+    isAdmin: (state, getters) => ['admin', 'systemadmin'].includes(getters.userRole),
+    isSystemAdmin: (state, getters) => getters.userRole === 'systemadmin',
     tasks: (state) => state.tasks,
 
     /**
      * Check if the user has the required role (or higher)
      */
-    hasPermission: (state) => (requiredRole) => {
-      // Support both role (singular) and roles (array) for backward compatibility
-      const userRole = state.user?.role || (state.user?.roles && state.user.roles[0]) || 'guest';
+    hasPermission: (state, getters) => (requiredRole) => {
+      const userRole = getters.userRole;
       const userIndex = ROLE_HIERARCHY.indexOf(userRole)
       
       // If user role not found in hierarchy, deny access

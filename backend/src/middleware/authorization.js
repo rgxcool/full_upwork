@@ -3,7 +3,7 @@ import rolesConfig from '../config/roles.js';
 import { PERMISSION_FEATURES, hasPermission as roleHasPermission } from '../config/permissions.js';
 import { logger } from '../utils/errorHandler.js';
 import User from '../models/User.js';
-import { getPrimaryRole } from '../utils/roles.js';
+import { collectRoles, getPrimaryRole } from '../utils/roles.js';
 
 const SUPERUSER_ROLES = ['systemadmin', 'admin', 'tester'];
 
@@ -95,7 +95,7 @@ export async function refreshUserAuthorization(req) {
 
     try {
         const fresh = await User.findById(userId)
-            .select('roles permissions active municipalities')
+            .select('roles role permissions active municipalities')
             .lean();
         if (!fresh) {
             // Account gone (deleted/disabled). Leave a marker so checks below
@@ -105,7 +105,8 @@ export async function refreshUserAuthorization(req) {
             req.user.permissions = req.user.permissions || {};
             return;
         }
-        req.user.roles = fresh.roles && fresh.roles.length ? fresh.roles : (req.user.roles || []);
+        const mergedRoles = collectRoles(fresh);
+        req.user.roles = mergedRoles.length ? mergedRoles : (req.user.roles || []);
         req.user.role = getPrimaryRole(fresh);
         req.user.permissions = fresh.permissions || {};
         req.user.active = fresh.active;

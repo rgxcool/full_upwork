@@ -123,6 +123,7 @@ describe("authController", () => {
             user: {
                 userId: user._id,
                 name: user.name,
+                username: "",
                 email: user.email,
                 role: user.role,
                 roles: user.roles,
@@ -349,13 +350,14 @@ describe("authController", () => {
             _id: "u",
             name: "Name",
             email: "email",
-            role: "role",
-            roles: ["role"],
+            role: "teacher",
+            roles: ["teacher"],
             mustChangePassword: false,
         };
         vi.spyOn(User, "findById").mockReturnValueOnce({
             select: vi.fn().mockResolvedValueOnce(user),
         });
+        vi.spyOn(User, "updateOne").mockResolvedValue({ modifiedCount: 0 });
 
         const req = { cookies: { [AUTH_COOKIE_NAME]: "t" } };
         const res = buildRes();
