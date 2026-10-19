@@ -537,12 +537,7 @@
 
   const filterOptions = ref({ municipalities: [], courses: [], teachers: [] })
   const courseItems = computed(() => filterOptions.value.courses || [])
-  const teacherItems = computed(() =>
-    (filterOptions.value.teachers || []).map((teacher) => ({
-      id: teacher._id || teacher.id,
-      name: teacher.userId?.username || teacher.userId?.name || 'Okänd lärare',
-    }))
-  )
+  const teacherItems = computed(() => filterOptions.value.teachers || [])
 
   const forecastMonths = ref(3)
   const studentGroupBy = ref('month')
