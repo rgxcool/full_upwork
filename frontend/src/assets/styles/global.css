@@ -161,16 +161,14 @@ label[for] {
   cursor: pointer;
 }
 
-/* === Vuetify v-select / v-autocomplete dropdown menu fix === */
+/* === Vuetify v-select / v-autocomplete dropdown menu styling === */
 
-.v-overlay-container .v-overlay__content {
+/* Keep visual styling on the menu surface, not the positioned overlay wrapper. */
+.v-overlay-container .v-list {
   background-color: var(--color-surface) !important;
-  border: 2px solid var(--color-border-strong) !important; /* Stronger borders */
+  border: 2px solid var(--color-border-strong) !important;
   border-radius: var(--radius-overlay) !important;
-  box-shadow: var(--shadow-overlay) !important; /* More prominent shadow */
-  padding: 0 !important;
-  overflow: hidden;
-  z-index: 3000 !important;
+  box-shadow: var(--shadow-overlay) !important;
 }
 
 /* Style the dropdown items */
@@ -246,17 +244,7 @@ label[for] {
   font-weight: bold !important;
 }
 
-/* === v-overlay (Dropdown) Fix === */
-
-.v-overlay-container .v-overlay__content {
-  background-color: var(--color-surface) !important;
-  border: 2px solid var(--color-border-strong) !important; /* Thicker border for dropdown */
-  border-radius: var(--radius-overlay) !important;
-  box-shadow: var(--shadow-overlay) !important; /* More prominent shadow */
-  padding: 0 !important;
-  overflow: hidden !important;
-  z-index: 3000 !important;
-}
+/* === Vuetify dropdown item styling === */
 
 /* Style the dropdown items */
 .v-overlay-container .v-list-item {

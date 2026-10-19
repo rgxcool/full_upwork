@@ -7,7 +7,9 @@
         </v-card-title>
         <v-card-subtitle class="pb-4">
           Hantera poänggränser (min-poäng → betyg) per termin (t.ex. HT24) och ämne
-          (Engelska/Svenska/Matematik). Skalan ändras årligen och visas som
+          (Engelska/Svenska/Matematik). 
+
+          Skalan ändras årligen och visas som
           förslag när en lärare sätter nationella prov-poäng.
         </v-card-subtitle>
 
