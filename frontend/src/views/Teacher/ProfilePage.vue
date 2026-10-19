@@ -25,7 +25,7 @@
               <div class="info-grid">
                 <div class="info-item">
                   <label>Namn</label>
-                  <span>{{ user?.username || user?.userId || 'Ej angivet' }}</span>
+                  <span>{{ user?.name || user?.username || 'Ej angivet' }}</span>
                 </div>
                 <div class="info-item">
                   <label>E-post</label>
@@ -193,13 +193,13 @@ export default {
     const router = useRouter();
     const toast = useToast();
 
-    const user = computed(() => store.getters.userRole ? store.state.user : null);
+    const user = computed(() => store.state.user);
     const isLoggedIn = computed(() => store.getters.isLoggedIn);
     onMounted(() => { if (!isLoggedIn.value) router.push('/login'); });
     onMounted(() => { store.dispatch('fetchTasks'); });
 
     const roleLabel = computed(() => {
-      const role = user.value?.role || (user.value?.roles && user.value.roles[0]) || '';
+      const role = store.getters.userRole;
       return ROLE_LABELS[role] || role;
     });
 

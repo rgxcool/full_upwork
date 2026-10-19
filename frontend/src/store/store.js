@@ -28,9 +28,20 @@ const store = createStore({
     isLoggedIn: (state) => !!state.user,
     requiresPasswordChange: (state) => !!state.requiresPasswordChange,
     userRole: (state) => {
-      // Support both role (singular) and roles (array) for backward compatibility
+      const roles = state.user?.roles;
+      if (Array.isArray(roles) && roles.length > 0) {
+        let best = null;
+        let bestIndex = -1;
+        for (const role of roles) {
+          const index = ROLE_HIERARCHY.indexOf(role);
+          if (index > bestIndex) {
+            bestIndex = index;
+            best = role;
+          }
+        }
+        if (best) return best;
+      }
       if (state.user?.role) return state.user.role;
-      if (state.user?.roles && state.user.roles.length > 0) return state.user.roles[0];
       return 'guest';
     },
     isAdmin: (state) => {

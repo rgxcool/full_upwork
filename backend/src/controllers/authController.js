@@ -4,6 +4,7 @@ import User from "../models/User.js";
 import logger from "../utils/logger.js";
 import { AUTH_COOKIE_NAME, setAuthCookie, clearAuthCookie } from "../config/cookies.js";
 import { refreshUserAuthorization } from "../middleware/authorization.js";
+import { getPrimaryRole } from "../utils/roles.js";
 
 /**
  * Authentication Controller
@@ -107,15 +108,15 @@ export const login = async (req, res) => {
 
         setAuthCookie(res, token);
 
-        // Ensure role is always set from roles array (for backward compatibility)
-        const primaryRole = user.roles && user.roles.length > 0 ? user.roles[0] : (user.role || 'guest');
-        
+        const primaryRole = getPrimaryRole(user);
+
         res.json({
             message: "Login successful",
             requiresPasswordChange: !!user.mustChangePassword,
             user: {
                 userId: user._id, // ✅ Standard key
                 name: user.name || user.username || "",
+                username: user.username || "",
                 email: user.email,
                 role: primaryRole,
                 roles: user.roles || [],
@@ -273,14 +274,14 @@ export const getSession = async (req, res) => {
             return res.status(404).json({ error: "User not found" });
         }
 
-        // Ensure role is always set from roles array (for backward compatibility)
-        const primaryRole = user.roles && user.roles.length > 0 ? user.roles[0] : (user.role || 'guest');
-        
+        const primaryRole = getPrimaryRole(user);
+
         res.json({
             requiresPasswordChange: !!user.mustChangePassword,
             user: {
                 userId: user._id, // ✅ Match login response
-                name: user.name,
+                name: user.name || user.username || "",
+                username: user.username || "",
                 email: user.email,
                 role: primaryRole,
                 roles: user.roles || [],

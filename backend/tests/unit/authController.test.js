@@ -367,6 +367,7 @@ describe("authController", () => {
             user: {
                 userId: user._id,
                 name: user.name,
+                username: "",
                 email: user.email,
                 role: user.role,
                 roles: user.roles,
