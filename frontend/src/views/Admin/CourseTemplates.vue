@@ -79,7 +79,13 @@
               label="Kurs (valfritt)"
               item-title="title"
               item-value="value"
-              :menu-props="{ location: 'bottom', origin: 'top', offset: 0, maxHeight: 300 }"
+              :menu-props="{
+                attach: true,
+                location: 'bottom',
+                origin: 'top',
+                offset: 0,
+                maxHeight: 300,
+              }"
               clearable
             />
 
