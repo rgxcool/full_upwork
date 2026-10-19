@@ -78,7 +78,10 @@ const buildBasePipeline = (filters, dateField) => {
     pipeline.push({
         $addFields: {
             municipalityName: {
-                $ifNull: ["$student.municipality.type", "$student.municipality"],
+                $ifNull: [
+                    "$student.municipality.type",
+                    "$student.municipality",
+                ],
             },
             courseName: { $ifNull: ["$course.courseName", "Okänd kurs"] },
         },
@@ -166,8 +169,7 @@ export const getRevenueReport = async (filters) => {
         // Forecast uses the course price when one is snapshotted, otherwise
         // the AtoE municipality price as default assumption.
         const revenue =
-            row.enrollmentPrice ??
-            gradeToRevenue(row.municipalityName, "A");
+            row.enrollmentPrice ?? gradeToRevenue(row.municipalityName, "A");
         if (!revenue) continue;
 
         totalForecasted += revenue;
@@ -219,7 +221,10 @@ export const getRevenueReport = async (filters) => {
  * same as the revenue report.
  */
 export const getMonthlyIncomeForecast = async (filters) => {
-    const forecastMonths = Math.min(Math.max(Number(filters.forecastMonths) || 3, 1), 12);
+    const forecastMonths = Math.min(
+        Math.max(Number(filters.forecastMonths) || 3, 1),
+        12,
+    );
 
     const pipeline = [
         ...buildBasePipeline(filters, "gradeDate"),
@@ -261,7 +266,9 @@ export const getMonthlyIncomeForecast = async (filters) => {
 
     const forecast = [];
     if (history.length) {
-        const [lastYear, lastMonth] = history[history.length - 1].month.split("-").map(Number);
+        const [lastYear, lastMonth] = history[history.length - 1].month
+            .split("-")
+            .map(Number);
         for (let i = 1; i <= forecastMonths; i++) {
             const date = new Date(lastYear, lastMonth - 1 + i, 1);
             forecast.push({
@@ -280,7 +287,9 @@ export const getMonthlyIncomeForecast = async (filters) => {
  * Includes statistics on active, new, completions, and drop-outs.
  */
 export const getStudentReport = async (filters) => {
-    const groupBy = ["month", "teacher", "course", "semester"].includes(filters.groupBy)
+    const groupBy = ["month", "teacher", "course", "semester"].includes(
+        filters.groupBy,
+    )
         ? filters.groupBy
         : "month";
 
@@ -305,18 +314,41 @@ export const getStudentReport = async (filters) => {
                     as: "teacherUser",
                 },
             },
-            { $unwind: { path: "$teacherUser", preserveNullAndEmptyArrays: true } },
+            {
+                $unwind: {
+                    path: "$teacherUser",
+                    preserveNullAndEmptyArrays: true,
+                },
+            },
             {
                 $group: {
                     _id: { $ifNull: ["$teacherUser.name", "Ej tilldelad"] },
                     studentCount: { $sum: 1 },
                     uniqueStudents: { $addToSet: "$studentId" },
-                    active: { $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] } },
-                    new: { $sum: { $cond: [{ $eq: ["$status", "enrolled"] }, 1, 0] } },
-                    completions: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
-                    dropouts: { $sum: { $cond: [{ $in: ["$status", DROPOUT_STATUSES] }, 1, 0] } },
+                    active: {
+                        $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+                    },
+                    new: {
+                        $sum: {
+                            $cond: [{ $eq: ["$status", "enrolled"] }, 1, 0],
+                        },
+                    },
+                    completions: {
+                        $sum: {
+                            $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
+                        },
+                    },
+                    dropouts: {
+                        $sum: {
+                            $cond: [
+                                { $in: ["$status", DROPOUT_STATUSES] },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
                 },
-            }
+            },
         );
     } else if (groupBy === "course") {
         pipeline.push({
@@ -324,10 +356,20 @@ export const getStudentReport = async (filters) => {
                 _id: "$courseName",
                 studentCount: { $sum: 1 },
                 uniqueStudents: { $addToSet: "$studentId" },
-                active: { $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] } },
-                new: { $sum: { $cond: [{ $eq: ["$status", "enrolled"] }, 1, 0] } },
-                completions: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
-                dropouts: { $sum: { $cond: [{ $in: ["$status", DROPOUT_STATUSES] }, 1, 0] } },
+                active: {
+                    $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+                },
+                new: {
+                    $sum: { $cond: [{ $eq: ["$status", "enrolled"] }, 1, 0] },
+                },
+                completions: {
+                    $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
+                },
+                dropouts: {
+                    $sum: {
+                        $cond: [{ $in: ["$status", DROPOUT_STATUSES] }, 1, 0],
+                    },
+                },
             },
         });
     } else if (groupBy === "semester") {
@@ -336,7 +378,18 @@ export const getStudentReport = async (filters) => {
                 $addFields: {
                     semester: {
                         $concat: [
-                            { $cond: [{ $lte: [{ $month: "$enrollmentDate" }, 6] }, "VT", "HT"] },
+                            {
+                                $cond: [
+                                    {
+                                        $lte: [
+                                            { $month: "$enrollmentDate" },
+                                            6,
+                                        ],
+                                    },
+                                    "VT",
+                                    "HT",
+                                ],
+                            },
                             { $toString: { $year: "$enrollmentDate" } },
                         ],
                     },
@@ -347,19 +400,40 @@ export const getStudentReport = async (filters) => {
                     _id: "$semester",
                     studentCount: { $sum: 1 },
                     uniqueStudents: { $addToSet: "$studentId" },
-                    active: { $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] } },
-                    new: { $sum: { $cond: [{ $eq: ["$status", "enrolled"] }, 1, 0] } },
-                    completions: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
-                    dropouts: { $sum: { $cond: [{ $in: ["$status", DROPOUT_STATUSES] }, 1, 0] } },
+                    active: {
+                        $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+                    },
+                    new: {
+                        $sum: {
+                            $cond: [{ $eq: ["$status", "enrolled"] }, 1, 0],
+                        },
+                    },
+                    completions: {
+                        $sum: {
+                            $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
+                        },
+                    },
+                    dropouts: {
+                        $sum: {
+                            $cond: [
+                                { $in: ["$status", DROPOUT_STATUSES] },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
                 },
-            }
+            },
         );
     } else {
         pipeline.push(
             {
                 $addFields: {
                     monthKey: {
-                        $dateToString: { format: "%Y-%m", date: "$enrollmentDate" },
+                        $dateToString: {
+                            format: "%Y-%m",
+                            date: "$enrollmentDate",
+                        },
                     },
                 },
             },
@@ -368,12 +442,30 @@ export const getStudentReport = async (filters) => {
                     _id: "$monthKey",
                     studentCount: { $sum: 1 },
                     uniqueStudents: { $addToSet: "$studentId" },
-                    active: { $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] } },
-                    new: { $sum: { $cond: [{ $eq: ["$status", "enrolled"] }, 1, 0] } },
-                    completions: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
-                    dropouts: { $sum: { $cond: [{ $in: ["$status", DROPOUT_STATUSES] }, 1, 0] } },
+                    active: {
+                        $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+                    },
+                    new: {
+                        $sum: {
+                            $cond: [{ $eq: ["$status", "enrolled"] }, 1, 0],
+                        },
+                    },
+                    completions: {
+                        $sum: {
+                            $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
+                        },
+                    },
+                    dropouts: {
+                        $sum: {
+                            $cond: [
+                                { $in: ["$status", DROPOUT_STATUSES] },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
                 },
-            }
+            },
         );
     }
 
@@ -390,7 +482,7 @@ export const getStudentReport = async (filters) => {
                 dropouts: 1,
             },
         },
-        { $sort: { label: 1 } }
+        { $sort: { label: 1 } },
     );
 
     return StudentEnrollment.aggregate(pipeline);
@@ -532,14 +624,23 @@ export const getGradeDistribution = async (filters) => {
     }
 
     const sortedOverall = sortGrades(
-        Object.entries(overall).map(([grade, count]) => ({ grade, count }))
+        Object.entries(overall).map(([grade, count]) => ({ grade, count })),
     );
 
     return {
         overall: sortedOverall,
-        perCourse: perCourse.map((row) => ({ ...row, grades: sortGrades(row.grades) })),
-        perTeacher: perTeacher.map((row) => ({ ...row, grades: sortGrades(row.grades) })),
-        perMunicipality: perMunicipality.map((row) => ({ ...row, grades: sortGrades(row.grades) })),
+        perCourse: perCourse.map((row) => ({
+            ...row,
+            grades: sortGrades(row.grades),
+        })),
+        perTeacher: perTeacher.map((row) => ({
+            ...row,
+            grades: sortGrades(row.grades),
+        })),
+        perMunicipality: perMunicipality.map((row) => ({
+            ...row,
+            grades: sortGrades(row.grades),
+        })),
     };
 };
 
@@ -557,7 +658,13 @@ export const getPopularCourses = async (filters) => {
                     $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
                 },
                 graded: {
-                    $sum: { $cond: [{ $not: [{ $in: ["$grade", [null, ""]] }] }, 1, 0] },
+                    $sum: {
+                        $cond: [
+                            { $not: [{ $in: ["$grade", [null, ""]] }] },
+                            1,
+                            0,
+                        ],
+                    },
                 },
             },
         },
@@ -587,7 +694,9 @@ export const getDropoutReport = async (filters) => {
         ...basePipeline,
         {
             $addFields: {
-                monthKey: { $dateToString: { format: "%Y-%m", date: "$enrollmentDate" } },
+                monthKey: {
+                    $dateToString: { format: "%Y-%m", date: "$enrollmentDate" },
+                },
                 isDropout: { $in: ["$status", DROPOUT_STATUSES] },
             },
         },
@@ -608,7 +717,17 @@ export const getDropoutReport = async (filters) => {
                     $cond: [
                         { $eq: ["$total", 0] },
                         0,
-                        { $round: [{ $multiply: [{ $divide: ["$dropouts", "$total"] }, 100] }, 1] },
+                        {
+                            $round: [
+                                {
+                                    $multiply: [
+                                        { $divide: ["$dropouts", "$total"] },
+                                        100,
+                                    ],
+                                },
+                                1,
+                            ],
+                        },
                     ],
                 },
             },
@@ -638,7 +757,17 @@ export const getDropoutReport = async (filters) => {
                     $cond: [
                         { $eq: ["$total", 0] },
                         0,
-                        { $round: [{ $multiply: [{ $divide: ["$dropouts", "$total"] }, 100] }, 1] },
+                        {
+                            $round: [
+                                {
+                                    $multiply: [
+                                        { $divide: ["$dropouts", "$total"] },
+                                        100,
+                                    ],
+                                },
+                                1,
+                            ],
+                        },
                     ],
                 },
             },
@@ -661,7 +790,9 @@ export const getDropoutReport = async (filters) => {
 export const getFilterOptions = async () => {
     const [municipalitiesRaw, courses, teachers] = await Promise.all([
         Student.distinct("municipality.type"),
-        Course.find({}, { courseName: 1, courseCode: 1 }).sort({ courseName: 1 }).lean(),
+        Course.find({}, { courseName: 1, courseCode: 1 })
+            .sort({ courseName: 1 })
+            .lean(),
         Teacher.find({}, { subject: 1, userId: 1 })
             .populate({ path: "userId", select: "name username email" })
             .lean(),
@@ -669,9 +800,17 @@ export const getFilterOptions = async () => {
 
     return {
         municipalities: municipalitiesRaw.filter(Boolean).sort(),
-        courses: courses.map((c) => ({ id: c._id, name: c.courseName, code: c.courseCode })),
+        courses: courses.map((c) => ({
+            id: c._id,
+            name: c.courseName,
+            code: c.courseCode,
+        })),
         teachers: teachers
             .filter((t) => t.userId)
-            .map((t) => ({ id: t._id, name: t.userId?.name || "Okänd lärare", subject: t.subject })),
+            .map((t) => ({
+                id: t._id,
+                name: t.userId?.name || t.userId?.username || "Okänd lärare",
+                subject: t.subject,
+            })),
     };
 };
