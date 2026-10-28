@@ -115,6 +115,20 @@
         </div>
       </div>
 
+      <div class="mt-3">
+        <label class="form-label">Studietakt</label>
+        <div class="d-flex gap-2 align-items-center">
+          <select v-model="studyPace" class="form-select" style="max-width:200px">
+            <option :value="5">100%</option>
+            <option :value="10">50%</option>
+            <option :value="20">25%</option>
+          </select>
+          <button class="btn btn-outline-primary" :disabled="updatingPace" @click="changeStudyPace">
+            {{ updatingPace ? 'Uppdaterar...' : 'Uppdatera studietakt' }}
+          </button>
+        </div>
+      </div>
+
       <div class="mt-3 d-flex gap-2">
         <button class="btn btn-primary" :disabled="saving" @click="save">
           {{ saving ? 'Sparar...' : 'Spara' }}
@@ -183,6 +197,8 @@
       const saving = ref(false)
       const successMessage = ref('')
       const errorMessage = ref('')
+      const studyPace = ref(5)
+      const updatingPace = ref(false)
 
       const hours = computed(() => Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')))
 
@@ -284,6 +300,23 @@
         }
       }
 
+      async function changeStudyPace() {
+        if (!form.value?._id) return
+        const confirmed = window.confirm('Är du säker på att du vill ändra studietakten? Endast framtida kurser ändras.')
+        if (!confirmed) return
+        updatingPace.value = true
+        errorMessage.value = ''
+        try {
+          await client.put(`/students/${form.value._id}/studyplan-tempo`, { tempoWeeks: Number(studyPace.value) })
+          successMessage.value = 'Studietakt uppdaterad!'
+        } catch (e) {
+          console.error('Failed to update study pace', e)
+          errorMessage.value = e.response?.data?.error || 'Kunde inte uppdatera studietakten'
+        } finally {
+          updatingPace.value = false
+        }
+      }
+
       function reload() {
         if (selectedId.value) loadStudent(selectedId.value)
       }
@@ -360,6 +393,9 @@
         saving,
         successMessage,
         errorMessage,
+        studyPace,
+        updatingPace,
+        changeStudyPace,
         examInstances,
         loadingExams,
         save,
