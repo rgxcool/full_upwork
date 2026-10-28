@@ -3,9 +3,16 @@
     <v-card>
       <v-card-title>Min kursöversikt</v-card-title>
       <v-card-text>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <v-text-field v-model="searchQuery" label="Sök kurs" density="compact" hide-details style="max-width:220px"></v-text-field>
+          <v-text-field v-model="finalExamDateFilter" label="Slutprovsdatum" type="date" density="compact" hide-details style="max-width:180px"></v-text-field>
+          <v-text-field v-model="startDateFilter" label="Startdatum" type="date" density="compact" hide-details style="max-width:180px"></v-text-field>
+          <v-text-field v-model="endDateFilter" label="Slutdatum" type="date" density="compact" hide-details style="max-width:180px"></v-text-field>
+          <v-btn variant="outlined" size="small" @click="clearFilters">Rensa</v-btn>
+        </div>
         <v-data-table
           :headers="headers"
-          :items="courses"
+          :items="filteredCourses"
           :loading="loading"
           class="elevation-1 course-table"
           item-value="_id"
@@ -123,6 +130,10 @@
       return {
         loading: true,
         courses: [],
+        searchQuery: '',
+        finalExamDateFilter: '',
+        startDateFilter: '',
+        endDateFilter: '',
         showModal: false,
         loadingDetails: false,
         courseDetails: {},
@@ -136,6 +147,34 @@
           { title: 'Ansvarig lärare', key: 'responsibleTeacher', sortable: true, align: 'start' },
         ],
       };
+    },
+    computed: {
+      filteredCourses() {
+        return (this.courses || []).filter((c) => {
+          if (this.searchQuery) {
+            const q = this.searchQuery.toLowerCase();
+            const name = (c.courseName || '').toLowerCase();
+            const code = (c.courseCode || '').toLowerCase();
+            if (!name.includes(q) && !code.includes(q)) return false;
+          }
+          if (this.finalExamDateFilter && c.slutprovDate) {
+            if (new Date(c.slutprovDate).toISOString().slice(0,10) !== this.finalExamDateFilter) return false;
+          } else if (this.finalExamDateFilter && !c.slutprovDate) {
+            return false;
+          }
+          if (this.startDateFilter && c.startDate) {
+            if (new Date(c.startDate).toISOString().slice(0,10) !== this.startDateFilter) return false;
+          } else if (this.startDateFilter && !c.startDate) {
+            return false;
+          }
+          if (this.endDateFilter && c.endDate) {
+            if (new Date(c.endDate).toISOString().slice(0,10) !== this.endDateFilter) return false;
+          } else if (this.endDateFilter && !c.endDate) {
+            return false;
+          }
+          return true;
+        });
+      },
     },
     async created() {
       await this.fetchMyCourses();
@@ -164,6 +203,12 @@
         } finally {
           this.loading = false;
         }
+      },
+      clearFilters() {
+        this.searchQuery = '';
+        this.finalExamDateFilter = '';
+        this.startDateFilter = '';
+        this.endDateFilter = '';
       },
       formatDate(dateString) {
         if (!dateString) return 'N/A';

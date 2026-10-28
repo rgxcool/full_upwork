@@ -35,6 +35,10 @@
         ></button>
       </div>
 
+      <div class="mb-3">
+        <a href="/demo-template.xlsx" download class="btn btn-outline-secondary btn-sm">Ladda ner demomall</a>
+      </div>
+
       <!-- File upload -->
       <!--
       <div class="form-container">
