@@ -4,6 +4,34 @@ import User from "../models/User.js";
 import logger from "../utils/logger.js";
 import { AUTH_COOKIE_NAME, setAuthCookie, clearAuthCookie } from "../config/cookies.js";
 import { refreshUserAuthorization } from "../middleware/authorization.js";
+import { collectRoles, getPrimaryRole } from "../utils/roles.js";
+
+async function persistMergedRoles(user) {
+    const mergedRoles = collectRoles(user);
+    const current = Array.isArray(user.roles) ? user.roles : [];
+    const alreadyMerged =
+        mergedRoles.length === current.length &&
+        mergedRoles.every((role) => current.includes(role));
+    const hasStoredRoleField =
+        user._doc && Object.prototype.hasOwnProperty.call(user._doc, "role");
+
+    user.roles = mergedRoles.length ? mergedRoles : current;
+
+    if (alreadyMerged && !hasStoredRoleField) {
+        return user.roles;
+    }
+
+    try {
+        await User.updateOne(
+            { _id: user._id },
+            { $set: { roles: user.roles }, $unset: { role: "" } }
+        );
+    } catch (error) {
+        logger.warn({ err: error, userId: user._id }, "Failed to persist merged roles");
+    }
+
+    return user.roles;
+}
 
 /**
  * Authentication Controller
@@ -92,10 +120,13 @@ export const login = async (req, res) => {
         const userPermissions =
             user.permissions && typeof user.permissions === "object" ? user.permissions : {};
 
+        const mergedRoles = await persistMergedRoles(user);
+        const primaryRole = getPrimaryRole(user);
+
         const tokenPayload = {
             userId: user._id,
-            roles: user.roles,
-            role: user.role,
+            roles: mergedRoles,
+            role: primaryRole,
             name: user.name,
             email: user.email,
             permissions: userPermissions,
@@ -107,18 +138,16 @@ export const login = async (req, res) => {
 
         setAuthCookie(res, token);
 
-        // Ensure role is always set from roles array (for backward compatibility)
-        const primaryRole = user.roles && user.roles.length > 0 ? user.roles[0] : (user.role || 'guest');
-        
         res.json({
             message: "Login successful",
             requiresPasswordChange: !!user.mustChangePassword,
             user: {
                 userId: user._id, // ✅ Standard key
                 name: user.name || user.username || "",
+                username: user.username || "",
                 email: user.email,
                 role: primaryRole,
-                roles: user.roles || [],
+                roles: mergedRoles,
                 permissions: userPermissions,
             },
         });
@@ -273,17 +302,18 @@ export const getSession = async (req, res) => {
             return res.status(404).json({ error: "User not found" });
         }
 
-        // Ensure role is always set from roles array (for backward compatibility)
-        const primaryRole = user.roles && user.roles.length > 0 ? user.roles[0] : (user.role || 'guest');
-        
+        const mergedRoles = await persistMergedRoles(user);
+        const primaryRole = getPrimaryRole(user);
+
         res.json({
             requiresPasswordChange: !!user.mustChangePassword,
             user: {
                 userId: user._id, // ✅ Match login response
-                name: user.name,
+                name: user.name || user.username || "",
+                username: user.username || "",
                 email: user.email,
                 role: primaryRole,
-                roles: user.roles || [],
+                roles: mergedRoles,
             },
         });
     } catch (error) {

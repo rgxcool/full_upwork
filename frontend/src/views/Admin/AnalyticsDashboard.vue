@@ -71,12 +71,20 @@
         <v-row dense class="mt-2">
           <v-col cols="12" class="d-flex justify-end">
             <v-btn variant="tonal" class="mr-2" @click="resetFilters">Rensa filter</v-btn>
-            <v-btn color="primary" :loading="isActiveTabLoading" @click="loadActiveTab">Uppdatera</v-btn>
+            <v-btn color="primary" :loading="isActiveTabLoading" @click="loadActiveTab">
+              Uppdatera
+            </v-btn>
           </v-col>
         </v-row>
       </v-card>
 
-      <v-alert v-if="activeTabError" type="error" class="mb-4" closable @click:close="tabErrors[activeTab] = ''">
+      <v-alert
+        v-if="activeTabError"
+        type="error"
+        class="mb-4"
+        closable
+        @click:close="tabErrors[activeTab] = ''"
+      >
         {{ activeTabError }}
       </v-alert>
 
@@ -101,7 +109,11 @@
               </div>
             </div>
 
-            <v-alert v-if="!loading.revenue && revenue.byMunicipality.length === 0" type="info" variant="tonal">
+            <v-alert
+              v-if="!loading.revenue && revenue.byMunicipality.length === 0"
+              type="info"
+              variant="tonal"
+            >
               Ingen intäktsdata för valda filter.
             </v-alert>
 
@@ -110,10 +122,17 @@
               <v-row>
                 <v-col cols="12" md="6">
                   <h4 class="mb-2">Per kommun</h4>
-                  <Bar v-if="revenue.byMunicipality.length" :data="revenueMunicipalityChart" :options="chartOptions" />
+                  <Bar
+                    v-if="revenue.byMunicipality.length"
+                    :data="revenueMunicipalityChart"
+                    :options="chartOptions"
+                  />
                   <v-table density="compact" class="mt-4">
                     <thead>
-                      <tr><th>Kommun</th><th class="text-right">Intäkt</th></tr>
+                      <tr>
+                        <th>Kommun</th>
+                        <th class="text-right">Intäkt</th>
+                      </tr>
                     </thead>
                     <tbody>
                       <tr v-for="row in revenue.byMunicipality" :key="row.municipality">
@@ -125,10 +144,17 @@
                 </v-col>
                 <v-col cols="12" md="6">
                   <h4 class="mb-2">Per kurs</h4>
-                  <Bar v-if="revenue.byCourse.length" :data="revenueCourseChart" :options="chartOptions" />
+                  <Bar
+                    v-if="revenue.byCourse.length"
+                    :data="revenueCourseChart"
+                    :options="chartOptions"
+                  />
                   <v-table density="compact" class="mt-4">
                     <thead>
-                      <tr><th>Kurs</th><th class="text-right">Intäkt</th></tr>
+                      <tr>
+                        <th>Kurs</th>
+                        <th class="text-right">Intäkt</th>
+                      </tr>
                     </thead>
                     <tbody>
                       <tr v-for="row in revenue.byCourse" :key="row.course">
@@ -169,7 +195,11 @@
               månaderna och kommunernas prislista - inte en bokförd siffra.
             </v-alert>
 
-            <v-alert v-if="!loading.forecast && forecast.history.length === 0" type="info" variant="tonal">
+            <v-alert
+              v-if="!loading.forecast && forecast.history.length === 0"
+              type="info"
+              variant="tonal"
+            >
               Ingen historisk intäktsdata för valda filter.
             </v-alert>
 
@@ -177,7 +207,11 @@
               <Line v-if="forecast.history.length" :data="forecastChart" :options="chartOptions" />
               <v-table density="compact" class="mt-4">
                 <thead>
-                  <tr><th>Månad</th><th class="text-right">Intäkt</th><th>Typ</th></tr>
+                  <tr>
+                    <th>Månad</th>
+                    <th class="text-right">Intäkt</th>
+                    <th>Typ</th>
+                  </tr>
                 </thead>
                 <tbody>
                   <tr v-for="row in [...forecast.history, ...forecast.forecast]" :key="row.month">
@@ -266,18 +300,29 @@
                   color="error"
                 />
                 <div class="text-body-2 mr-4">
-                  F-andel: <strong :class="fGradePercentage > 20 ? 'text-error' : ''">{{ fGradePercentage }}%</strong>
+                  F-andel:
+                  <strong :class="fGradePercentage > 20 ? 'text-error' : ''">
+                    {{ fGradePercentage }}%
+                  </strong>
                 </div>
                 <v-btn size="small" class="mr-2" @click="exportGradesCSV">Exportera CSV</v-btn>
                 <v-btn size="small" @click="exportGradesPDF">Exportera PDF</v-btn>
               </div>
             </div>
 
-            <v-alert v-if="!loading.grades && grades.overall.length === 0" type="info" variant="tonal">
+            <v-alert
+              v-if="!loading.grades && grades.overall.length === 0"
+              type="info"
+              variant="tonal"
+            >
               Ingen betygsdata för valda filter.
             </v-alert>
 
-            <v-alert v-else-if="showOnlyF && filteredGradesPerCourse.length === 0" type="info" variant="tonal">
+            <v-alert
+              v-else-if="showOnlyF && filteredGradesPerCourse.length === 0"
+              type="info"
+              variant="tonal"
+            >
               Inga F-betyg för valda filter.
             </v-alert>
 
@@ -285,13 +330,21 @@
               <v-row>
                 <v-col cols="12" md="5">
                   <h4 class="mb-2">Totalt</h4>
-                  <Doughnut v-if="filteredGradesOverall.length" :data="filteredOverallChart" :options="chartOptions" />
+                  <Doughnut
+                    v-if="filteredGradesOverall.length"
+                    :data="filteredOverallChart"
+                    :options="chartOptions"
+                  />
                 </v-col>
                 <v-col cols="12" md="7">
                   <h4 class="mb-2">Per kurs</h4>
                   <v-table density="compact">
                     <thead>
-                      <tr><th>Kurs</th><th>Fördelning</th><th class="text-right">Totalt</th></tr>
+                      <tr>
+                        <th>Kurs</th>
+                        <th>Fördelning</th>
+                        <th class="text-right">Totalt</th>
+                      </tr>
                     </thead>
                     <tbody>
                       <tr v-for="row in filteredGradesPerCourse" :key="row.course">
@@ -322,7 +375,11 @@
               </div>
             </div>
 
-            <v-alert v-if="!loading.popular && popularCourses.length === 0" type="info" variant="tonal">
+            <v-alert
+              v-if="!loading.popular && popularCourses.length === 0"
+              type="info"
+              variant="tonal"
+            >
               Ingen data för valda filter.
             </v-alert>
 
@@ -330,7 +387,12 @@
               <Bar v-if="popularCourses.length" :data="popularChart" :options="chartOptions" />
               <v-table density="compact" class="mt-4">
                 <thead>
-                  <tr><th>Kurs</th><th class="text-right">Inskrivningar</th><th class="text-right">Avslutade</th><th class="text-right">Betygsatta</th></tr>
+                  <tr>
+                    <th>Kurs</th>
+                    <th class="text-right">Inskrivningar</th>
+                    <th class="text-right">Avslutade</th>
+                    <th class="text-right">Betygsatta</th>
+                  </tr>
                 </thead>
                 <tbody>
                   <tr v-for="row in popularCourses" :key="row.course">
@@ -356,7 +418,11 @@
               </div>
             </div>
 
-            <v-alert v-if="!loading.dropouts && dropouts.byMonth.length === 0" type="info" variant="tonal">
+            <v-alert
+              v-if="!loading.dropouts && dropouts.byMonth.length === 0"
+              type="info"
+              variant="tonal"
+            >
               Ingen data för valda filter.
             </v-alert>
 
@@ -364,10 +430,19 @@
               <v-row>
                 <v-col cols="12" md="6">
                   <h4 class="mb-2">Per månad</h4>
-                  <Line v-if="dropouts.byMonth.length" :data="dropoutsMonthChart" :options="chartOptions" />
+                  <Line
+                    v-if="dropouts.byMonth.length"
+                    :data="dropoutsMonthChart"
+                    :options="chartOptions"
+                  />
                   <v-table density="compact" class="mt-4">
                     <thead>
-                      <tr><th>Månad</th><th class="text-right">Avbrott</th><th class="text-right">Totalt</th><th class="text-right">Andel</th></tr>
+                      <tr>
+                        <th>Månad</th>
+                        <th class="text-right">Avbrott</th>
+                        <th class="text-right">Totalt</th>
+                        <th class="text-right">Andel</th>
+                      </tr>
                     </thead>
                     <tbody>
                       <tr v-for="row in dropouts.byMonth" :key="row.month">
@@ -383,7 +458,12 @@
                   <h4 class="mb-2">Per kurs</h4>
                   <v-table density="compact">
                     <thead>
-                      <tr><th>Kurs</th><th class="text-right">Avbrott</th><th class="text-right">Totalt</th><th class="text-right">Andel</th></tr>
+                      <tr>
+                        <th>Kurs</th>
+                        <th class="text-right">Avbrott</th>
+                        <th class="text-right">Totalt</th>
+                        <th class="text-right">Andel</th>
+                      </tr>
                     </thead>
                     <tbody>
                       <tr v-for="row in dropouts.byCourse" :key="row.course">
@@ -405,510 +485,557 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { api } from '@/store/store'
-import { Bar, Line, Doughnut } from 'vue-chartjs'
-import {
-  Chart as ChartJS,
-  Title,
-  Tooltip,
-  Legend,
-  BarElement,
-  CategoryScale,
-  LinearScale,
-  LineElement,
-  PointElement,
-  ArcElement,
-} from 'chart.js'
-import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
-import '@vuepic/vue-datepicker/dist/main.css'
-import { exportToCSV, exportToPDF } from '@/utils/exportUtils'
+  import { ref, reactive, computed, watch, onMounted } from 'vue'
+  import { api } from '@/store/store'
+  import { Bar, Line, Doughnut } from 'vue-chartjs'
+  import {
+    Chart as ChartJS,
+    Title,
+    Tooltip,
+    Legend,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    LineElement,
+    PointElement,
+    ArcElement,
+  } from 'chart.js'
+  import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
+  import '@vuepic/vue-datepicker/dist/main.css'
+  import { exportToCSV, exportToPDF } from '@/utils/exportUtils'
 
-ChartJS.register(
-  Title,
-  Tooltip,
-  Legend,
-  BarElement,
-  CategoryScale,
-  LinearScale,
-  LineElement,
-  PointElement,
-  ArcElement,
-)
-
-const activeTab = ref('revenue')
-const tabErrors = reactive({
-  revenue: '',
-  forecast: '',
-  students: '',
-  grades: '',
-  popular: '',
-  dropouts: '',
-})
-const activeTabError = computed(() => tabErrors[activeTab.value] || '')
-
-const filters = reactive({
-  startDate: '',
-  endDate: '',
-  municipality: null,
-  courseId: null,
-  teacherId: null,
-})
-
-const filterOptions = ref({ municipalities: [], courses: [], teachers: [] })
-const courseItems = computed(() => filterOptions.value.courses || [])
-const teacherItems = computed(() => filterOptions.value.teachers || [])
-
-const forecastMonths = ref(3)
-const studentGroupBy = ref('month')
-
-const loading = reactive({
-  revenue: false,
-  forecast: false,
-  students: false,
-  grades: false,
-  popular: false,
-  dropouts: false,
-})
-
-const revenue = ref({ totalRevenue: 0, byMunicipality: [], byCourse: [] })
-const forecast = ref({ history: [], forecast: [] })
-const students = ref([])
-const grades = ref({ overall: [], perCourse: [] })
-const showOnlyF = ref(false)
-const popularCourses = ref([])
-const dropouts = ref({ byMonth: [], byCourse: [] })
-
-const isActiveTabLoading = computed(() => !!loading[activeTab.value])
-
-function buildParams(extra = {}) {
-  const params = {}
-  if (filters.startDate) params.startDate = filters.startDate
-  if (filters.endDate) params.endDate = filters.endDate
-  if (filters.municipality) params.municipality = filters.municipality
-  if (filters.courseId) params.courseId = filters.courseId
-  if (filters.teacherId) params.teacherId = filters.teacherId
-  return { ...params, ...extra }
-}
-
-async function safeGet(path, params, tabKey) {
-  try {
-    const res = await api.get(path, { params })
-    if (tabKey) tabErrors[tabKey] = ''
-    return res.data
-  } catch (err) {
-    console.error(`❌ Failed to load ${path}:`, err)
-    if (tabKey) tabErrors[tabKey] = 'Kunde inte hämta rapportdata. Försök igen.'
-    throw err
-  }
-}
-
-async function loadFilterOptions() {
-  try {
-    filterOptions.value = await safeGet('/analytics/filters')
-  } catch {
-    // error already surfaced via safeGet
-  }
-}
-
-async function loadRevenue() {
-  loading.revenue = true
-  tabErrors.revenue = ''
-  try {
-    revenue.value = await safeGet('/analytics/revenue', buildParams(), 'revenue')
-  } catch {
-    // handled
-  } finally {
-    loading.revenue = false
-  }
-}
-
-async function loadForecast() {
-  loading.forecast = true
-  tabErrors.forecast = ''
-  try {
-    forecast.value = await safeGet(
-      '/analytics/forecast',
-      buildParams({ forecastMonths: forecastMonths.value }),
-      'forecast',
-    )
-  } catch {
-    // handled
-  } finally {
-    loading.forecast = false
-  }
-}
-
-async function loadStudents() {
-  loading.students = true
-  tabErrors.students = ''
-  try {
-    students.value = await safeGet(
-      '/analytics/students',
-      buildParams({ groupBy: studentGroupBy.value }),
-      'students',
-    )
-  } catch {
-    // handled
-  } finally {
-    loading.students = false
-  }
-}
-
-async function loadGrades() {
-  loading.grades = true
-  tabErrors.grades = ''
-  try {
-    grades.value = await safeGet('/analytics/grades', buildParams(), 'grades')
-  } catch {
-    // handled
-  } finally {
-    loading.grades = false
-  }
-}
-
-async function loadPopular() {
-  loading.popular = true
-  tabErrors.popular = ''
-  try {
-    popularCourses.value = await safeGet('/analytics/popular-courses', buildParams(), 'popular')
-  } catch {
-    // handled
-  } finally {
-    loading.popular = false
-  }
-}
-
-async function loadDropouts() {
-  loading.dropouts = true
-  tabErrors.dropouts = ''
-  try {
-    dropouts.value = await safeGet('/analytics/dropouts', buildParams(), 'dropouts')
-  } catch {
-    // handled
-  } finally {
-    loading.dropouts = false
-  }
-}
-
-const tabLoaders = {
-  revenue: loadRevenue,
-  forecast: loadForecast,
-  students: loadStudents,
-  grades: loadGrades,
-  popular: loadPopular,
-  dropouts: loadDropouts,
-}
-
-async function loadActiveTab() {
-  tabErrors[activeTab.value] = ''
-  await tabLoaders[activeTab.value]?.()
-}
-
-watch(activeTab, (tab) => {
-  tabErrors[tab] = ''
-  tabLoaders[tab]?.()
-})
-
-function resetFilters() {
-  filters.startDate = ''
-  filters.endDate = ''
-  filters.municipality = null
-  filters.courseId = null
-  filters.teacherId = null
-  loadActiveTab()
-}
-
-onMounted(async () => {
-  Object.keys(tabErrors).forEach((k) => (tabErrors[k] = ''))
-  await loadFilterOptions()
-  await Promise.all([
-    loadRevenue(),
-    loadForecast(),
-    loadStudents(),
-    loadGrades(),
-    loadPopular(),
-    loadDropouts(),
-  ])
-})
-
-function formatCurrency(value) {
-  return new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 }).format(
-    value || 0,
+  ChartJS.register(
+    Title,
+    Tooltip,
+    Legend,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    LineElement,
+    PointElement,
+    ArcElement
   )
-}
 
-const studentGroupLabel = computed(() => {
-  const labels = { month: 'Månad', teacher: 'Lärare', course: 'Kurs', semester: 'Termin' }
-  return labels[studentGroupBy.value] || 'Grupp'
-})
+  const activeTab = ref('revenue')
+  const tabErrors = reactive({
+    revenue: '',
+    forecast: '',
+    students: '',
+    grades: '',
+    popular: '',
+    dropouts: '',
+  })
+  const activeTabError = computed(() => tabErrors[activeTab.value] || '')
 
-const chartOptions = { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: true } } }
+  const filters = reactive({
+    startDate: '',
+    endDate: '',
+    municipality: null,
+    courseId: null,
+    teacherId: null,
+  })
 
-const chartPalette = ['#3f51b5', '#00acc1', '#ff9800', '#8bc34a', '#e91e63', '#9c27b0', '#607d8b', '#f44336']
+  const filterOptions = ref({ municipalities: [], courses: [], teachers: [] })
+  const courseItems = computed(() => filterOptions.value.courses || [])
+  const teacherItems = computed(() => filterOptions.value.teachers || [])
 
-const revenueMunicipalityChart = computed(() => ({
-  labels: revenue.value.byMunicipality.map((r) => r.municipality),
-  datasets: [
-    {
-      label: 'Intäkt (kr)',
-      backgroundColor: chartPalette[0],
-      data: revenue.value.byMunicipality.map((r) => r.revenue),
-    },
-  ],
-}))
+  const forecastMonths = ref(3)
+  const studentGroupBy = ref('month')
 
-const revenueCourseChart = computed(() => ({
-  labels: revenue.value.byCourse.map((r) => r.course),
-  datasets: [
-    {
-      label: 'Intäkt (kr)',
-      backgroundColor: chartPalette[1],
-      data: revenue.value.byCourse.map((r) => r.revenue),
-    },
-  ],
-}))
+  const loading = reactive({
+    revenue: false,
+    forecast: false,
+    students: false,
+    grades: false,
+    popular: false,
+    dropouts: false,
+  })
 
-const forecastChart = computed(() => {
-  const combined = [...forecast.value.history, ...forecast.value.forecast]
-  return {
-    labels: combined.map((r) => r.month),
+  const revenue = ref({ totalRevenue: 0, byMunicipality: [], byCourse: [] })
+  const forecast = ref({ history: [], forecast: [] })
+  const students = ref([])
+  const grades = ref({ overall: [], perCourse: [] })
+  const showOnlyF = ref(false)
+  const popularCourses = ref([])
+  const dropouts = ref({ byMonth: [], byCourse: [] })
+
+  const isActiveTabLoading = computed(() => !!loading[activeTab.value])
+
+  function buildParams(extra = {}) {
+    const params = {}
+    if (filters.startDate) params.startDate = filters.startDate
+    if (filters.endDate) params.endDate = filters.endDate
+    if (filters.municipality) params.municipality = filters.municipality
+    if (filters.courseId) params.courseId = filters.courseId
+    if (filters.teacherId) params.teacherId = filters.teacherId
+    return { ...params, ...extra }
+  }
+
+  async function safeGet(path, params, tabKey) {
+    try {
+      const res = await api.get(path, { params })
+      if (tabKey) tabErrors[tabKey] = ''
+      return res.data
+    } catch (err) {
+      console.error(`❌ Failed to load ${path}:`, err)
+      if (tabKey) tabErrors[tabKey] = 'Kunde inte hämta rapportdata. Försök igen.'
+      throw err
+    }
+  }
+
+  async function loadFilterOptions() {
+    try {
+      filterOptions.value = await safeGet('/analytics/filters')
+    } catch {
+      // error already surfaced via safeGet
+    }
+  }
+
+  async function loadRevenue() {
+    loading.revenue = true
+    tabErrors.revenue = ''
+    try {
+      revenue.value = await safeGet('/analytics/revenue', buildParams(), 'revenue')
+    } catch {
+      // handled
+    } finally {
+      loading.revenue = false
+    }
+  }
+
+  async function loadForecast() {
+    loading.forecast = true
+    tabErrors.forecast = ''
+    try {
+      forecast.value = await safeGet(
+        '/analytics/forecast',
+        buildParams({ forecastMonths: forecastMonths.value }),
+        'forecast'
+      )
+    } catch {
+      // handled
+    } finally {
+      loading.forecast = false
+    }
+  }
+
+  async function loadStudents() {
+    loading.students = true
+    tabErrors.students = ''
+    try {
+      students.value = await safeGet(
+        '/analytics/students',
+        buildParams({ groupBy: studentGroupBy.value }),
+        'students'
+      )
+    } catch {
+      // handled
+    } finally {
+      loading.students = false
+    }
+  }
+
+  async function loadGrades() {
+    loading.grades = true
+    tabErrors.grades = ''
+    try {
+      grades.value = await safeGet('/analytics/grades', buildParams(), 'grades')
+    } catch {
+      // handled
+    } finally {
+      loading.grades = false
+    }
+  }
+
+  async function loadPopular() {
+    loading.popular = true
+    tabErrors.popular = ''
+    try {
+      popularCourses.value = await safeGet('/analytics/popular-courses', buildParams(), 'popular')
+    } catch {
+      // handled
+    } finally {
+      loading.popular = false
+    }
+  }
+
+  async function loadDropouts() {
+    loading.dropouts = true
+    tabErrors.dropouts = ''
+    try {
+      dropouts.value = await safeGet('/analytics/dropouts', buildParams(), 'dropouts')
+    } catch {
+      // handled
+    } finally {
+      loading.dropouts = false
+    }
+  }
+
+  const tabLoaders = {
+    revenue: loadRevenue,
+    forecast: loadForecast,
+    students: loadStudents,
+    grades: loadGrades,
+    popular: loadPopular,
+    dropouts: loadDropouts,
+  }
+
+  async function loadActiveTab() {
+    tabErrors[activeTab.value] = ''
+    await tabLoaders[activeTab.value]?.()
+  }
+
+  watch(activeTab, (tab) => {
+    tabErrors[tab] = ''
+    tabLoaders[tab]?.()
+  })
+
+  function resetFilters() {
+    filters.startDate = ''
+    filters.endDate = ''
+    filters.municipality = null
+    filters.courseId = null
+    filters.teacherId = null
+    loadActiveTab()
+  }
+
+  onMounted(async () => {
+    Object.keys(tabErrors).forEach((k) => (tabErrors[k] = ''))
+    await loadFilterOptions()
+    await Promise.all([
+      loadRevenue(),
+      loadForecast(),
+      loadStudents(),
+      loadGrades(),
+      loadPopular(),
+      loadDropouts(),
+    ])
+  })
+
+  function formatCurrency(value) {
+    return new Intl.NumberFormat('sv-SE', {
+      style: 'currency',
+      currency: 'SEK',
+      maximumFractionDigits: 0,
+    }).format(value || 0)
+  }
+
+  const studentGroupLabel = computed(() => {
+    const labels = { month: 'Månad', teacher: 'Lärare', course: 'Kurs', semester: 'Termin' }
+    return labels[studentGroupBy.value] || 'Grupp'
+  })
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: { legend: { display: true } },
+  }
+
+  const chartPalette = [
+    '#3f51b5',
+    '#00acc1',
+    '#ff9800',
+    '#8bc34a',
+    '#e91e63',
+    '#9c27b0',
+    '#607d8b',
+    '#f44336',
+  ]
+
+  const revenueMunicipalityChart = computed(() => ({
+    labels: revenue.value.byMunicipality.map((r) => r.municipality),
     datasets: [
       {
         label: 'Intäkt (kr)',
-        borderColor: chartPalette[0],
-        backgroundColor: 'rgba(63,81,181,0.2)',
-        data: combined.map((r) => r.revenue),
-        segment: {
-          borderDash: (ctx) => (combined[ctx.p1DataIndex]?.projected ? [6, 6] : undefined),
-        },
+        backgroundColor: chartPalette[0],
+        data: revenue.value.byMunicipality.map((r) => r.revenue),
       },
     ],
+  }))
+
+  const revenueCourseChart = computed(() => ({
+    labels: revenue.value.byCourse.map((r) => r.course),
+    datasets: [
+      {
+        label: 'Intäkt (kr)',
+        backgroundColor: chartPalette[1],
+        data: revenue.value.byCourse.map((r) => r.revenue),
+      },
+    ],
+  }))
+
+  const forecastChart = computed(() => {
+    const combined = [...forecast.value.history, ...forecast.value.forecast]
+    return {
+      labels: combined.map((r) => r.month),
+      datasets: [
+        {
+          label: 'Intäkt (kr)',
+          borderColor: chartPalette[0],
+          backgroundColor: 'rgba(63,81,181,0.2)',
+          data: combined.map((r) => r.revenue),
+          segment: {
+            borderDash: (ctx) => (combined[ctx.p1DataIndex]?.projected ? [6, 6] : undefined),
+          },
+        },
+      ],
+    }
+  })
+
+  const studentsChart = computed(() => ({
+    labels: students.value.map((r) => r.label),
+    datasets: [
+      {
+        label: 'Inskrivningar',
+        backgroundColor: chartPalette[2],
+        data: students.value.map((r) => r.enrollments),
+      },
+      {
+        label: 'Unika elever',
+        backgroundColor: chartPalette[3],
+        data: students.value.map((r) => r.uniqueStudents),
+      },
+    ],
+  }))
+
+  const gradesOverallChart = computed(() => ({
+    labels: grades.value.overall.map((g) => g.grade),
+    datasets: [
+      {
+        backgroundColor: chartPalette,
+        data: grades.value.overall.map((g) => g.count),
+      },
+    ],
+  }))
+
+  const filteredGradesOverall = computed(() => {
+    if (!showOnlyF.value) return grades.value.overall
+    return grades.value.overall.filter((g) => g.grade === 'F')
+  })
+
+  const filteredGradesPerCourse = computed(() => {
+    if (!showOnlyF.value) return grades.value.perCourse
+    return grades.value.perCourse
+      .map((row) => ({
+        ...row,
+        grades: row.grades.filter((g) => g.grade === 'F'),
+        total: row.grades.filter((g) => g.grade === 'F').reduce((s, g) => s + g.count, 0),
+      }))
+      .filter((row) => row.total > 0)
+  })
+
+  const fGradePercentage = computed(() => {
+    const total = grades.value.overall.reduce((s, g) => s + g.count, 0)
+    if (total === 0) return 0
+    const fCount = grades.value.overall.find((g) => g.grade === 'F')?.count || 0
+    return Math.round((fCount / total) * 100)
+  })
+
+  const filteredOverallChart = computed(() => ({
+    labels: filteredGradesOverall.value.map((g) => g.grade),
+    datasets: [
+      {
+        backgroundColor: chartPalette,
+        data: filteredGradesOverall.value.map((g) => g.count),
+      },
+    ],
+  }))
+
+  const popularChart = computed(() => ({
+    labels: popularCourses.value.map((r) => r.course),
+    datasets: [
+      {
+        label: 'Inskrivningar',
+        backgroundColor: chartPalette[4],
+        data: popularCourses.value.map((r) => r.enrollments),
+      },
+    ],
+  }))
+
+  const dropoutsMonthChart = computed(() => ({
+    labels: dropouts.value.byMonth.map((r) => r.month),
+    datasets: [
+      {
+        label: 'Avbrottsandel (%)',
+        borderColor: chartPalette[5],
+        backgroundColor: 'rgba(156,39,176,0.2)',
+        data: dropouts.value.byMonth.map((r) => r.rate),
+      },
+    ],
+  }))
+
+  // --- Export handlers ---
+  function exportRevenueCSV() {
+    exportToCSV(
+      'intakter-per-kommun-och-kurs.csv',
+      ['Kommun', 'Intäkt'],
+      revenue.value.byMunicipality.map((r) => [r.municipality, r.revenue])
+    )
   }
-})
+  function exportRevenuePDF() {
+    exportToPDF(
+      'intakter-per-kommun.pdf',
+      'Intäkter per kommun',
+      ['Kommun', 'Intäkt'],
+      revenue.value.byMunicipality.map((r) => [r.municipality, formatCurrency(r.revenue)])
+    )
+  }
 
-const studentsChart = computed(() => ({
-  labels: students.value.map((r) => r.label),
-  datasets: [
-    {
-      label: 'Inskrivningar',
-      backgroundColor: chartPalette[2],
-      data: students.value.map((r) => r.enrollments),
-    },
-    {
-      label: 'Unika elever',
-      backgroundColor: chartPalette[3],
-      data: students.value.map((r) => r.uniqueStudents),
-    },
-  ],
-}))
+  function exportForecastCSV() {
+    exportToCSV(
+      'intaktsprognos.csv',
+      ['Månad', 'Intäkt', 'Typ'],
+      [...forecast.value.history, ...forecast.value.forecast].map((r) => [
+        r.month,
+        r.revenue,
+        r.projected ? 'Prognos' : 'Faktisk',
+      ])
+    )
+  }
+  function exportForecastPDF() {
+    exportToPDF(
+      'intaktsprognos.pdf',
+      'Intäktsprognos',
+      ['Månad', 'Intäkt', 'Typ'],
+      [...forecast.value.history, ...forecast.value.forecast].map((r) => [
+        r.month,
+        formatCurrency(r.revenue),
+        r.projected ? 'Prognos' : 'Faktisk',
+      ])
+    )
+  }
 
-const gradesOverallChart = computed(() => ({
-  labels: grades.value.overall.map((g) => g.grade),
-  datasets: [
-    {
-      backgroundColor: chartPalette,
-      data: grades.value.overall.map((g) => g.count),
-    },
-  ],
-}))
+  function exportStudentsCSV() {
+    exportToCSV(
+      'elevrapport.csv',
+      [
+        studentGroupLabel.value,
+        'Inskrivningar',
+        'Unika elever',
+        'Aktiva',
+        'Nya',
+        'Klara',
+        'Avbrott',
+      ],
+      students.value.map((r) => [
+        r.label,
+        r.enrollments,
+        r.uniqueStudents,
+        r.active || 0,
+        r.new || 0,
+        r.completions || 0,
+        r.dropouts || 0,
+      ])
+    )
+  }
+  function exportStudentsPDF() {
+    exportToPDF(
+      'elevrapport.pdf',
+      'Elevrapport',
+      [
+        studentGroupLabel.value,
+        'Inskrivningar',
+        'Unika elever',
+        'Aktiva',
+        'Nya',
+        'Klara',
+        'Avbrott',
+      ],
+      students.value.map((r) => [
+        r.label,
+        r.enrollments,
+        r.uniqueStudents,
+        r.active || 0,
+        r.new || 0,
+        r.completions || 0,
+        r.dropouts || 0,
+      ])
+    )
+  }
 
-const filteredGradesOverall = computed(() => {
-  if (!showOnlyF.value) return grades.value.overall
-  return grades.value.overall.filter((g) => g.grade === 'F')
-})
+  function exportGradesCSV() {
+    exportToCSV(
+      'betygsfordelning.csv',
+      ['Kurs', 'Betyg', 'Antal'],
+      grades.value.perCourse.flatMap((row) => row.grades.map((g) => [row.course, g.grade, g.count]))
+    )
+  }
+  function exportGradesPDF() {
+    exportToPDF(
+      'betygsfordelning.pdf',
+      'Betygsfördelning per kurs',
+      ['Kurs', 'Betyg', 'Antal'],
+      grades.value.perCourse.flatMap((row) => row.grades.map((g) => [row.course, g.grade, g.count]))
+    )
+  }
 
-const filteredGradesPerCourse = computed(() => {
-  if (!showOnlyF.value) return grades.value.perCourse
-  return grades.value.perCourse
-    .map((row) => ({
-      ...row,
-      grades: row.grades.filter((g) => g.grade === 'F'),
-      total: row.grades.filter((g) => g.grade === 'F').reduce((s, g) => s + g.count, 0),
-    }))
-    .filter((row) => row.total > 0)
-})
+  function exportPopularCSV() {
+    exportToCSV(
+      'populara-kurser.csv',
+      ['Kurs', 'Inskrivningar', 'Avslutade', 'Betygsatta'],
+      popularCourses.value.map((r) => [r.course, r.enrollments, r.completed, r.graded])
+    )
+  }
+  function exportPopularPDF() {
+    exportToPDF(
+      'populara-kurser.pdf',
+      'Populära kurser',
+      ['Kurs', 'Inskrivningar', 'Avslutade', 'Betygsatta'],
+      popularCourses.value.map((r) => [r.course, r.enrollments, r.completed, r.graded])
+    )
+  }
 
-const fGradePercentage = computed(() => {
-  const total = grades.value.overall.reduce((s, g) => s + g.count, 0)
-  if (total === 0) return 0
-  const fCount = grades.value.overall.find((g) => g.grade === 'F')?.count || 0
-  return Math.round((fCount / total) * 100)
-})
-
-const filteredOverallChart = computed(() => ({
-  labels: filteredGradesOverall.value.map((g) => g.grade),
-  datasets: [
-    {
-      backgroundColor: chartPalette,
-      data: filteredGradesOverall.value.map((g) => g.count),
-    },
-  ],
-}))
-
-const popularChart = computed(() => ({
-  labels: popularCourses.value.map((r) => r.course),
-  datasets: [
-    {
-      label: 'Inskrivningar',
-      backgroundColor: chartPalette[4],
-      data: popularCourses.value.map((r) => r.enrollments),
-    },
-  ],
-}))
-
-const dropoutsMonthChart = computed(() => ({
-  labels: dropouts.value.byMonth.map((r) => r.month),
-  datasets: [
-    {
-      label: 'Avbrottsandel (%)',
-      borderColor: chartPalette[5],
-      backgroundColor: 'rgba(156,39,176,0.2)',
-      data: dropouts.value.byMonth.map((r) => r.rate),
-    },
-  ],
-}))
-
-// --- Export handlers ---
-function exportRevenueCSV() {
-  exportToCSV(
-    'intakter-per-kommun-och-kurs.csv',
-    ['Kommun', 'Intäkt'],
-    revenue.value.byMunicipality.map((r) => [r.municipality, r.revenue]),
-  )
-}
-function exportRevenuePDF() {
-  exportToPDF(
-    'intakter-per-kommun.pdf',
-    'Intäkter per kommun',
-    ['Kommun', 'Intäkt'],
-    revenue.value.byMunicipality.map((r) => [r.municipality, formatCurrency(r.revenue)]),
-  )
-}
-
-function exportForecastCSV() {
-  exportToCSV(
-    'intaktsprognos.csv',
-    ['Månad', 'Intäkt', 'Typ'],
-    [...forecast.value.history, ...forecast.value.forecast].map((r) => [
-      r.month,
-      r.revenue,
-      r.projected ? 'Prognos' : 'Faktisk',
-    ]),
-  )
-}
-function exportForecastPDF() {
-  exportToPDF(
-    'intaktsprognos.pdf',
-    'Intäktsprognos',
-    ['Månad', 'Intäkt', 'Typ'],
-    [...forecast.value.history, ...forecast.value.forecast].map((r) => [
-      r.month,
-      formatCurrency(r.revenue),
-      r.projected ? 'Prognos' : 'Faktisk',
-    ]),
-  )
-}
-
-function exportStudentsCSV() {
-  exportToCSV(
-    'elevrapport.csv',
-    [studentGroupLabel.value, 'Inskrivningar', 'Unika elever', 'Aktiva', 'Nya', 'Klara', 'Avbrott'],
-    students.value.map((r) => [r.label, r.enrollments, r.uniqueStudents, r.active || 0, r.new || 0, r.completions || 0, r.dropouts || 0]),
-  )
-}
-function exportStudentsPDF() {
-  exportToPDF(
-    'elevrapport.pdf',
-    'Elevrapport',
-    [studentGroupLabel.value, 'Inskrivningar', 'Unika elever', 'Aktiva', 'Nya', 'Klara', 'Avbrott'],
-    students.value.map((r) => [r.label, r.enrollments, r.uniqueStudents, r.active || 0, r.new || 0, r.completions || 0, r.dropouts || 0]),
-  )
-}
-
-function exportGradesCSV() {
-  exportToCSV(
-    'betygsfordelning.csv',
-    ['Kurs', 'Betyg', 'Antal'],
-    grades.value.perCourse.flatMap((row) => row.grades.map((g) => [row.course, g.grade, g.count])),
-  )
-}
-function exportGradesPDF() {
-  exportToPDF(
-    'betygsfordelning.pdf',
-    'Betygsfördelning per kurs',
-    ['Kurs', 'Betyg', 'Antal'],
-    grades.value.perCourse.flatMap((row) => row.grades.map((g) => [row.course, g.grade, g.count])),
-  )
-}
-
-function exportPopularCSV() {
-  exportToCSV(
-    'populara-kurser.csv',
-    ['Kurs', 'Inskrivningar', 'Avslutade', 'Betygsatta'],
-    popularCourses.value.map((r) => [r.course, r.enrollments, r.completed, r.graded]),
-  )
-}
-function exportPopularPDF() {
-  exportToPDF(
-    'populara-kurser.pdf',
-    'Populära kurser',
-    ['Kurs', 'Inskrivningar', 'Avslutade', 'Betygsatta'],
-    popularCourses.value.map((r) => [r.course, r.enrollments, r.completed, r.graded]),
-  )
-}
-
-function exportDropoutsCSV() {
-  exportToCSV(
-    'avbrottsrapport.csv',
-    ['Månad', 'Avbrott', 'Totalt', 'Andel (%)'],
-    dropouts.value.byMonth.map((r) => [r.month, r.dropouts, r.total, r.rate]),
-  )
-}
-function exportDropoutsPDF() {
-  exportToPDF(
-    'avbrottsrapport.pdf',
-    'Avbrottsrapport per månad',
-    ['Månad', 'Avbrott', 'Totalt', 'Andel (%)'],
-    dropouts.value.byMonth.map((r) => [r.month, r.dropouts, r.total, `${r.rate}%`]),
-  )
-}
+  function exportDropoutsCSV() {
+    exportToCSV(
+      'avbrottsrapport.csv',
+      ['Månad', 'Avbrott', 'Totalt', 'Andel (%)'],
+      dropouts.value.byMonth.map((r) => [r.month, r.dropouts, r.total, r.rate])
+    )
+  }
+  function exportDropoutsPDF() {
+    exportToPDF(
+      'avbrottsrapport.pdf',
+      'Avbrottsrapport per månad',
+      ['Månad', 'Avbrott', 'Totalt', 'Andel (%)'],
+      dropouts.value.byMonth.map((r) => [r.month, r.dropouts, r.total, `${r.rate}%`])
+    )
+  }
 </script>
 
 <style scoped>
-.analytics-dashboard {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem;
-}
+  .analytics-dashboard {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+  }
 
-.analytics-dashboard :deep(.dp__input) {
-  height: 40px;
-  border-radius: 4px;
-  font-size: 14px;
-  padding: 0 12px;
-}
+  .analytics-dashboard :deep(.dp__input) {
+    height: 40px;
+    border-radius: 4px;
+    font-size: 14px;
+    padding: 0 12px;
+  }
 
-.analytics-dashboard :deep(.dp__input:focus) {
-  border-color: rgb(var(--v-theme-primary));
-  box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
-}
+  .analytics-dashboard :deep(.dp__input:focus) {
+    border-color: rgb(var(--v-theme-primary));
+    box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
+  }
 
-.analytics-dashboard :deep(.dp__main) {
-  font-family: inherit;
-}
+  .analytics-dashboard :deep(.dp__main) {
+    font-family: inherit;
+  }
 
-.analytics-dashboard :deep(.dp__input::placeholder) {
-  color: rgba(0, 0, 0, 0.6);
-  opacity: 1;
-}
+  .analytics-dashboard :deep(.dp__input::placeholder) {
+    color: rgba(0, 0, 0, 0.6);
+    opacity: 1;
+  }
 
-.analytics-dashboard :deep(.v-field) {
-  min-height: 40px;
-}
+  .analytics-dashboard :deep(.v-field) {
+    min-height: 40px;
+  }
 
-.analytics-dashboard :deep(.v-field__input) {
-  min-height: 40px;
-  padding-top: 4px;
-}
+  .analytics-dashboard :deep(.v-field__input) {
+    min-height: 40px;
+    padding-top: 4px;
+  }
 </style>

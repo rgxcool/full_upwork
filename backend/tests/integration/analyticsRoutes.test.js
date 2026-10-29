@@ -107,6 +107,30 @@ describe("Analytics Routes Integration Tests", () => {
             expect(res.body).toHaveProperty("courses");
             expect(res.body).toHaveProperty("teachers");
         });
+
+        it("uses the linked username when a teacher's name is unset", async () => {
+            const user = await User.create({
+                username: "Alex Teacher",
+                email: "alex.teacher@example.com",
+                password: "test-password",
+                roles: ["teacher"],
+            });
+            const teacher = await Teacher.create({
+                userId: user._id,
+                subject: "Matematik",
+            });
+
+            const res = await request(app)
+                .get("/api/analytics/filters")
+                .set(buildAuthHeader("admin"))
+                .expect(200);
+
+            expect(res.body.teachers).toContainEqual({
+                id: teacher._id.toString(),
+                name: "Alex Teacher",
+                subject: "Matematik",
+            });
+        });
     });
 
     describe("Reporting Endpoints", () => {

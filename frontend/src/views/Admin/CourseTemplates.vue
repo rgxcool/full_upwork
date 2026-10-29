@@ -4,12 +4,15 @@
       <v-card class="pa-5">
         <div class="d-flex align-center justify-space-between">
           <v-card-title class="text-h4 font-weight-bold pa-0">Kursmallar</v-card-title>
-          <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">
-            Ny kursmall
-          </v-btn>
+          <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Ny kursmall</v-btn>
         </div>
 
-        <v-progress-linear v-if="loading" indeterminate color="primary" class="my-5"></v-progress-linear>
+        <v-progress-linear
+          v-if="loading"
+          indeterminate
+          color="primary"
+          class="my-5"
+        ></v-progress-linear>
 
         <v-alert v-else-if="error" type="error" class="my-3">{{ error }}</v-alert>
 
@@ -71,32 +74,45 @@
             />
 
             <v-select
+              ref="courseSelect"
               v-model="form.courseId"
               :items="courseOptions"
               label="Kurs (valfritt)"
               item-title="title"
               item-value="value"
+              :menu-props="{
+                location: 'bottom',
+                origin: 'top',
+                locationStrategy: 'connected',
+                contentClass: 'course-template-menu',
+                zIndex: 10000,
+                maxHeight: 300,
+              }"
               clearable
+              @update:menu="(open) => positionDropdown(open, courseSelect)"
             />
 
             <v-divider class="my-4"></v-divider>
 
             <div class="d-flex align-center justify-space-between mb-2">
               <h4 class="text-subtitle-1 font-weight-bold">Moduler (5 × 2 sektioner)</h4>
-              <div class="text-caption text-grey">
-                Modul 3 = delprov, Modul 5 = case study
-              </div>
+              <div class="text-caption text-grey">Modul 3 = delprov, Modul 5 = case study</div>
             </div>
 
             <div
               v-for="(module, moduleIndex) in form.modules"
               :key="moduleIndex"
               class="module-block pa-3 mb-3"
-              :class="{ 'module-partial-exam': module.isPartialExam, 'module-case-study': module.isCaseStudy }"
+              :class="{
+                'module-partial-exam': module.isPartialExam,
+                'module-case-study': module.isCaseStudy,
+              }"
             >
               <div class="d-flex align-center justify-space-between">
                 <div class="d-flex align-center ga-3">
-                  <v-chip size="small" color="primary" variant="tonal">Modul {{ module.moduleNumber }}</v-chip>
+                  <v-chip size="small" color="primary" variant="tonal">
+                    Modul {{ module.moduleNumber }}
+                  </v-chip>
                   <v-text-field
                     v-model="module.title"
                     label="Modultitel"
@@ -106,12 +122,8 @@
                   />
                 </div>
                 <div class="d-flex ga-2">
-                  <v-chip v-if="module.isPartialExam" size="small" color="warning">
-                    Delprov
-                  </v-chip>
-                  <v-chip v-if="module.isCaseStudy" size="small" color="info">
-                    Case study
-                  </v-chip>
+                  <v-chip v-if="module.isPartialExam" size="small" color="warning">Delprov</v-chip>
+                  <v-chip v-if="module.isCaseStudy" size="small" color="info">Case study</v-chip>
                 </div>
               </div>
 
@@ -198,7 +210,8 @@
       <v-card>
         <v-card-title>Ta bort kursmall</v-card-title>
         <v-card-text>
-          Är du säker på att du vill ta bort "{{ pendingDelete?.templateName }}"? Detta kan inte ångras.
+          Är du säker på att du vill ta bort "{{ pendingDelete?.templateName }}"? Detta kan inte
+          ångras.
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -211,7 +224,7 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted } from 'vue'
+  import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
 
@@ -222,6 +235,43 @@
   const loading = ref(true)
   const error = ref(null)
   const showModal = ref(false)
+  const courseSelect = ref(null)
+  let courseMenuOpen = false
+
+  const updateCourseMenuPosition = () => {
+    if (!courseMenuOpen) return
+    const anchor = courseSelect.value?.$el?.querySelector('.v-field')
+    const menu = document.querySelector('.course-template-menu')
+    if (!anchor || !menu) return
+
+    const rect = anchor.getBoundingClientRect()
+    menu.style.setProperty('position', 'fixed', 'important')
+    menu.style.setProperty('top', `${rect.bottom}px`, 'important')
+    menu.style.setProperty('left', `${rect.left}px`, 'important')
+    menu.style.setProperty('width', `${rect.width}px`, 'important')
+    menu.style.setProperty('margin', '0', 'important')
+    menu.style.setProperty('transform', 'none', 'important')
+    menu.style.setProperty('pointer-events', 'auto', 'important')
+    menu.style.setProperty('z-index', '10000', 'important')
+  }
+
+  const positionDropdown = async (open) => {
+    courseMenuOpen = open
+    if (!open) {
+      window.removeEventListener('scroll', updateCourseMenuPosition, true)
+      window.removeEventListener('resize', updateCourseMenuPosition)
+      return
+    }
+    await nextTick()
+    requestAnimationFrame(updateCourseMenuPosition)
+    window.addEventListener('scroll', updateCourseMenuPosition, true)
+    window.addEventListener('resize', updateCourseMenuPosition)
+  }
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('scroll', updateCourseMenuPosition, true)
+    window.removeEventListener('resize', updateCourseMenuPosition)
+  })
   const showDeleteModal = ref(false)
   const editing = ref(null)
   const pendingDelete = ref(null)
@@ -361,7 +411,9 @@
     deleting.value = true
     try {
       await client.delete(`/course-templates/${pendingDelete.value._id}`)
-      templates.value = templates.value.filter((template) => template._id !== pendingDelete.value._id)
+      templates.value = templates.value.filter(
+        (template) => template._id !== pendingDelete.value._id
+      )
       showDeleteModal.value = false
       toast.success('Kursmallen togs bort.')
     } catch (err) {
