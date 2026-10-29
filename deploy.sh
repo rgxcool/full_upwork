@@ -94,22 +94,34 @@ echo "⏳ Waiting for backend to start..."
 sleep 3
 
 echo "🏥 Running health checks..."
-# Liveness check
+# Liveness check (with retries)
 if command -v curl >/dev/null 2>&1; then
-  if curl -sf "http://localhost:${BACKEND_PORT}/health/live" >/dev/null 2>&1; then
-    echo "✓ Liveness check passed (/health/live)"
-  else
-    echo "❌ Liveness check failed (/health/live)"
-    exit 1
-  fi
+  for i in 1 2 3 4 5; do
+    if curl -sf "http://localhost:${BACKEND_PORT}/health/live" >/dev/null 2>&1; then
+      echo "✓ Liveness check passed (/health/live)"
+      break
+    fi
+    echo "⏳ Waiting for liveness... attempt $i"
+    sleep 2
+    if [ "$i" -eq 5 ]; then
+      echo "❌ Liveness check failed (/health/live)"
+      exit 1
+    fi
+  done
 
-  # Readiness check (confirms DB connectivity)
-  if curl -sf "http://localhost:${BACKEND_PORT}/health/ready" >/dev/null 2>&1; then
-    echo "✓ Readiness check passed (/health/ready) - DB connected"
-  else
-    echo "❌ Readiness check failed (/health/ready) - service not ready (may indicate DB connectivity issue)"
-    exit 1
-  fi
+  # Readiness check (confirms DB connectivity) with retries
+  for i in 1 2 3 4 5; do
+    if curl -sf "http://localhost:${BACKEND_PORT}/health/ready" >/dev/null 2>&1; then
+      echo "✓ Readiness check passed (/health/ready) - DB connected"
+      break
+    fi
+    echo "⏳ Waiting for readiness... attempt $i"
+    sleep 2
+    if [ "$i" -eq 5 ]; then
+      echo "❌ Readiness check failed (/health/ready) - service not ready (may indicate DB connectivity issue)"
+      exit 1
+    fi
+  done
 else
   echo "⚠️  curl not available - skipping HTTP health checks"
   echo "⚠️  Verify manually: curl -f http://localhost:${BACKEND_PORT}/health/live and /health/ready"
