@@ -35,7 +35,13 @@ describe('Vuex Store', () => {
             expect(store.getters.userRole).toBe('admin')
 
             store.replaceState({ user: { roles: ['teacher', 'admin'] }, tasks: [] })
-            expect(store.getters.userRole).toBe('teacher')
+            expect(store.getters.userRole).toBe('admin')
+
+            store.replaceState({ user: { roles: ['user', 'systemadmin'] }, tasks: [] })
+            expect(store.getters.userRole).toBe('systemadmin')
+
+            store.replaceState({ user: { role: 'systemadmin', roles: ['user'] }, tasks: [] })
+            expect(store.getters.userRole).toBe('systemadmin')
 
             store.replaceState({ user: {}, tasks: [] })
             expect(store.getters.userRole).toBe('guest')

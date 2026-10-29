@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { roleRank, hasCommentPermission } from "../../src/utils/roles.js";
+import { roleRank, hasCommentPermission, getPrimaryRole } from "../../src/utils/roles.js";
 
 describe("roles utilities", () => {
     it("exposes the expected role ranking", () => {
@@ -23,5 +23,25 @@ describe("roles utilities", () => {
     it("gracefully handles unknown roles", () => {
         expect(hasCommentPermission("mystery"))
             .toBe(false);
+    });
+
+    it("getPrimaryRole picks the highest role in the array", () => {
+        expect(getPrimaryRole({ roles: ["user", "systemadmin"] })).toBe("systemadmin");
+        expect(getPrimaryRole({ roles: ["teacher", "admin"] })).toBe("admin");
+        expect(getPrimaryRole({ roles: ["systemadmin"] })).toBe("systemadmin");
+    });
+
+    it("getPrimaryRole falls back to singular role or guest", () => {
+        expect(getPrimaryRole({ role: "admin", roles: [] })).toBe("admin");
+        expect(getPrimaryRole({ roles: [] })).toBe("guest");
+    });
+
+    it("getPrimaryRole prefers a stored Mongo role over default roles[0]", () => {
+        expect(getPrimaryRole({ roles: ["user"], role: "systemadmin" })).toBe("systemadmin");
+        expect(getPrimaryRole({
+            roles: ["user"],
+            role: "user",
+            _doc: { role: "systemadmin", roles: ["user"] },
+        })).toBe("systemadmin");
     });
 });

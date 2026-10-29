@@ -7,8 +7,11 @@
         </v-card-title>
         <v-card-subtitle class="pb-4">
           Hantera poänggränser (min-poäng → betyg) per termin (t.ex. HT24) och ämne
-          (Engelska/Svenska/Matematik). Skalan ändras årligen och visas som
-          förslag när en lärare sätter nationella prov-poäng.
+          (Engelska/Svenska/Matematik).
+          <br />
+          Skalan ändras årligen och visas som förslag
+          <br />
+          när en lärare sätter nationella prov-poäng.
         </v-card-subtitle>
 
         <v-alert v-if="error" type="error" class="mb-4" dense>{{ error }}</v-alert>
@@ -66,22 +69,46 @@
 
       <v-dialog v-model="showDialog" max-width="560px">
         <v-card>
-          <v-card-title>{{ editingId ? 'Redigera betygsskala' : 'Lägg till betygsskala' }}</v-card-title>
+          <v-card-title>
+            {{ editingId ? 'Redigera betygsskala' : 'Lägg till betygsskala' }}
+          </v-card-title>
           <v-card-text>
             <v-form @submit.prevent="saveScale">
               <v-autocomplete
+                class="grading-scale-term-select"
                 v-model="form.term"
                 :items="terms"
                 label="Termin * (t.ex. HT24)"
                 variant="outlined"
                 hint="HT = hösttermin, VT = vårtermin"
+                :menu-props="{
+                  location: 'bottom',
+                  origin: 'top',
+                  locationStrategy: gradingScaleLocationStrategy,
+                  attach: 'body',
+                  target: '.grading-scale-term-select .v-field',
+                  contentClass: 'grading-scale-term-menu',
+                  zIndex: 10000,
+                  maxHeight: 300,
+                }"
                 @update:search="onTermSearch"
               />
               <v-select
+                class="grading-scale-subject-select"
                 v-model="form.subject"
                 :items="nationalSubjects"
                 label="Ämne *"
                 variant="outlined"
+                :menu-props="{
+                  location: 'bottom',
+                  origin: 'top',
+                  locationStrategy: gradingScaleLocationStrategy,
+                  attach: 'body',
+                  target: '.grading-scale-subject-select .v-field',
+                  contentClass: 'grading-scale-subject-menu',
+                  zIndex: 10000,
+                  maxHeight: 300,
+                }"
               />
               <p class="text-body-2 mb-2">Min-poäng för respektive betyg (F = under E:s gräns):</p>
               <div v-for="g in ['A', 'B', 'C', 'D', 'E']" :key="g" class="threshold-row">
@@ -110,7 +137,7 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted } from 'vue'
+  import { ref, computed, onMounted, onScopeDispose, watch } from 'vue'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
 
@@ -127,8 +154,33 @@
   const editingId = ref(null)
   const form = ref({ term: '', subject: '', thresholds: {} })
 
+  const gradingScaleLocationStrategy = (data, _props, contentStyles) => {
+    const updateLocation = () => {
+      const target = data.target.value
+      const content = data.contentEl.value
+      if (!target || Array.isArray(target) || !content) return
+
+      const rect = target.getBoundingClientRect()
+      Object.assign(contentStyles.value, {
+        position: 'fixed',
+        top: `${rect.bottom}px`,
+        left: `${rect.left}px`,
+        minWidth: `${rect.width}px`,
+        maxWidth: `${Math.max(0, window.innerWidth - rect.left - 12)}px`,
+      })
+    }
+
+    watch([data.target, data.contentEl], updateLocation, { immediate: true })
+    window.addEventListener('scroll', updateLocation, true)
+    onScopeDispose(() => window.removeEventListener('scroll', updateLocation, true))
+
+    return { updateLocation }
+  }
+
   const sortedScales = computed(() =>
-    [...scales.value].sort((a, b) => a.term.localeCompare(b.term) || a.subject.localeCompare(b.subject))
+    [...scales.value].sort(
+      (a, b) => a.term.localeCompare(b.term) || a.subject.localeCompare(b.subject)
+    )
   )
 
   const sortedScaleRows = (scale) =>
@@ -171,7 +223,9 @@
   }
 
   const onTermSearch = (text) => {
-    const candidate = String(text || '').trim().toUpperCase()
+    const candidate = String(text || '')
+      .trim()
+      .toUpperCase()
     if (/^(HT|VT)\d{2}$/.test(candidate) && !terms.value.includes(candidate)) {
       terms.value = [...terms.value, candidate].sort()
     }
@@ -186,12 +240,10 @@
   }
 
   const buildScalePayload = () => {
-    const scale = GRADE_ORDER
-      .map((grade) => ({
-        grade,
-        min: form.value.thresholds[grade],
-      }))
-      .filter((row) => typeof row.min === 'number' && row.min >= 0)
+    const scale = GRADE_ORDER.map((grade) => ({
+      grade,
+      min: form.value.thresholds[grade],
+    })).filter((row) => typeof row.min === 'number' && row.min >= 0)
     return {
       term: String(form.value.term).trim().toUpperCase(),
       subject: form.value.subject,
@@ -217,7 +269,11 @@
   }
 
   const confirmDelete = async (scale) => {
-    if (!confirm(`Är du säker på att du vill ta bort betygsskalan för ${scale.term} ${scale.subject}?`)) {
+    if (
+      !confirm(
+        `Är du säker på att du vill ta bort betygsskalan för ${scale.term} ${scale.subject}?`
+      )
+    ) {
       return
     }
     try {
