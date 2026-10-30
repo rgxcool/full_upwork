@@ -79,7 +79,38 @@ async function getNextAvailableColor() {
  * @param {string} subject - The subject for the teacher (optional)
  * @returns {Object} - { teacher, wasCreated, password }
  */
-export async function createOrFindTeacher(
+const inFlightTeacherLookups = new Map();
+
+/**
+ * Create or find a teacher, deduplicating concurrent lookups by name.
+ *
+ * Bulk student imports resolve many rows in parallel and often contain
+ * several students for the same teacher. Without deduplication those rows
+ * race between the lookup and insert and hit the unique user email index.
+ */
+export function createOrFindTeacher(
+    teacherName,
+    createdByUserId = null,
+    subject = "Övrigt"
+) {
+    const key = teacherName.trim().toLowerCase();
+    if (inFlightTeacherLookups.has(key)) {
+        return inFlightTeacherLookups.get(key);
+    }
+
+    const pending = findOrCreateTeacher(
+        teacherName,
+        createdByUserId,
+        subject
+    ).finally(() => {
+        inFlightTeacherLookups.delete(key);
+    });
+
+    inFlightTeacherLookups.set(key, pending);
+    return pending;
+}
+
+async function findOrCreateTeacher(
     teacherName,
     _createdByUserId = null,
     subject = "Övrigt"
