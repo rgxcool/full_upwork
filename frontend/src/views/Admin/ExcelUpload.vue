@@ -45,6 +45,15 @@
             <button class="btn btn-primary" type="submit">Upload</button>
           </div>
         </form>
+        <div class="template-download">
+          <a
+            href="/excel-upload-template.xlsx"
+            download="excel-upload-template.xlsx"
+            class="btn btn-outline-secondary btn-sm"
+          >
+            Ladda ner Excel-mall
+          </a>
+        </div>
       </div>
       <br />
 
@@ -1317,6 +1326,10 @@
 </script>
 
 <style scoped>
+  .template-download {
+    margin-top: 10px;
+  }
+
   .align-right {
     margin-left: auto; /* Pushes the content to the right */
   }
