@@ -513,4 +513,27 @@ describe('ExcelUpload.vue', () => {
         expect(wrapper.vm.getCourseName({ courseId: {} })).toBe('Unnamed Course');
         expect(wrapper.vm.getCourseName(null)).toBe('No course data');
     });
+
+    it('uploads a user-selected test_mindful_CLEAN.xlsx without a bundled workbook', async () => {
+        const file = new File(
+            ['dummy workbook bytes'],
+            'test_mindful_CLEAN.xlsx',
+            { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+        );
+        wrapper.vm.handleFileUpload({ target: { files: [file] } });
+        expect(wrapper.vm.selectedFileName).toBe('test_mindful_CLEAN.xlsx');
+
+        client.post.mockResolvedValueOnce({ data: { success: true } });
+        const fetchSpy = vi.spyOn(wrapper.vm, 'fetchStudents').mockResolvedValue();
+
+        await wrapper.vm.uploadFile();
+
+        expect(client.post).toHaveBeenCalledTimes(1);
+        const [url, formData, config] = client.post.mock.calls[0];
+        expect(url).toBe('/uploads/upload/xlsxupload');
+        expect(formData).toBeInstanceOf(FormData);
+        expect(formData.get('file').name).toBe('test_mindful_CLEAN.xlsx');
+        expect(config.headers['Content-Type']).toBe('multipart/form-data');
+        expect(fetchSpy).toHaveBeenCalled();
+    });
 });
