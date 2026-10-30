@@ -36,7 +36,6 @@
       </div>
 
       <!-- File upload -->
-      <!--
       <div class="form-container">
         <form @submit.prevent="uploadFile">
           <div class="file-input-wrapper">
@@ -47,7 +46,6 @@
           </div>
         </form>
       </div>
-      -->
       <br />
 
       <div class="controls">
