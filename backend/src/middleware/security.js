@@ -507,10 +507,10 @@ export const corsConfig = {
         // request MUST carry a recognised Origin to prevent CSRF via no-origin
         // tricks.
         if (!origin) {
-            // if (process.env.NODE_ENV === "production") {
-            //    logger.warn("CORS blocked request with no Origin header");
-            //    return callback(new AppError("CORS: No Origin header", 403));
-            // }
+            if (process.env.NODE_ENV === "production") {
+                logger.warn("CORS blocked request with no Origin header");
+                return callback(new AppError("CORS: No Origin header", 403));
+            }
             logger.debug("CORS allowing request with no Origin header (non-production)");
             return callback(null, true);
         }
