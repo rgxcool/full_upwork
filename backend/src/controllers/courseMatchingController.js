@@ -1680,19 +1680,21 @@ export const deleteEnrollmentAndShift = async (req, res) => {
 export const updateStudyplanTempo = async (req, res) => {
     try {
         const { studentId } = req.params;
-        const { tempoWeeks } = req.body;
+        const { tempoWeeks, pace, includeActive } = req.body;
         const userId = req.user?.userId || null;
 
-        const { updatedCount } = await enrollmentService.updateStudyplanTempo({
+        const result = await enrollmentService.updateStudyplanTempo({
             studentId,
             tempoWeeks,
+            pace,
             userId,
+            includeActive: includeActive !== undefined ? includeActive : true,
         });
 
         res.json({
             success: true,
             message: "Study plan tempo updated",
-            updatedCount,
+            ...result,
         });
     } catch (error) {
         if (error.statusCode) {

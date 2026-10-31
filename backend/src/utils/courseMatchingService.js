@@ -458,6 +458,7 @@ class CourseMatchingService {
                             studentDocA?.teacherId || entry.teacherId || null,
                         notes: entry.notes || null,
                         needsSupport: options.needsSupport || false,
+                        pace: Number(options.pace) || 100,
                         examMode: options.examMode || this.getDefaultExamMode(studentDocA?.municipality),
                     });
                     logger.debug({ teacherId: enrollment.teacherId || "null", studentDocTeacherId: studentDocA?.teacherId || "null", entryTeacherId: entry.teacherId || "null" }, "Creating individual course enrollment");

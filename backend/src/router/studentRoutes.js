@@ -523,7 +523,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        const allowedStudentCreateFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses', 'education', 'createdBy', 'specialNeeds', 'teacherId', 'aplStatus', 'exam', 'attendedExam', 'paidExamFee', 'priorAplCompleted', 'priorAplIntygDocId'];
+        const allowedStudentCreateFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses', 'education', 'createdBy', 'specialNeeds', 'teacherId', 'aplStatus', 'exam', 'attendedExam', 'paidExamFee', 'priorAplCompleted', 'priorAplIntygDocId', 'pace'];
         const studentData = {};
         for (const field of allowedStudentCreateFields) {
             if (req.body[field] !== undefined) studentData[field] = req.body[field];
@@ -534,6 +534,20 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
         // break the Sollentuna Lärteamet email trigger below).
         if (typeof studentData.municipality === "string") {
             studentData.municipality = { type: studentData.municipality };
+        }
+
+        // Studietakt is limited to the supported paces. Reject anything else
+        // instead of letting an invalid value reach the date scheduler.
+        if (studentData.pace !== undefined && studentData.pace !== null && studentData.pace !== "") {
+            const pace = Number(studentData.pace);
+            if (![25, 50, 100].includes(pace)) {
+                return res.status(400).json({
+                    error: "Invalid pace. Allowed values are 100, 50 and 25.",
+                });
+            }
+            studentData.pace = pace;
+        } else {
+            delete studentData.pace;
         }
 
         // Backend-enforced tenant write guard: a scoped user may only create /
@@ -596,7 +610,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
                         {
                             needsSupport: req.body.needsSupport,
                             examMode: req.body.examMode,
-                            pace: req.body.pace,
+                            pace: studentData.pace || savedStudent.pace || 100,
                         }
                     );
 
@@ -1143,9 +1157,24 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
         "education",
         "priorAplCompleted",
         "priorAplIntygDocId",
+        "pace",
     ];
 
     const updates = {};
+
+    // Validate pace before it reaches the date scheduler. Invalid values are
+    // rejected instead of being silently ignored.
+    let requestedPace;
+    if (req.body.pace !== undefined && req.body.pace !== null && req.body.pace !== "") {
+        requestedPace = Number(req.body.pace);
+        if (![25, 50, 100].includes(requestedPace)) {
+            return res.status(400).json({
+                error: "Invalid pace. Allowed values are 100, 50 and 25.",
+            });
+        }
+    } else {
+        delete req.body.pace;
+    }
 
     for (const field of allowedFields) {
         if (req.body[field] !== undefined) {
@@ -1172,6 +1201,8 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
         if (!student) {
             return res.status(404).json({ error: "Student not found" });
         }
+
+        const previousPace = student.pace ?? 100;
 
         if (req.body.education) {
             const StudentEnrollment = mongoose.model("StudentEnrollment");
@@ -1312,6 +1343,38 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
             return res.status(404).json({ error: "Student not found" });
         }
 
+        // A pace change must reschedule the study plan and therefore the
+        // exam (slutprov) dates. This runs after the ordinary field update so
+        // the new pace is already persisted when enrollments are rebuilt.
+        let tempoResult = null;
+        if (requestedPace !== undefined && requestedPace !== previousPace) {
+            try {
+                const { updateStudyplanTempo } = await import(
+                    "../services/enrollmentService.js"
+                );
+                tempoResult = await updateStudyplanTempo({
+                    studentId: updatedStudent._id,
+                    pace: requestedPace,
+                    userId: req.user?.userId || null,
+                    includeActive: true,
+                });
+                logger.info(
+                    {
+                        studentId: updatedStudent._id,
+                        previousPace,
+                        requestedPace,
+                        ...tempoResult,
+                    },
+                    "Study pace changed and study plan rescheduled"
+                );
+            } catch (tempoError) {
+                logger.error(
+                    { err: tempoError, studentId: updatedStudent._id },
+                    "Failed to reschedule study plan after pace change"
+                );
+            }
+        }
+
         const StudentEnrollmentModel = mongoose.model("StudentEnrollment");
         const enrollments = await StudentEnrollmentModel.find({
             studentId: updatedStudent._id,
@@ -1356,6 +1419,16 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
 
         const responseData = {
             ...updatedStudent.toObject(),
+            ...(tempoResult
+                ? {
+                      paceReschedule: tempoResult,
+                      endDate:
+                          tempoResult.endDate || updatedStudent.endDate,
+                      finalExamDate:
+                          tempoResult.finalExamDate ||
+                          updatedStudent.finalExamDate,
+                  }
+                : {}),
             education: enrollmentEducation,
             ...(dropoutActionResult ? { dropoutAction: {
                 performed: true,

@@ -325,6 +325,22 @@ export default {
       });
     };
 
+    const paceToTempoWeeks = (pace) => {
+      const value = Number(pace);
+      if (value === 100) return 5;
+      if (value === 50) return 10;
+      if (value === 25) return 20;
+      return null;
+    };
+
+    const tempoWeeksToPace = (tempoWeeks) => {
+      const weeks = Number(tempoWeeks);
+      if (weeks === 5) return 100;
+      if (weeks === 10) return 50;
+      if (weeks === 20) return 25;
+      return null;
+    };
+
     const getTempoFromEducation = (educationArray) => {
       const tempoOptions = [5, 10, 20];
       const counts = new Map(tempoOptions.map((tempo) => [tempo, 0]));
@@ -364,7 +380,11 @@ export default {
           return;
         }
         sortedEducation.value = sortEducation(newStudent.education);
-        selectedTempo.value = getTempoFromEducation(sortedEducation.value);
+        // The student's stored pace is authoritative; fall back to deriving it
+        // from existing course durations for legacy records.
+        selectedTempo.value =
+          paceToTempoWeeks(newStudent?.pace) ||
+          getTempoFromEducation(sortedEducation.value);
       },
       { immediate: true, deep: true }
     );
@@ -599,7 +619,9 @@ export default {
     };
 
     const handleTempoChange = async () => {
-      const currentTempo = getTempoFromEducation(sortedEducation.value);
+      const currentTempo =
+        paceToTempoWeeks(props.student?.pace) ||
+        getTempoFromEducation(sortedEducation.value);
       const nextTempo = Number(selectedTempo.value);
       if (!nextTempo || nextTempo === currentTempo || !props.student?._id) {
         selectedTempo.value = currentTempo;
@@ -607,7 +629,7 @@ export default {
       }
 
       const confirmed = window.confirm(
-        'Är du säker på att du vill ändra studietakten? Endast framtida kurser ändras.'
+        'Är du säker på att du vill ändra studietakten? Kursernas längd och slutprovsdatum räknas om automatiskt.'
       );
       if (!confirmed) {
         selectedTempo.value = currentTempo;
@@ -618,6 +640,8 @@ export default {
       try {
         await client.put(`/students/${props.student._id}/studyplan-tempo`, {
           tempoWeeks: nextTempo,
+          pace: tempoWeeksToPace(nextTempo),
+          includeActive: true,
         });
         const refreshed = await client.get(`/student-details/${props.student._id}`);
         emit('student-updated', refreshed.data);

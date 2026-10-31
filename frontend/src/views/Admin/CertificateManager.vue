@@ -1339,11 +1339,15 @@ const buildPreviewData = () => {
 const previewDoc = computed(() => {
   if (!currentTemplate.value) return ''
   const data = buildPreviewData()
-  const html = renderTemplate(currentTemplate.value.html, data, {
-    showGrade: preview.showGrade,
+  const hasGrade = Boolean(preview.grade && String(preview.grade).trim())
+  let html = renderTemplate(currentTemplate.value.html, data, {
+    showGrade: preview.showGrade && hasGrade,
     showApl: preview.showApl,
     secondSignerEnabled: settings.secondSignerEnabled === true,
   })
+  if (!hasGrade) {
+    html = html.replace(/<span[^>]*class="pill"[^>]*>\s*Betyg:[^<]*<\/span>/gi, "")
+  }
   return html
 })
 
