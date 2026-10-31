@@ -11,9 +11,9 @@
           :disabled="updatingTempo"
           @change="handleTempoChange"
         >
-          <option :value="5">5v (100%)</option>
-          <option :value="10">10v (50%)</option>
-          <option :value="20">20v (25%)</option>
+          <option :value="5">100 % (normal studietakt)</option>
+          <option :value="10">50 % (dubbel tid)</option>
+          <option :value="20">25 % (fyrdubbel tid)</option>
         </select>
       </div>
       <div v-if="student.enrollmentStats" class="header-column header-right enrollment-stats">

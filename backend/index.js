@@ -81,9 +81,21 @@ app.use(securityHeaders);
 // Apply request timeout (30 seconds)
 app.use(requestTimeout(30));
 
-// Apply CORS with enhanced configuration
+// Apply CORS with enhanced configuration.
+// Infrastructure probes (health/metrics) are GET-only, never read auth
+// cookies and are called by orchestrators that do not send an Origin header.
+// They must bypass the strict production no-Origin rule, otherwise container
+// and load-balancer health checks fail with 403.
 import cors from "cors";
-app.use(cors(corsConfig));
+const isCorsExemptPath = (path) =>
+    path === "/health" || path.startsWith("/health/") || path === "/metrics";
+const corsOptionsDelegate = (req, callback) => {
+    if (isCorsExemptPath(req.path) && !req.headers.origin) {
+        return callback(null, { ...corsConfig, origin: true });
+    }
+    return callback(null, corsConfig);
+};
+app.use(cors(corsOptionsDelegate));
 
 // Cookie parsing must run BEFORE the rate limiters: their skip logic
 // (admin/systemadmin exemption) inspects req.cookies[token] via isAdminUser.

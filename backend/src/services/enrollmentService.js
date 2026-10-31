@@ -677,6 +677,69 @@ export const updateStudyplanTempo = async ({
 };
 
 /**
+ * Recalculate a student's plan summary (end date and final exam date) from
+ * their active/non-completed enrollments and resync the exam calendar event.
+ * Used after imports that apply a study pace so the student header does not
+ * keep stale spreadsheet dates.
+ */
+export const recalculateStudentScheduleSummary = async (studentId) => {
+    const enrollments = await StudentEnrollment.find({
+        studentId,
+        status: { $nin: ["completed", "dropped"] },
+        startDate: { $ne: null },
+    })
+        .select("startDate endDate slutprovDate")
+        .lean();
+
+    if (!enrollments.length) {
+        return null;
+    }
+
+    let endDate = null;
+    let finalExamDate = null;
+    for (const enrollment of enrollments) {
+        const enrollmentEnd = enrollment.endDate
+            ? new Date(enrollment.endDate)
+            : null;
+        if (enrollmentEnd && (!endDate || enrollmentEnd > endDate)) {
+            endDate = enrollmentEnd;
+        }
+        const exam = enrollment.slutprovDate
+            ? new Date(enrollment.slutprovDate)
+            : null;
+        if (exam && (!finalExamDate || exam > finalExamDate)) {
+            finalExamDate = exam;
+        }
+    }
+
+    const student = await Student.findById(studentId);
+    if (!student) {
+        return null;
+    }
+
+    if (endDate) student.endDate = endDate;
+    if (finalExamDate) student.finalExamDate = finalExamDate;
+
+    if (typeof student.save === "function") {
+        await student.save();
+    }
+
+    try {
+        const { syncCalendarEventsForStudent } = await import(
+            "../utils/calendarEventSync.js"
+        );
+        await syncCalendarEventsForStudent(student._id);
+    } catch (syncErr) {
+        logger.warn(
+            { err: syncErr, studentId },
+            "Failed to sync student calendar event"
+        );
+    }
+
+    return { endDate, finalExamDate };
+};
+
+/**
  * Add students to a course instance, skipping students that are already
  * enrolled. Per-student failures are collected and reported without aborting
  * the batch. Throws AppError(400) for a missing/invalid studentIds array and

@@ -282,7 +282,31 @@ describe("backend/index.js", () => {
       ])
     );
 
-    expect(corsMock).toHaveBeenCalledWith(securityMocks.corsConfig);
+    expect(corsMock).toHaveBeenCalledWith(expect.any(Function));
+
+    // Health/metrics probes from orchestrators carry no Origin header, so
+    // the CORS delegate must allow them while API routes keep the strict
+    // production policy.
+    const corsOptionsDelegate = corsMock.mock.calls[0][0];
+    const healthCallback = vi.fn();
+    corsOptionsDelegate(
+      { path: "/health/live", headers: {} },
+      healthCallback
+    );
+    expect(healthCallback).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ ...securityMocks.corsConfig, origin: true })
+    );
+
+    const apiCallback = vi.fn();
+    corsOptionsDelegate(
+      { path: "/api/students", headers: {} },
+      apiCallback
+    );
+    expect(apiCallback).toHaveBeenCalledWith(
+      null,
+      securityMocks.corsConfig
+    );
     expect(cookieParserMock).toHaveBeenCalled();
     expect(expressMock.static).not.toHaveBeenCalled();
     expect(appInstance.get.mock.calls.some(([route]) => route === "/uploads/:filename")).toBe(true);
