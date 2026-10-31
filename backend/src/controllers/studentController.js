@@ -566,14 +566,28 @@ async function uploadXlsx(req, res) {
                 if (!saved || !student.education?.length) continue;
 
                 try {
+                    // An explicit STUDIETAKT cell makes the pace authoritative:
+                    // course lengths and exam dates are recalculated from the
+                    // course extent instead of trusting the spreadsheet dates.
+                    const parsedPace = student.pace
+                        ? Number(student.pace)
+                        : null;
+                    const applyPace = parsedPace !== null;
                     await CourseMatchingService.processStudentEducation(
                         saved._id,
                         student.education,
                         req.user?.userId || null,
                         {
-                            pace: student.pace || saved.pace || 100,
+                            pace: parsedPace || saved.pace || 100,
+                            applyPace,
                         }
                     );
+
+                    if (applyPace) {
+                        const { recalculateStudentScheduleSummary } =
+                            await import("../services/enrollmentService.js");
+                        await recalculateStudentScheduleSummary(saved._id);
+                    }
                 } catch (enrollmentError) {
                     logger.error(
                         { err: enrollmentError, email: student.email },

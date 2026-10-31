@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import request from "supertest";
 import app from "../../index.js";
 import {
@@ -54,6 +54,34 @@ describe("Health & Infrastructure", () => {
             expect(res.body.system).toHaveProperty("memory");
             expect(res.body.cache).toHaveProperty("size");
             expect(res.body.cache).toHaveProperty("keys");
+        });
+    });
+
+    describe("CORS production no-Origin policy", () => {
+        const originalNodeEnv = process.env.NODE_ENV;
+
+        afterEach(() => {
+            process.env.NODE_ENV = originalNodeEnv;
+        });
+
+        it("lets infrastructure probes run without an Origin header", async () => {
+            process.env.NODE_ENV = "production";
+
+            const live = await request(app).get("/health/live").expect(200);
+            expect(live.body).toEqual({ status: "ok" });
+
+            const ready = await request(app).get("/health/ready").expect(200);
+            expect(ready.body.database).toBe("connected");
+
+            const metrics = await request(app).get("/metrics").expect(200);
+            expect(metrics.body).toHaveProperty("system");
+        });
+
+        it("still blocks API requests without an Origin header", async () => {
+            process.env.NODE_ENV = "production";
+
+            const res = await request(app).get("/api/students").expect(403);
+            expect(res.body.error.message).toMatch(/Origin/i);
         });
     });
 });
