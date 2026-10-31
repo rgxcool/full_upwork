@@ -8,6 +8,14 @@ const StudentSchema = new mongoose.Schema(
         name: { type: String, required: true },
         personalNumber: { type: String, required: true },
 
+        // Studietakt (study pace) in percent. 100% is the normal pace,
+        // 50% doubles the course duration and 25% quadruples it.
+        pace: {
+            type: Number,
+            enum: [25, 50, 100],
+            default: 100,
+        },
+
         // education: [EducationEntrySchema], // REMOVED: Using StudentEnrollment system instead
 
         startDate: Date,

@@ -159,7 +159,11 @@ async function uploadXlsx(req, res) {
         for (const s of parsedStudents) {
             if (!s.email) continue;
             if (grouped.has(s.email)) {
-                grouped.get(s.email).education.push(...(s.education || []));
+                const existingGroup = grouped.get(s.email);
+                existingGroup.education.push(...(s.education || []));
+                if (!existingGroup.pace && s.pace) {
+                    existingGroup.pace = s.pace;
+                }
             } else {
                 grouped.set(s.email, {
                     ...s,
@@ -548,7 +552,7 @@ async function uploadXlsx(req, res) {
             const savedStudents = await Student.find({
                 email: { $in: emails },
             })
-                .select("_id email")
+                .select("_id email pace")
                 .lean();
             const savedByEmail = new Map(
                 savedStudents.map((student) => [student.email, student])
@@ -565,7 +569,10 @@ async function uploadXlsx(req, res) {
                     await CourseMatchingService.processStudentEducation(
                         saved._id,
                         student.education,
-                        req.user?.userId || null
+                        req.user?.userId || null,
+                        {
+                            pace: student.pace || saved.pace || 100,
+                        }
                     );
                 } catch (enrollmentError) {
                     logger.error(

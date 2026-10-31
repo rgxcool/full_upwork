@@ -351,6 +351,30 @@ describe("Search Routes", () => {
             );
         });
 
+        it("matches a full name regardless of comma and word order", async () => {
+            const student = await Student.create({
+                name: "Bano, Saira",
+                personalNumber: "888888-8888",
+                email: "bano.saira@example.com",
+            });
+
+            const response = await request(searchApp)
+                .get("/api/search")
+                .query({ type: "Användare", q: "bano saira" })
+                .expect(200);
+
+            expect(response.body).toEqual(
+                expect.arrayContaining([
+                    {
+                        id: student._id.toString(),
+                        name: "Bano, Saira",
+                        type: "Elev",
+                        extra: "Email: bano.saira@example.com",
+                    },
+                ])
+            );
+        });
+
         it("returns unique course results for course searches", async () => {
             const course = await Course.create({
                 courseName: "Alpha Course",

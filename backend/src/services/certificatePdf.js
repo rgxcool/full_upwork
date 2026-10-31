@@ -103,7 +103,7 @@ export async function buildCertificateHtml({
         periodEnd: fmtDate(snapshot.periodEnd),
         completedAt: fmtDate(snapshot.completedAt),
         teacherName: snapshot.teacherName || "",
-        grade: template.showGrade !== false ? snapshot.grade || "" : "",
+        grade: template.showGrade !== false && snapshot.grade && String(snapshot.grade).trim() ? String(snapshot.grade).trim() : "",
         schoolName: schoolName || settings?.schoolName || "Mindful Learning",
         organizationName: settings?.organizationName || "",
         certificateNumber: snapshot.certificateNumber || "",
@@ -119,12 +119,20 @@ export async function buildCertificateHtml({
         configVersion: settings?.configVersion || 1,
     };
 
-    return renderTemplate(template.html || "<h1>{{title}}</h1>", data, {
-        showGrade: template.showGrade !== false && !!snapshot.grade,
+    const hasGrade = Boolean(snapshot.grade && String(snapshot.grade).trim());
+    let rendered = renderTemplate(template.html || "<h1>{{title}}</h1>", data, {
+        showGrade: template.showGrade !== false && hasGrade,
         showApl: template.showApl === true,
         showPackage: template.showPackage === true && !!snapshot.packageName,
         secondSignerEnabled: settings?.secondSignerEnabled === true,
     });
+
+    if (!hasGrade) {
+        // Strip any residual standalone grade pill or grade text
+        rendered = rendered.replace(/<span[^>]*class="pill"[^>]*>\s*Betyg:[^<]*<\/span>/gi, "");
+    }
+
+    return rendered;
 }
 
 /**

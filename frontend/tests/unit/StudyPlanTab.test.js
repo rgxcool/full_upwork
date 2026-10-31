@@ -205,3 +205,53 @@ describe('StudyPlanTab.vue - "Lästa kurser" re-registration', () => {
         expect(wrapper.emitted('student-updated')).toBeFalsy()
     })
 })
+
+describe('StudyPlanTab.vue - study pace', () => {
+    let wrapper
+
+    const mountTab = async (student) => {
+        wrapper = mount(StudyPlanTab, {
+            props: { student },
+        })
+        await wrapper.vm.$nextTick()
+    }
+
+    beforeEach(() => {
+        vi.resetAllMocks()
+        window.confirm = vi.fn(() => true)
+        client.get.mockImplementation((url) => {
+            if (url === '/student-details/stu-1') {
+                return Promise.resolve({
+                    data: { ...buildStudent([]), pace: 25 },
+                })
+            }
+            return Promise.reject(new Error(`404 Not Found: ${url}`))
+        })
+        client.put.mockResolvedValue({ data: {} })
+    })
+
+    it('initializes the selector from the stored student pace', async () => {
+        const student = { ...buildStudent([]), pace: 50 }
+        await mountTab(student)
+
+        expect(wrapper.vm.selectedTempo).toBe(10)
+    })
+
+    it('sends the new pace and reschedules active courses', async () => {
+        const student = {
+            ...buildStudent([]),
+            pace: 100,
+        }
+        await mountTab(student)
+
+        wrapper.vm.selectedTempo = 20
+        await wrapper.vm.handleTempoChange()
+
+        expect(client.put).toHaveBeenCalledWith(
+            '/students/stu-1/studyplan-tempo',
+            { tempoWeeks: 20, pace: 25, includeActive: true }
+        )
+        expect(client.get).toHaveBeenCalledWith('/student-details/stu-1')
+        expect(wrapper.emitted('student-updated')).toBeTruthy()
+    })
+})
