@@ -86,11 +86,19 @@ app.use(requestTimeout(30));
 // cookies and are called by orchestrators that do not send an Origin header.
 // They must bypass the strict production no-Origin rule, otherwise container
 // and load-balancer health checks fail with 403.
+//
+// Safe methods must bypass it as well: browsers never attach an Origin header
+// to same-origin GET/HEAD requests, so enforcing the no-Origin rule on reads
+// blocks every request the SPA makes and takes the whole app down. CSRF
+// protection only needs to cover state-changing methods, which browsers do
+// send an Origin for (and which stay blocked when the header is absent).
 import cors from "cors";
 const isCorsExemptPath = (path) =>
     path === "/health" || path.startsWith("/health/") || path === "/metrics";
+const isReadOnlyMethod = (method) =>
+    method === "GET" || method === "HEAD" || method === "OPTIONS";
 const corsOptionsDelegate = (req, callback) => {
-    if (isCorsExemptPath(req.path) && !req.headers.origin) {
+    if (!req.headers.origin && (isCorsExemptPath(req.path) || isReadOnlyMethod(req.method))) {
         return callback(null, { ...corsConfig, origin: true });
     }
     return callback(null, corsConfig);

@@ -77,10 +77,22 @@ describe("Health & Infrastructure", () => {
             expect(metrics.body).toHaveProperty("system");
         });
 
-        it("still blocks API requests without an Origin header", async () => {
+        it("allows same-origin reads without an Origin header", async () => {
             process.env.NODE_ENV = "production";
 
-            const res = await request(app).get("/api/students").expect(403);
+            // Browsers never send Origin on same-origin GET/HEAD requests.
+            // Reads must therefore reach the auth layer, not be rejected by CORS.
+            const res = await request(app).get("/api/students").expect(401);
+            expect(JSON.stringify(res.body)).not.toMatch(/Origin/i);
+        });
+
+        it("still blocks state-changing requests without an Origin header", async () => {
+            process.env.NODE_ENV = "production";
+
+            const res = await request(app)
+                .post("/api/auth/login")
+                .send({ email: "no-origin@example.com", password: "no-origin" })
+                .expect(403);
             expect(res.body.error.message).toMatch(/Origin/i);
         });
     });
