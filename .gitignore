@@ -48,3 +48,6 @@ e2e/.auth/
 # Playwright output
 e2e/test-results/
 e2e/playwright-report/
+
+# Local test workbook (selected manually in the browser, never committed)
+test_mindful_CLEAN.xlsx
