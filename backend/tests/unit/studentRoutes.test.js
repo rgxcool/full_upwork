@@ -983,7 +983,7 @@ describe("POST /student", () => {
             expect.any(String),
             req.body.education,
             "creator-1",
-            { needsSupport: undefined, examMode: undefined }
+            { needsSupport: undefined, examMode: undefined, pace: 100 }
         );
         expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith(
@@ -1184,7 +1184,7 @@ describe("POST /student", () => {
             "existing-2",
             req.body.education,
             null,
-            { needsSupport: undefined, examMode: undefined }
+            { needsSupport: undefined, examMode: undefined, pace: 100 }
         );
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith(

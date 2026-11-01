@@ -64,6 +64,9 @@
                 <div v-if="courseDetails.startDate && courseDetails.endDate" class="info-item">
                   <strong>Period:</strong> {{ formatDate(courseDetails.startDate) }} - {{ formatDate(courseDetails.endDate) }}
                 </div>
+                <div v-if="courseDetails.slutprovDate" class="info-item">
+                  <strong>Slutprovsdatum:</strong> {{ formatDate(courseDetails.slutprovDate) }}
+                </div>
                 <div v-if="courseDetails.mainCourseId" class="info-item">
                   <strong>Huvudkurs:</strong> {{ courseDetails.mainCourseId?.courseName || 'Okänd' }}
                 </div>
@@ -92,14 +95,33 @@
 
               <h3 class="mb-3">Elever ({{ courseDetails.students?.length || 0 }})</h3>
               <div v-if="courseDetails.students && courseDetails.students.length > 0" class="students-list">
-                <ul class="students-ul">
-                  <li v-for="student in courseDetails.students" :key="student._id" class="student-item">
-                    <a href="#" class="student-link" @click.prevent="viewStudent(student._id)">
-                      {{ student.name }}
-                    </a>
-                    <span v-if="student.email" class="student-email"> ({{ student.email }})</span>
-                  </li>
-                </ul>
+                <div
+                  v-for="student in courseDetails.students"
+                  :key="student._id"
+                  class="student-item p-3 mb-2 rounded border bg-light"
+                >
+                  <div class="d-flex justify-space-between align-center mb-1">
+                    <div>
+                      <a href="#" class="student-link font-weight-bold" @click.prevent="viewStudent(student._id)">
+                        {{ student.name }}
+                      </a>
+                      <span v-if="student.personalNumber" class="text-caption text-grey ml-2">({{ student.personalNumber }})</span>
+                    </div>
+                    <v-chip
+                      size="x-small"
+                      :color="student.attended ? 'success' : 'grey'"
+                      variant="flat"
+                    >
+                      {{ student.attended ? 'Deltog vid slutprov' : 'Ej registrerad' }}
+                    </v-chip>
+                  </div>
+                  <div class="student-exam-meta d-flex flex-wrap gap-3 text-caption text-grey-darken-1 mt-1">
+                    <span v-if="student.email"><strong>E-post:</strong> {{ student.email }}</span>
+                    <span><strong>Tid:</strong> {{ student.examTime || 'Enligt schema' }}</span>
+                    <span><strong>Kommun:</strong> {{ student.examMunicipality || 'Ej angiven' }}</span>
+                    <span><strong>Plats:</strong> {{ student.examLocation || 'Ej angiven' }}<span v-if="student.examRoom"> (Sal: {{ student.examRoom }})</span></span>
+                  </div>
+                </div>
               </div>
               <div v-else class="no-students">
                 Inga elever inskrivna i denna kurs
@@ -155,21 +177,31 @@
             const q = this.searchQuery.toLowerCase();
             const name = (c.courseName || '').toLowerCase();
             const code = (c.courseCode || '').toLowerCase();
-            if (!name.includes(q) && !code.includes(q)) return false;
+            const teacher = this.getResponsibleTeacher(c).toLowerCase();
+            if (
+              !name.includes(q) &&
+              !code.includes(q) &&
+              !teacher.includes(q)
+            ) {
+              return false;
+            }
           }
-          if (this.finalExamDateFilter && c.slutprovDate) {
-            if (new Date(c.slutprovDate).toISOString().slice(0,10) !== this.finalExamDateFilter) return false;
-          } else if (this.finalExamDateFilter && !c.slutprovDate) {
+          if (
+            this.finalExamDateFilter &&
+            this.toLocalDateKey(c.slutprovDate) !== this.finalExamDateFilter
+          ) {
             return false;
           }
-          if (this.startDateFilter && c.startDate) {
-            if (new Date(c.startDate).toISOString().slice(0,10) !== this.startDateFilter) return false;
-          } else if (this.startDateFilter && !c.startDate) {
+          if (
+            this.startDateFilter &&
+            this.toLocalDateKey(c.startDate) !== this.startDateFilter
+          ) {
             return false;
           }
-          if (this.endDateFilter && c.endDate) {
-            if (new Date(c.endDate).toISOString().slice(0,10) !== this.endDateFilter) return false;
-          } else if (this.endDateFilter && !c.endDate) {
+          if (
+            this.endDateFilter &&
+            this.toLocalDateKey(c.endDate) !== this.endDateFilter
+          ) {
             return false;
           }
           return true;
@@ -209,6 +241,15 @@
         this.finalExamDateFilter = '';
         this.startDateFilter = '';
         this.endDateFilter = '';
+      },
+      toLocalDateKey(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
       },
       formatDate(dateString) {
         if (!dateString) return 'N/A';

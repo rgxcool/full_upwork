@@ -625,7 +625,13 @@ describe("updateStudyplanTempo", () => {
     it("throws a 400 AppError for invalid tempos", async () => {
         await expect(
             updateStudyplanTempo({ studentId: "stu1", tempoWeeks: 7 })
-        ).rejects.toMatchObject({ statusCode: 400, message: "Invalid tempoWeeks" });
+        ).rejects.toMatchObject({ statusCode: 400 });
+    });
+
+    it("throws a 400 AppError for an unsupported pace", async () => {
+        await expect(
+            updateStudyplanTempo({ studentId: "stu1", pace: 33 })
+        ).rejects.toMatchObject({ statusCode: 400 });
     });
 
     it("throws a 404 AppError when the student is missing", async () => {
@@ -648,23 +654,23 @@ describe("updateStudyplanTempo", () => {
 
         const result = await updateStudyplanTempo({ studentId: "stu1", tempoWeeks: 5 });
 
-        expect(result).toEqual({ updatedCount: 0 });
+        expect(result).toEqual({ updatedCount: 0, pace: 100 });
     });
 
-    it("re-creates future enrollments at the new tempo", async () => {
+    it("re-schedules future enrollments at the new tempo and keeps the enrollment", async () => {
         StudentMock.findById.mockReturnValue({
             select: vi.fn().mockResolvedValue({ teacherId: "t1", name: "Anna" }),
         });
+        const enrollment = {
+            _id: "e1",
+            mainCourseId: "c1",
+            courseInstanceId: "ci1",
+            startDate: new Date("2030-09-01"),
+            status: "enrolled",
+            save: vi.fn().mockResolvedValue(undefined),
+        };
         StudentEnrollmentMock.find.mockReturnValue({
-            sort: vi.fn().mockResolvedValue([
-                {
-                    _id: "e1",
-                    mainCourseId: "c1",
-                    courseInstanceId: "ci1",
-                    startDate: new Date("2030-09-01"),
-                    status: "enrolled",
-                },
-            ]),
+            sort: vi.fn().mockResolvedValue([enrollment]),
         });
         courseMatchingServiceMock.findOrCreateCourseInstance.mockResolvedValue({
             instance: { _id: "new-ci" },
@@ -672,7 +678,7 @@ describe("updateStudyplanTempo", () => {
 
         const result = await updateStudyplanTempo({
             studentId: "stu1",
-            tempoWeeks: 5,
+            tempoWeeks: 10,
             userId: "user1",
         });
 
@@ -683,12 +689,20 @@ describe("updateStudyplanTempo", () => {
             "user1",
             "t1"
         );
-        expect(StudentEnrollmentMock.findByIdAndDelete).toHaveBeenCalledWith("e1");
+        // 5-week default extent at 50% => 10 weeks.
+        const [, startDate, endDate] =
+            courseMatchingServiceMock.findOrCreateCourseInstance.mock.calls[0];
+        expect(
+            Math.round((endDate - startDate) / (7 * 24 * 60 * 60 * 1000))
+        ).toBe(10);
+        expect(enrollment.save).toHaveBeenCalled();
+        expect(enrollment.courseInstanceId).toBe("new-ci");
+        expect(enrollment.pace).toBe(50);
         expect(StudentEnrollmentMock.countDocuments).toHaveBeenCalledWith({
             courseInstanceId: "ci1",
         });
         expect(CourseInstanceMock.findByIdAndDelete).toHaveBeenCalledWith("ci1");
-        expect(result).toEqual({ updatedCount: 1 });
+        expect(result).toMatchObject({ updatedCount: 1, pace: 50 });
     });
 });
 

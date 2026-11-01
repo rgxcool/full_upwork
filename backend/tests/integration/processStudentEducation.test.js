@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
+import mongoose from "mongoose";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
 import CoursePackage from "../../src/models/CoursePackage.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import CourseMatchingService from "../../src/utils/courseMatchingService.js";
+import { recalculateStudentScheduleSummary } from "../../src/services/enrollmentService.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
 
 vi.mock("../../src/utils/logger.js", () => ({
@@ -143,5 +145,152 @@ describe("processStudentEducation — course package studietakt (pace)", () => {
         const end = new Date(enrollment.endDate);
         const weeks = Math.round((end - start) / (7 * 24 * 60 * 60 * 1000));
         expect(weeks).toBe(5);
+    });
+
+    it("recalculates an individual course's dates and exam date when a pace is applied", async () => {
+        const student = await Student.create({
+            name: "Individuell Elev",
+            personalNumber: "20010101-3333",
+            email: "individuell@elev.se",
+        });
+
+        const course = await Course.create({
+            courseName: "Engelska 5",
+            courseCode: "ENG500",
+            courseExtent: "5",
+            coursePoints: 100,
+            isActive: true,
+        });
+
+        const results = await CourseMatchingService.processStudentEducation(
+            student._id.toString(),
+            [
+                {
+                    type: "Course",
+                    refId: course._id.toString(),
+                    name: "ENG500",
+                    // Spreadsheet dates describe the 100% plan. The pace must
+                    // override them and also move the final exam.
+                    startDate: "2026-09-21",
+                    endDate: "2026-10-26",
+                    slutprovDate: "2026-10-23",
+                },
+            ],
+            null,
+            { pace: 50, applyPace: true }
+        );
+
+        expect(results.errors).toEqual([]);
+        expect(results.enrollments).toHaveLength(1);
+
+        const enrollment = await StudentEnrollment.findOne({
+            studentId: student._id,
+        });
+        expect(enrollment.pace).toBe(50);
+
+        const start = new Date(enrollment.startDate);
+        const end = new Date(enrollment.endDate);
+        const weeks = Math.round(
+            (end - start) / (7 * 24 * 60 * 60 * 1000)
+        );
+        expect(weeks).toBe(10);
+
+        // The stale spreadsheet date must not be kept.
+        expect(new Date(enrollment.slutprovDate).getTime()).toBeGreaterThan(
+            new Date("2026-10-26").getTime()
+        );
+        expect(new Date(enrollment.slutprovDate).getTime()).toBeLessThan(
+            end.getTime()
+        );
+    });
+
+    it("keeps explicit spreadsheet dates when no pace is applied", async () => {
+        const student = await Student.create({
+            name: "Explicit Elev",
+            personalNumber: "20020101-4444",
+            email: "explicit@elev.se",
+        });
+
+        const course = await Course.create({
+            courseName: "Historia 1",
+            courseCode: "HIS100",
+            courseExtent: "5",
+            coursePoints: 100,
+            isActive: true,
+        });
+
+        await CourseMatchingService.processStudentEducation(
+            student._id.toString(),
+            [
+                {
+                    type: "Course",
+                    refId: course._id.toString(),
+                    name: "HIS100",
+                    startDate: "2026-09-21",
+                    endDate: "2026-10-26",
+                    slutprovDate: "2026-10-23",
+                },
+            ],
+            null,
+            { pace: 50 }
+        );
+
+        const enrollment = await StudentEnrollment.findOne({
+            studentId: student._id,
+        });
+        expect(enrollment.pace).toBe(50);
+
+        const start = new Date(enrollment.startDate);
+        const end = new Date(enrollment.endDate);
+        const weeks = Math.round(
+            (end - start) / (7 * 24 * 60 * 60 * 1000)
+        );
+        expect(weeks).toBe(5);
+        expect(new Date(enrollment.slutprovDate).toISOString().slice(0, 10)).toBe(
+            "2026-10-23"
+        );
+    });
+
+    it("refreshes the student's end and final exam dates from active enrollments", async () => {
+        const student = await Student.create({
+            name: "Sammanfattning Elev",
+            personalNumber: "20030101-5555",
+            email: "sammanfattning@elev.se",
+            endDate: new Date("2020-01-01"),
+            finalExamDate: new Date("2020-01-01"),
+        });
+
+        await StudentEnrollment.create({
+            studentId: student._id,
+            courseInstanceId: new mongoose.Types.ObjectId(),
+            startDate: new Date("2026-09-21"),
+            endDate: new Date("2026-11-30"),
+            slutprovDate: new Date("2026-11-25"),
+            status: "enrolled",
+        });
+        // Completed courses must not push the plan summary forward.
+        await StudentEnrollment.create({
+            studentId: student._id,
+            courseInstanceId: new mongoose.Types.ObjectId(),
+            startDate: new Date("2027-01-01"),
+            endDate: new Date("2028-01-01"),
+            slutprovDate: new Date("2027-12-25"),
+            status: "completed",
+        });
+
+        const summary = await recalculateStudentScheduleSummary(student._id);
+
+        expect(summary.endDate.toISOString().slice(0, 10)).toBe("2026-11-30");
+        expect(summary.finalExamDate.toISOString().slice(0, 10)).toBe(
+            "2026-11-25"
+        );
+
+        const updated = await Student.findById(student._id);
+        expect(new Date(updated.endDate).toISOString().slice(0, 10)).toBe(
+            "2026-11-30"
+        );
+        expect(new Date(updated.finalExamDate).toISOString().slice(0, 10)).toBe(
+            "2026-11-25"
+        );
     });
 });

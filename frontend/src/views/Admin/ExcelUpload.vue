@@ -45,6 +45,15 @@
             <button class="btn btn-primary" type="submit">Upload</button>
           </div>
         </form>
+        <div class="template-download">
+          <a
+            href="/excel-upload-template.xlsx"
+            download="excel-upload-template.xlsx"
+            class="btn btn-outline-secondary btn-sm"
+          >
+            Ladda ner Excel-mall
+          </a>
+        </div>
       </div>
       <br />
 
@@ -327,6 +336,24 @@
                       type="text"
                       class="form-control"
                     />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="edit-pace" class="form-label">Studietakt</label>
+                    <select
+                      id="edit-pace"
+                      v-model.number="editingStudent.pace"
+                      class="form-control"
+                    >
+                      <option :value="100">100% (normal)</option>
+                      <option :value="50">50% (dubbel tid)</option>
+                      <option :value="25">25% (fyrdubbel tid)</option>
+                    </select>
+                    <small class="form-text text-muted">
+                      Vid ändring räknas kursperioder och slutprovsdatum om
+                      automatiskt.
+                    </small>
                   </div>
                 </div>
               </div>
@@ -865,6 +892,11 @@
           clone.municipality = { type: '' }
         }
 
+        // Default to the normal pace for legacy records.
+        if (![25, 50, 100].includes(Number(clone.pace))) {
+          clone.pace = 100
+        }
+
         // Ensure education array exists and format dates properly
         if (!Array.isArray(clone.education)) {
           clone.education = []
@@ -1317,6 +1349,10 @@
 </script>
 
 <style scoped>
+  .template-download {
+    margin-top: 10px;
+  }
+
   .align-right {
     margin-left: auto; /* Pushes the content to the right */
   }

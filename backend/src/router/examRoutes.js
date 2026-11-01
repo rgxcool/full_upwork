@@ -2410,6 +2410,7 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
         // Note: Events are dynamic and not stored in CalendarEvent collection
         // Exam info is stored in ExamAttendance records and retrieved via /calendar-events/syncable
 
+        const absentStudentsList = [];
         const updatePromises = students.map(async (student) => {
             try {
                 const studentDoc = await Student.findById(student._id);
@@ -2477,6 +2478,12 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
                     if (student.examRoom || eventExamRoom)
                         attendanceRecord.examRoom =
                             student.examRoom || eventExamRoom;
+
+                    // Present again: a future absence is a new occasion and
+                    // should be allowed to trigger a new information email.
+                    if (student.attended) {
+                        attendanceRecord.absenceEmailSentAt = null;
+                    }
                 }
 
                 logger.debug("About to save attendance record");
@@ -2539,6 +2546,24 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
 
                 await studentDoc.save();
 
+                if (
+                    student.attended === false &&
+                    !attendanceRecord.absenceEmailSentAt
+                ) {
+                    absentStudentsList.push({
+                        attendanceRecordId: attendanceRecord._id,
+                        studentId: studentDoc._id,
+                        studentName: studentDoc.name,
+                        studentEmail: studentDoc.email,
+                        courseName: courseName || "Unknown Course",
+                        examDate: dateKey,
+                        examTime: student.examTime || eventExamTime || "",
+                        examMunicipality: student.examMunicipality || eventExamMunicipality || "",
+                        examLocation: student.examLocation || eventExamLocation || "",
+                        attended: false,
+                    });
+                }
+
                 logger.info({ student: studentDoc.name, attended: student.attended }, "Updated attendance for student");
                 return {
                     success: true,
@@ -2560,6 +2585,37 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED
         const failureCount = results.filter((r) => !r.success).length;
 
         logger.info({ successCount, failureCount }, "Attendance update results");
+
+        if (absentStudentsList.length > 0) {
+            try {
+                const { notifyAbsentStudents } = await import("../services/examAbsenceNotificationService.js");
+                const notificationResults = await notifyAbsentStudents({
+                    records: absentStudentsList,
+                    dryRun: false,
+                });
+
+                // Remember successful sends so a repeated save does not send
+                // the same information email again.
+                await Promise.all(
+                    notificationResults
+                        .filter((result) => result.status === "sent")
+                        .map((result) =>
+                            result.attendanceRecordId
+                                ? ExamAttendance.updateOne(
+                                      { _id: result.attendanceRecordId },
+                                      {
+                                          $set: {
+                                              absenceEmailSentAt: new Date(),
+                                          },
+                                      }
+                                  )
+                                : Promise.resolve()
+                        )
+                );
+            } catch (notifyErr) {
+                logger.error({ err: notifyErr }, "Failed to send absence emails to absent students");
+            }
+        }
 
         // Note: Events are dynamic and not stored in CalendarEvent collection
         // Exam info is stored in ExamAttendance records and will be retrieved via /calendar-events/syncable

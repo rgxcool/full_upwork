@@ -38,10 +38,11 @@ vi.mock("../../src/models/Teacher.js", () => ({
     findOne: vi.fn(),
   },
 }));
-const createOrFindTeacherMock = vi.fn(() =>
-  Promise.resolve({ teacher: { _id: "created-teacher" } })
-);
-globalThis.createOrFindTeacher = createOrFindTeacherMock;
+vi.mock("../../src/utils/teacherService.js", () => ({
+  createOrFindTeacher: vi.fn(() =>
+    Promise.resolve({ teacher: { _id: "created-teacher" } })
+  ),
+}));
 
 vi.mock("../../src/utils/parseStudentExcel.js", async () => {
   const actual = await vi.importActual(
@@ -82,6 +83,9 @@ import {
 } from "../../src/controllers/studentController.js";
 import * as parseModule from "../../src/utils/parseStudentExcel.js";
 import { maybeSendLarteametEmail } from "../../src/services/emailService.js";
+import { createOrFindTeacher } from "../../src/utils/teacherService.js";
+
+const createOrFindTeacherMock = vi.mocked(createOrFindTeacher);
 
 const createLeanResult = (value) => ({
   lean: vi.fn().mockResolvedValue(value),

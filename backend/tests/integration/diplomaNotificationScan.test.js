@@ -288,6 +288,7 @@ describe("Completion scan (course + package + diploma trigger)", () => {
             type: NOTIFICATION_TYPES.DIPLOMA_READY,
             teacher: { $exists: false },
             "meta.studentId": student._id,
+            "meta.studentMunicipality": { $exists: true },
         }).lean();
         expect(adminNote).toBeTruthy();
         expect(adminNote.message).toContain("Ebba Lindgren");

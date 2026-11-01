@@ -14,6 +14,7 @@ import {
     normalizeCodeForMatching,
 } from "../utils/parseStudentExcel.js";
 import { distance } from "fastest-levenshtein";
+import { createOrFindTeacher } from "../utils/teacherService.js";
 import logger from "../utils/logger.js";
 import { maybeSendLarteametEmail, SOLLENTUNA_MUNICIPALITY } from "../services/emailService.js";
 
@@ -158,7 +159,11 @@ async function uploadXlsx(req, res) {
         for (const s of parsedStudents) {
             if (!s.email) continue;
             if (grouped.has(s.email)) {
-                grouped.get(s.email).education.push(...(s.education || []));
+                const existingGroup = grouped.get(s.email);
+                existingGroup.education.push(...(s.education || []));
+                if (!existingGroup.pace && s.pace) {
+                    existingGroup.pace = s.pace;
+                }
             } else {
                 grouped.set(s.email, {
                     ...s,
@@ -537,6 +542,65 @@ async function uploadXlsx(req, res) {
         );
 
         await Student.bulkWrite(bulkOps);
+
+        // Student.education was removed from the schema in favour of
+        // StudentEnrollment. Persist the imported education through the same
+        // service used by manual student creation so courses/packages are not
+        // silently dropped. A single student's enrollment failure must not
+        // abort the rest of the import.
+        try {
+            const savedStudents = await Student.find({
+                email: { $in: emails },
+            })
+                .select("_id email pace")
+                .lean();
+            const savedByEmail = new Map(
+                savedStudents.map((student) => [student.email, student])
+            );
+            const { default: CourseMatchingService } = await import(
+                "../utils/courseMatchingService.js"
+            );
+
+            for (const student of mergedStudents) {
+                const saved = savedByEmail.get(student.email);
+                if (!saved || !student.education?.length) continue;
+
+                try {
+                    // An explicit STUDIETAKT cell makes the pace authoritative:
+                    // course lengths and exam dates are recalculated from the
+                    // course extent instead of trusting the spreadsheet dates.
+                    const parsedPace = student.pace
+                        ? Number(student.pace)
+                        : null;
+                    const applyPace = parsedPace !== null;
+                    await CourseMatchingService.processStudentEducation(
+                        saved._id,
+                        student.education,
+                        req.user?.userId || null,
+                        {
+                            pace: parsedPace || saved.pace || 100,
+                            applyPace,
+                        }
+                    );
+
+                    if (applyPace) {
+                        const { recalculateStudentScheduleSummary } =
+                            await import("../services/enrollmentService.js");
+                        await recalculateStudentScheduleSummary(saved._id);
+                    }
+                } catch (enrollmentError) {
+                    logger.error(
+                        { err: enrollmentError, email: student.email },
+                        "Failed to create enrollments from Excel import"
+                    );
+                }
+            }
+        } catch (enrollmentImportError) {
+            logger.error(
+                { err: enrollmentImportError },
+                "Failed to process enrollments from Excel import"
+            );
+        }
 
         // Requirement #26: every NEWLY created Sollentuna student gets the
         // Lärteamet admission email. Pre-existing students (matched by email in

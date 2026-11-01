@@ -123,6 +123,7 @@ export const getStudentDetails = async (req, res) => {
         
         // Combine CoursePackages with enrollment data
         populatedStudent.education = [...coursePackages, ...enrollmentEducation];
+        populatedStudent.enrollments = enrollments;
 
         // Add enrollment statistics
         populatedStudent.enrollmentStats = {

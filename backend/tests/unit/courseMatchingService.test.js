@@ -49,6 +49,15 @@ describe("CourseMatchingService date helpers", () => {
         const result = CourseMatchingService.getWednesdayOfWeek(start, 3);
         expect(result.getDay()).toBe(3);
     });
+
+    it("getWednesdayBefore returns the Wednesday of the previous week", () => {
+        const result = CourseMatchingService.getWednesdayBefore(
+            new Date("2026-11-30") // Monday
+        );
+        expect(result.getDay()).toBe(3);
+        expect(result.getDate()).toBe(25);
+        expect(result.getHours()).toBe(0);
+    });
 });
 
 describe("CourseMatchingService.getDefaultExamMode", () => {

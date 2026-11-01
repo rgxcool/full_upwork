@@ -514,6 +514,13 @@ describe('ExcelUpload.vue', () => {
         expect(wrapper.vm.getCourseName(null)).toBe('No course data');
     });
 
+    it('offers the Excel template as a download', () => {
+        const link = wrapper.find('a[href="/excel-upload-template.xlsx"]');
+        expect(link.exists()).toBe(true);
+        expect(link.attributes('download')).toBe('excel-upload-template.xlsx');
+        expect(link.text()).toContain('Ladda ner Excel-mall');
+    });
+
     it('uploads a user-selected test_mindful_CLEAN.xlsx without a bundled workbook', async () => {
         const file = new File(
             ['dummy workbook bytes'],
