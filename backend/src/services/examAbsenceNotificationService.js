@@ -26,26 +26,30 @@ export const notifyAbsentStudents = async ({ records = [], dryRun = true } = {})
     for (const r of records) {
         if (r.attended !== false) continue;
         if (!r.studentEmail) {
-            results.push({ studentId: r.studentId, status: "skipped-no-email" });
+            results.push({ studentId: r.studentId, attendanceRecordId: r.attendanceRecordId, status: "skipped-no-email" });
             continue;
         }
         const key = `${r.studentId}:${r.examDate}`;
         if (seen.has(key)) {
-            results.push({ studentId: r.studentId, status: "duplicate-skipped" });
+            results.push({ studentId: r.studentId, attendanceRecordId: r.attendanceRecordId, status: "duplicate-skipped" });
             continue;
         }
         seen.add(key);
         const body = buildAbsenceEmailBody(r);
         if (dryRun) {
-            results.push({ studentId: r.studentId, status: "dry-run", subject: ABSENCE_EMAIL_SUBJECT });
+            results.push({ studentId: r.studentId, attendanceRecordId: r.attendanceRecordId, status: "dry-run", subject: ABSENCE_EMAIL_SUBJECT });
             continue;
         }
         try {
-            await sendEmail({ to: r.studentEmail, subject: ABSENCE_EMAIL_SUBJECT, text: body });
-            results.push({ studentId: r.studentId, status: "sent" });
+            const sendResult = await sendEmail({ to: r.studentEmail, subject: ABSENCE_EMAIL_SUBJECT, text: body });
+            if (sendResult && sendResult.success === false) {
+                results.push({ studentId: r.studentId, attendanceRecordId: r.attendanceRecordId, status: "failed" });
+            } else {
+                results.push({ studentId: r.studentId, attendanceRecordId: r.attendanceRecordId, status: "sent" });
+            }
         } catch (err) {
             logger.error({ err }, "Failed to send absence email");
-            results.push({ studentId: r.studentId, status: "failed" });
+            results.push({ studentId: r.studentId, attendanceRecordId: r.attendanceRecordId, status: "failed" });
         }
     }
     return results;

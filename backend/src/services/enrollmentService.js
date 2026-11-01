@@ -473,15 +473,62 @@ export const deleteEnrollmentAndShift = async ({ studentId, enrollmentId, userId
 };
 
 /**
- * Update study plan tempo for future courses only. Throws AppError(400) for
- * unsupported tempos and AppError(404) when the student is missing.
+ * Map the study-plan tempo (weeks) used by the UI to a pace percentage.
+ * 5 weeks = 100%, 10 weeks = 50%, 20 weeks = 25%.
  */
-export const updateStudyplanTempo = async ({ studentId, tempoWeeks, userId }) => {
-    if (!VALID_TEMPO_WEEKS.includes(Number(tempoWeeks))) {
-        throw new AppError("Invalid tempoWeeks", 400);
+export const tempoWeeksToPace = (tempoWeeks) => {
+    const weeks = Number(tempoWeeks);
+    if (weeks === 5) return 100;
+    if (weeks === 10) return 50;
+    if (weeks === 20) return 25;
+    return null;
+};
+
+/** Map a pace percentage to the tempo weeks understood by the UI. */
+export const paceToTempoWeeks = (pace) => {
+    const value = Number(pace);
+    if (value === 100) return 5;
+    if (value === 50) return 10;
+    if (value === 25) return 20;
+    return null;
+};
+
+const addWeeks = (date, weeks) => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + Number(weeks) * 7);
+    return result;
+};
+
+/**
+ * Change a student's study pace and reschedule the study plan.
+ *
+ * A pace change affects the duration of every non-completed course:
+ * duration = course extent in weeks x (100 / pace). The first course keeps
+ * its start date, later courses are chained after the previous one, and the
+ * student's end date / final exam date are moved with the plan.
+ *
+ * Throws AppError(400) for unsupported pace/tempo values and AppError(404)
+ * when the student is missing.
+ */
+export const updateStudyplanTempo = async ({
+    studentId,
+    tempoWeeks,
+    pace,
+    userId,
+    includeActive = false,
+}) => {
+    const requestedPace =
+        pace !== undefined && pace !== null
+            ? Number(pace)
+            : tempoWeeksToPace(tempoWeeks);
+
+    if (![25, 50, 100].includes(requestedPace)) {
+        throw new AppError("Invalid pace or tempoWeeks", 400);
     }
 
-    const student = await Student.findById(studentId).select("teacherId name");
+    const student = await Student.findById(studentId).select(
+        "teacherId name pace"
+    );
     if (!student) {
         throw new AppError("Student not found", 404);
     }
@@ -494,58 +541,95 @@ export const updateStudyplanTempo = async ({ studentId, tempoWeeks, userId }) =>
         mainCourseId: { $exists: true, $ne: null },
     }).sort({ startDate: 1, createdAt: 1 });
 
-    const futureEnrollments = enrollments.filter((enrollment) => {
+    const targetEnrollments = enrollments.filter((enrollment) => {
         if (!enrollment.startDate) return false;
-        const startDate = new Date(enrollment.startDate);
-        return startDate.getTime() > today.getTime();
+        if (["completed", "dropped"].includes(enrollment.status)) return false;
+        if (includeActive) return true;
+        return new Date(enrollment.startDate).getTime() > today.getTime();
     });
 
-    if (futureEnrollments.length === 0) {
-        return { updatedCount: 0 };
+    if (targetEnrollments.length === 0) {
+        // Still record the chosen pace so the student profile reflects it.
+        if (student && String(student.pace) !== String(requestedPace)) {
+            student.pace = requestedPace;
+            if (typeof student.save === "function") await student.save();
+        }
+        return { updatedCount: 0, pace: requestedPace };
     }
 
-    let nextStartDate = new Date(futureEnrollments[0].startDate);
+    const paceFactor = 100 / requestedPace;
+    let nextStartDate = new Date(targetEnrollments[0].startDate);
     let updatedCount = 0;
-    for (const enrollment of futureEnrollments) {
-        const startDate = new Date(nextStartDate);
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + Number(tempoWeeks) * 7);
+    let lastSlutprovDate = null;
+    let lastEndDate = null;
 
-        const { instance } = await CourseMatchingService.findOrCreateCourseInstance(
-            enrollment.mainCourseId,
-            startDate,
-            endDate,
-            userId,
-            student.teacherId || enrollment.teacherId || null
-        );
+    for (const enrollment of targetEnrollments) {
+        const startDate = new Date(nextStartDate);
+
+        // Duration is based on the course's own extent so a 2.5-week course
+        // at 50% becomes 5 weeks, not an arbitrary fixed length.
+        let extentWeeks = 5;
+        try {
+            const course = await Course.findById(enrollment.mainCourseId);
+            const parsedExtent = parseFloat(course?.courseExtent);
+            if (Number.isFinite(parsedExtent) && parsedExtent > 0) {
+                extentWeeks = parsedExtent;
+            }
+        } catch (courseError) {
+            logger.warn(
+                { err: courseError, courseId: enrollment.mainCourseId },
+                "Could not load course extent, using 5 weeks"
+            );
+        }
+
+        const endDate = addWeeks(startDate, extentWeeks * paceFactor);
+
+        const { instance } =
+            await CourseMatchingService.findOrCreateCourseInstance(
+                enrollment.mainCourseId,
+                startDate,
+                endDate,
+                userId,
+                student.teacherId || enrollment.teacherId || null
+            );
 
         const previousInstanceId = enrollment.courseInstanceId;
-        const previousEnrollmentId = enrollment._id;
 
-        const newEnrollment = new StudentEnrollment({
-            studentId,
-            courseInstanceId: instance._id,
-            mainCourseId: enrollment.mainCourseId,
-            enrollmentPrice: enrollment.enrollmentPrice ?? null,
-            startDate,
-            endDate,
-            status: enrollment.status || "enrolled",
-            teacherId: enrollment.teacherId || student.teacherId || null,
-            notes: enrollment.notes || null,
-            needsSupport: enrollment.needsSupport || false,
-            examMode: enrollment.examMode || "on-site",
-            isReEnrollment: true,
-            previousEnrollmentId: previousEnrollmentId,
-        });
+        // Update in place so grades, assessment results, certificates and
+        // history are preserved. Recreating the enrollment used to wipe them.
+        enrollment.courseInstanceId = instance._id;
+        enrollment.startDate = startDate;
+        enrollment.endDate = endDate;
+        enrollment.slutprovDate =
+            instance.slutprovDate || enrollment.slutprovDate || null;
+        enrollment.pace = requestedPace;
+        enrollment.statusHistory = [
+            ...(enrollment.statusHistory || []),
+            {
+                status: enrollment.status || "enrolled",
+                changedAt: new Date(),
+                changedBy: userId || undefined,
+                reason: `Studietakt ändrad till ${requestedPace}%`,
+            },
+        ];
 
-        await newEnrollment.save();
+        if (typeof enrollment.save === "function") {
+            await enrollment.save();
+        }
 
-        await StudentEnrollment.findByIdAndDelete(previousEnrollmentId);
+        if (instance.slutprovDate) {
+            lastSlutprovDate = instance.slutprovDate;
+        }
+        lastEndDate = endDate;
 
-        if (previousInstanceId) {
-            const remainingForPrevious = await StudentEnrollment.countDocuments({
-                courseInstanceId: previousInstanceId,
-            });
+        if (
+            previousInstanceId &&
+            String(previousInstanceId) !== String(instance._id)
+        ) {
+            const remainingForPrevious =
+                await StudentEnrollment.countDocuments({
+                    courseInstanceId: previousInstanceId,
+                });
             if (remainingForPrevious === 0) {
                 await CourseInstance.findByIdAndDelete(previousInstanceId);
             }
@@ -555,7 +639,104 @@ export const updateStudyplanTempo = async ({ studentId, tempoWeeks, userId }) =>
         nextStartDate = new Date(endDate);
     }
 
-    return { updatedCount };
+    const studentToUpdate = await Student.findById(studentId);
+    if (studentToUpdate) {
+        studentToUpdate.pace = requestedPace;
+        if (lastEndDate) {
+            studentToUpdate.endDate = lastEndDate;
+        }
+        if (lastSlutprovDate) {
+            studentToUpdate.finalExamDate = lastSlutprovDate;
+        }
+
+        if (typeof studentToUpdate.save === "function") {
+            await studentToUpdate.save();
+
+            try {
+                const { syncCalendarEventsForStudent } = await import(
+                    "../utils/calendarEventSync.js"
+                );
+                await syncCalendarEventsForStudent(studentToUpdate._id);
+            } catch (syncErr) {
+                logger.warn(
+                    { err: syncErr },
+                    "Failed to sync student calendar event"
+                );
+            }
+        }
+    }
+
+    const result = { updatedCount, pace: requestedPace };
+    if (studentToUpdate?.finalExamDate) {
+        result.finalExamDate = studentToUpdate.finalExamDate;
+    }
+    if (studentToUpdate?.endDate) {
+        result.endDate = studentToUpdate.endDate;
+    }
+    return result;
+};
+
+/**
+ * Recalculate a student's plan summary (end date and final exam date) from
+ * their active/non-completed enrollments and resync the exam calendar event.
+ * Used after imports that apply a study pace so the student header does not
+ * keep stale spreadsheet dates.
+ */
+export const recalculateStudentScheduleSummary = async (studentId) => {
+    const enrollments = await StudentEnrollment.find({
+        studentId,
+        status: { $nin: ["completed", "dropped"] },
+        startDate: { $ne: null },
+    })
+        .select("startDate endDate slutprovDate")
+        .lean();
+
+    if (!enrollments.length) {
+        return null;
+    }
+
+    let endDate = null;
+    let finalExamDate = null;
+    for (const enrollment of enrollments) {
+        const enrollmentEnd = enrollment.endDate
+            ? new Date(enrollment.endDate)
+            : null;
+        if (enrollmentEnd && (!endDate || enrollmentEnd > endDate)) {
+            endDate = enrollmentEnd;
+        }
+        const exam = enrollment.slutprovDate
+            ? new Date(enrollment.slutprovDate)
+            : null;
+        if (exam && (!finalExamDate || exam > finalExamDate)) {
+            finalExamDate = exam;
+        }
+    }
+
+    const student = await Student.findById(studentId);
+    if (!student) {
+        return null;
+    }
+
+    if (endDate) student.endDate = endDate;
+    if (finalExamDate) student.finalExamDate = finalExamDate;
+
+    if (typeof student.save === "function") {
+        await student.save();
+    }
+
+    try {
+        const { syncCalendarEventsForStudent } = await import(
+            "../utils/calendarEventSync.js"
+        );
+        await syncCalendarEventsForStudent(student._id);
+    } catch (syncErr) {
+        logger.warn(
+            { err: syncErr, studentId },
+            "Failed to sync student calendar event"
+        );
+    }
+
+    return { endDate, finalExamDate };
 };
 
 /**

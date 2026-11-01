@@ -39,6 +39,20 @@ class CourseMatchingService {
     }
 
     /**
+     * Helper: get the Wednesday of the week before the given date.
+     * Used as a final exam fallback when no teacher-specific rule applies.
+     */
+    static getWednesdayBefore(date) {
+        const d = new Date(date);
+        const currentDay = d.getDay();
+        let daysToSubtract = (currentDay - 3 + 7) % 7; // 3 = Wednesday
+        if (daysToSubtract === 0) daysToSubtract = 7;
+        d.setDate(d.getDate() - daysToSubtract);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
+
+    /**
      * Default exam mode derived from the student's municipality.
      * Spec: all municipalities except Upplands Bro default to on-site exams;
      * Upplands Bro defaults to remote (distans).
@@ -334,6 +348,14 @@ class CourseMatchingService {
 
         logger.debug({ educationCount: educationEntries.length, studentId }, "Processing education entries for student");
 
+        // Studietakt: 100% → ×1, 50% → ×2, 25% → ×4 duration.
+        // applyPace means the caller explicitly supplied a pace (e.g. the
+        // Excel STUDIETAKT column) and expects dates/exams to be recalculated
+        // from the course extent instead of trusting stale spreadsheet dates.
+        const paceValue = Number(options.pace) || 100;
+        const paceFactor = 100 / paceValue;
+        const applyPace = options.applyPace === true;
+
         for (const entry of educationEntries) {
             try {
                 // --- PATCH: Match course packages by code (prioritized) ---
@@ -398,16 +420,30 @@ class CourseMatchingService {
                     // Use student's teacherId as responsibleTeacher for course instance
                     const responsibleTeacherId = studentDocA?.teacherId || entry.teacherId || null;
 
+                    // When a study pace is supplied, the course length is
+                    // derived from the course extent instead of the (possibly
+                    // stale) spreadsheet end date.
+                    const courseStart = new Date(entry.startDate);
+                    const extentWeeks =
+                        parseFloat(match.course.courseExtent) || 5;
+                    const courseEnd = applyPace
+                        ? this.addWeeks(courseStart, extentWeeks * paceFactor)
+                        : new Date(entry.endDate);
+
                     // Determine slutprovDate (will be calculated later after enrollment is created)
-                    // For now, pass entry.slutprovDate if available, otherwise null
-                    const initialSlutprovDate = entry.slutprovDate ? new Date(entry.slutprovDate) : null;
+                    // For now, pass entry.slutprovDate if available, otherwise null.
+                    // A pace change recalculates the exam date from the new end date.
+                    const initialSlutprovDate =
+                        !applyPace && entry.slutprovDate
+                            ? new Date(entry.slutprovDate)
+                            : null;
 
                     // Find or create course instance, pass responsibleTeacherId from student
                     const { instance, wasCreated } =
                         await this.findOrCreateCourseInstance(
                             match.course._id,
-                            new Date(entry.startDate),
-                            new Date(entry.endDate),
+                            courseStart,
+                            courseEnd,
                             userId,
                             responsibleTeacherId,
                             initialSlutprovDate
@@ -430,11 +466,11 @@ class CourseMatchingService {
                         studentId,
                         courseInstanceId: instance._id,
                         mainCourseId: match.course._id,
-                        startDate: new Date(entry.startDate),
-                        endDate: new Date(entry.endDate),
+                        startDate: courseStart,
+                        endDate: courseEnd,
                     });
                     if (existingEnrollment) {
-                        logger.debug({ studentId, courseId: match.course._id, startDate: entry.startDate, endDate: entry.endDate }, "Skipping duplicate enrollment");
+                        logger.debug({ studentId, courseId: match.course._id, startDate: courseStart, endDate: courseEnd }, "Skipping duplicate enrollment");
                         continue;
                     }
 
@@ -451,13 +487,14 @@ class CourseMatchingService {
                         courseInstanceId: instance._id,
                         mainCourseId: match.course._id,
                         enrollmentPrice: match.course.price ?? null,
-                        startDate: new Date(entry.startDate),
-                        endDate: new Date(entry.endDate),
+                        startDate: courseStart,
+                        endDate: courseEnd,
                         status: "enrolled",
                         teacherId:
                             studentDocA?.teacherId || entry.teacherId || null,
                         notes: entry.notes || null,
                         needsSupport: options.needsSupport || false,
+                        pace: paceValue,
                         examMode: options.examMode || this.getDefaultExamMode(studentDocA?.municipality),
                     });
                     logger.debug({ teacherId: enrollment.teacherId || "null", studentDocTeacherId: studentDocA?.teacherId || "null", entryTeacherId: entry.teacherId || "null" }, "Creating individual course enrollment");
@@ -507,21 +544,21 @@ class CourseMatchingService {
         // Non-fatal - learning kit creation failure should not break the enrollment flow
     }
 
-    // Calculate and set slutprov date BEFORE adding to results
-    const courseStart = new Date(entry.startDate);
+                    // Calculate and set slutprov date BEFORE adding to results.
+                    // With an explicit pace the spreadsheet exam date is stale,
+                    // so it is recalculated from the new course end date.
                     let slutprovDate;
-                    if (entry.slutprovDate) {
+                    if (!applyPace && entry.slutprovDate) {
                         // Use explicit slutprovDate if provided
                         slutprovDate = new Date(entry.slutprovDate);
                         logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Using provided slutprov date for individual course");
                     } else if (!entry.teacherId) {
                         // Only use fallback Wednesday if there's no teacher
                         // If there's a teacher, let the pre-save hook calculate based on teacher rules
-                        slutprovDate = this.getWednesdayOfWeek(
-                            courseStart,
-                            4
-                        );
-                        logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Calculated slutprov date for individual course (Wednesday week 4)");
+                        slutprovDate = applyPace
+                            ? this.getWednesdayBefore(courseEnd)
+                            : this.getWednesdayOfWeek(courseStart, 4);
+                        logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Calculated slutprov date for individual course");
                     } else {
                         // Teacher is set but no explicit date - let pre-save hook calculate
                         // Reload enrollment to get the calculated date from the pre-save hook
@@ -530,9 +567,11 @@ class CourseMatchingService {
                         if (slutprovDate) {
                             logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Using auto-calculated slutprov date from pre-save hook");
                         } else {
-                            // Fallback to Wednesday week 4 if pre-save hook didn't set it
-                            slutprovDate = this.getWednesdayOfWeek(courseStart, 4);
-                            logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Fallback: Calculated slutprov date (Wednesday week 4)");
+                            // Fallback to the Wednesday before the course ends
+                            slutprovDate = applyPace
+                                ? this.getWednesdayBefore(courseEnd)
+                                : this.getWednesdayOfWeek(courseStart, 4);
+                            logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Fallback: Calculated slutprov date");
                         }
                     }
 
@@ -579,9 +618,9 @@ class CourseMatchingService {
                                 e.refId.toString() !==
                                 match.course._id.toString() ||
                                 new Date(e.startDate).getTime() !==
-                                new Date(entry.startDate).getTime() ||
+                                courseStart.getTime() ||
                                 new Date(e.endDate).getTime() !==
-                                new Date(entry.endDate).getTime()
+                                courseEnd.getTime()
                             );
                         });
 
@@ -592,8 +631,8 @@ class CourseMatchingService {
                             type: "Course",
                             refId: match.course._id,
                             name: match.course.courseName,
-                            startDate: new Date(entry.startDate),
-                            endDate: new Date(entry.endDate),
+                            startDate: courseStart,
+                            endDate: courseEnd,
                             grade: null,
                             addedAt: new Date(),
                             addedBy: userId,
@@ -677,9 +716,6 @@ class CourseMatchingService {
                         entry.startDate || new Date()
                     );
                     let i = 0;
-                    // Studietakt: 100% → ×1, 50% → ×2, 25% → ×4 duration
-                    const paceValue = Number(options.pace) || 100;
-                    const paceFactor = 100 / paceValue;
 
                     while (i < packageCourses.length) {
                         // Get current course details
@@ -1096,12 +1132,15 @@ class CourseMatchingService {
                     const course = courseMatch.course;
                     logger.debug({ entryName: entry.name, courseName: course.courseName }, "Matched individual course");
 
-                    // Calculate course dates
+                    // Calculate course dates, honoring the study pace
                     const courseStart = entry.startDate
                         ? new Date(entry.startDate)
                         : this.getNextMonday(new Date());
-                    const extentWeeks = parseInt(course.courseExtent) || 5; // Default to 5 weeks if not set
-                    const courseEnd = this.addWeeks(courseStart, extentWeeks);
+                    const extentWeeks = parseFloat(course.courseExtent) || 5; // Default to 5 weeks if not set
+                    const courseEnd = this.addWeeks(
+                        courseStart,
+                        extentWeeks * paceFactor
+                    );
 
                     // Get student to find teacherId for course instance
                     let studentDocIndividual;
@@ -1171,6 +1210,7 @@ class CourseMatchingService {
                             studentDoc?.teacherId || entry.teacherId || null,
                         notes: entry.notes || null,
                         needsSupport: options.needsSupport,
+                        pace: paceValue,
                         examMode: options.examMode || this.getDefaultExamMode(studentDoc?.municipality),
                     });
 
@@ -1179,12 +1219,23 @@ class CourseMatchingService {
 
                     // Calculate and set slutprov date BEFORE adding to results
                     let slutprovDate;
-                    if (entry.slutprovDate) {
+                    if (!applyPace && entry.slutprovDate) {
                         slutprovDate = new Date(entry.slutprovDate);
                         logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Using provided slutprov date for individual course");
+                    } else if (!entry.teacherId) {
+                        slutprovDate = applyPace
+                            ? this.getWednesdayBefore(courseEnd)
+                            : this.getWednesdayOfWeek(courseStart, 4);
+                        logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Calculated slutprov date for individual course");
                     } else {
-                        slutprovDate = this.getWednesdayOfWeek(courseStart, 4);
-                        logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Calculated slutprov date for individual course (Wednesday week 4)");
+                        const reloadedEnrollment = await StudentEnrollment.findById(enrollment._id);
+                        slutprovDate = reloadedEnrollment?.slutprovDate || null;
+                        if (!slutprovDate) {
+                            slutprovDate = applyPace
+                                ? this.getWednesdayBefore(courseEnd)
+                                : this.getWednesdayOfWeek(courseStart, 4);
+                        }
+                        logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Resolved slutprov date for individual course");
                     }
 
                     // Validate the slutprov date

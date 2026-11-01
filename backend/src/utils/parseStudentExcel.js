@@ -21,6 +21,23 @@ function extractMail(value) {
     return typeof value === "string" ? value.trim() : "";
 }
 
+/**
+ * Parse a study pace (studietakt) cell. Accepts 100, "100%", "50 %" etc.
+ * Only 100, 50 and 25 are valid; anything else is ignored so a typo can
+ * never silently produce invalid course dates.
+ * @param {*} value - Raw cell value
+ * @returns {number|null} Normalized pace percentage or null
+ */
+export function normalizeStudyPace(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const raw =
+        typeof value === "object" && value.text ? value.text : String(value);
+    const match = raw.match(/(\d{1,3})\s*%?/);
+    if (!match) return null;
+    const pace = Number(match[1]);
+    return [25, 50, 100].includes(pace) ? pace : null;
+}
+
 // ✅ Clean course-like strings for normalization (exact matching only)
 export function cleanCourseName(name) {
     if (!name) return "";
@@ -60,6 +77,11 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
     const worksheet = workbook.worksheets[0];
 
     const headers = worksheet.getRow(1).values.slice(1);
+    const paceHeader = headers.find(
+        (header) =>
+            typeof header === "string" &&
+            /^(STUDIETAKT|TAKT|PACE)(\s*\(?%\)?)?$/i.test(header.trim())
+    );
     const requiredFields = [
         "NAMN",
         "PERSONNUMMER",
@@ -152,9 +174,14 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
             education.push({ type: "Course", name: "SE STUDIEPLAN" });
         }
 
+        const parsedPace = paceHeader
+            ? normalizeStudyPace(rowObject[paceHeader])
+            : null;
+
         studentsToSave.push({
             name: rowObject["NAMN"],
             personalNumber: normalizePN(rowObject["PERSONNUMMER"]),
+            ...(parsedPace ? { pace: parsedPace } : {}),
             startDate: parseExcelDate(rowObject["START"]),
             endDate: parseExcelDate(rowObject["SLUT"]),
             finalExamDate: parseExcelDate(rowObject["PREL. DATUM SLUTPROV"]),

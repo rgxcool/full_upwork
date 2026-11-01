@@ -235,4 +235,76 @@ describe("parseStudentExcel utilities", () => {
         expect(students).toHaveLength(2);
         expect(students.map((s) => s.name)).toEqual(["Empty Start", "Empty Mid"]);
     });
+
+    it("reads an optional STUDIETAKT column as a percentage", async () => {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet("Elever");
+        worksheet.addRow([
+            "NAMN",
+            "PERSONNUMMER",
+            "KURS/PAKET",
+            "START",
+            "SLUT",
+            "KOMMUN/PRIVAT",
+            "MAIL",
+            "STUDIETAKT",
+        ]);
+
+        worksheet.addRow([
+            "Pace Student",
+            "20000101-1234",
+            "KURS1000X",
+            new Date("2026-01-05T00:00:00.000Z"),
+            new Date("2026-02-06T00:00:00.000Z"),
+            "Solna",
+            "pace@example.com",
+            "50%",
+        ]);
+        worksheet.addRow([
+            "Default Pace Student",
+            "20000101-5678",
+            "KURS1000X",
+            new Date("2026-01-05T00:00:00.000Z"),
+            new Date("2026-02-06T00:00:00.000Z"),
+            "Solna",
+            "default-pace@example.com",
+            "",
+        ]);
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const students = await parseStudentExcel(buffer, "Teacher");
+
+        expect(students[0].pace).toBe(50);
+        expect(students[1].pace).toBeUndefined();
+    });
+
+    it("ignores invalid study pace values instead of creating bad dates", async () => {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet("Elever");
+        worksheet.addRow([
+            "NAMN",
+            "PERSONNUMMER",
+            "KURS/PAKET",
+            "START",
+            "SLUT",
+            "KOMMUN/PRIVAT",
+            "MAIL",
+            "STUDIETAKT",
+        ]);
+        worksheet.addRow([
+            "Bad Pace Student",
+            "20000101-9999",
+            "KURS1000X",
+            new Date("2026-01-05T00:00:00.000Z"),
+            new Date("2026-02-06T00:00:00.000Z"),
+            "Solna",
+            "bad-pace@example.com",
+            "33%",
+        ]);
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const students = await parseStudentExcel(buffer, "Teacher");
+
+        expect(students[0].pace).toBeUndefined();
+    });
 });

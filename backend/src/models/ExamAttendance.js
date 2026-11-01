@@ -26,6 +26,10 @@ const examAttendanceSchema = new mongoose.Schema(
         // Academic details
         grade: String,
         notes: String,
+
+        // Set once the "you were absent" information email has been sent, so
+        // repeated attendance saves do not spam the student.
+        absenceEmailSentAt: { type: Date, default: null },
         
         // Metadata
         recordedAt: { type: Date, default: Date.now },

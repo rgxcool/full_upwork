@@ -20,11 +20,6 @@ export async function syncCalendarEventsForStudent(studentId) {
             .populate({
                 path: "teacherId",
                 populate: { path: "userId", select: "username" },
-            })
-            .populate({
-                path: "education.refId",
-                model: "Course",
-                select: "courseName courseCode",
             });
 
         if (!student || !student.finalExamDate) {
@@ -61,10 +56,8 @@ export async function syncCalendarEventsForStudent(studentId) {
             const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
             const enrollment = await StudentEnrollment.findOne({
                 studentId: student._id,
-                endDate: {
-                    $gte: new Date(dateKey),
-                    $lt: new Date(new Date(dateKey).getTime() + 24 * 60 * 60 * 1000),
-                },
+                startDate: { $lte: examDate },
+                endDate: { $gte: examDate },
             }).populate("mainCourseId");
             if (enrollment && enrollment.mainCourseId && enrollment.mainCourseId.courseName) {
                 courseName = enrollment.mainCourseId.courseName;

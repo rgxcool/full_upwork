@@ -6,6 +6,7 @@ import CourseInstance from "../models/CourseInstance.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Teacher from "../models/Teacher.js";
+import ExamAttendance from "../models/ExamAttendance.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
 import { canFeature } from "../middleware/authorization.js";
@@ -49,34 +50,26 @@ const buildNameSearchClause = (q) => {
     if (!q || q.trim().length === 0) return null;
     
     const trimmed = q.trim();
-    const parts = trimmed.split(/\s+/).filter(Boolean);
+    const parts = trimmed.split(/[\s,]+/).filter(Boolean);
     
-    // For 1-2 word queries, use simple regex search (backward compatible)
-    if (parts.length <= 2) {
-        const regexStr = escapeRegExp(parts.join("|"));
-        return { name: { $regex: regexStr, $options: "i" } };
+    // For multiple parts, require all parts to match the name (handles "Bano, Saira" vs "bano saira")
+    if (parts.length > 1) {
+        return {
+            $and: parts.map(p => ({
+                name: { $regex: escapeRegExp(p), $options: "i" }
+            }))
+        };
     }
     
-    // For 3+ word queries, parse as potential name parts
-    // and create a regex that requires all parts to be present in the name
-    const escapedParts = parts.map(p => escapeRegExp(p)).join(".*");
-    const regexStr = `^.*${escapedParts}.*$`;
+    const regexStr = escapeRegExp(parts[0] || q);
     return { name: { $regex: regexStr, $options: "i" } };
 };
 
 /**
  * Search for students by name, supporting first/middle/last name parsing.
- * For 1-2 word queries, performs substring match (backward compatible).
- * For 3+ word queries, requires all name parts to be present in the full name.
  */
 const buildStudentNameQuery = (q) => {
-    // Try name part parsing first (for 3+ word queries)
-    const nameClause = buildNameSearchClause(q);
-    if (nameClause) return nameClause;
-    
-    // Fall back to simple regex search (backward compatible for 1-2 word queries)
-    const regexStr = escapeRegExp(q);
-    return { name: { $regex: regexStr, $options: "i" } };
+    return buildNameSearchClause(q) || { name: { $regex: escapeRegExp(q), $options: "i" } };
 };
 
 /**
@@ -86,23 +79,21 @@ const buildUserNameQuery = (q) => {
     if (!q || q.trim().length === 0) return null;
     
     const trimmed = q.trim();
-    const parts = trimmed.split(/\s+/).filter(Boolean);
+    const parts = trimmed.split(/[\s,]+/).filter(Boolean);
     
-    // For 1-2 word queries, use simple regex search on username/email/name
-    if (parts.length <= 2) {
-        const regexStr = escapeRegExp(q);
+    if (parts.length > 1) {
         return {
-            $or: [
-                { username: { $regex: regexStr, $options: "i" } },
-                { email: { $regex: regexStr, $options: "i" } },
-                { name: { $regex: regexStr, $options: "i" } },
-            ],
+            $and: parts.map(p => ({
+                $or: [
+                    { username: { $regex: escapeRegExp(p), $options: "i" } },
+                    { email: { $regex: escapeRegExp(p), $options: "i" } },
+                    { name: { $regex: escapeRegExp(p), $options: "i" } },
+                ]
+            }))
         };
     }
     
-    // For 3+ word queries, search for all name parts
-    const escapedParts = parts.map(p => escapeRegExp(p)).join(".*");
-    const regexStr = `^.*${escapedParts}.*$`;
+    const regexStr = escapeRegExp(q.trim());
     return {
         $or: [
             { username: { $regex: regexStr, $options: "i" } },
@@ -250,22 +241,16 @@ router.get("/search", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_US
             ["Kurs", "Alla"].includes(type) && q && q.length >= 3;
 
         if (shouldSearchUsers) {
-            // Use improved name search that supports first/middle/last name parsing
-            const studentNameQuery = buildStudentNameQuery(q);
-            const regexQuery = escapeRegExp(q);
-            const regexOptions = { $regex: regexQuery, $options: "i" };
-
+            // Multi-part queries ("bano saira") must match every part, so
+            // "Bano, Saira" is found even though the stored order differs.
+            const studentNameClause = buildStudentNameQuery(q);
             const studentRegex = Student.find({
                 ...studentQuery,
-                name: regexOptions,
+                ...studentNameClause,
             }).select("_id name email");
-            const userRegex = User.find({
-                $or: [
-                    { username: regexOptions },
-                    { email: regexOptions },
-                    { name: regexOptions },
-                ],
-            }).select("_id username name email role roles");
+
+            const userNameClause = buildUserNameQuery(q);
+            const userRegex = User.find(userNameClause).select("_id username name email role roles");
 
             const studentText = buildTextSearchClause(q)
                 ? Student.find({ ...studentQuery, ...buildTextSearchClause(q) }).select("_id name email")
@@ -627,13 +612,63 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                     const enrollments = await StudentEnrollment.find({
                         courseInstanceId: id,
                     })
-                        .populate("studentId", "name email")
+                        .populate("studentId", "name email personalNumber examTime examMunicipality examLocation examRoom municipality attendedExam")
                         .populate("teacherId")
                         .lean();
 
                     const students = enrollments
-                        .map((e) => e.studentId)
+                        .map((e) => {
+                            if (!e.studentId) return null;
+                            const s = e.studentId;
+                            return {
+                                _id: s._id,
+                                name: s.name,
+                                email: s.email,
+                                personalNumber: s.personalNumber,
+                                attended: s.attendedExam || false,
+                                examTime: s.examTime || "",
+                                examMunicipality: s.examMunicipality || s.municipality?.type || (typeof s.municipality === "string" ? s.municipality : "") || "",
+                                examLocation: s.examLocation || "",
+                                examRoom: s.examRoom || "",
+                            };
+                        })
                         .filter(Boolean);
+
+                    // Prefer the latest exam attendance record: it carries the
+                    // time, municipality and place that were entered when the
+                    // exam was planned/attended.
+                    if (students.length > 0) {
+                        const attendanceRecords = await ExamAttendance.find({
+                            studentId: { $in: students.map((s) => s._id) },
+                        })
+                            .sort({ examDate: -1, updatedAt: -1 })
+                            .lean();
+
+                        const latestByStudent = new Map();
+                        for (const record of attendanceRecords) {
+                            const key = String(record.studentId);
+                            if (!latestByStudent.has(key)) {
+                                latestByStudent.set(key, record);
+                            }
+                        }
+
+                        for (const student of students) {
+                            const attendance = latestByStudent.get(
+                                String(student._id)
+                            );
+                            if (!attendance) continue;
+                            student.attended = Boolean(attendance.attended);
+                            student.examTime =
+                                attendance.examTime || student.examTime;
+                            student.examMunicipality =
+                                attendance.examMunicipality ||
+                                student.examMunicipality;
+                            student.examLocation =
+                                attendance.examLocation || student.examLocation;
+                            student.examRoom =
+                                attendance.examRoom || student.examRoom;
+                        }
+                    }
 
                     const instanceUniqueStudents = Array.from(
                         new Map(students.map((s) => [s._id.toString(), s])).values()

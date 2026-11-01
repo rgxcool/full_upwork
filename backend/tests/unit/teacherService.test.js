@@ -113,6 +113,21 @@ describe("teacherService", () => {
         expect(await Teacher.countDocuments()).toBe(1);
     });
 
+    it("deduplicates concurrent lookups for the same new teacher", async () => {
+        const [first, second] = await Promise.all([
+            createOrFindTeacher("Concurrent Teacher"),
+            createOrFindTeacher("Concurrent Teacher"),
+        ]);
+
+        expect(first.teacher._id.toString()).toBe(
+            second.teacher._id.toString()
+        );
+        expect(
+            await User.countDocuments({ username: "Concurrent Teacher" })
+        ).toBe(1);
+        expect(await Teacher.countDocuments()).toBe(1);
+    });
+
     it("creates a teacher with a strong password and the next available color", async () => {
         const existingUser = await User.create(
             buildUser({
