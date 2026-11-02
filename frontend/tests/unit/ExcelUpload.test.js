@@ -115,11 +115,12 @@ describe('ExcelUpload.vue', () => {
         const originalConfirm = globalThis.confirm;
         globalThis.confirm = vi.fn(() => true);
         const showInfoSpy = vi.spyOn(wrapper.vm, 'showInfo').mockImplementation(() => { });
-        wrapper.vm.editingStudent = { education: [{ name: 'Math 101' }] };
+        const education = { name: 'Math 101' };
+        wrapper.vm.editingStudent = { education: [education] };
 
-        wrapper.vm.confirmRemoveEducation(0);
+        wrapper.vm.confirmRemoveEducation(education);
 
-        expect(wrapper.vm.editingStudent.education[0].removedAt).toBeTruthy();
+        expect(education.removedAt).toBeTruthy();
         expect(showInfoSpy).toHaveBeenCalled();
 
         showInfoSpy.mockRestore();
@@ -218,13 +219,41 @@ describe('ExcelUpload.vue', () => {
         });
     });
 
+    it('keeps education entries keyed to their course when dates reorder the list', () => {
+        wrapper.vm.openEditStudent({
+            _id: 'edit-sorted',
+            education: [
+                { _id: 'course-later', type: 'Course', startDate: '2024-02-01' },
+                { _id: 'course-earlier', type: 'Course', startDate: '2024-01-01' },
+            ],
+        });
+
+        const [laterCourse, earlierCourse] = wrapper.vm.editingStudent.education;
+        const laterKey = laterCourse._editKey;
+        laterCourse.startDate = '2024-03-01';
+
+        expect(
+            wrapper.vm.getSortedEducation(wrapper.vm.editingStudent.education)[0]._id
+        ).toBe('course-earlier');
+        expect(laterCourse._editKey).toBe(laterKey);
+        expect(earlierCourse._editKey).not.toBe(laterKey);
+    });
+
     it('saves edited student and updates local list', async () => {
         wrapper.vm.editingStudent = {
             _id: 'student-1',
             startDate: '2024-01-01',
             endDate: '2024-02-01',
             finalExamDate: '2024-03-01',
-            education: [],
+            education: [
+                {
+                    _editKey: 'editor-only',
+                    type: 'Course',
+                    refId: 'course-1',
+                    startDate: '2024-01-10',
+                    endDate: '2024-02-10',
+                },
+            ],
         };
         wrapper.vm.students = [{ _id: 'student-1', name: 'Original' }];
         client.put.mockResolvedValue({ data: { _id: 'student-1', name: 'Updated' } });
@@ -232,6 +261,18 @@ describe('ExcelUpload.vue', () => {
 
         await wrapper.vm.saveEditedStudent();
 
+        expect(client.put).toHaveBeenCalledWith(
+            '/student/student-1',
+            expect.objectContaining({
+                education: [
+                    expect.objectContaining({
+                        startDate: '2024-01-10T00:00:00.000Z',
+                        endDate: '2024-02-10T00:00:00.000Z',
+                    }),
+                ],
+            })
+        );
+        expect(client.put.mock.calls[0][1].education[0]).not.toHaveProperty('_editKey');
         expect(wrapper.vm.students[0].name).toBe('Updated');
         expect(wrapper.vm.editingStudentDialog).toBe(false);
         expect(showSuccessSpy).toHaveBeenCalled();
@@ -289,12 +330,16 @@ describe('ExcelUpload.vue', () => {
         expect(wrapper.vm.showGradeIndex).toBeNull();
     });
 
-    it('marks education removed when removeEducation is called', () => {
-        wrapper.vm.editingStudent = { education: [{ name: 'Course A' }] };
+    it('marks the selected education entry removed when sorted order differs', () => {
+        const laterCourse = { name: 'Course B', startDate: '2024-02-01' };
+        const earlierCourse = { name: 'Course A', startDate: '2024-01-01' };
+        wrapper.vm.editingStudent = { education: [laterCourse, earlierCourse] };
 
-        wrapper.vm.removeEducation(0);
+        const sortedEducation = wrapper.vm.getSortedEducation(wrapper.vm.editingStudent.education);
+        wrapper.vm.removeEducation(sortedEducation[0]);
 
-        expect(wrapper.vm.editingStudent.education[0].removedAt).toBeDefined();
+        expect(earlierCourse.removedAt).toBeDefined();
+        expect(laterCourse.removedAt).toBeUndefined();
     });
 
     it('stores uploaded file data', () => {

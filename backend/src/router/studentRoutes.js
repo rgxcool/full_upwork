@@ -1210,7 +1210,10 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
             // Batch-fetch all existing enrollments for this student to avoid N+1 queries
             const courseIds = req.body.education
                 .filter((e) => e.type === "Course")
-                .map((e) => (typeof e.refId === "object" ? e.refId._id : e.refId));
+                .map((e) => (
+                    typeof e.refId === "object" ? e.refId?._id : e.refId
+                ))
+                .filter(Boolean);
 
             const existingEnrollments = courseIds.length > 0
                 ? await StudentEnrollment.find({
@@ -1219,18 +1222,61 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
                 })
                 : [];
 
-            const enrollmentByCourse = new Map();
+            const enrollmentsByCourse = new Map();
+            const enrollmentById = new Map();
             for (const enr of existingEnrollments) {
-                enrollmentByCourse.set(enr.mainCourseId.toString(), enr);
+                const courseId = String(enr.mainCourseId?._id || enr.mainCourseId);
+                const enrollments = enrollmentsByCourse.get(courseId) || [];
+                enrollments.push(enr);
+                enrollmentsByCourse.set(courseId, enrollments);
+                enrollmentById.set(String(enr._id), enr);
             }
+            const usedEnrollmentIds = new Set();
 
             for (const eduData of req.body.education) {
                 if (eduData.type === "Course") {
                     const courseId =
                         typeof eduData.refId === "object"
-                            ? eduData.refId._id
+                            ? eduData.refId?._id
                             : eduData.refId;
-                    const existingEnrollment = enrollmentByCourse.get(courseId.toString());
+                    const courseEnrollments =
+                        enrollmentsByCourse.get(String(courseId)) || [];
+                    const requestedEnrollmentId =
+                        eduData.enrollmentId || eduData._id;
+                    const requestedInstanceId =
+                        typeof eduData.courseInstanceId === "object"
+                            ? eduData.courseInstanceId?._id
+                            : eduData.courseInstanceId;
+                    const enrollmentByRequestedId =
+                        requestedEnrollmentId
+                            ? enrollmentById.get(String(requestedEnrollmentId))
+                            : null;
+                    const existingEnrollment =
+                        (enrollmentByRequestedId &&
+                            String(
+                                enrollmentByRequestedId.mainCourseId?._id ||
+                                    enrollmentByRequestedId.mainCourseId
+                            ) === String(courseId) &&
+                            enrollmentByRequestedId) ||
+                        courseEnrollments.find(
+                            (enrollment) =>
+                                !usedEnrollmentIds.has(String(enrollment._id)) &&
+                                requestedInstanceId &&
+                                String(enrollment.courseInstanceId) ===
+                                    String(requestedInstanceId)
+                        ) ||
+                        courseEnrollments.find(
+                            (enrollment) =>
+                                !usedEnrollmentIds.has(String(enrollment._id)) &&
+                                new Date(enrollment.startDate).getTime() ===
+                                    new Date(eduData.startDate).getTime() &&
+                                new Date(enrollment.endDate).getTime() ===
+                                    new Date(eduData.endDate).getTime()
+                        ) ||
+                        courseEnrollments.find(
+                            (enrollment) =>
+                                !usedEnrollmentIds.has(String(enrollment._id))
+                        );
 
                     if (existingEnrollment) {
                         if (eduData.removedAt) {
@@ -1240,6 +1286,49 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
                             logger.info({ courseName: eduData.name }, "Deleted enrollment for course");
                             continue;
                         }
+                        usedEnrollmentIds.add(String(existingEnrollment._id));
+
+                        const parseCourseDate = (value) => {
+                            if (value === null || value === "") return null;
+                            const date = new Date(value);
+                            return Number.isNaN(date.getTime()) ? null : date;
+                        };
+                        const startDate =
+                            eduData.startDate !== undefined
+                                ? parseCourseDate(eduData.startDate)
+                                : existingEnrollment.startDate;
+                        const endDate =
+                            eduData.endDate !== undefined
+                                ? parseCourseDate(eduData.endDate)
+                                : existingEnrollment.endDate;
+                        if (!startDate || !endDate || endDate <= startDate) {
+                            throw new Error(
+                                `Invalid course dates for ${eduData.name || courseId}`
+                            );
+                        }
+
+                        const datesChanged =
+                            new Date(existingEnrollment.startDate).getTime() !==
+                                startDate.getTime() ||
+                            new Date(existingEnrollment.endDate).getTime() !==
+                                endDate.getTime();
+                        if (datesChanged || !existingEnrollment.courseInstanceId) {
+                            const CourseMatchingService = await import(
+                                "../utils/courseMatchingService.js"
+                            );
+                            const { instance } =
+                                await CourseMatchingService.default.findOrCreateCourseInstance(
+                                    courseId,
+                                    startDate,
+                                    endDate,
+                                    req.user?.userId || null,
+                                    student.teacherId || null,
+                                    eduData.finalExamDate
+                                        ? parseCourseDate(eduData.finalExamDate)
+                                        : null
+                                );
+                            existingEnrollment.courseInstanceId = instance._id;
+                        }
 
                         if (eduData.grade !== undefined)
                             existingEnrollment.grade = eduData.grade;
@@ -1248,20 +1337,21 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
                             eduData.status !== ""
                         )
                             existingEnrollment.status = eduData.status;
-                        if (eduData.startDate !== undefined)
-                            existingEnrollment.startDate = new Date(
-                                eduData.startDate
-                            );
-                        if (eduData.endDate !== undefined)
-                            existingEnrollment.endDate = new Date(
-                                eduData.endDate
-                            );
+                        existingEnrollment.startDate = startDate;
+                        existingEnrollment.endDate = endDate;
                         if (eduData.comments !== undefined)
                             existingEnrollment.notes = eduData.comments;
-                        if (eduData.finalExamDate !== undefined)
-                            existingEnrollment.slutprovDate = new Date(
+                        if (eduData.finalExamDate !== undefined) {
+                            const finalExamDate = parseCourseDate(
                                 eduData.finalExamDate
                             );
+                            if (!finalExamDate) {
+                                throw new Error(
+                                    `Invalid final exam date for ${eduData.name || courseId}`
+                                );
+                            }
+                            existingEnrollment.slutprovDate = finalExamDate;
+                        }
 
                         await existingEnrollment.save();
                         logger.info({ courseName: eduData.name }, "Updated enrollment for course");
@@ -1279,6 +1369,8 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
                             const eduDataForService = {
                                 ...eduData,
                                 refId: courseId,
+                                slutprovDate: eduData.finalExamDate,
+                                notes: eduData.comments,
                             };
 
                             await CourseMatchingService.default.processStudentEducation(
