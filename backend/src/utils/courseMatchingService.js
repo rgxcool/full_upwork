@@ -4,6 +4,7 @@ import logger from "./logger.js";
 import mongoose from "mongoose";
 import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
 import CourseInstance from "../models/CourseInstance.js";
+import Course from "../models/Course.js";
 
 class CourseMatchingService {
     /**
@@ -90,7 +91,6 @@ class CourseMatchingService {
      */
      
     static async findBestCourseMatch(courseCodeOrName) {
-        const { default: Course } = await import("../models/Course.js");
         // Normalize input: treat as code using the same function as database codes
         const normalizedInput = normalizeCodeForMatching(courseCodeOrName || "");
 
@@ -116,6 +116,17 @@ class CourseMatchingService {
         // No match found - return null (strict matching only)
         logger.debug({ normalizedInput }, "No exact code match found");
         return null;
+    }
+
+    static async findCourseMatchForEntry(entry) {
+        const courseId =
+            typeof entry.refId === "object" ? entry.refId?._id : entry.refId;
+        if (courseId) {
+            const course = await Course.findById(courseId);
+            if (course) return { course, score: 1.0 };
+        }
+
+        return this.findBestCourseMatch(entry.name);
     }
 
     /**
@@ -393,7 +404,7 @@ class CourseMatchingService {
                     entry.endDate
                 ) {
                     // Find the best course match
-                    const match = await this.findBestCourseMatch(entry.name);
+                    const match = await this.findCourseMatchForEntry(entry);
 
                     if (!match) {
                         results.warnings.push({
@@ -1116,9 +1127,7 @@ class CourseMatchingService {
                     logger.debug({ entryName: entry.name }, "Processing individual course");
 
                     // Find the best matching course
-                    const courseMatch = await this.findBestCourseMatch(
-                        entry.name
-                    );
+                    const courseMatch = await this.findCourseMatchForEntry(entry);
                     if (!courseMatch) {
                         results.warnings.push({
                             type: "no_match",

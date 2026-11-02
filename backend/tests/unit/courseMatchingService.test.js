@@ -137,6 +137,52 @@ describe("CourseMatchingService.findBestCourseMatch", () => {
     });
 });
 
+describe("CourseMatchingService.findCourseMatchForEntry", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("resolves a selected course by refId instead of matching its display name as a code", async () => {
+        const course = { _id: "course-1", courseName: "Matematik 1" };
+        vi.spyOn(Course, "findById").mockResolvedValue(course);
+        const findBestCourseMatch = vi.spyOn(
+            CourseMatchingService,
+            "findBestCourseMatch"
+        );
+
+        const result = await CourseMatchingService.findCourseMatchForEntry({
+            refId: "course-1",
+            name: "Matematik 1",
+        });
+
+        expect(Course.findById).toHaveBeenCalledWith("course-1");
+        expect(findBestCourseMatch).not.toHaveBeenCalled();
+        expect(result).toEqual({ course, score: 1.0 });
+    });
+
+    it("falls back to exact course-code matching when refId is absent or not found", async () => {
+        const match = {
+            course: { _id: "course-2", courseCode: "FYFFY01" },
+            score: 1.0,
+        };
+        vi.spyOn(Course, "findById").mockResolvedValue(null);
+        vi.spyOn(CourseMatchingService, "findBestCourseMatch").mockResolvedValue(
+            match
+        );
+
+        const result = await CourseMatchingService.findCourseMatchForEntry({
+            refId: "missing-course",
+            name: "FYFFY01",
+        });
+
+        expect(Course.findById).toHaveBeenCalledWith("missing-course");
+        expect(CourseMatchingService.findBestCourseMatch).toHaveBeenCalledWith(
+            "FYFFY01"
+        );
+        expect(result).toBe(match);
+    });
+});
+
 describe("CourseMatchingService.resolveCourseTemplate", () => {
     afterEach(() => {
         vi.restoreAllMocks();
