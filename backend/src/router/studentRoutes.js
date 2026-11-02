@@ -29,6 +29,7 @@ import { studentScopeFilter, municipalityInScope } from "../utils/tenantScope.js
 import { projectStudentForViewer, projectStudentsForViewer } from "../utils/studentSerializer.js";
 import { getRevenueReport } from "../services/analyticsService.js";
 import { APL_STATUSES, updateAplStatus } from "../services/aplService.js";
+import AplRecord from "../models/AplRecord.js";
 
 const router = Router();
 
@@ -944,6 +945,7 @@ router.delete("/student/:id", authenticateUser, hasRole(ALLOWED_ADMIN_ROLES), as
         if (!deletedStudent) {
             return res.status(404).json({ error: "Student not found" });
         }
+        await AplRecord.deleteMany({ studentId });
 
         logger.info({ name: deletedStudent.name, studentId, deletedFilesCount }, "Deleted student and associated file(s)");
         res.json({ 
@@ -996,13 +998,22 @@ router.delete("/students", authenticateUser, hasRole(["systemadmin", "admin", "t
 
         const totalDeletedFiles = await deleteAllStudentFiles(studentIds);
 
+        const aplRecords = await AplRecord.deleteMany({});
         await Student.deleteMany({});
 
-        logger.info({ totalDeletedFiles, count: studentIds.length }, "Deleted ALL students (confirmed)");
+        logger.info(
+            {
+                totalDeletedFiles,
+                count: studentIds.length,
+                aplRecordsDeleted: aplRecords.deletedCount,
+            },
+            "Deleted ALL students (confirmed)"
+        );
         res.json({
             message: "All students deleted successfully",
             deletedStudents: studentIds.length,
             deletedFilesCount: totalDeletedFiles,
+            deletedAplRecords: aplRecords.deletedCount,
         });
     } catch (error) {
         logger.error({ err: error }, "Error deleting all students");

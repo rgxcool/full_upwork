@@ -566,6 +566,22 @@ describe("APL Status Transitions", () => {
             expect(records[0].studentId.name).toBe("Bertil");
         });
 
+        it("excludes APL records whose student no longer exists", async () => {
+            AplRecord.find.mockReturnValue({
+                populate: vi.fn().mockReturnThis(),
+                sort: vi.fn().mockReturnThis(),
+                lean: vi.fn().mockResolvedValue([
+                    { status: "GREEN", studentId: null, cvDocId: "cv", contractDocId: "contract" },
+                    { status: "GREEN", studentId: { name: "Anna", education: [] } },
+                ]),
+            });
+
+            const records = await getAplRecords({ status: "GREEN", search: "anna" });
+
+            expect(records).toHaveLength(1);
+            expect(records[0].studentId.name).toBe("Anna");
+        });
+
         it("enriches records with computed APL fields", async () => {
             AplRecord.find.mockReturnValue({
                 populate: vi.fn().mockReturnThis(),
@@ -596,6 +612,18 @@ describe("APL Status Transitions", () => {
 
         it("returns null when no record exists", async () => {
             expect(await getAplRecordByStudent("s1")).toBeNull();
+        });
+
+        it("returns null when the APL record has no existing student", async () => {
+            AplRecord.findOne.mockReturnValue({
+                populate: vi.fn().mockReturnThis(),
+                lean: vi.fn().mockResolvedValue({
+                    status: "GREEN",
+                    studentId: null,
+                }),
+            });
+
+            expect(await getAplRecordByStudent("deleted-student")).toBeNull();
         });
 
         it("enriches the found record with computed fields", async () => {
