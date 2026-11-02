@@ -41,7 +41,9 @@ export async function findEligibleStudents() {
             const aplPeriod = computeAplPeriod(student.education || []);
             const effective = computeAplEffectiveStatus(
                 student.aplStatus,
-                aplPeriod.aplEndDate
+                aplPeriod.aplEndDate,
+                new Date(),
+                student.aplStatusManualOverride
             );
             eligible.push({
                 ...student,
@@ -161,23 +163,32 @@ async function notifyAplKit(student, kit) {
 /**
  * Update APL status for a student, sync both AplRecord and Student.aplStatus.
  */
-export async function updateAplStatus({ studentId, status, reason, userId }) {
+export async function updateAplStatus({
+    studentId,
+    status,
+    reason,
+    userId,
+    changedBy,
+    studentDocument,
+    manualOverride,
+}) {
     if (!APL_STATUSES.includes(status)) {
         throw new AppError("Invalid APL status", 400);
     }
 
-    const student = await Student.findById(studentId);
+    const student = studentDocument || await Student.findById(studentId);
     if (!student) throw new AppError("Student not found", 404);
 
     const previousStatus = student.aplStatus;
 
     // Update Student model
     student.aplStatus = status;
+    student.aplStatusManualOverride = manualOverride ?? Boolean(userId);
     if (!student.aplStatusHistory) student.aplStatusHistory = [];
     student.aplStatusHistory.push({
         status,
         changedAt: new Date(),
-        changedBy: userId?.toString() || "system",
+        changedBy: changedBy || userId?.toString() || "system",
     });
     await student.save();
 
@@ -247,7 +258,10 @@ export async function autoTransitionStatuses() {
     // Find all active APL records (not GREEN or RED-auto)
     const records = await AplRecord.find({
         status: { $in: ["GRAY", "BLUE", "YELLOW", "PURPLE"] },
-    }).populate("studentId", "name email education aplStatus");
+    }).populate(
+        "studentId",
+        "name email education aplStatus aplStatusManualOverride"
+    );
 
     for (const record of records) {
         const student = record.studentId;
@@ -256,6 +270,7 @@ export async function autoTransitionStatuses() {
         // Personalized APL learning kit appears on the student's first page as
         // soon as their APL period has started (record exists).
         await ensureAplLearningKit(student._id);
+        if (student.aplStatusManualOverride) continue;
 
         const aplPeriod = computeAplPeriod(student.education || []);
         if (!aplPeriod.aplEndDate) continue;
@@ -318,7 +333,7 @@ export async function getAplRecords({ status, includeCompleted, search }) {
     }
 
     const records = await AplRecord.find(query)
-        .populate("studentId", "name email phone teacherId education aplStatus dropout")
+        .populate("studentId", "name email phone teacherId education aplStatus aplStatusManualOverride dropout")
         .populate("coursePackageId", "coursePackageName coursePackageCode")
         .populate("cvDocId", "filename uploadDate")
         .populate("contractDocId", "filename uploadDate")
@@ -341,7 +356,9 @@ export async function getAplRecords({ status, includeCompleted, search }) {
         const aplPeriod = computeAplPeriod(student?.education || []);
         const effective = computeAplEffectiveStatus(
             record.status,
-            aplPeriod.aplEndDate
+            aplPeriod.aplEndDate,
+            new Date(),
+            student?.aplStatusManualOverride
         );
         return {
             ...record,
@@ -358,7 +375,7 @@ export async function getAplRecords({ status, includeCompleted, search }) {
  */
 export async function getAplRecordByStudent(studentId) {
     const record = await AplRecord.findOne({ studentId })
-        .populate("studentId", "name email phone teacherId education aplStatus dropout")
+        .populate("studentId", "name email phone teacherId education aplStatus aplStatusManualOverride dropout")
         .populate("coursePackageId", "coursePackageName coursePackageCode")
         .populate("cvDocId", "filename uploadDate")
         .populate("contractDocId", "filename uploadDate")
@@ -368,7 +385,12 @@ export async function getAplRecordByStudent(studentId) {
 
     const student = record.studentId;
     const aplPeriod = computeAplPeriod(student?.education || []);
-    const effective = computeAplEffectiveStatus(record.status, aplPeriod.aplEndDate);
+    const effective = computeAplEffectiveStatus(
+        record.status,
+        aplPeriod.aplEndDate,
+        new Date(),
+        student?.aplStatusManualOverride
+    );
 
     return {
         ...record,

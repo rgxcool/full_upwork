@@ -120,7 +120,29 @@ describe("APL Status Transitions", () => {
 
             expect(result.previousStatus).toBe("GRAY");
             expect(result.student.aplStatus).toBe("BLUE");
+            expect(result.student.aplStatusManualOverride).toBe(true);
             expect(mockStudent.save).toHaveBeenCalled();
+        });
+
+        it("initializes missing status history before a board update", async () => {
+            const mockStudent = {
+                _id: "student-null-history",
+                aplStatus: "GRAY",
+                education: [],
+                aplStatusHistory: null,
+                save: vi.fn(),
+            };
+            Student.findById.mockResolvedValue(mockStudent);
+            AplRecord.findOne.mockResolvedValue(null);
+
+            const result = await updateAplStatus({
+                studentId: mockStudent._id,
+                status: "BLUE",
+                userId: "user-1",
+            });
+
+            expect(result.student.aplStatusHistory).toHaveLength(1);
+            expect(result.student.aplStatusHistory[0].status).toBe("BLUE");
         });
 
         it("transitions GRAY → BLUE", async () => {
@@ -342,6 +364,31 @@ describe("APL Status Transitions", () => {
 
             const result = await autoTransitionStatuses();
             expect(result).toEqual([]);
+        });
+
+        it("does not auto-transition a staff-overridden status", async () => {
+            const student = {
+                _id: "s4",
+                name: "Doris",
+                dropout: false,
+                aplStatus: "BLUE",
+                aplStatusManualOverride: true,
+                education: [],
+                logbook: [{ title: "APL-lärkit" }],
+            };
+            const record = {
+                _id: "r4",
+                status: "BLUE",
+                studentId: student,
+            };
+            AplRecord.find.mockReturnValue({
+                populate: vi.fn().mockResolvedValue([record]),
+            });
+
+            const result = await autoTransitionStatuses();
+
+            expect(result).toEqual([]);
+            expect(record.status).toBe("BLUE");
         });
     });
 

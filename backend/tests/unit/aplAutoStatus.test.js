@@ -35,6 +35,18 @@ describe("aplAutoStatus", () => {
             expect(result.aplAutoRed).toBe(true);
             expect(result.aplBehindSchedule).toBe(true);
         });
+
+        it("preserves a manually selected status during an automatic warning period", () => {
+            const result = computeAplEffectiveStatus(
+                "BLUE",
+                "2025-06-13",
+                new Date("2025-06-01"),
+                true
+            );
+
+            expect(result.aplStatus).toBe("BLUE");
+            expect(result.aplAutoRed).toBe(false);
+        });
     });
 
     describe("computeAplBehindSchedule", () => {

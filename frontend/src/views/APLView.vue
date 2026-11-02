@@ -10,7 +10,6 @@
     <v-tabs v-model="activeTab" grow>
       <v-tab value="ongoing">Pågående</v-tab>
       <v-tab value="completed">Avslutad</v-tab>
-      <v-tab value="contracts">APL-kontrakt</v-tab>
     </v-tabs>
     <v-window v-model="activeTab">
       <v-window-item value="ongoing">
@@ -26,9 +25,6 @@
       <v-window-item value="completed">
         <AplCompletedTab />
       </v-window-item>
-      <v-window-item value="contracts">
-        <APLFileArchive />
-      </v-window-item>
     </v-window>
   </div>
 </template>
@@ -37,7 +33,6 @@
 import { ref, onMounted } from 'vue';
 import client from '@/api/client.js';
 import APLBoard from '../components/APLBoard.vue';
-import APLFileArchive from '../components/APLFileArchive.vue';
 import AplCompletedTab from './Admin/AplCompletedTab.vue';
 
 const activeTab = ref('ongoing');

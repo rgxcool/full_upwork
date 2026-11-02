@@ -105,6 +105,7 @@ const StudentSchema = new mongoose.Schema(
             enum: ["GRAY", "BLUE", "YELLOW", "PURPLE", "RED", "GREEN"],
             default: "GRAY",
         },
+        aplStatusManualOverride: { type: Boolean, default: false },
 
         // "Eleven har redan utfört praktik via annan skola" (tidigare praktik)
         priorAplCompleted: { type: Boolean, default: false },

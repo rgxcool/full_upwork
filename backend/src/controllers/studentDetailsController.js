@@ -14,6 +14,7 @@ import {
     performStudentDropout,
     removeStudentDropoutRecord,
 } from "../services/dropoutService.js";
+import { APL_STATUSES, updateAplStatus } from "../services/aplService.js";
 import {
     performStudyplanRevision,
     getRevisionHistory,
@@ -144,7 +145,9 @@ export const getStudentDetails = async (req, res) => {
         const aplPeriod = computeAplPeriod(populatedStudent.education);
         const aplEffective = computeAplEffectiveStatus(
             populatedStudent.aplStatus,
-            aplPeriod.aplEndDate
+            aplPeriod.aplEndDate,
+            new Date(),
+            populatedStudent.aplStatusManualOverride
         );
         populatedStudent.aplStatus = aplEffective.aplStatus;
         populatedStudent.aplStatusStored = aplEffective.aplStatusStored;
@@ -206,27 +209,28 @@ export const updateStudentInfo = async (req, res) => {
             "examTime",
             "municipality",
             "dropout",
+            "aplStatus",
         ];
+
+        const previousValues = {};
+        for (const field of allowedFields) {
+            if (updates[field] !== undefined) {
+                previousValues[field] = student[field];
+            }
+        }
 
         // Apply updates
         for (const field of allowedFields) {
-            if (updates[field] !== undefined) {
+            if (field !== "aplStatus" && updates[field] !== undefined) {
                 student[field] = updates[field];
             }
         }
 
-        // Track APL status changes with history
-        if (
+        const aplStatusChanged =
             typeof updates.aplStatus === "string" &&
-            updates.aplStatus !== student.aplStatus
-        ) {
-            student.aplStatusHistory = student.aplStatusHistory || [];
-            student.aplStatusHistory.push({
-                status: updates.aplStatus,
-                changedAt: new Date(),
-                changedBy: req.user?.name || req.user?.userId || "system",
-            });
-            student.aplStatus = updates.aplStatus;
+            updates.aplStatus !== student.aplStatus;
+        if (aplStatusChanged && !APL_STATUSES.includes(updates.aplStatus)) {
+            return res.status(400).json({ error: "Invalid APL status" });
         }
 
         // Track if finalExamDate changed
@@ -242,13 +246,11 @@ export const updateStudentInfo = async (req, res) => {
             changes: Object.keys(updates).filter((key) =>
                 allowedFields.includes(key)
             ),
-            previousValues: {},
+            previousValues,
             newValues: {},
         };
 
-        // Store previous values for audit
         for (const field of changeLog.changes) {
-            changeLog.previousValues[field] = student[field];
             changeLog.newValues[field] = updates[field];
         }
 
@@ -258,7 +260,18 @@ export const updateStudentInfo = async (req, res) => {
         }
         student.changeHistory.push(changeLog);
 
-        await student.save();
+        if (aplStatusChanged) {
+            await updateAplStatus({
+                studentId: student._id,
+                status: updates.aplStatus,
+                userId: req.user?.userId,
+                changedBy: req.user?.name,
+                studentDocument: student,
+                manualOverride: true,
+            });
+        } else {
+            await student.save();
+        }
 
         // Sync calendar event if finalExamDate was set or changed
         if (finalExamDateChanged && student.finalExamDate) {
@@ -994,4 +1007,3 @@ export const getStudyplanRevisionHistory = async (req, res) => {
         res.status(500).json({ error: "Failed to fetch revision history" });
     }
 };
-
