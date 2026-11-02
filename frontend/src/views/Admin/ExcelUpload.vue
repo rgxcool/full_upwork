@@ -434,10 +434,10 @@
               <div class="form-section">
                 <h4>Utbildning</h4>
                 <div
-                  v-for="(edu, index) in getSortedEducation(
+                  v-for="edu in getSortedEducation(
                     editingStudent.education.filter((e) => !e.removedAt)
                   )"
-                  :key="index"
+                  :key="edu._editKey"
                   class="education-box"
                 >
                   <div class="education-header">
@@ -522,7 +522,7 @@
                     <button
                       type="button"
                       class="btn btn-danger btn-xs left"
-                      @click="confirmRemoveEducation(index)"
+                      @click="confirmRemoveEducation(edu)"
                     >
                       Ta bort kurs
                     </button>
@@ -741,11 +741,11 @@
         this.showFlashMessage('info', message, duration)
       },
 
-      confirmRemoveEducation(index) {
+      confirmRemoveEducation(education) {
         const confirmText = 'Är du säker på att du vill ta bort denna utbildning från eleven?'
         if (confirm(confirmText)) {
-          const courseName = this.editingStudent.education[index]?.name || 'kursen'
-          this.removeEducation(index)
+          const courseName = education?.name || 'kursen'
+          this.removeEducation(education)
           this.showInfo(
             `📝 ${courseName} markerad för borttagning. Klicka "Spara ändringar" för att bekräfta.`
           )
@@ -901,6 +901,15 @@
         if (!Array.isArray(clone.education)) {
           clone.education = []
         }
+        clone.education.forEach((edu, index) => {
+          edu._editKey = String(
+            edu.enrollmentId ||
+              edu._id ||
+              edu.courseInstanceId?._id ||
+              edu.courseInstanceId ||
+              `education-${index}`
+          )
+        })
 
         // Format dates for HTML date inputs
         if (clone.startDate) {
@@ -1023,6 +1032,9 @@
 
           // Prepare the data for sending
           const studentData = { ...this.editingStudent }
+          studentData.education = studentData.education.map(
+            ({ _editKey, ...education }) => education
+          )
 
           // If dropout was already handled via dedicated endpoint, exclude it from PUT
           // (to avoid overwriting the changes made by the dedicated endpoint)
@@ -1299,6 +1311,7 @@
         const { type, name, refId } = this.selectedEducation
 
         this.editingStudent.education.push({
+          _editKey: `education-${this.editingStudent.education.length}`,
           type,
           name,
           refId,
@@ -1338,10 +1351,9 @@
         this.showGradeIndex = null // 🔁 Reset grade toggles
       },
 
-      removeEducation(index) {
-        const edu = this.editingStudent.education[index]
-        if (edu) {
-          edu.removedAt = new Date().toISOString() // 🕒 Soft delete marker
+      removeEducation(education) {
+        if (education && this.editingStudent.education.includes(education)) {
+          education.removedAt = new Date().toISOString()
         }
       },
     },

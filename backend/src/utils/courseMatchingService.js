@@ -224,11 +224,18 @@ class CourseMatchingService {
         // If there's a teacher, let the pre-save hook calculate it based on teacher rules
         const shouldSetSlutprovDate = slutprovDate && !responsibleTeacherId;
 
-        // Generate unique courseCode: baseCourseCode + YY (year) + MM (month)
+        // Generate a course code that distinguishes instances with the same
+        // course and start month but different date ranges.
         const startDateObj = new Date(startDate);
         const year = String(startDateObj.getFullYear()).slice(-2); // Last 2 digits of year (e.g., "26" for 2026)
         const month = String(startDateObj.getMonth() + 1).padStart(2, '0'); // Month (01-12)
-        const uniqueCourseCode = `${mainCourse.courseCode}${year}${month}`;
+        const baseCourseCode = `${mainCourse.courseCode}${year}${month}`;
+        let uniqueCourseCode = baseCourseCode;
+        let version = 1;
+        while (await CourseInstance.findOne({ courseCode: uniqueCourseCode })) {
+            uniqueCourseCode = `${baseCourseCode}v${version}`;
+            version += 1;
+        }
 
         // Auto-generate card content from the course's own template (item #31
         // Part B). Only applies to NEW instances created at admission time —

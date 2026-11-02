@@ -372,6 +372,43 @@ describe("CourseMatchingService.findOrCreateCourseInstance", () => {
         expect(courseInstanceSave).toHaveBeenCalled();
     });
 
+    it("assigns a distinct course code when an extended instance shares the start month", async () => {
+        const mainCourse = mockCourse();
+        const existingFiveWeekInstance = {
+            courseCode: "MAT2601",
+            startDate: new Date("2026-01-05"),
+            endDate: new Date("2026-02-09"),
+        };
+        vi.spyOn(CourseInstance, "findOne").mockImplementation(async (query) => {
+            if (query.courseCode === "MAT2601") return existingFiveWeekInstance;
+            return null;
+        });
+        vi.spyOn(Course, "findById").mockResolvedValue(mainCourse);
+        vi.spyOn(CourseTemplate, "findOne").mockReturnValue({
+            sort: vi.fn().mockResolvedValue(null),
+        });
+        vi.spyOn(TeacherScheduleParameters, "findOne").mockReturnValue({
+            lean: vi.fn().mockResolvedValue(null),
+        });
+        vi.spyOn(CourseInstance.prototype, "save").mockImplementation(function () {
+            return Promise.resolve(this);
+        });
+
+        const result = await CourseMatchingService.findOrCreateCourseInstance(
+            mainCourse._id,
+            new Date("2026-01-05"),
+            new Date("2026-03-16"),
+            "user1"
+        );
+
+        expect(result.wasCreated).toBe(true);
+        expect(result.instance.courseName).toBe(existingFiveWeekInstance.courseName || mainCourse.courseName);
+        expect(result.instance.courseCode).toBe("MAT2601v1");
+        expect(result.instance.startDate).toEqual(new Date("2026-01-05"));
+        expect(result.instance.endDate).toEqual(new Date("2026-03-16"));
+        expect(result.instance.sectionDates).toHaveLength(5);
+    });
+
     it("clones template modules when a template exists", async () => {
         const mainCourse = mockCourse();
         const template = {

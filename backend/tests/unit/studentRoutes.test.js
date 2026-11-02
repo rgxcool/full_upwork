@@ -4,6 +4,7 @@ const CourseMatchingServiceMock = {
     __esModule: true,
     default: {
         processStudentEducation: vi.fn(),
+        findOrCreateCourseInstance: vi.fn(),
     },
 };
 
@@ -244,6 +245,7 @@ beforeEach(() => {
     Student.findOne.mockResolvedValue(null);
     sendDropoutNotification.mockReset();
     CourseMatchingServiceMock.default.processStudentEducation.mockReset();
+    CourseMatchingServiceMock.default.findOrCreateCourseInstance.mockReset();
     calendarEventSyncMock.syncCalendarEventsForStudent.mockReset();
     maybeSendLarteametEmail.mockReset();
     maybeSendLarteametEmail.mockResolvedValue({ sent: true });
@@ -2127,6 +2129,95 @@ describe("PUT /student/:id", () => {
         expect(CourseMatchingServiceMock.default.processStudentEducation).not.toHaveBeenCalled();
     });
 
+    it.each([
+        {
+            scenario: "the course dates change",
+            existingInstanceId: "instance-old",
+            currentStartDate: "2024-01-01",
+            currentEndDate: "2024-01-31",
+            startDate: "2024-02-01",
+            endDate: "2024-02-29",
+        },
+        {
+            scenario: "the enrollment has no instance",
+            existingInstanceId: null,
+            currentStartDate: "2024-02-01",
+            currentEndDate: "2024-02-29",
+            startDate: "2024-02-01",
+            endDate: "2024-02-29",
+        },
+    ])("uses a matching course instance when $scenario", async ({
+        existingInstanceId,
+        currentStartDate,
+        currentEndDate,
+        startDate,
+        endDate,
+    }) => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const studentDoc = {
+            _id: "put-edit-dates",
+            teacherId: "teacher-1",
+            education: [],
+            toObject() {
+                return { _id: this._id };
+            },
+        };
+        const enrollment = {
+            _id: "enrollment-1",
+            mainCourseId: "course-1",
+            courseInstanceId: existingInstanceId,
+            startDate: new Date(currentStartDate),
+            endDate: new Date(currentEndDate),
+            save: vi.fn().mockResolvedValue(undefined),
+        };
+        Student.findById.mockResolvedValue(studentDoc);
+        StudentEnrollmentMock.find
+            .mockReturnValueOnce([enrollment])
+            .mockReturnValue({
+                populate: vi.fn().mockReturnThis(),
+                sort: vi.fn().mockResolvedValue([]),
+            });
+        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
+        CourseMatchingServiceMock.default.findOrCreateCourseInstance.mockResolvedValue({
+            instance: { _id: "instance-new" },
+        });
+
+        const res = createRes();
+        await handler(
+            {
+                params: { id: "put-edit-dates" },
+                body: {
+                    education: [
+                        {
+                            type: "Course",
+                            refId: "course-1",
+                            enrollmentId: "enrollment-1",
+                            courseInstanceId: existingInstanceId,
+                            startDate,
+                            endDate,
+                        },
+                    ],
+                },
+                user: { userId: "admin-1" },
+            },
+            res
+        );
+
+        expect(CourseMatchingServiceMock.default.findOrCreateCourseInstance).toHaveBeenCalledWith(
+            "course-1",
+            new Date(startDate),
+            new Date(endDate),
+            "admin-1",
+            "teacher-1",
+            null
+        );
+        expect(enrollment.courseInstanceId).toBe("instance-new");
+        expect(enrollment.startDate).toEqual(new Date(startDate));
+        expect(enrollment.endDate).toEqual(new Date(endDate));
+        expect(enrollment.save).toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     it("ignores creation when removed education lacks enrollment", async () => {
         const handler = findRouteHandler("/student/:id", "PUT");
         const studentDoc = {
@@ -2199,6 +2290,8 @@ describe("PUT /student/:id", () => {
                         type: "Course",
                         refId: "course-new",
                         name: "New Course",
+                        startDate: "2024-01-01",
+                        endDate: "2024-02-01",
                     },
                 ],
             },
@@ -2213,6 +2306,8 @@ describe("PUT /student/:id", () => {
             [
                 expect.objectContaining({
                     refId: "course-new",
+                    startDate: "2024-01-01",
+                    endDate: "2024-02-01",
                 }),
             ],
             "creator-user"
