@@ -38,6 +38,15 @@ vi.mock("../../src/models/Student.js", () => {
     };
 });
 
+const { AplRecordMock } = vi.hoisted(() => ({
+    AplRecordMock: {
+        deleteMany: vi.fn(),
+    },
+}));
+vi.mock("../../src/models/AplRecord.js", () => ({
+    default: AplRecordMock,
+}));
+
 vi.mock("../../src/models/CoursePackage.js", () => ({
     __esModule: true,
     default: {
@@ -194,6 +203,7 @@ vi.mock("mongoose", () => {
 
 import mongoose from "mongoose";
 import Student from "../../src/models/Student.js";
+import AplRecord from "../../src/models/AplRecord.js";
 import CoursePackage from "../../src/models/CoursePackage.js";
 import Course from "../../src/models/Course.js";
 import Program from "../../src/models/Program.js";
@@ -251,6 +261,8 @@ beforeEach(() => {
     Student.countDocuments.mockResolvedValue(0);
     Student.findOne.mockReset();
     Student.findOne.mockResolvedValue(null);
+    AplRecord.deleteMany.mockReset();
+    AplRecord.deleteMany.mockResolvedValue({ deletedCount: 0 });
     sendDropoutNotification.mockReset();
     CourseMatchingServiceMock.default.processStudentEducation.mockReset();
     CourseMatchingServiceMock.default.findOrCreateCourseInstance.mockReset();
@@ -1597,6 +1609,7 @@ describe("DELETE /student/:id", () => {
 
         await handler(req, res);
 
+        expect(AplRecord.deleteMany).toHaveBeenCalledWith({ studentId: "delete-2" });
         expect(res.json).toHaveBeenCalledWith({
             message: "Student deleted successfully",
             deletedFilesCount: 0,
@@ -1643,10 +1656,12 @@ describe("DELETE /students", () => {
         );
 
         expect(Student.deleteMany).toHaveBeenCalled();
+        expect(AplRecord.deleteMany).toHaveBeenCalledWith({});
         expect(res.json).toHaveBeenCalledWith({
             message: "All students deleted successfully",
             deletedStudents: 0,
             deletedFilesCount: 0,
+            deletedAplRecords: 0,
         });
     });
     it("handles delete all failures", async () => {

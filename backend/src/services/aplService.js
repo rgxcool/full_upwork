@@ -340,10 +340,10 @@ export async function getAplRecords({ status, includeCompleted, search }) {
         .sort({ createdAt: -1 })
         .lean();
 
-    let filtered = records;
+    let filtered = records.filter((record) => record.studentId);
     if (search) {
         const q = search.toLowerCase();
-        filtered = records.filter((r) => {
+        filtered = filtered.filter((r) => {
             const name = r.studentId?.name || "";
             const email = r.studentId?.email || "";
             return name.toLowerCase().includes(q) || email.toLowerCase().includes(q);
@@ -381,7 +381,7 @@ export async function getAplRecordByStudent(studentId) {
         .populate("contractDocId", "filename uploadDate")
         .lean();
 
-    if (!record) return null;
+    if (!record?.studentId) return null;
 
     const student = record.studentId;
     const aplPeriod = computeAplPeriod(student?.education || []);
