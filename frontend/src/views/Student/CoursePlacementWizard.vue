@@ -527,7 +527,7 @@ export default {
           });
         }
 
-        await client.post('/process-education', {
+        const response = await client.post('/process-education', {
           studentId: props.student._id,
           educationEntries: entries,
           needsSupport: needsSupport.value,
@@ -535,6 +535,19 @@ export default {
           aplCompletedElsewhere: placementType.value === 'package' ? aplCompletedElsewhere.value : false,
           examMode: examMode.value,
         });
+
+        const processingResults = response.data?.results;
+        const placementFailure = [
+          ...(processingResults?.errors || []),
+          ...(processingResults?.warnings || []).filter(
+            (warning) => warning.type === 'no_match'
+          ),
+        ][0];
+        if (placementFailure) {
+          throw new Error(
+            placementFailure.message || 'Kunde inte placera kursen. Försök igen.'
+          );
+        }
 
         submitSuccess.value = true;
         toast.success('Kursen har placerats!');
