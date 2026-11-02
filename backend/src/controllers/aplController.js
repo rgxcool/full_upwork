@@ -55,6 +55,7 @@ export const patchAplStatus = async (req, res) => {
             status,
             reason,
             userId,
+            manualOverride: true,
         });
         res.json({
             success: true,

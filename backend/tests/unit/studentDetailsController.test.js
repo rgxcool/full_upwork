@@ -549,14 +549,16 @@ describe("studentDetailsController", () => {
             expect(res.body.student.dropout).toBe(true);
             expect(res.body.student.phone).toBe("123");
             expect(res.body.student.aplStatus).toBe("GREEN");
+            expect(res.body.student.aplStatusManualOverride).toBe(true);
             expect(res.body.student.aplStatusHistory).toHaveLength(1);
             expect(res.body.student.aplStatusHistory[0]).toMatchObject({
                 status: "GREEN",
                 changedBy: "Admin User",
             });
             expect(res.body.changeLog.changes).toEqual(
-                expect.arrayContaining(["name", "dropout", "phone"])
+                expect.arrayContaining(["name", "dropout", "phone", "aplStatus"])
             );
+            expect(res.body.changeLog.previousValues.aplStatus).toBe("GRAY");
             expect(res.body.student.changeHistory).toHaveLength(1);
         });
 

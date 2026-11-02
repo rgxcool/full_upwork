@@ -85,12 +85,13 @@
           class="auto-red-badge"
           title="Auto-röd – APL-perioden slutar snart"
         >AUTO</span>
-        <!-- Behind-schedule badge -->
+        <!-- Temporarily hidden until this flag reflects actual progress.
         <span
           v-if="isBehindSchedule(student)"
           class="auto-behind-schedule-badge"
           title="Bak i schema – påbörjad för minst 14 dagar sedan"
         >BAK i schema</span>
+        -->
         <!-- File uploaded badge -->
         <v-icon
           v-if="hasFiles(student._id)"

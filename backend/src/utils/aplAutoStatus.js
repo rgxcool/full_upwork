@@ -5,8 +5,8 @@
  * StudentEnrollment, consistent with the APL rule in GET /students) and computes
  * an effective, date-driven status: when the APL period ends within a configurable
  * number of weeks, the effective status becomes RED ("Röd – varning, snart slut").
- * The stored `aplStatus` is never mutated; the effective status is attached to the
- * API responses instead.
+ * A staff-set manual override takes precedence over date-derived warning colors.
+ * The stored `aplStatus` is never mutated by this helper.
  * 
  * New: "behind schedule" detection — when a student's APL period has been active
  * for at least APL_BEHIND_MIN_DAYS_SINCE_LOGIN days (default 14) and the APL
@@ -82,9 +82,15 @@ export function computeAplPeriod(education = []) {
  * @param {string} aplStatus - stored APL status.
  * @param {Date|string|null} aplEndDate - end of the APL period.
  * @param {Date} [today] - reference date (injectable for tests).
- * @returns {{ aplStatus: string, aplStatusStored: string, aplAutoRed: boolean, aplWeeksRemaining: (number|null) }}
+ * @param {boolean} [manualOverride] - whether a staff-set status overrides date-derived colors.
+ * @returns {{ aplStatus: string, aplStatusStored: string, aplAutoRed: boolean, aplAutoOrange: boolean, aplAutoYellow: boolean, aplWeeksRemaining: (number|null) }}
  */
-export function computeAplEffectiveStatus(aplStatus, aplEndDate, today = new Date()) {
+export function computeAplEffectiveStatus(
+    aplStatus,
+    aplEndDate,
+    today = new Date(),
+    manualOverride = false
+) {
     const end = toDate(aplEndDate);
     let aplWeeksRemaining = null;
     let aplAutoRed = false;
@@ -100,13 +106,21 @@ export function computeAplEffectiveStatus(aplStatus, aplEndDate, today = new Dat
         aplAutoYellow = !aplAutoRed && !aplAutoOrange && daysRemaining >= 0 && daysRemaining <= APL_AUTO_YELLOW_WEEKS * 7;
     }
     const stored = aplStatus || "GRAY";
-    const computedStatus = aplAutoRed ? "RED" : aplAutoOrange ? "PURPLE" : aplAutoYellow ? "YELLOW" : stored;
+    const computedStatus = manualOverride
+        ? stored
+        : aplAutoRed
+          ? "RED"
+          : aplAutoOrange
+            ? "PURPLE"
+            : aplAutoYellow
+              ? "YELLOW"
+              : stored;
     return {
         aplStatus: computedStatus,
         aplStatusStored: stored,
-        aplAutoRed,
-        aplAutoOrange,
-        aplAutoYellow,
+        aplAutoRed: aplAutoRed && !manualOverride,
+        aplAutoOrange: aplAutoOrange && !manualOverride,
+        aplAutoYellow: aplAutoYellow && !manualOverride,
         aplWeeksRemaining,
     };
 }

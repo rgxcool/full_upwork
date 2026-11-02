@@ -99,6 +99,14 @@ vi.mock("../../src/services/analyticsService.js", () => ({
     getRevenueReport: getRevenueReportMock,
 }));
 
+const { updateAplStatusMock } = vi.hoisted(() => ({
+    updateAplStatusMock: vi.fn(),
+}));
+vi.mock("../../src/services/aplService.js", () => ({
+    APL_STATUSES: ["GRAY", "BLUE", "YELLOW", "PURPLE", "RED", "GREEN"],
+    updateAplStatus: updateAplStatusMock,
+}));
+
 const loggerMock = vi.hoisted(() => ({
     info: vi.fn(),
     warn: vi.fn(),
@@ -249,6 +257,7 @@ beforeEach(() => {
     calendarEventSyncMock.syncCalendarEventsForStudent.mockReset();
     maybeSendLarteametEmail.mockReset();
     maybeSendLarteametEmail.mockResolvedValue({ sent: true });
+    updateAplStatusMock.mockReset();
     TeacherMock.findOne.mockReset();
     StudentEnrollmentQuery = {
         populate: vi.fn().mockReturnThis(),
@@ -1719,35 +1728,28 @@ describe("PATCH /students/:id", () => {
         expect(res.json).toHaveBeenCalledWith({ error: "Invalid APL status update" });
     });
 
-    it("logs and returns server error when updating aplStatus", async () => {
+    it("rejects an invalid aplStatus", async () => {
         const handler = findRouteHandler("/students/:id", "PATCH");
         const studentDoc = {
             _id: "patch-3",
-            teacher: "Link Teacher",
-            teacherId: null,
             aplStatusHistory: [],
-            education: [],
         };
         Student.findById.mockResolvedValue(studentDoc);
-        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-1" });
-        StudentEnrollmentMock.findOne.mockResolvedValue(null);
-        Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
-        StudentEnrollmentQuery.lean.mockResolvedValue([]);
+        updateAplStatusMock.mockRejectedValueOnce(
+            Object.assign(new Error("Invalid APL status"), { statusCode: 400 })
+        );
         const req = {
             params: { id: "patch-3" },
-            body: {
-                aplStatus: "UPD",
-                education: [{ type: "Course", refId: "course-3", name: "Course A" }],
-                municipality: { type: "kombo" },
-            },
+            body: { aplStatus: "INVALID" },
             user: { userId: "user-patch" },
         };
         const res = createRes();
 
         await handler(req, res);
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "Failed to update APL status" });
+        expect(updateAplStatusMock).toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: "Invalid APL status" });
     });
 
     it("updates aplStatus when valid data provided", async () => {
@@ -1758,19 +1760,31 @@ describe("PATCH /students/:id", () => {
             save: vi.fn().mockResolvedValue(true),
         };
         Student.findById.mockResolvedValue(studentDoc);
+        updateAplStatusMock.mockImplementationOnce(async ({ studentDocument, status }) => {
+            studentDocument.aplStatus = status;
+            studentDocument.aplStatusHistory.push({ status });
+            return { student: studentDocument };
+        });
         const res = createRes();
 
         await handler(
             {
                 params: { id: "patch-ok" },
-                body: { aplStatus: "ACTIVE" },
+                body: { aplStatus: "BLUE" },
                 user: { userId: "user-ok" },
             },
             res
         );
 
-        expect(studentDoc.aplStatus).toBe("ACTIVE");
+        expect(studentDoc.aplStatus).toBe("BLUE");
         expect(studentDoc.aplStatusHistory).toHaveLength(1);
+        expect(updateAplStatusMock).toHaveBeenCalledWith({
+            studentId: "patch-ok",
+            status: "BLUE",
+            userId: "user-ok",
+            studentDocument: studentDoc,
+            manualOverride: true,
+        });
         expect(res.json).toHaveBeenCalledWith(studentDoc);
     });
 
@@ -1961,6 +1975,49 @@ describe("DELETE /students/:id/comment", () => {
 });
 
 describe("PUT /student/:id", () => {
+    it("syncs a staff-selected APL status to the shared status service", async () => {
+        const handler = findRouteHandler("/student/:id", "PUT");
+        const student = {
+            _id: "put-apl",
+            aplStatus: "GRAY",
+            teacherId: "teacher-1",
+            education: [],
+        };
+        const updatedStudent = {
+            ...student,
+            toObject: () => ({ ...updatedStudent }),
+        };
+        Student.findById.mockResolvedValue(student);
+        Student.findByIdAndUpdate.mockResolvedValue(updatedStudent);
+        StudentEnrollmentQuery.sort.mockResolvedValueOnce([]);
+        updateAplStatusMock.mockImplementationOnce(async ({ studentDocument, status }) => {
+            studentDocument.aplStatus = status;
+            return { student: studentDocument };
+        });
+
+        const res = createRes();
+        await handler(
+            {
+                params: { id: "put-apl" },
+                body: { aplStatus: "BLUE" },
+                user: { userId: "staff-user" },
+            },
+            res
+        );
+
+        expect(updateAplStatusMock).toHaveBeenCalledWith({
+            studentId: "put-apl",
+            status: "BLUE",
+            userId: "staff-user",
+            studentDocument: updatedStudent,
+            manualOverride: true,
+        });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ aplStatus: "BLUE" })
+        );
+    });
+
     it("returns 404 when student missing", async () => {
         const handler = findRouteHandler("/student/:id", "PUT");
         Student.findById.mockResolvedValue(null);

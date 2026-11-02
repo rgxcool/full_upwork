@@ -190,6 +190,7 @@ describe("aplController", () => {
                 status: "RED",
                 reason: "Närmar sig slut",
                 userId: "user-1",
+                manualOverride: true,
             });
         });
 

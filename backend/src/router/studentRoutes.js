@@ -28,6 +28,7 @@ import {
 import { studentScopeFilter, municipalityInScope } from "../utils/tenantScope.js";
 import { projectStudentForViewer, projectStudentsForViewer } from "../utils/studentSerializer.js";
 import { getRevenueReport } from "../services/analyticsService.js";
+import { APL_STATUSES, updateAplStatus } from "../services/aplService.js";
 
 const router = Router();
 
@@ -429,7 +430,9 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
             const aplPeriod = computeAplPeriod(student.education);
             const aplEffective = computeAplEffectiveStatus(
                 student.aplStatus,
-                aplPeriod.aplEndDate
+                aplPeriod.aplEndDate,
+                new Date(),
+                student.aplStatusManualOverride
             );
             student.aplStatus = aplEffective.aplStatus;
             student.aplStatusStored = aplEffective.aplStatusStored;
@@ -1023,20 +1026,22 @@ router.patch("/students/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), as
         }
 
         if (typeof aplStatus === "string") {
-            student.aplStatus = aplStatus;
-            student.aplStatusHistory.push({
+            const result = await updateAplStatus({
+                studentId: student._id,
                 status: aplStatus,
-                changedAt: new Date(),
-                changedBy: userId,
+                userId,
+                studentDocument: student,
+                manualOverride: true,
             });
-
-            await student.save();
-            return res.json(student);
+            return res.json(result.student);
         } else {
             return res.status(400).json({ error: "Invalid APL status update" });
         }
     } catch (err) {
         logger.error({ err }, "Failed to update APL status");
+        if (err.statusCode === 400) {
+            return res.status(400).json({ error: err.message });
+        }
         return res.status(500).json({ error: "Failed to update APL status" });
     }
 });
@@ -1181,6 +1186,14 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
             updates[field] = req.body[field];
         }
     }
+    const requestedAplStatus = updates.aplStatus;
+    if (
+        requestedAplStatus !== undefined &&
+        !APL_STATUSES.includes(requestedAplStatus)
+    ) {
+        return res.status(400).json({ error: "Invalid APL status" });
+    }
+    delete updates.aplStatus;
 
     // dropout is handled explicitly below through the avbrott cascade so the
     // flag is never written in isolation (bypassing enrollment/calendar/APL
@@ -1425,7 +1438,7 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
             }
         }
 
-        const updatedStudent = await Student.findByIdAndUpdate(
+        let updatedStudent = await Student.findByIdAndUpdate(
             req.params.id,
             { $set: updates },
             { new: true }
@@ -1433,6 +1446,20 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
 
         if (!updatedStudent) {
             return res.status(404).json({ error: "Student not found" });
+        }
+
+        if (
+            requestedAplStatus !== undefined &&
+            requestedAplStatus !== student.aplStatus
+        ) {
+            const result = await updateAplStatus({
+                studentId: updatedStudent._id,
+                status: requestedAplStatus,
+                userId: req.user?.userId,
+                studentDocument: updatedStudent,
+                manualOverride: true,
+            });
+            updatedStudent = result.student;
         }
 
         // A pace change must reschedule the study plan and therefore the

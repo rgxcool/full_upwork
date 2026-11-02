@@ -43,14 +43,14 @@ describe('Feature: APL view (APL-status board)', () => {
         expect(client.get).toHaveBeenCalledWith('/students')
     })
 
-    it('renders the APL view heading and all three tabs', async () => {
+    it('renders the APL view heading and the two status tabs', async () => {
         client.get.mockResolvedValueOnce(ok(STUDENTS))
         await renderWithVuetify(APLView)
 
         expect(screen.getByText('APL-status')).toBeInTheDocument()
         expect(screen.getByText('Pågående')).toBeInTheDocument()
         expect(screen.getByText('Avslutad')).toBeInTheDocument()
-        expect(screen.getByText('APL-kontrakt')).toBeInTheDocument()
+        expect(screen.queryByText('APL-kontrakt')).not.toBeInTheDocument()
     })
 
     it('renders every APL status column with its student count', async () => {
