@@ -320,11 +320,121 @@ export const fetchCourseInstanceEnrollments = async ({ instanceId, status }) => 
 };
 
 /**
+ * Remove a single dropped enrollment from the exam list: delete its
+ * ExamAttendance rows and rebuild the student's slutprov calendar so only the
+ * still-active enrollments remain. This mirrors the "ta bort från
+ * slutprovslistan" requirement for course-level avbrott.
+ */
+const removeDroppedEnrollmentFromExamList = async (enrollment) => {
+    try {
+        const { default: ExamAttendance } = await import("../models/ExamAttendance.js");
+
+        const query = {
+            studentId: enrollment.studentId,
+            ...(enrollment.mainCourseId ? { courseId: enrollment.mainCourseId } : {}),
+        };
+
+        if (enrollment.slutprovDate) {
+            const d = new Date(enrollment.slutprovDate);
+            if (!isNaN(d.getTime())) {
+                query.examDate = {
+                    $gte: new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0)),
+                    $lte: new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999)),
+                };
+            }
+        }
+
+        await ExamAttendance.deleteMany(query);
+    } catch (err) {
+        logger.error(
+            { err, enrollmentId: enrollment._id },
+            "Error removing dropped enrollment from exam list (non-fatal)"
+        );
+    }
+};
+
+/**
+ * Rebuild the student's slutprov calendar from scratch using their active
+ * enrollments. Used after a course-level status change so dropped courses no
+ * longer appear on the exam calendar but the remaining ones still do.
+ */
+const rebuildStudentExamCalendar = async (studentId) => {
+    try {
+        const { default: CalendarEvent } = await import("../models/Event.js");
+        const { syncCalendarEventFromEnrollment } = await import("../utils/calendarEventSync.js");
+
+        await CalendarEvent.updateMany(
+            {
+                "extendedProps.type": "slutprov",
+                "extendedProps.students._id": studentId,
+            },
+            { $pull: { "extendedProps.students": { _id: studentId } } }
+        );
+
+        await CalendarEvent.deleteMany({
+            "extendedProps.type": "slutprov",
+            $or: [
+                { "extendedProps.students": { $size: 0 } },
+                { "extendedProps.students": { $exists: false } },
+                { "extendedProps.students": null },
+            ],
+        });
+
+        const activeEnrollments = await StudentEnrollment.find({
+            studentId,
+            status: { $nin: ["dropped", "completed"] },
+            slutprovDate: { $ne: null },
+        }).select("_id");
+
+        for (const active of activeEnrollments) {
+            await syncCalendarEventFromEnrollment(active._id);
+        }
+    } catch (err) {
+        logger.error({ err, studentId }, "Error rebuilding student exam calendar (non-fatal)");
+    }
+};
+
+/**
+ * Keep the student-level avbrott state in sync with their enrollments.
+ *
+ * - When the last active enrollment is dropped, run the full dropout cascade
+ *   (student flag, exam/APL removal, teacher notification, inactive list).
+ * - When no dropped enrollments remain, clear a previously set dropout flag
+ *   (reinstate) and resolve dropout notifications.
+ */
+const syncStudentDropoutState = async ({ studentId, userId, role, reason }) => {
+    const [activeCount, droppedCount] = await Promise.all([
+        StudentEnrollment.countDocuments({
+            studentId,
+            status: { $nin: ["dropped", "completed"] },
+        }),
+        StudentEnrollment.countDocuments({ studentId, status: "dropped" }),
+    ]);
+
+    if (activeCount === 0 && droppedCount > 0) {
+        const { performStudentDropout } = await import("./dropoutService.js");
+        await performStudentDropout({ studentId, userId, role, reason });
+        return "dropout";
+    }
+
+    if (droppedCount === 0) {
+        const student = await Student.findById(studentId).select("dropout");
+        if (student?.dropout) {
+            const { removeStudentDropoutRecord } = await import("./dropoutService.js");
+            await removeStudentDropoutRecord({ studentId, userId, role });
+            return "reactivated";
+        }
+    }
+
+    return null;
+};
+
+/**
  * Update an enrollment's status, refresh course instance stats, and return the
  * reloaded enrollment. Throws AppError(404) when the enrollment is missing and
  * AppError(400) for unknown statuses (with the valid statuses attached).
  */
-export const updateEnrollmentStatus = async ({ enrollmentId, status, reason, notes, userId }) => {
+export const updateEnrollmentStatus = async ({ enrollmentId, status, reason, notes, userId, role }) => {
     const enrollment = await StudentEnrollment.findById(enrollmentId);
     if (!enrollment) {
         throw new AppError("Enrollment not found", 404);
@@ -337,6 +447,32 @@ export const updateEnrollmentStatus = async ({ enrollmentId, status, reason, not
     }
 
     await enrollment.changeStatus(status, reason, notes, userId);
+
+    // Course-level avbrott: remove the course from the exam list and refresh
+    // the student's exam calendar.
+    if (status === "dropped") {
+        await removeDroppedEnrollmentFromExamList(enrollment);
+    }
+
+    // Promote/demote the student-level dropout state. Non-fatal: a cascade
+    // failure must not roll back the status change the user asked for.
+    try {
+        await syncStudentDropoutState({
+            studentId: enrollment.studentId,
+            userId,
+            role,
+            reason,
+        });
+    } catch (dropoutError) {
+        logger.error(
+            { err: dropoutError, enrollmentId, status },
+            "Error syncing student dropout state after status change (non-fatal)"
+        );
+    }
+
+    if (status === "dropped") {
+        await rebuildStudentExamCalendar(enrollment.studentId);
+    }
 
     // Update course instance statistics (wrap in try-catch to not fail if this errors)
     try {

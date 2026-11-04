@@ -1211,6 +1211,21 @@ export const processStudentEducation = async (req, res) => {
             { needsSupport, examMode, pace }
         );
 
+        // Entries that could not be processed (e.g. an unknown course id from
+        // the placement wizard) must not be reported as a successful placement.
+        if (Array.isArray(results?.errors) && results.errors.length > 0) {
+            return res.status(422).json({
+                success: false,
+                error:
+                    results.errors[0]?.message ||
+                    "Kunde inte placera kursen.",
+                message:
+                    results.errors[0]?.message ||
+                    "Kunde inte placera kursen.",
+                results,
+            });
+        }
+
         res.json({
             success: true,
             message: "Education processing completed",
@@ -1595,6 +1610,7 @@ export const updateEnrollmentStatus = async (req, res) => {
             reason,
             notes,
             userId,
+            role: req.user?.role,
         });
 
         res.json({

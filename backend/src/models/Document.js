@@ -16,6 +16,13 @@ const DocumentSchema = new mongoose.Schema({
     ref: 'User',
     required: false
   },
+  // Staff members who were explicitly given access to this document, e.g.
+  // Mirsada shares a grading-support document with Anes. Sharing is per
+  // document so it never widens access to the rest of the owner's files.
+  sharedWith: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  }],
   filename: { 
     type: String, 
     required: true 
@@ -32,6 +39,21 @@ const DocumentSchema = new mongoose.Schema({
   enrollmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'StudentEnrollment',
+    default: null,
+  },
+  // File metadata captured at upload time. Older documents may not have these
+  // fields; the API derives them from originalName when missing.
+  mimeType: {
+    type: String,
+    default: null,
+  },
+  size: {
+    type: Number,
+    default: null,
+  },
+  // Lower-case extension without the leading dot (e.g. "pdf").
+  fileType: {
+    type: String,
     default: null,
   },
   createdAt: { 

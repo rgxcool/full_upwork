@@ -199,6 +199,15 @@ const PERMISSION_MATRIX = {
     coordinator: 'Nej',
     student: 'Nej',
   },
+  course_templates: {
+    systemadmin: 'Ja',
+    admin: 'Ja',
+    teacher: 'Ja',
+    syv: 'Nej',
+    specped: 'Nej',
+    coordinator: 'Nej',
+    student: 'Nej',
+  },
 };
 
 const FEATURES = [
@@ -210,6 +219,7 @@ const FEATURES = [
   { value: 'hierarchy_management', label: 'Hierarkihantering?' },
   { value: 'own_settings', label: 'Egna inställningar (ex profilbild)' },
   { value: 'add_municipalities_courses', label: 'Lägga till kommuner, kurser etc' },
+  { value: 'course_templates', label: 'Kursmallar (kursmoduler)' },
 ];
 
 export default {
@@ -232,6 +242,7 @@ export default {
     const newTempPassword = ref(null);
     const showTempPassword = ref(false);
     const features = ref(FEATURES);
+    const permissionMatrix = ref(PERMISSION_MATRIX);
     
     // Custom permissions state
     const customPermissions = ref({});
@@ -251,7 +262,7 @@ export default {
       // If no custom permission set, check if any of the user's roles have this permission
       const userRoles = props.student?.user?.roles || [];
       for (const role of userRoles) {
-        const rolePermission = PERMISSION_MATRIX[feature]?.[role];
+        const rolePermission = permissionMatrix.value[feature]?.[role];
         if (rolePermission && rolePermission !== 'Nej') {
           return true;
         }
@@ -307,8 +318,31 @@ export default {
       }
     };
 
+    // Load the canonical feature/role catalog from the backend so new features
+    // (e.g. course_templates) show up without a frontend release. Falls back to
+    // the local defaults above if the request fails.
+    const loadPermissionCatalog = async () => {
+      if (!isAdmin.value) return;
+      try {
+        const { data } = await client.get('/permissions');
+        if (Array.isArray(data?.features) && data.features.length > 0) {
+          features.value = data.features.map((feature) => ({
+            value: feature.key,
+            label: feature.label,
+          }));
+        }
+        if (data?.permissionMatrix && typeof data.permissionMatrix === 'object') {
+          permissionMatrix.value = data.permissionMatrix;
+        }
+      } catch (error) {
+        // Non-fatal: the hard-coded catalog keeps the tab usable.
+        console.error('Error loading permission catalog:', error);
+      }
+    };
+
     onMounted(() => {
       loadPermissions();
+      loadPermissionCatalog();
     });
 
     // Watch for student changes

@@ -126,4 +126,27 @@ describe("documentAuthorization", () => {
             })
         ).resolves.toBe(true);
     });
+
+    it("grants access to a document that was explicitly shared with the user", async () => {
+        const document = {
+            teacher: "teacher-1",
+            sharedWith: ["user-2"],
+        };
+
+        await expect(
+            canAccessDocument({ role: "teacher", userId: "user-2" }, document)
+        ).resolves.toBe(true);
+        await expect(
+            canAccessDocument({ role: "teacher", userId: "user-3" }, document)
+        ).resolves.toBe(false);
+    });
+
+    it("grants access to a shared document even without a matching role", async () => {
+        await expect(
+            canAccessDocument({ role: "coordinator", userId: "user-4" }, {
+                filename: "orphan.pdf",
+                sharedWith: [{ _id: "user-4" }],
+            })
+        ).resolves.toBe(true);
+    });
 });
