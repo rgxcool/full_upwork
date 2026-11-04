@@ -123,6 +123,7 @@
                       class="status-select"
                       :class="'status-' + (element.status || 'enrolled')"
                       :disabled="updatingStatus[element.enrollmentId]"
+                      @focus="rememberStatus(element)"
                       @change="updateStatus(element)"
                     >
                       <option value="enrolled">Antagen</option>
@@ -287,6 +288,10 @@ export default {
     const sortedEducation = ref([]);
     const localStudent = ref(props.student);
     const updatingStatus = ref({});
+    // Snapshot of each enrollment's status taken before the user edits the
+    // dropdown. `v-model` mutates the row in place, so reading the "previous"
+    // status from the row in updateStatus() would already return the new value.
+    const statusBeforeEdit = ref({});
     const removingEnrollment = ref({});
     const selectedTempo = ref(5);
     const updatingTempo = ref(false);
@@ -540,13 +545,21 @@ export default {
       return statusMap[status] || status;
     };
 
+    const rememberStatus = (element) => {
+      if (!element?.enrollmentId) return;
+      // Only capture the status the first time the control is focused for this
+      // enrollment so repeated edits keep the value that was persisted.
+      if (statusBeforeEdit.value[element.enrollmentId] === undefined) {
+        statusBeforeEdit.value[element.enrollmentId] = element.status;
+      }
+    };
+
     const updateStatus = async (element) => {
       if (!element.enrollmentId || !element.status) return;
-      
-      const originalStatus = localStudent.value.education?.find(
-        e => e.enrollmentId === element.enrollmentId
-      )?.status || element.status;
-      
+
+      const originalStatus =
+        statusBeforeEdit.value[element.enrollmentId] ?? element.status;
+
       updatingStatus.value[element.enrollmentId] = true;
       try {
         const response = await client.put(`/enrollments/${element.enrollmentId}/status`, {
@@ -574,19 +587,41 @@ export default {
             localStudent.value.education[studentEduIndex].status = element.status;
           }
         }
+
+        statusBeforeEdit.value[element.enrollmentId] = element.status;
+
+        // A status change can cascade on the backend (avbrott removes the
+        // student from exams/APL and flags the student). Reload so the rest of
+        // the profile reflects those changes.
+        try {
+          const refreshed = await client.get(`/student-details/${props.student._id}`);
+          emit('student-updated', refreshed.data);
+        } catch (refreshError) {
+          console.error('Error refreshing student after status change:', refreshError);
+        }
       } catch (err) {
         console.error('Error updating enrollment status:', err);
         console.error('Error response:', err.response?.data);
         const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Kunde inte uppdatera status';
         toast.error(`Kunde inte uppdatera status: ${errorMessage}`);
         
-        // Revert the change
+        // Revert the change in every view of the row.
         const index = sortedEducation.value.findIndex(e => e.enrollmentId === element.enrollmentId);
         if (index !== -1) {
           sortedEducation.value[index].status = originalStatus;
         }
+        if (localStudent.value.education) {
+          const studentEduIndex = localStudent.value.education.findIndex(
+            e => e.enrollmentId === element.enrollmentId
+          );
+          if (studentEduIndex !== -1) {
+            localStudent.value.education[studentEduIndex].status = originalStatus;
+          }
+        }
+        element.status = originalStatus;
       } finally {
         updatingStatus.value[element.enrollmentId] = false;
+        delete statusBeforeEdit.value[element.enrollmentId];
       }
     };
 
@@ -824,6 +859,7 @@ export default {
       getTeacherId,
       getStatusLabel,
       updateStatus,
+      rememberStatus,
       canEditStatus,
       updatingStatus,
       handleRemoveEnrollment,

@@ -50,12 +50,17 @@ vi.mock("../../src/middleware/auth.js", () => ({
     const role = req.headers["x-user-role"] || "teacher";
     const rolesHeader = req.headers["x-user-roles"];
     const roles = rolesHeader ? JSON.parse(rolesHeader) : undefined;
-    
+    const permissionsHeader = req.headers["x-user-permissions"];
+    const permissions = permissionsHeader
+      ? JSON.parse(permissionsHeader)
+      : undefined;
+
     req.user = {
       role,
       roles: roles || (role ? [role] : []),
       userId: req.headers["x-user-id"] || "user-id",
       _id: req.headers["x-user-objectid"] || "user-obj-id",
+      permissions,
     };
     next();
   },
@@ -1410,8 +1415,30 @@ describe("examRoutes", () => {
       });
     expect(nonResponsibleTeacherResponse.status).toBe(403);
     expect(nonResponsibleTeacherResponse.body.error).toBe(
-      "Only admins or the responsible teacher can move exam dates"
+      "Only admins, the responsible teacher, or users granted calendar permission can move exam dates"
     );
+
+    // Test 7b: Teacher with an explicit per-user calendar_final_exam grant may
+    // move the group even when they are not the responsible teacher (Angelina).
+    Teacher.findOne.mockReturnValueOnce(
+      createSessionQuery(nonResponsibleTeacher)
+    );
+    StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
+    const calendarOverrideResponse = await request(app)
+      .put("/api/calendar-events/move-group")
+      .set("x-user-role", "teacher")
+      .set("x-user-id", "teacher-user-id")
+      .set(
+        "x-user-permissions",
+        JSON.stringify({ calendar_final_exam: true })
+      )
+      .send({
+        ...validPayload,
+        teacherId: "teacher-1",
+      });
+    expect(calendarOverrideResponse.status).toBe(200);
 
     // Test 8: Teacher with roles array ['teacher'] who is responsible should get 200 OK
     Teacher.findOne.mockReturnValueOnce(

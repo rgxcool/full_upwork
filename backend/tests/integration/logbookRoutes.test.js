@@ -44,6 +44,15 @@ const createStudent = async () =>
         email: `logbook${new mongoose.Types.ObjectId()}@example.com`,
     });
 
+const addKit = async (studentId, kit = {}) => {
+    const response = await request(app)
+        .post(`/api/students/${studentId}/logbook`)
+        .set("Cookie", authCookie)
+        .send({ title: "Introduktionskit", ...kit })
+        .expect(200);
+    return response.body.logbook[0];
+};
+
 describe("logbook routes", () => {
     beforeAll(async () => {
         await connectTestDatabase();
@@ -162,6 +171,233 @@ describe("logbook routes", () => {
                 .expect(200);
             expect(response.body.logbook).toHaveLength(1);
         });
+
+        it("stores start and end dates supplied by the form", async () => {
+            const student = await createStudent();
+            await addKit(student._id, {
+                title: "Daterat kit",
+                startDate: "2026-03-01",
+                endDate: "2026-05-01",
+            });
+
+            const persisted = await Student.findById(student._id).lean();
+            expect(persisted.logbook[0].startDate.toISOString()).toBe(
+                "2026-03-01T00:00:00.000Z"
+            );
+            expect(persisted.logbook[0].endDate.toISOString()).toBe(
+                "2026-05-01T00:00:00.000Z"
+            );
+        });
+
+        it("rejects an impossible date with a 400 instead of a 500", async () => {
+            const student = await createStudent();
+            const response = await request(app)
+                .post(`/api/students/${student._id}/logbook`)
+                .set("Cookie", authCookie)
+                .send({ title: "Trasigt datum", startDate: "not-a-date" })
+                .expect(400);
+            expect(response.body).toEqual({ message: "Ogiltigt startdatum." });
+        });
+    });
+
+    describe("PATCH /api/students/:studentId/logbook/:kitId", () => {
+        it("updates a kit addressed by the id returned by the API", async () => {
+            const student = await createStudent();
+            const kit = await addKit(student._id, {
+                title: "Gammalt namn",
+                description: "Gammal beskrivning",
+                startDate: "2026-03-01",
+                endDate: "2026-05-01",
+            });
+
+            const response = await request(app)
+                .patch(`/api/students/${student._id}/logbook/${kit.id}`)
+                .set("Cookie", authCookie)
+                .send({
+                    title: "Nytt namn",
+                    description: "Ny beskrivning",
+                    startDate: "2026-03-02",
+                    endDate: "2026-05-02",
+                })
+                .expect(200);
+
+            expect(response.body.success).toBe(true);
+            expect(response.body.logbook[0].title).toBe("Nytt namn");
+
+            const persisted = await Student.findById(student._id).lean();
+            expect(persisted.logbook[0].title).toBe("Nytt namn");
+            expect(persisted.logbook[0].description).toBe("Ny beskrivning");
+            expect(persisted.logbook[0].startDate.toISOString()).toBe(
+                "2026-03-02T00:00:00.000Z"
+            );
+
+            const audit = await AuditLog.findOne({
+                entityType: "Student",
+                action: "logbook:update",
+            });
+            expect(audit).not.toBeNull();
+        });
+
+        it("also accepts the subdocument _id", async () => {
+            const student = await createStudent();
+            await addKit(student._id);
+            const stored = await Student.findById(student._id);
+            const subdocumentId = String(stored.logbook[0]._id);
+
+            const response = await request(app)
+                .patch(`/api/students/${student._id}/logbook/${subdocumentId}`)
+                .set("Cookie", authCookie)
+                .send({ title: "Uppdaterad via _id" })
+                .expect(200);
+
+            expect(response.body.logbook[0].title).toBe("Uppdaterad via _id");
+        });
+
+        it("clears dates when the form sends null", async () => {
+            const student = await createStudent();
+            const kit = await addKit(student._id, {
+                startDate: "2026-03-01",
+                endDate: "2026-05-01",
+            });
+
+            await request(app)
+                .patch(`/api/students/${student._id}/logbook/${kit.id}`)
+                .set("Cookie", authCookie)
+                .send({ title: "Kit utan datum", startDate: null, endDate: null })
+                .expect(200);
+
+            const persisted = await Student.findById(student._id).lean();
+            expect(persisted.logbook[0].startDate).toBeNull();
+            expect(persisted.logbook[0].endDate).toBeNull();
+        });
+
+        it("keeps the description when it is omitted from the request", async () => {
+            const student = await createStudent();
+            const kit = await addKit(student._id, { description: "Behåll mig" });
+
+            await request(app)
+                .patch(`/api/students/${student._id}/logbook/${kit.id}`)
+                .set("Cookie", authCookie)
+                .send({ title: "Bara titeln" })
+                .expect(200);
+
+            const persisted = await Student.findById(student._id).lean();
+            expect(persisted.logbook[0].description).toBe("Behåll mig");
+        });
+
+        it("returns 400 for a malformed kit id", async () => {
+            const student = await createStudent();
+            const response = await request(app)
+                .patch(`/api/students/${student._id}/logbook/not-an-object-id`)
+                .set("Cookie", authCookie)
+                .send({ title: "Ny titel" })
+                .expect(400);
+            expect(response.body).toHaveProperty("success", false);
+        });
+
+        it("returns 404 for an unknown kit", async () => {
+            const student = await createStudent();
+            await addKit(student._id);
+            const response = await request(app)
+                .patch(`/api/students/${student._id}/logbook/${new mongoose.Types.ObjectId()}`)
+                .set("Cookie", authCookie)
+                .send({ title: "Ny titel" })
+                .expect(404);
+            expect(response.body).toEqual({ message: "Logbook kit not found." });
+        });
+
+        it("rejects an invalid date with a 400", async () => {
+            const student = await createStudent();
+            const kit = await addKit(student._id);
+            const response = await request(app)
+                .patch(`/api/students/${student._id}/logbook/${kit.id}`)
+                .set("Cookie", authCookie)
+                .send({ title: "Kit", endDate: "2026-02-31" })
+                .expect(400);
+            expect(response.body).toEqual({ message: "Ogiltigt slutdatum." });
+        });
+    });
+
+    describe("DELETE /api/students/:studentId/logbook/:kitId", () => {
+        it("deletes the kit by its API id and writes an audit log", async () => {
+            const student = await createStudent();
+            const kit = await addKit(student._id);
+
+            const response = await request(app)
+                .delete(`/api/students/${student._id}/logbook/${kit.id}`)
+                .set("Cookie", authCookie)
+                .expect(200);
+
+            expect(response.body.success).toBe(true);
+            expect(response.body.logbook).toEqual([]);
+
+            const persisted = await Student.findById(student._id).lean();
+            expect(persisted.logbook).toEqual([]);
+
+            const audit = await AuditLog.findOne({
+                entityType: "Student",
+                action: "logbook:delete",
+            });
+            expect(audit).not.toBeNull();
+        });
+
+        it("only removes the requested kit", async () => {
+            const student = await createStudent();
+            const first = await addKit(student._id, { title: "Första" });
+            await addKit(student._id, { title: "Andra" });
+
+            const response = await request(app)
+                .delete(`/api/students/${student._id}/logbook/${first.id}`)
+                .set("Cookie", authCookie)
+                .expect(200);
+
+            expect(response.body.logbook).toHaveLength(1);
+            expect(response.body.logbook[0].title).toBe("Andra");
+        });
+
+        it("returns 404 for an unknown kit", async () => {
+            const student = await createStudent();
+            const response = await request(app)
+                .delete(`/api/students/${student._id}/logbook/${new mongoose.Types.ObjectId()}`)
+                .set("Cookie", authCookie)
+                .expect(404);
+            expect(response.body).toEqual({ message: "Logbook kit not found." });
+        });
+
+        it("returns 400 for a malformed kit id", async () => {
+            const student = await createStudent();
+            await request(app)
+                .delete(`/api/students/${student._id}/logbook/not-an-object-id`)
+                .set("Cookie", authCookie)
+                .expect(400);
+        });
+    });
+
+    describe("permissions", () => {
+        // Non-admin calls share the test rate-limit window (3 requests/min), so
+        // each role check below makes a single request; the write paths are
+        // exercised separately with the (rate-limit exempt) admin cookie.
+        it("does not let a student read kits", async () => {
+            const student = await createStudent();
+            await addKit(student._id);
+
+            const studentUser = await User.create({
+                name: "Student User",
+                email: "student@example.com",
+                password: "testPassword123!",
+                roles: ["student"],
+            });
+            const studentCookie = `token=${makeToken(studentUser)}`;
+
+            await request(app)
+                .get(`/api/students/${student._id}/logbook`)
+                .set("Cookie", studentCookie)
+                .expect(403);
+        });
+
+        // The existing "allows a teacher to add a kit" case proves that staff
+        // outside admin/systemadmin can write; the GET/POST/PATCH/DELETE routes
+        // all share the same LOGBOOK_ROLES guard.
     });
 
     describe("GET /api/student-details/:studentId/logbook", () => {

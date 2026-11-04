@@ -14,6 +14,7 @@ import { PERMISSION_FEATURES } from "../config/permissions.js";
 import logger from "../utils/logger.js";
 import { escapeRegExp } from '../utils/escapeRegExp.js';
 import { studentScopeFilter } from "../utils/tenantScope.js";
+import { getDateOnlyRange, parseSearchDate } from "../utils/dateSearch.js";
 
 const router = express.Router();
 
@@ -200,13 +201,21 @@ router.get("/search", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_US
         }
 
         if (type === "Datum" && date) {
-            const parsedDate = new Date(date);
-            if (isNaN(parsedDate)) {
+            // A search date is a calendar day, not an instant. Build the day
+            // range in an explicit timezone so the result does not change with
+            // the server's TZ setting, and reject impossible dates such as
+            // 2024-02-30 instead of silently rolling them over.
+            const parsedDate = parseSearchDate(date);
+            if (!parsedDate) {
                 return res.status(400).json({ message: "Ogiltigt datum" });
             }
 
-            const startOfDay = new Date(parsedDate.setHours(0, 0, 0, 0));
-            const endOfDay = new Date(parsedDate.setHours(23, 59, 59, 999));
+            const dateRange = getDateOnlyRange(parsedDate.dateOnly);
+            if (!dateRange) {
+                return res.status(400).json({ message: "Ogiltigt datum" });
+            }
+
+            const { startOfDay, endOfDay } = dateRange;
 
             const enrollments = await StudentEnrollment.find({
                 $or: [

@@ -173,7 +173,7 @@
             <span>Startdatum: {{ formatDate(startDate) }}</span>
             <span>Slutdatum: {{ formatDate(calculatedEndDate) }}</span>
             <span v-if="placementType === 'package'">Studietakt: {{ pace }}%</span>
-            <span v-if="placementType === 'course' || placementType === 'package'">Slutprov: enligt kursplan</span>
+            <span v-if="placementType === 'course' || placementType === 'package'">Slutprov: beräknas automatiskt utifrån lärare och kursens slutdatum</span>
           </div>
         </div>
 
@@ -228,6 +228,10 @@
             <p v-else>
               Tentamen sker på plats.
             </p>
+            <p>
+              Slutprovsdag beräknas automatiskt utifrån ansvarig lärare och kursens
+              slutdatum. Du kan justera datumet per kurs i nästa steg.
+            </p>
           </div>
         </div>
 
@@ -259,13 +263,23 @@
                   </td>
                   <td>{{ formatDate(c.startDate) }}</td>
                   <td>{{ formatDate(c.endDate) }}</td>
-                  <td>{{ formatDate(c.slutprovDate) }}</td>
+                  <td>
+                    <input
+                      v-model="c.slutprovDate"
+                      type="date"
+                      class="form-control slutprov-date-input"
+                      :aria-label="`Slutprovsdatum för ${c.courseName}`"
+                    />
+                  </td>
                   <td>{{ c.examMode === 'remote' ? 'Distans' : 'På plats' }}</td>
                 </tr>
               </tbody>
             </table>
             <div class="preview-summary">
               <p>Totalt: {{ previewData.courses.length }} kurs(er), {{ previewData.totalWeeks }} veckor</p>
+              <p class="preview-hint">
+                Slutprovsdatum är förberäknat och kan ändras per kurs innan du bekräftar.
+              </p>
             </div>
           </div>
         </div>
@@ -410,6 +424,15 @@ export default {
       return d.toLocaleDateString('sv-SE');
     };
 
+    // `input[type=date]` only accepts YYYY-MM-DD; the preview endpoint returns
+    // ISO timestamps. Normalize so the auto-calculated value is editable.
+    const toDateInputValue = (date) => {
+      if (!date) return '';
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString().slice(0, 10);
+    };
+
     const loadCourses = async () => {
       try {
         const res = await client.get('/courses');
@@ -487,7 +510,13 @@ export default {
         }
 
         const res = await client.post('/placement/preview', payload);
-        previewData.value = res.data;
+        previewData.value = {
+          ...res.data,
+          courses: (res.data?.courses || []).map((course) => ({
+            ...course,
+            slutprovDate: toDateInputValue(course.slutprovDate),
+          })),
+        };
       } catch (err) {
         console.error('Error loading preview:', err);
         previewError.value =
@@ -503,20 +532,32 @@ export default {
 
       try {
         const entries = [];
+        const previewCourses = previewData.value?.courses || [];
 
         if (placementType.value === 'course' && selectedCourse.value) {
+          const endDate = new Date(
+            new Date(startDate.value).getTime() + durationWeeks.value * 7 * 24 * 60 * 60 * 1000
+          )
+            .toISOString()
+            .slice(0, 10);
           entries.push({
             type: 'Course',
             refId: selectedCourse.value._id,
             name: selectedCourse.value.courseName,
             startDate: startDate.value,
-            endDate: new Date(
-              new Date(startDate.value).getTime() + durationWeeks.value * 7 * 24 * 60 * 60 * 1000
-            )
-              .toISOString()
-              .slice(0, 10),
+            endDate,
+            // Explicit final-exam date chosen in the preview step. The backend
+            // falls back to its teacher-based rule when this is omitted.
+            slutprovDate: previewCourses[0]?.slutprovDate || undefined,
           });
         } else if (placementType.value === 'package' && selectedPackage.value) {
+          // Per-course final-exam dates (editable in the preview step).
+          const slutprovDates = {};
+          for (const course of previewCourses) {
+            if (course.courseId && course.slutprovDate) {
+              slutprovDates[String(course.courseId)] = course.slutprovDate;
+            }
+          }
           // Build the package entry with excluded courses
           entries.push({
             type: 'CoursePackage',
@@ -524,6 +565,7 @@ export default {
             name: selectedPackage.value.coursePackageName,
             startDate: startDate.value,
             excludedCourseIds: excludeCourseIds.value,
+            slutprovDates,
           });
         }
 
@@ -967,6 +1009,18 @@ export default {
   margin: 0;
   font-size: 14px;
   font-weight: 500;
+}
+
+.preview-summary .preview-hint {
+  margin-top: 6px;
+  font-weight: 400;
+  color: #6c757d;
+}
+
+.slutprov-date-input {
+  padding: 4px 6px;
+  font-size: 13px;
+  min-width: 140px;
 }
 
 .submit-success {

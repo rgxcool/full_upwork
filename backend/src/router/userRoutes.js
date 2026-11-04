@@ -540,6 +540,55 @@ router.post(
     }
 );
 
+/**
+ * Logbook kits carry their own `id` field (the UI uses it as the key), while
+ * Mongoose also assigns every subdocument an `_id`. Accept either so kits can
+ * be addressed with the identifier the API returned.
+ */
+const findLogbookKit = (student, kitId) =>
+    (student?.logbook || []).find(
+        (kit) => String(kit.id) === String(kitId) || String(kit._id) === String(kitId)
+    );
+
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+const isRealCalendarDate = (value) => {
+    const match = DATE_ONLY_RE.exec(value);
+    if (!match) return true; // Not date-only; Date parsing below handles it.
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const candidate = new Date(Date.UTC(year, month - 1, day));
+    return (
+        candidate.getUTCFullYear() === year &&
+        candidate.getUTCMonth() === month - 1 &&
+        candidate.getUTCDate() === day
+    );
+};
+
+/**
+ * Parses a kit date field. `undefined` means "not supplied" (leave unchanged),
+ * null/empty string explicitly clears the date, and anything unparseable is
+ * rejected instead of failing later inside Mongoose with a 500. Date-only
+ * values are validated as real calendar days (2026-02-31 is rejected instead
+ * of silently rolling over to March).
+ */
+const parseKitDate = (value) => {
+    if (value === undefined) return { provided: false };
+    if (value === null) return { provided: true, value: null };
+    if (typeof value === "string" && value.trim() === "") {
+        return { provided: true, value: null };
+    }
+    if (typeof value === "string" && !isRealCalendarDate(value.trim())) {
+        return { provided: true, error: true };
+    }
+    const date = value instanceof Date ? value : new Date(
+        typeof value === "string" ? value.trim() : value
+    );
+    if (Number.isNaN(date.getTime())) return { provided: true, error: true };
+    return { provided: true, value: date };
+};
+
 router.get(
     "/students/:studentId/logbook",
     isAuthenticated,
@@ -575,16 +624,25 @@ router.post(
             }
 
             const { title, description, startDate, endDate, placementId, coursePackageId } = req.body;
-            if (!title) {
+            if (typeof title !== "string" || !title.trim()) {
                 return res.status(400).send({ message: "Titel krävs." });
+            }
+
+            const parsedStartDate = parseKitDate(startDate);
+            const parsedEndDate = parseKitDate(endDate);
+            if (parsedStartDate.error) {
+                return res.status(400).send({ message: "Ogiltigt startdatum." });
+            }
+            if (parsedEndDate.error) {
+                return res.status(400).send({ message: "Ogiltigt slutdatum." });
             }
 
             const newKit = {
                 id: new mongoose.Types.ObjectId(),
-                title,
-                description,
-                startDate: startDate || new Date(),
-                endDate,
+                title: title.trim(),
+                description: typeof description === "string" ? description : undefined,
+                startDate: parsedStartDate.value || new Date(),
+                endDate: parsedEndDate.provided ? parsedEndDate.value : undefined,
                 status: "pending",
                 placementId,
                 coursePackageId,
@@ -618,17 +676,34 @@ router.patch(
     isAuthenticated,
     hasRole(LOGBOOK_ROLES),
     validateId("studentId"),
+    validateId("kitId"),
     asyncHandler(async (req, res) => {
         const student = await Student.findById(req.params.studentId);
         if (!student) return res.status(404).send({ message: "Student not found." });
-        const kit = student.logbook?.id(req.params.kitId);
+        // `student.logbook.id()` resolves by subdocument `_id`, but the API and
+        // UI address kits by their own `id` field. Use the shared lookup.
+        const kit = findLogbookKit(student, req.params.kitId);
         if (!kit) return res.status(404).send({ message: "Logbook kit not found." });
         const { title, description, startDate, endDate } = req.body;
         if (typeof title !== "string" || !title.trim()) return res.status(400).send({ message: "Titel krävs." });
+
+        const parsedStartDate = parseKitDate(startDate);
+        const parsedEndDate = parseKitDate(endDate);
+        if (parsedStartDate.error) {
+            return res.status(400).send({ message: "Ogiltigt startdatum." });
+        }
+        if (parsedEndDate.error) {
+            return res.status(400).send({ message: "Ogiltigt slutdatum." });
+        }
+
         kit.title = title.trim();
-        kit.description = typeof description === "string" ? description.trim() : undefined;
-        if (startDate !== undefined) kit.startDate = startDate || null;
-        if (endDate !== undefined) kit.endDate = endDate || null;
+        // Only touch optional fields when they were actually supplied, so a
+        // title-only edit cannot erase the description or dates.
+        if (description !== undefined) {
+            kit.description = typeof description === "string" ? description.trim() : kit.description;
+        }
+        if (parsedStartDate.provided) kit.startDate = parsedStartDate.value;
+        if (parsedEndDate.provided) kit.endDate = parsedEndDate.value;
         await student.save();
         await recordAudit(req, { entityType: "Student", entityId: student._id, action: "logbook:update", description: `Uppdaterade loggboks-kit för elev ${student.name || req.params.studentId}` });
         res.send({ success: true, logbook: student.logbook });
@@ -640,12 +715,17 @@ router.delete(
     isAuthenticated,
     hasRole(LOGBOOK_ROLES),
     validateId("studentId"),
+    validateId("kitId"),
     asyncHandler(async (req, res) => {
         const student = await Student.findById(req.params.studentId);
         if (!student) return res.status(404).send({ message: "Student not found." });
-        const originalLength = student.logbook?.length || 0;
-        student.logbook = (student.logbook || []).filter((kit) => String(kit.id) !== req.params.kitId);
-        if (student.logbook.length === originalLength) return res.status(404).send({ message: "Logbook kit not found." });
+        const kit = findLogbookKit(student, req.params.kitId);
+        if (!kit) return res.status(404).send({ message: "Logbook kit not found." });
+        // Remove by `_id` so a duplicated legacy `id` value can never delete
+        // more than the single kit that was requested.
+        student.logbook = (student.logbook || []).filter(
+            (entry) => String(entry._id) !== String(kit._id)
+        );
         await student.save();
         await recordAudit(req, { entityType: "Student", entityId: student._id, action: "logbook:delete", description: `Tog bort loggboks-kit för elev ${student.name || req.params.studentId}` });
         res.send({ success: true, logbook: student.logbook });

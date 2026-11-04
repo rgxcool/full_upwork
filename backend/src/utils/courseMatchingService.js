@@ -119,6 +119,28 @@ class CourseMatchingService {
     }
 
     /**
+     * Resolve the Course for an education entry.
+     *
+     * The placement wizard already knows the exact course id, so `refId` must
+     * take precedence over name/code matching. Spreadsheet imports only carry
+     * a code/name, so they keep using the strict code matcher as a fallback.
+     *
+     * Returns `{ course, resolvedByRef }`. `resolvedByRef` is true when the
+     * caller supplied a refId, which lets callers report an invalid id as an
+     * error instead of silently warning about an unmatched name.
+     */
+    static async resolveEntryCourse(entry) {
+        if (entry?.refId && mongoose.isValidObjectId(entry.refId)) {
+            const { default: Course } = await import("../models/Course.js");
+            const course = await Course.findById(entry.refId);
+            return { course, resolvedByRef: true };
+        }
+
+        const match = await this.findBestCourseMatch(entry?.name);
+        return { course: match?.course || null, resolvedByRef: false };
+    }
+
+    /**
      * Resolve the course template to auto-generate card content from at
      * admission time (MILESTONE-3 #31 Part B).
      *
@@ -392,16 +414,28 @@ class CourseMatchingService {
                     entry.startDate &&
                     entry.endDate
                 ) {
-                    // Find the best course match
-                    const match = await this.findBestCourseMatch(entry.name);
+                    // Prefer the explicit course id from the placement wizard.
+                    // Spreadsheet imports fall back to strict code matching.
+                    const { course, resolvedByRef } =
+                        await this.resolveEntryCourse(entry);
 
-                    if (!match) {
-                        results.warnings.push({
-                            type: "no_match",
-                            courseName: entry.name,
-                            studentId: studentId,
-                            message: `Ingen matchande kurs hittades för "${entry.name}". Kursen kommer inte att skapas automatiskt.`,
-                        });
+                    if (!course) {
+                        if (resolvedByRef) {
+                            results.errors.push({
+                                type: "no_course",
+                                courseId: entry.refId,
+                                courseName: entry.name,
+                                studentId: studentId,
+                                message: `Kursen med id "${entry.refId}" hittades inte.`,
+                            });
+                        } else {
+                            results.warnings.push({
+                                type: "no_match",
+                                courseName: entry.name,
+                                studentId: studentId,
+                                message: `Ingen matchande kurs hittades för "${entry.name}". Kursen kommer inte att skapas automatiskt.`,
+                            });
+                        }
                         continue;
                     }
 
@@ -425,7 +459,7 @@ class CourseMatchingService {
                     // stale) spreadsheet end date.
                     const courseStart = new Date(entry.startDate);
                     const extentWeeks =
-                        parseFloat(match.course.courseExtent) || 5;
+                        parseFloat(course.courseExtent) || 5;
                     const courseEnd = applyPace
                         ? this.addWeeks(courseStart, extentWeeks * paceFactor)
                         : new Date(entry.endDate);
@@ -441,7 +475,7 @@ class CourseMatchingService {
                     // Find or create course instance, pass responsibleTeacherId from student
                     const { instance, wasCreated } =
                         await this.findOrCreateCourseInstance(
-                            match.course._id,
+                            course._id,
                             courseStart,
                             courseEnd,
                             userId,
@@ -465,12 +499,19 @@ class CourseMatchingService {
                     const existingEnrollment = await StudentEnrollment.findOne({
                         studentId,
                         courseInstanceId: instance._id,
-                        mainCourseId: match.course._id,
+                        mainCourseId: course._id,
                         startDate: courseStart,
                         endDate: courseEnd,
                     });
                     if (existingEnrollment) {
-                        logger.debug({ studentId, courseId: match.course._id, startDate: courseStart, endDate: courseEnd }, "Skipping duplicate enrollment");
+                        logger.debug({ studentId, courseId: course._id, startDate: courseStart, endDate: courseEnd }, "Skipping duplicate enrollment");
+                        results.warnings.push({
+                            type: "duplicate_enrollment",
+                            courseId: course._id,
+                            courseName: course.courseName,
+                            studentId: studentId,
+                            message: `Kursen "${course.courseName}" är redan placerad med samma start- och slutdatum och skapades inte igen.`,
+                        });
                         continue;
                     }
 
@@ -485,8 +526,8 @@ class CourseMatchingService {
                     const enrollment = new StudentEnrollment({
                         studentId,
                         courseInstanceId: instance._id,
-                        mainCourseId: match.course._id,
-                        enrollmentPrice: match.course.price ?? null,
+                        mainCourseId: course._id,
+                        enrollmentPrice: course.price ?? null,
                         startDate: courseStart,
                         endDate: courseEnd,
                         status: "enrolled",
@@ -616,7 +657,7 @@ class CourseMatchingService {
                             if (!e.refId) return true;
                             return (
                                 e.refId.toString() !==
-                                match.course._id.toString() ||
+                                course._id.toString() ||
                                 new Date(e.startDate).getTime() !==
                                 courseStart.getTime() ||
                                 new Date(e.endDate).getTime() !==
@@ -629,8 +670,8 @@ class CourseMatchingService {
                         // Add the new education entry (always, regardless of type)
                         const newEducationEntry = {
                             type: "Course",
-                            refId: match.course._id,
-                            name: match.course.courseName,
+                            refId: course._id,
+                            name: course.courseName,
                             startDate: courseStart,
                             endDate: courseEnd,
                             grade: null,
@@ -833,7 +874,15 @@ class CourseMatchingService {
 
                         // Calculate slutprov date - for grouped courses, use the same date for both
                         let slutprovDate;
-                        if (entry.slutprovDate) {
+                        // Per-course overrides (from the placement wizard preview)
+                        // take precedence over a single package-level date.
+                        const courseOverrideDate = entry.slutprovDates
+                            ? entry.slutprovDates[String(course._id)]
+                            : null;
+                        if (courseOverrideDate) {
+                            slutprovDate = new Date(courseOverrideDate);
+                            logger.debug({ slutprovDate: slutprovDate.toDateString(), courseId: course._id }, "Using per-course slutprov date override");
+                        } else if (entry.slutprovDate) {
                             slutprovDate = new Date(entry.slutprovDate);
                             logger.debug({ slutprovDate: slutprovDate.toDateString() }, "Using provided slutprov date");
                         } else {
@@ -1115,21 +1164,30 @@ class CourseMatchingService {
                 } else if (entry.type === "Course" && entry.name) {
                     logger.debug({ entryName: entry.name }, "Processing individual course");
 
-                    // Find the best matching course
-                    const courseMatch = await this.findBestCourseMatch(
-                        entry.name
-                    );
-                    if (!courseMatch) {
-                        results.warnings.push({
-                            type: "no_match",
-                            courseName: entry.name,
-                            studentId: studentId,
-                            message: `Ingen matchande kurs hittades för "${entry.name}". Kursen kommer inte att skapas automatiskt.`,
-                        });
+                    // Prefer the explicit course id from the placement wizard.
+                    // Spreadsheet imports fall back to strict code matching.
+                    const { course, resolvedByRef } =
+                        await this.resolveEntryCourse(entry);
+                    if (!course) {
+                        if (resolvedByRef) {
+                            results.errors.push({
+                                type: "no_course",
+                                courseId: entry.refId,
+                                courseName: entry.name,
+                                studentId: studentId,
+                                message: `Kursen med id "${entry.refId}" hittades inte.`,
+                            });
+                        } else {
+                            results.warnings.push({
+                                type: "no_match",
+                                courseName: entry.name,
+                                studentId: studentId,
+                                message: `Ingen matchande kurs hittades för "${entry.name}". Kursen kommer inte att skapas automatiskt.`,
+                            });
+                        }
                         continue;
                     }
 
-                    const course = courseMatch.course;
                     logger.debug({ entryName: entry.name, courseName: course.courseName }, "Matched individual course");
 
                     // Calculate course dates, honoring the study pace
@@ -1184,6 +1242,13 @@ class CourseMatchingService {
                     });
                     if (existingEnrollment) {
                         logger.debug({ studentId, courseId: course._id, startDate: courseStart, endDate: courseEnd }, "Skipping duplicate enrollment for individual course");
+                        results.warnings.push({
+                            type: "duplicate_enrollment",
+                            courseId: course._id,
+                            courseName: course.courseName,
+                            studentId: studentId,
+                            message: `Kursen "${course.courseName}" är redan placerad med samma start- och slutdatum och skapades inte igen.`,
+                        });
                         continue;
                     }
 
