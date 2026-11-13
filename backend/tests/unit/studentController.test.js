@@ -223,6 +223,89 @@ describe("uploadXlsx", () => {
     expect(payload.warnings).toEqual([]);
   });
 
+  it("stores spreadsheet dates and an ObjectId addedBy on uploaded education", async () => {
+    const uploaderId = "64b7f9f9f9f9f9f9f9f9f9f9";
+    parseModule.parseStudentExcel.mockResolvedValue([
+      {
+        email: "dated@example.com",
+        name: "Dated Student",
+        municipality: "Solna",
+        teacher: "Teacher, First",
+        education: [
+          {
+            name: "PKG-001",
+            startDate: "2026-08-17T00:00:00.000Z",
+            endDate: "2026-12-18T00:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+    CoursePackage.find.mockReturnValue(
+      createLeanResult([{ coursePackageCode: "PKG-001", _id: "pkg-1" }])
+    );
+    const res = createMockRes();
+    const req = {
+      file: { buffer: Buffer.from("data"), originalname: "dated.xlsx" },
+      user: { userId: uploaderId },
+    };
+
+    await uploadXlsx(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const bulkOps = Student.bulkWrite.mock.calls[0][0];
+    const educationEntry = bulkOps[0].updateOne.update.$set.education[0];
+    expect(educationEntry).toMatchObject({
+      type: "CoursePackage",
+      refId: "pkg-1",
+    });
+    expect(educationEntry.startDate).toEqual(
+      new Date("2026-08-17T00:00:00.000Z")
+    );
+    expect(educationEntry.endDate).toEqual(
+      new Date("2026-12-18T00:00:00.000Z")
+    );
+    // Must be ObjectId-shaped, never the teacher's display name.
+    expect(educationEntry.addedBy).toBe(uploaderId);
+    expect(String(educationEntry.addedBy)).toMatch(/^[a-f0-9]{24}$/);
+  });
+
+  it("matches a course code even when it does not end with NIVÅ N", async () => {
+    parseModule.parseStudentExcel.mockResolvedValue([
+      {
+        email: "course@example.com",
+        name: "Course Student",
+        municipality: "Solna",
+        teacher: "Teacher, First",
+        education: [
+          {
+            name: "MATMAT01",
+            startDate: "2026-08-17T00:00:00.000Z",
+            endDate: "2026-12-18T00:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+    CoursePackage.find.mockReturnValue(createLeanResult([]));
+    Course.find.mockReturnValue(
+      createLeanResult([{ courseCode: "MATMAT01", _id: "course-9" }])
+    );
+    const res = createMockRes();
+    const req = {
+      file: { buffer: Buffer.from("data"), originalname: "course.xlsx" },
+    };
+
+    await uploadXlsx(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const bulkOps = Student.bulkWrite.mock.calls[0][0];
+    const educationEntry = bulkOps[0].updateOne.update.$set.education[0];
+    expect(educationEntry).toMatchObject({
+      type: "Course",
+      refId: "course-9",
+    });
+    expect(res.json.mock.calls[0][0].warnings).toEqual([]);
+  });
+
   it("skips blank education rows and still accepts valid entries", async () => {
     const parsedStudents = [
       {

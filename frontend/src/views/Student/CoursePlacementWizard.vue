@@ -3,7 +3,7 @@
     <div class="placement-wizard">
       <div class="wizard-header">
         <h3>Placera kurs</h3>
-        <button class="btn-close-wizard" @click="$emit('close')">&times;</button>
+        <button class="btn-close-wizard" @click="closeWizard">&times;</button>
       </div>
 
       <!-- Step Indicator -->
@@ -150,14 +150,14 @@
           <div v-if="placementType === 'course' && selectedCourse" class="course-summary">
             <p>
               <strong>{{ selectedCourse.courseName }}</strong> &mdash;
-              {{ durationWeeks }} veckor, startar {{ formatDate(startDate) }}
+              {{ durationWeeks }} veckor, startar {{ formatDate(effectiveStartDate) }}
             </p>
           </div>
           <div v-if="placementType === 'package' && selectedPackage" class="course-summary">
             <p>
               <strong>{{ selectedPackage.coursePackageName }}</strong> &mdash;
               {{ packageCourses.length - excludeCourseIds.length }} kurser,
-              startar {{ formatDate(startDate) }}
+              startar {{ formatDate(effectiveStartDate) }}
             </p>
             <label class="apl-checkbox">
               <input v-model="aplCompletedElsewhere" type="checkbox" />
@@ -170,7 +170,7 @@
           </div>
           <div class="calculated-dates" aria-live="polite">
             <strong>Beräknade datum</strong>
-            <span>Startdatum: {{ formatDate(startDate) }}</span>
+            <span>Startdatum: {{ formatDate(effectiveStartDate) }}</span>
             <span>Slutdatum: {{ formatDate(calculatedEndDate) }}</span>
             <span v-if="placementType === 'package'">Studietakt: {{ pace }}%</span>
             <span v-if="placementType === 'course' || placementType === 'package'">Slutprov: beräknas automatiskt utifrån lärare och kursens slutdatum</span>
@@ -296,7 +296,7 @@
           <div v-else-if="submitSuccess" class="submit-success">
             <div class="success-icon">&#10003;</div>
             <p>Kursen har placerats!</p>
-            <button class="btn btn-primary" @click="$emit('placed')">Stäng</button>
+            <button class="btn btn-primary" @click="closeWizard">Stäng</button>
           </div>
         </div>
       </div>
@@ -337,6 +337,7 @@ import { ref, computed, watch, onMounted } from 'vue';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
 import { municipalityPricing } from '@/utils/municipalityPricing.js';
+import { addWeeks, getNextMonday } from '@/utils/dateOnly.js';
 import FileUploaderDownloader from '@/components/FileUploaderDownloader.vue';
 
 export default {
@@ -369,14 +370,20 @@ export default {
     const pace = ref(100);
     const needsSupport = ref(Boolean(props.student.needsSupport));
     const aplCompletedElsewhere = ref(false);
+
+    // The backend always schedules from the next Monday on or after the chosen
+    // start date. Mirror that here so the summary shows the dates that will
+    // actually be registered.
+    const effectiveStartDate = computed(() =>
+      startDate.value ? getNextMonday(startDate.value) : ''
+    );
+
     const calculatedEndDate = computed(() => {
-      if (!startDate.value) return '';
+      if (!effectiveStartDate.value) return '';
       const weeks = placementType.value === 'package'
         ? Math.round(5 * (100 / pace.value))
         : durationWeeks.value;
-      const date = new Date(`${startDate.value}T00:00:00`);
-      date.setDate(date.getDate() + weeks * 7);
-      return date.toISOString().slice(0, 10);
+      return addWeeks(effectiveStartDate.value, weeks);
     });
 
     const examMode = ref('on-site');
@@ -529,26 +536,33 @@ export default {
     const submitPlacement = async () => {
       isSubmitting.value = true;
       submitError.value = '';
+      submitSuccess.value = false;
 
       try {
         const entries = [];
         const previewCourses = previewData.value?.courses || [];
 
         if (placementType.value === 'course' && selectedCourse.value) {
-          const endDate = new Date(
-            new Date(startDate.value).getTime() + durationWeeks.value * 7 * 24 * 60 * 60 * 1000
-          )
-            .toISOString()
-            .slice(0, 10);
+          const previewCourse = previewCourses[0];
+          // Submit exactly the dates shown in the preview. The backend
+          // normalizes the start date to a Monday; recalculating from the raw
+          // picker value here used to register a different (often Sunday)
+          // period than the user reviewed.
+          const submittedStartDate =
+            toDateInputValue(previewCourse?.startDate) || effectiveStartDate.value;
+          const submittedEndDate =
+            toDateInputValue(previewCourse?.endDate) ||
+            addWeeks(submittedStartDate, durationWeeks.value);
+
           entries.push({
             type: 'Course',
             refId: selectedCourse.value._id,
             name: selectedCourse.value.courseName,
-            startDate: startDate.value,
-            endDate,
+            startDate: submittedStartDate,
+            endDate: submittedEndDate,
             // Explicit final-exam date chosen in the preview step. The backend
             // falls back to its teacher-based rule when this is omitted.
-            slutprovDate: previewCourses[0]?.slutprovDate || undefined,
+            slutprovDate: previewCourse?.slutprovDate || undefined,
           });
         } else if (placementType.value === 'package' && selectedPackage.value) {
           // Per-course final-exam dates (editable in the preview step).
@@ -558,18 +572,21 @@ export default {
               slutprovDates[String(course.courseId)] = course.slutprovDate;
             }
           }
-          // Build the package entry with excluded courses
+          // Build the package entry with excluded courses. Use the preview's
+          // first start date so the submitted plan matches what was reviewed.
+          const submittedStartDate =
+            toDateInputValue(previewCourses[0]?.startDate) || effectiveStartDate.value;
           entries.push({
             type: 'CoursePackage',
             refId: selectedPackage.value._id,
             name: selectedPackage.value.coursePackageName,
-            startDate: startDate.value,
+            startDate: submittedStartDate,
             excludedCourseIds: excludeCourseIds.value,
             slutprovDates,
           });
         }
 
-        await client.post('/process-education', {
+        const response = await client.post('/process-education', {
           studentId: props.student._id,
           educationEntries: entries,
           needsSupport: needsSupport.value,
@@ -577,6 +594,27 @@ export default {
           aplCompletedElsewhere: placementType.value === 'package' ? aplCompletedElsewhere.value : false,
           examMode: examMode.value,
         });
+
+        const results = response.data?.results || {};
+        const warnings = Array.isArray(results.warnings) ? results.warnings : [];
+        const createdEnrollments = Array.isArray(results.enrollments)
+          ? results.enrollments.length
+          : 0;
+        const hasResultsPayload =
+          response.data?.results && typeof response.data.results === 'object';
+
+        // A duplicate is returned as a warning (HTTP 200) because nothing was
+        // written. Showing the regular success screen made it look as if the
+        // course had been placed when the study plan was unchanged.
+        if (hasResultsPayload && createdEnrollments === 0) {
+          const warning = warnings.find(
+            (item) => item.type === 'duplicate_enrollment'
+          ) || warnings.find((item) => item.message);
+          submitError.value =
+            warning?.message ||
+            'Ingen kurs registrerades. Kontrollera att kursen inte redan är placerad med samma datum.';
+          return;
+        }
 
         submitSuccess.value = true;
         toast.success('Kursen har placerats!');
@@ -591,24 +629,21 @@ export default {
       }
     };
 
-    // Set default start date to next Monday
-    const getNextMonday = () => {
-      const d = new Date();
-      const day = d.getDay();
-      const diff = day === 1 ? 0 : (8 - day) % 7;
-      d.setDate(d.getDate() + diff);
-      d.setHours(0, 0, 0, 0);
-      return d.toISOString().slice(0, 10);
-    };
-
-    // Set default exam mode based on student municipality
+    // Set defaults for the period and exam configuration
     const setDefaults = () => {
+      // Next Monday, as a date-only string (timezone-safe).
       startDate.value = getNextMonday();
       const mun = props.student.municipality?.type || '';
       examMunicipality.value = mun;
       // Upplands Bro defaults to remote
       const normalized = mun.trim().toLowerCase().replace(/[\s-]+/g, '');
       examMode.value = normalized === 'upplandsbro' ? 'remote' : 'on-site';
+    };
+
+    // After a successful placement the study plan must be refreshed even when
+    // the user closes the dialog with the header X instead of the Stäng button.
+    const closeWizard = () => {
+      emit(submitSuccess.value ? 'placed' : 'close');
     };
 
     onMounted(() => {
@@ -650,6 +685,7 @@ export default {
       packageCourses,
       excludeCourseIds,
       startDate,
+      effectiveStartDate,
       durationWeeks,
       pace,
       needsSupport,
@@ -672,6 +708,7 @@ export default {
       nextStep,
       prevStep,
       submitPlacement,
+      closeWizard,
     };
   },
 };

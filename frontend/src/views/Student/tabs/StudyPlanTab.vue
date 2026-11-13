@@ -264,6 +264,7 @@ import { ref, watch, computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
+import { addDays, addWeeks, toDateOnly } from '@/utils/dateOnly.js';
 import draggable from 'vuedraggable';
 import CoursePlacementWizard from '../CoursePlacementWizard.vue';
 import StudyPlanRevisionModal from '../StudyPlanRevisionModal.vue';
@@ -803,19 +804,18 @@ export default {
       const key = course.enrollmentId || course._id;
       reEnrolling.value[key] = true;
       try {
-        // Start one day after the last scheduled course, or today if none
-        const lastEnd = sortedEducation.value
-          .map((edu) => (edu.endDate ? new Date(edu.endDate).getTime() : 0))
-          .filter((time) => !isNaN(time))
-          .reduce((max, time) => Math.max(max, time), 0);
-        const start = lastEnd > 0 ? new Date(lastEnd) : new Date();
-        start.setDate(start.getDate() + 1);
-        const startDate = start.toISOString().slice(0, 10);
+        // Start one day after the last scheduled course, or today if none.
+        // Date-only helpers keep the calendar day stable in timezones ahead
+        // of UTC (toISOString on local midnight returns the previous day).
+        const lastEndDate = sortedEducation.value
+          .map((edu) => toDateOnly(edu.endDate))
+          .filter(Boolean)
+          .sort()
+          .pop();
 
+        const startDate = lastEndDate ? addDays(lastEndDate, 1) : toDateOnly(new Date());
         const tempoWeeks = Number(selectedTempo.value) || 5;
-        const end = new Date(start);
-        end.setDate(end.getDate() + tempoWeeks * 7);
-        const endDate = end.toISOString().slice(0, 10);
+        const endDate = addWeeks(startDate, tempoWeeks);
 
         await client.post('/process-education', {
           studentId: props.student._id,
