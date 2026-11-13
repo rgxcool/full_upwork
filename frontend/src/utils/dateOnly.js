@@ -48,3 +48,64 @@ export const toDateOnly = (value) => {
 }
 
 export const isDateOnly = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+
+const formatUtcDateOnly = (date) =>
+  `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    date.getUTCDate()
+  ).padStart(2, '0')}`
+
+const parseDateOnlyAsUtc = (value) => {
+  const dateOnly = toDateOnly(value)
+  if (!dateOnly) return null
+  const [year, month, day] = dateOnly.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+/**
+ * Adds calendar days to a date-only value without any timezone conversion.
+ *
+ * Doing the arithmetic in UTC keeps the selected calendar day stable even when
+ * the range crosses a daylight-saving transition.
+ *
+ * @param {Date|string|number|null|undefined} value
+ * @param {number} days
+ * @returns {string} YYYY-MM-DD, or an empty string when the value is invalid
+ */
+export const addDays = (value, days) => {
+  const date = parseDateOnlyAsUtc(value)
+  if (!date) return ''
+  date.setUTCDate(date.getUTCDate() + Number(days))
+  return formatUtcDateOnly(date)
+}
+
+/**
+ * Adds whole weeks to a date-only value.
+ *
+ * @param {Date|string|number|null|undefined} value
+ * @param {number} weeks
+ * @returns {string} YYYY-MM-DD, or an empty string when the value is invalid
+ */
+export const addWeeks = (value, weeks) => addDays(value, Number(weeks) * 7)
+
+/**
+ * Returns the date-only value of the next Monday on or after the given day.
+ *
+ * The input is read by its local calendar day, which is what date pickers and
+ * "today" refer to. Building the result from local calendar parts (instead of
+ * calling toISOString on local midnight) avoids returning the previous day in
+ * timezones ahead of UTC, such as Sweden.
+ *
+ * @param {Date|string|number} value
+ * @returns {string} YYYY-MM-DD, or an empty string when the value is invalid
+ */
+export const getNextMonday = (value = new Date()) => {
+  const dateOnly = toDateOnly(value)
+  if (!dateOnly) return ''
+
+  const [year, month, day] = dateOnly.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  const weekday = date.getDay()
+  const offset = weekday === 1 ? 0 : (8 - weekday) % 7
+  date.setDate(date.getDate() + offset)
+  return toDateOnly(date)
+}
