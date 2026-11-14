@@ -103,6 +103,20 @@ export async function canAccessTeacherDocuments(user, teacherId) {
 }
 
 export async function canAccessDocument(user, document) {
+    if (!user) {
+        return false;
+    }
+
+    const userId = getId(user.userId) ?? getId(user._id);
+    const sharedWith = Array.isArray(document?.sharedWith) ? document.sharedWith : [];
+    if (
+        userId !== undefined &&
+        userId !== null &&
+        sharedWith.some((sharedUserId) => sameId(sharedUserId, userId))
+    ) {
+        return true;
+    }
+
     const studentId = getId(document?.student);
     if (studentId) {
         return canAccessStudentDocuments(user, studentId);

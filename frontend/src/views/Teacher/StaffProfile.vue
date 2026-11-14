@@ -55,6 +55,7 @@ import StaffGeneralTab from './Tabs/StaffGeneralTab.vue';
 import StaffCoursesTab from './Tabs/StaffCoursesTab.vue';
 import StaffStudentsTab from './Tabs/StaffStudentsTab.vue';
 import StaffDocumentsTab from './Tabs/StaffDocumentsTab.vue';
+import StaffPermissionsTab from './Tabs/StaffPermissionsTab.vue';
 
 export default {
   name: 'StaffProfile',
@@ -63,6 +64,7 @@ export default {
     StaffCoursesTab,
     StaffStudentsTab,
     StaffDocumentsTab,
+    StaffPermissionsTab,
   },
   setup() {
     const route = useRoute();
@@ -78,12 +80,27 @@ export default {
     const userRoles = computed(() => store.getters.userRoles || []);
     const isStaff = computed(() => userRoles.value.some(r => ['teacher', 'admin', 'systemadmin', 'coordinator', 'syv', 'specped'].includes(r)));
 
-    const tabs = [
-      { name: 'Allmänt', component: StaffGeneralTab },
-      { name: 'Kurser', component: StaffCoursesTab },
-      { name: 'Elever', component: StaffStudentsTab },
-      { name: 'Filarkiv', component: StaffDocumentsTab },
-    ];
+    const tabs = computed(() => {
+      const baseTabs = [
+        { name: 'Allmänt', component: StaffGeneralTab },
+        { name: 'Kurser', component: StaffCoursesTab },
+        { name: 'Elever', component: StaffStudentsTab },
+        { name: 'Filarkiv', component: StaffDocumentsTab },
+      ];
+      // Behörigheter is admin-only: the permission catalog and user endpoints
+      // it relies on require admin/systemadmin.
+      const roles = store.getters.userRoles || [];
+      const canManagePermissions = roles.some((r) =>
+        ['admin', 'systemadmin'].includes(r)
+      );
+      if (canManagePermissions) {
+        baseTabs.push({
+          name: 'Behörigheter',
+          component: StaffPermissionsTab,
+        });
+      }
+      return baseTabs;
+    });
 
     const fetchProfile = async () => {
       loading.value = true;

@@ -63,9 +63,13 @@
           </span>
           <span v-else class="text-muted">—</span>
         </template>
+        <template #item.decision="{ item }">
+          <span>{{ decisionLabel(item.decision) }}</span>
+        </template>
         <template #item.actions="{ item }">
-          <v-icon small class="me-2" @click="openForm(item)">mdi-pencil</v-icon>
-          <v-icon small color="red" @click="deleteExam(item._id)">mdi-delete</v-icon>
+          <v-icon small class="me-2" title="Beslut" @click="openDecision(item)">mdi-gavel</v-icon>
+          <v-icon small class="me-2" title="Redigera" @click="openForm(item)">mdi-pencil</v-icon>
+          <v-icon small color="red" title="Ta bort" @click="deleteExam(item._id)">mdi-delete</v-icon>
         </template>
       </v-data-table>
 
@@ -86,17 +90,62 @@
           <v-card-text>
             <v-text-field v-model="currentExam.name" label="Namn" required />
             <v-text-field v-model="currentExam.personalNumber" label="Personnummer" required />
-            <v-text-field v-model="currentExam.course" label="Kurs" required />
+            <v-text-field v-model="currentExam.phone" label="Telefon" />
+            <v-text-field v-model="currentExam.email" label="E-post" />
             <v-text-field v-model="currentExam.address" label="Adress" />
+            <v-text-field v-model="currentExam.course" label="Kurs" required />
             <v-select v-model="currentExam.requestedMonth" :items="months" label="Önskad månad" required />
             <v-text-field v-model="currentExam.municipality" label="Kommun" />
+            <v-select
+              v-model="currentExam.teacherId"
+              :items="teacherOptions"
+              label="Lärare"
+              clearable
+              density="compact"
+            />
+            <v-text-field v-model="currentExam.paymentDate" type="date" label="Betalningsdatum" />
+            <v-select v-model="currentExam.examMode" :items="examModeOptions" label="Tentatyp" />
+            <v-text-field v-model="currentExam.examRoom" label="Rum" />
+            <div class="text-subtitle-2 mt-2 mb-1">Anpassningar</div>
+            <v-checkbox v-model="currentExam.accommodations.extraTime" label="Extra skrivtid" density="compact" hide-details />
+            <v-checkbox v-model="currentExam.accommodations.computer" label="Dator" density="compact" hide-details />
+            <v-checkbox v-model="currentExam.accommodations.separateRoom" label="Sitter ensam" density="compact" hide-details />
+            <v-text-field v-model="currentExam.accommodations.notes" label="Anteckning om anpassning" density="compact" />
             <v-checkbox v-model="currentExam.materialReceived.status" label="Material hämtat" />
+            <v-text-field
+              v-if="currentExam.materialReceived.status"
+              v-model="currentExam.materialReceived.receivedDate"
+              type="date"
+              label="Material hämtat datum"
+            />
             <v-alert v-if="formError" type="error" density="compact" class="mt-2">{{ formError }}</v-alert>
           </v-card-text>
           <v-card-actions>
             <v-spacer />
             <v-btn text @click="closeForm()">Avbryt</v-btn>
             <v-btn color="primary" :loading="saving" :disabled="saving" @click="saveExam()">Spara</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Decision Dialog -->
+      <v-dialog v-model="showDecision" max-width="520px" persistent>
+        <v-card>
+          <v-card-title>Beslut för prövning</v-card-title>
+          <v-card-text>
+            <p v-if="decisionTarget" class="mb-2">
+              <strong>{{ decisionTarget.name }}</strong> — {{ decisionTarget.course }}
+              ({{ decisionTarget.requestedMonth }})
+            </p>
+            <v-text-field v-model="decisionComment" label="Kommentar (valfritt)" />
+            <v-alert v-if="decisionError" type="error" density="compact" class="mt-2">{{ decisionError }}</v-alert>
+          </v-card-text>
+          <v-card-actions class="flex-wrap">
+            <v-btn text @click="closeDecision()">Avbryt</v-btn>
+            <v-spacer />
+            <v-btn color="red" :loading="savingDecision" :disabled="savingDecision" @click="submitDecision('deny')">Neka</v-btn>
+            <v-btn color="orange" :loading="savingDecision" :disabled="savingDecision" @click="submitDecision('move')">Flytta fram</v-btn>
+            <v-btn color="green" :loading="savingDecision" :disabled="savingDecision" @click="submitDecision('accept')">Acceptera</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -177,14 +226,46 @@ const showDeleteDialog = ref(false)
 const deleting = ref(false)
 const deleteTargetId = ref(null)
 
+const teachers = ref([])
+const showDecision = ref(false)
+const decisionTarget = ref(null)
+const decisionComment = ref('')
+const decisionError = ref(null)
+const savingDecision = ref(false)
+
+const teacherOptions = computed(() =>
+  teachers.value.map((teacher) => ({
+    title: teacher.userId?.username || teacher.userId?.email || 'Namnlös lärare',
+    value: teacher._id,
+  }))
+)
+
+const toDateInput = (value) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (isNaN(date.getTime())) return ''
+  return date.toISOString().slice(0, 10)
+}
+
 const headers = [
   { title: 'Namn', key: 'name' },
   { title: 'Kurs', key: 'course' },
   { title: 'Månad', key: 'requestedMonth' },
   { title: 'Kommun', key: 'municipality' },
   { title: 'Status', key: 'status', sortable: true },
+  { title: 'Beslut', key: 'decision', sortable: false },
   { title: 'Anpassningar', key: 'accommodations', sortable: false },
   { title: 'Åtgärder', key: 'actions', sortable: false },
+]
+
+const decisionLabel = (decision) => {
+  const map = { accept: 'Accepterad', move: 'Flyttad', deny: 'Nekad' }
+  return map[decision] || '—'
+}
+
+const examModeOptions = [
+  { title: 'På plats', value: 'onsite' },
+  { title: 'Distans', value: 'remote' },
 ]
 
 const statusOptions = [
@@ -230,6 +311,16 @@ const fetchExams = async () => {
   }
 }
 
+const fetchTeachers = async () => {
+  try {
+    const { data } = await client.get('/teachers')
+    teachers.value = Array.isArray(data) ? data : []
+  } catch (error) {
+    // Non-fatal: the teacher select simply stays empty.
+    console.error('Kunde inte hämta lärare:', error)
+  }
+}
+
 // Bulk download of the current (filtered) registrations as CSV, mirroring the
 // import columns so an export can be re-imported unchanged.
 const exportExams = () => {
@@ -256,14 +347,70 @@ const exportExams = () => {
 
 const openForm = (exam = {}) => {
   formError.value = null
+  const examData = { ...exam }
+  // teacherId is populated by GET /admin/exams; the form needs the raw id.
+  if (examData.teacherId && typeof examData.teacherId === 'object') {
+    examData.teacherId = examData.teacherId._id
+  }
+  const materialReceived = {
+    status: false,
+    ...(exam.materialReceived || {}),
+  }
+  if (materialReceived.receivedDate) {
+    materialReceived.receivedDate = toDateInput(materialReceived.receivedDate)
+  }
+  const accommodations =
+    exam.accommodations && !Array.isArray(exam.accommodations)
+      ? { ...exam.accommodations }
+      : {}
   currentExam.value = {
     status: 'intresse',
-    materialReceived: { status: false },
-    accommodations: [],
-    ...exam,
-    materialReceived: { status: false, ...(exam.materialReceived || {}) },
+    ...examData,
+    paymentDate: toDateInput(examData.paymentDate),
+    materialReceived,
+    accommodations: {
+      extraTime: false,
+      computer: false,
+      separateRoom: false,
+      notes: '',
+      ...accommodations,
+    },
   }
   showForm.value = true
+}
+
+const openDecision = (exam) => {
+  decisionTarget.value = exam
+  decisionComment.value = exam.comment || ''
+  decisionError.value = null
+  showDecision.value = true
+}
+
+const closeDecision = () => {
+  showDecision.value = false
+  decisionTarget.value = null
+  decisionComment.value = ''
+  decisionError.value = null
+}
+
+const submitDecision = async (decision) => {
+  if (!decisionTarget.value?._id) return
+  savingDecision.value = true
+  decisionError.value = null
+  try {
+    await client.put(`/exams/${decisionTarget.value._id}/decision`, {
+      decision,
+      comment: decisionComment.value,
+    })
+    toast.success(`Beslut sparat: ${decisionLabel(decision)}`)
+    closeDecision()
+    await fetchExams()
+  } catch (err) {
+    decisionError.value =
+      err.response?.data?.error || 'Kunde inte spara beslutet.'
+  } finally {
+    savingDecision.value = false
+  }
 }
 
 const closeForm = () => {
@@ -283,10 +430,22 @@ const saveExam = async () => {
   }
   saving.value = true
   try {
+    const payload = { ...currentExam.value }
+    delete payload._id
+    delete payload.__v
+    delete payload.createdAt
+    delete payload.updatedAt
+    if (!payload.paymentDate) delete payload.paymentDate
+    if (payload.materialReceived && !payload.materialReceived.receivedDate) {
+      delete payload.materialReceived.receivedDate
+    }
+    if (payload.teacherId && typeof payload.teacherId === 'object') {
+      payload.teacherId = payload.teacherId._id
+    }
     if (currentExam.value._id) {
-      await client.put(`/exams/${currentExam.value._id}`, currentExam.value)
+      await client.put(`/exams/${currentExam.value._id}`, payload)
     } else {
-      await client.post('/exams', currentExam.value)
+      await client.post('/exams', payload)
     }
     toast.success('Prövning sparad!')
     closeForm()
@@ -380,7 +539,10 @@ const submitImport = async () => {
   }
 }
 
-onMounted(fetchExams)
+onMounted(() => {
+  fetchExams()
+  fetchTeachers()
+})
 </script>
 
 <style scoped>

@@ -135,6 +135,9 @@ export default {
     const currentComponent = computed(() => {
       switch (activeTab.value) {
         case "Studieplan": return StudyPlan;
+        // The staff profile calls this tab "Filarkiv"; students/legacy use
+        // "Dokument". Both render the same document section.
+        case "Filarkiv":
         case "Dokument": return DocumentSection;
         case "Handlingsplan": return ActionPlanTab;
         case "Elever": return StudentsTab;

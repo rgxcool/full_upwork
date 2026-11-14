@@ -45,8 +45,10 @@
                   </v-chip>
                 </td>
                 <td class="text-no-wrap">
-                  <v-btn icon="mdi-pencil" size="small" variant="text" :aria-label="`Redigera ${kit.title}`" @click="openEdit(kit)" />
-                  <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Ta bort ${kit.title}`" @click="openDelete(kit)" />
+                  <template v-if="canEdit">
+                    <v-btn icon="mdi-pencil" size="small" variant="text" :aria-label="`Redigera ${kit.title}`" @click="openEdit(kit)" />
+                    <v-btn icon="mdi-delete" size="small" variant="text" color="error" :aria-label="`Ta bort ${kit.title}`" @click="openDelete(kit)" />
+                  </template>
                 </td>
               </tr>
               <tr v-if="logbook.length === 0">
@@ -135,6 +137,7 @@ import { ref, computed, onMounted } from 'vue';
 import client from '@/api/client.js';
 import { useStore } from 'vuex';
 import { useToast } from '@/composables/useToast.js';
+import { LOGBOOK_ROLES } from '@/utils/aplKits.js';
 
 export default {
   name: 'LogbookTab',
@@ -169,8 +172,8 @@ export default {
     });
 
     const canEdit = computed(() => {
-      const role = store.getters.userRole;
-      return ['admin', 'systemadmin', 'teacher'].includes(role);
+      const role = store.getters.userRole || store.state.user?.role;
+      return LOGBOOK_ROLES.includes(role);
     });
 
     const statusLabel = (status) => {
@@ -213,7 +216,23 @@ export default {
       }
     };
 
-    const dateInput = (value) => value ? new Date(value).toISOString().slice(0, 10) : '';
+    // Date inputs expect the local calendar day. Using toISOString() here would
+    // shift a kit date backwards for timezones ahead of UTC (Sweden), the same
+    // way the global date search used to.
+    const dateInput = (value) => {
+      if (!value) return '';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    // Prefer the API's explanation (e.g. "Titel krävs.") over axios's generic
+    // "Request failed with status code 400".
+    const errorMessage = (err, fallback) =>
+      err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback;
 
     const openEdit = (kit) => {
       selectedKit.value = kit;
@@ -242,15 +261,16 @@ export default {
       try {
         const response = await client.patch(`/students/${props.student._id}/logbook/${selectedKit.value.id}`, {
           title: editForm.value.title.trim(),
-          description: editForm.value.description || undefined,
-          startDate: editForm.value.startDate || undefined,
-          endDate: editForm.value.endDate || undefined,
+          description: editForm.value.description || '',
+          // Send null (not undefined) so clearing a date is persisted.
+          startDate: editForm.value.startDate || null,
+          endDate: editForm.value.endDate || null,
         });
         logbook.value = response.data.logbook || [];
         editDialog.value = false;
         toast.success('Kit uppdaterades.');
       } catch (err) {
-        toast.error(err.message || 'Ett fel uppstod när kit skulle uppdateras.');
+        toast.error(errorMessage(err, 'Ett fel uppstod när kit skulle uppdateras.'));
       } finally {
         updating.value = false;
       }
@@ -264,7 +284,7 @@ export default {
         deleteDialog.value = false;
         toast.success('Kit togs bort.');
       } catch (err) {
-        toast.error(err.message || 'Ett fel uppstod när kit skulle tas bort.');
+        toast.error(errorMessage(err, 'Ett fel uppstod när kit skulle tas bort.'));
       } finally {
         deleting.value = false;
       }
@@ -292,7 +312,7 @@ export default {
         toast.success('Kit lades till i loggboken.');
       } catch (err) {
         console.error('Error adding kit:', err);
-        toast.error('Ett fel uppstod när kit skulle läggas till.');
+        toast.error(errorMessage(err, 'Ett fel uppstod när kit skulle läggas till.'));
       } finally {
         saving.value = false;
       }
@@ -321,6 +341,10 @@ export default {
       statusColor,
       formatDate,
       addKit,
+      openEdit,
+      openDelete,
+      updateKit,
+      deleteKit,
     };
   },
 };

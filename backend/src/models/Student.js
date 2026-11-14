@@ -1,7 +1,28 @@
 import mongoose from "mongoose";
 import { ALL_MUNICIPALITIES } from "../config/municipalities.js";
 
-// REMOVED: EducationEntrySchema - Using StudentEnrollment system instead
+// Education entries recorded on the student's study plan (used by course
+// placement, study plan tab and APL filtering). Kept in parallel with the
+// StudentEnrollment system so the student document carries a denormalized
+// plan snapshot.
+const EducationEntrySchema = new mongoose.Schema(
+    {
+        type: {
+            type: String,
+            enum: ["Course", "CoursePackage", "Program"],
+            required: true,
+        },
+        refId: { type: mongoose.Schema.Types.ObjectId },
+        name: { type: String },
+        startDate: { type: Date },
+        endDate: { type: Date },
+        grade: { type: String },
+        addedAt: { type: Date },
+        addedBy: { type: mongoose.Schema.Types.ObjectId },
+        removedAt: { type: Date },
+    },
+    { _id: false }
+);
 
 const StudentSchema = new mongoose.Schema(
     {
@@ -16,7 +37,7 @@ const StudentSchema = new mongoose.Schema(
             default: 100,
         },
 
-        // education: [EducationEntrySchema], // REMOVED: Using StudentEnrollment system instead
+        education: [EducationEntrySchema],
 
         startDate: Date,
         endDate: Date,

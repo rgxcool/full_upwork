@@ -10,6 +10,7 @@
           <DocumentSection
             :user-data="teacher.user"
             user-type="teacher"
+            allow-sharing
             type="GENERAL"
           />
         </div>
@@ -19,7 +20,8 @@
           <DocumentSection
             :user-data="teacher.user"
             user-type="teacher"
-            type="TEACHER_DOC"
+            allow-sharing
+            type="TEACHER_DOCUMENT"
           />
         </div>
 
@@ -28,6 +30,7 @@
           <DocumentSection
             :user-data="teacher.user"
             user-type="teacher"
+            allow-sharing
             type="REPORT"
           />
         </div>

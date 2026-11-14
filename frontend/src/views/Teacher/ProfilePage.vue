@@ -102,6 +102,27 @@
             </div>
           </div>
 
+          <!-- Delade dokument -->
+          <div v-if="activeSection === 'shared'" class="card">
+            <div class="card-header"><h3>Delade dokument</h3></div>
+            <div class="card-body">
+              <p v-if="sharedLoading" class="muted">Laddar delade dokument...</p>
+              <p v-else-if="!sharedDocuments.length" class="muted">
+                Inga dokument har delats med dig.
+              </p>
+              <ul v-else class="shared-documents">
+                <li v-for="doc in sharedDocuments" :key="doc._id" class="shared-document">
+                  <a :href="sharedDownloadUrl(doc)" target="_blank" rel="noopener">
+                    {{ doc.originalName }}
+                  </a>
+                  <span class="shared-owner">
+                    delat av {{ sharedOwnerName(doc) }}
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
           <!-- Att göra -->
           <div v-if="activeSection === 'tasks'" class="card">
             <div class="card-header"><h3>Att göra</h3></div>
@@ -197,6 +218,7 @@ export default {
     const isLoggedIn = computed(() => store.getters.isLoggedIn);
     onMounted(() => { if (!isLoggedIn.value) router.push('/login'); });
     onMounted(() => { store.dispatch('fetchTasks'); });
+    onMounted(loadSharedDocuments);
 
     const roleLabel = computed(() => {
       const role = store.getters.userRole;
@@ -206,9 +228,39 @@ export default {
     const menuItems = [
       { key: 'info',     label: 'Min profil',  icon: '👤' },
       { key: 'password', label: 'Byt lösenord', icon: '🔒' },
+      { key: 'shared',   label: 'Delade dokument', icon: '📁' },
       { key: 'tasks',    label: 'Att göra',     icon: '📋' },
     ];
     const activeSection = ref('info');
+
+    // Documents other staff members have explicitly shared with this user
+    // (e.g. a grading-support document shared between two teachers).
+    const baseURL = import.meta.env.VITE_API_URL || '';
+    const sharedDocuments = ref([]);
+    const sharedLoading = ref(false);
+
+    const loadSharedDocuments = async () => {
+      if (sharedLoading.value) return;
+      sharedLoading.value = true;
+      try {
+        const response = await client.get('/documents/shared');
+        sharedDocuments.value = Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error('Error fetching shared documents:', error);
+        toast.error('Kunde inte hämta delade dokument');
+      } finally {
+        sharedLoading.value = false;
+      }
+    };
+
+    const sharedDownloadUrl = (doc) =>
+      `${baseURL}/api/documents/download/${doc._id}`;
+
+    const sharedOwnerName = (doc) =>
+      doc.uploader?.name ||
+      doc.uploadedBy?.name ||
+      doc.uploadedBy?.email ||
+      'okänd';
 
     const currentPassword = ref('');
     const newPassword = ref('');
@@ -348,6 +400,11 @@ export default {
       toggleTaskCompletion,
       deleteTask,
       deleteAllTasks,
+      sharedDocuments,
+      sharedLoading,
+      loadSharedDocuments,
+      sharedDownloadUrl,
+      sharedOwnerName,
     };
   },
 };
@@ -632,5 +689,42 @@ export default {
 .btn-outline-danger:hover {
   background: #dc3545;
   color: white;
+}
+
+.muted {
+  color: #6c757d;
+}
+
+.shared-documents {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.shared-document {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.shared-document:last-child {
+  border-bottom: none;
+}
+
+.shared-document a {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.shared-document a:hover {
+  text-decoration: underline;
+}
+
+.shared-owner {
+  color: #6c757d;
+  font-size: 0.85rem;
 }
 </style>

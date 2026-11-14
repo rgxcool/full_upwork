@@ -298,17 +298,17 @@ studentEnrollmentSchema.methods.changeStatus = function (
     this.statusChangeReason = reason;
     this.statusChangeNotes = notes;
 
-    // Set specific dates based on status
-    if (newStatus === "completed") {
-        this.completedAt = new Date();
-        if (!this.completionCertificate) {
-            const year = this.completedAt.getFullYear();
-            const suffix = String(this._id || "").slice(-8).toUpperCase() || "NEW";
-            this.completionCertificate = `CERT-${year}-${suffix}`;
-        }
-    } else if (newStatus === "dropped") {
-        this.dropoutDate = new Date();
-        this.dropoutBy = changedBy;
+    // Set specific dates based on status. Dates that belong to other statuses
+    // are cleared so moving e.g. dropped -> completed does not leave a stale
+    // dropoutDate (or vice versa) on the enrollment.
+    this.completedAt = newStatus === "completed" ? new Date() : null;
+    this.dropoutDate = newStatus === "dropped" ? new Date() : null;
+    this.dropoutBy = newStatus === "dropped" ? changedBy : null;
+
+    if (newStatus === "completed" && !this.completionCertificate) {
+        const year = this.completedAt.getFullYear();
+        const suffix = String(this._id || "").slice(-8).toUpperCase() || "NEW";
+        this.completionCertificate = `CERT-${year}-${suffix}`;
     }
 
     return this.save();
