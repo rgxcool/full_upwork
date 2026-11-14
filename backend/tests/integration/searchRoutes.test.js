@@ -314,6 +314,141 @@ describe("Search Routes", () => {
             ]);
         });
 
+        it("matches enrollments whose endDate is the searched calendar date", async () => {
+            const student = await Student.create({
+                name: "End Date Student",
+                personalNumber: "565656-5656",
+                email: "end-date-student@example.com",
+            });
+            await StudentEnrollment.create({
+                studentId: student._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: new mongoose.Types.ObjectId(),
+                startDate: new Date("2024-01-01T00:00:00.000Z"),
+                endDate: new Date("2024-02-05T00:00:00.000Z"),
+            });
+
+            const response = await request(searchApp)
+                .get("/api/search")
+                .query({ type: "Datum", date: "2024-02-05" })
+                .expect(200);
+
+            expect(response.body).toEqual([
+                {
+                    id: student._id.toString(),
+                    name: "End Date Student",
+                    type: "Elev",
+                    extra: "Email: end-date-student@example.com",
+                },
+            ]);
+        });
+
+        it("uses Swedish calendar days at timezone boundaries", async () => {
+            const makeStudent = (name, personalNumber) =>
+                Student.create({
+                    name,
+                    personalNumber,
+                    email: `${personalNumber.replace(/\D/g, "")}@example.com`,
+                });
+
+            const previousDay = await makeStudent("Previous Day", "570101-5701");
+            const selectedDay = await makeStudent("Selected Day", "570202-5702");
+            const nextDay = await makeStudent("Next Day", "570303-5703");
+
+            const baseEnrollment = {
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: new mongoose.Types.ObjectId(),
+            };
+
+            // Midnight in Stockholm: 23:00 UTC on the previous calendar day.
+            await StudentEnrollment.create({
+                ...baseEnrollment,
+                studentId: previousDay._id,
+                startDate: new Date("2024-01-03T23:00:00.000Z"),
+                endDate: new Date("2024-01-04T22:59:59.999Z"),
+            });
+            await StudentEnrollment.create({
+                ...baseEnrollment,
+                studentId: selectedDay._id,
+                startDate: new Date("2024-01-04T23:00:00.000Z"),
+                endDate: new Date("2024-01-05T22:59:59.999Z"),
+            });
+            await StudentEnrollment.create({
+                ...baseEnrollment,
+                studentId: nextDay._id,
+                startDate: new Date("2024-01-05T23:00:00.000Z"),
+                endDate: new Date("2024-01-06T22:59:59.999Z"),
+            });
+
+            const response = await request(searchApp)
+                .get("/api/search")
+                .query({ type: "Datum", date: "2024-01-05" })
+                .expect(200);
+
+            expect(response.body).toEqual([
+                {
+                    id: selectedDay._id.toString(),
+                    name: "Selected Day",
+                    type: "Elev",
+                    extra: "Email: 5702025702@example.com",
+                },
+            ]);
+        });
+
+        it("rejects impossible calendar dates instead of rolling them over", async () => {
+            for (const date of ["2024-02-30", "2024-13-01", "2024-01-00"]) {
+                const response = await request(searchApp)
+                    .get("/api/search")
+                    .query({ type: "Datum", date })
+                    .expect(400);
+
+                expect(response.body).toEqual({ message: "Ogiltigt datum" });
+            }
+        });
+
+        it("paginates date search results without dropping or duplicating students", async () => {
+            const students = [];
+            for (let index = 0; index < 3; index += 1) {
+                const student = await Student.create({
+                    name: `Paged Date Student ${index}`,
+                    personalNumber: `58010${index}-580${index}`,
+                    email: `paged-date-${index}@example.com`,
+                });
+                students.push(student);
+                await StudentEnrollment.create({
+                    studentId: student._id,
+                    courseInstanceId: new mongoose.Types.ObjectId(),
+                    mainCourseId: new mongoose.Types.ObjectId(),
+                    startDate: new Date("2024-03-15T00:00:00.000Z"),
+                    endDate: new Date("2024-04-15T00:00:00.000Z"),
+                });
+            }
+
+            const firstPage = await request(searchApp)
+                .get("/api/search")
+                .query({ type: "Datum", date: "2024-03-15", page: 1, limit: 2 })
+                .expect(200);
+            const secondPage = await request(searchApp)
+                .get("/api/search")
+                .query({ type: "Datum", date: "2024-03-15", page: 2, limit: 2 })
+                .expect(200);
+
+            expect(firstPage.body).toHaveLength(2);
+            expect(secondPage.body).toHaveLength(1);
+            expect(Number(firstPage.headers["x-total-count"])).toBe(3);
+            expect(Number(firstPage.headers["x-total-pages"])).toBe(2);
+            expect(firstPage.headers["x-current-page"]).toBe("1");
+            expect(secondPage.headers["x-current-page"]).toBe("2");
+
+            const returnedIds = [...firstPage.body, ...secondPage.body].map(
+                (item) => item.id
+            );
+            expect(new Set(returnedIds).size).toBe(3);
+            expect(new Set(returnedIds)).toEqual(
+                new Set(students.map((student) => student._id.toString()))
+            );
+        });
+
         it("returns user and student results for user searches", async () => {
             const student = await Student.create({
                 name: "Ann Student",

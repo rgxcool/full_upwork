@@ -293,4 +293,138 @@ describe("processStudentEducation — course package studietakt (pace)", () => {
             "2026-11-25"
         );
     });
+
+    it("places an individual course by refId when the display name differs from the course code", async () => {
+        const student = await Student.create({
+            name: "Enskild Elev",
+            personalNumber: "20040101-6666",
+            email: "enskild@elev.se",
+        });
+
+        const course = await Course.create({
+            courseName: "Engelska 5",
+            courseCode: "ENG500",
+            courseExtent: "5",
+            coursePoints: 100,
+            isActive: true,
+        });
+
+        // The wizard sends the human readable courseName as `name`, while the
+        // old matching logic only compared against courseCode.
+        const results = await CourseMatchingService.processStudentEducation(
+            student._id.toString(),
+            [
+                {
+                    type: "Course",
+                    refId: course._id.toString(),
+                    name: "Engelska 5",
+                    startDate: "2026-09-21",
+                    endDate: "2026-10-26",
+                },
+            ],
+            null,
+            {}
+        );
+
+        expect(results.errors).toEqual([]);
+        expect(results.enrollments).toHaveLength(1);
+
+        const enrollment = await StudentEnrollment.findOne({
+            studentId: student._id,
+        });
+        expect(enrollment).not.toBeNull();
+        expect(enrollment.mainCourseId.toString()).toBe(course._id.toString());
+
+        const updatedStudent = await Student.findById(student._id);
+        expect(
+            updatedStudent.education.some(
+                (entry) =>
+                    entry.type === "Course" &&
+                    entry.refId?.toString() === course._id.toString()
+            )
+        ).toBe(true);
+    });
+
+    it("reports an error for an unknown course refId instead of silently skipping it", async () => {
+        const student = await Student.create({
+            name: "Fel Id Elev",
+            personalNumber: "20050101-7777",
+            email: "felid@elev.se",
+        });
+
+        const results = await CourseMatchingService.processStudentEducation(
+            student._id.toString(),
+            [
+                {
+                    type: "Course",
+                    refId: new mongoose.Types.ObjectId().toString(),
+                    name: "Finns inte",
+                    startDate: "2026-09-21",
+                    endDate: "2026-10-26",
+                },
+            ],
+            null,
+            {}
+        );
+
+        expect(results.enrollments).toEqual([]);
+        expect(results.errors).toHaveLength(1);
+        expect(results.errors[0]).toMatchObject({
+            type: "no_course",
+            studentId: student._id.toString(),
+        });
+        expect(
+            await StudentEnrollment.countDocuments({ studentId: student._id })
+        ).toBe(0);
+    });
+
+    it("does not create a duplicate enrollment when the same course is placed twice", async () => {
+        const student = await Student.create({
+            name: "Dubbel Elev",
+            personalNumber: "20060101-8888",
+            email: "dubbel@elev.se",
+        });
+
+        const course = await Course.create({
+            courseName: "Samhällskunskap 1",
+            courseCode: "SAM100",
+            courseExtent: "5",
+            coursePoints: 100,
+            isActive: true,
+        });
+
+        const entry = {
+            type: "Course",
+            refId: course._id.toString(),
+            name: course.courseName,
+            startDate: "2026-09-21",
+            endDate: "2026-10-26",
+        };
+
+        await CourseMatchingService.processStudentEducation(
+            student._id.toString(),
+            [{ ...entry }],
+            null,
+            {}
+        );
+        const secondResults = await CourseMatchingService.processStudentEducation(
+            student._id.toString(),
+            [{ ...entry }],
+            null,
+            {}
+        );
+
+        expect(
+            await StudentEnrollment.countDocuments({
+                studentId: student._id,
+                mainCourseId: course._id,
+            })
+        ).toBe(1);
+        expect(secondResults.enrollments).toEqual([]);
+        expect(secondResults.warnings).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ type: "duplicate_enrollment" }),
+            ])
+        );
+    });
 });

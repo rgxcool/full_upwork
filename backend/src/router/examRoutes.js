@@ -162,7 +162,20 @@ router.post("/exams", isAuthenticated, hasRole(['admin', 'systemadmin']), async 
 
 router.put("/exams/:id", isAuthenticated, hasRole(['admin', 'systemadmin']), async (req, res) => {
     try {
-        const allowedExamFields = ['title', 'course', 'courseInstance', 'date', 'time', 'location', 'teacherId', 'teacherName', 'paymentDate', 'examType', 'status', 'notes', 'maxStudents', 'type', 'courseInstanceIds'];
+        // Supports both the exam calendar model and the prövningar (Provning)
+        // model. The prövning form edits contact details, teacher, payment
+        // date, accommodations etc.; without these fields the PUT silently
+        // dropped everything except course/teacherId/paymentDate/status.
+        const allowedExamFields = [
+            'title', 'course', 'courseInstance', 'date', 'time', 'location',
+            'teacherId', 'teacherName', 'paymentDate', 'examType', 'status',
+            'notes', 'maxStudents', 'type', 'courseInstanceIds',
+            // Prövningar fields
+            'name', 'personalNumber', 'phone', 'email', 'address',
+            'municipality', 'requestedMonth', 'originalRequestedMonth',
+            'materialReceived', 'accommodations', 'examMode', 'examRoom',
+            'decision', 'comment',
+        ];
         const examUpdates = {};
         for (const field of allowedExamFields) {
             if (req.body[field] !== undefined) examUpdates[field] = req.body[field];
@@ -378,7 +391,11 @@ router.put(
                     .json({ error: "Missing teacherId, fromDate or toDate" });
             }
 
-            // Permission check: Only admins or the responsible teacher can move events
+            // Permission check: only admins, the responsible teacher, or a user
+            // with an explicit per-user `calendar_final_exam` grant (e.g.
+            // Angelina) may move exam dates. Role defaults alone are not
+            // enough: teachers can view the calendar but only the responsible
+            // teacher may drag the group.
             // Support both role (singular) and roles (array) for backward compatibility
             const userRoles =
                 req.user.roles || (req.user.role ? [req.user.role] : []);
@@ -386,6 +403,10 @@ router.put(
             const isAdmin = userRoles.some((role) =>
                 ["admin", "systemadmin"].includes(role)
             );
+            const hasCalendarOverride =
+                req.user.permissions &&
+                typeof req.user.permissions === "object" &&
+                req.user.permissions.calendar_final_exam === true;
             let isResponsibleTeacher = false;
 
             if (userRoles.includes("teacher")) {
@@ -404,9 +425,9 @@ router.put(
                 }
             }
 
-            if (!isAdmin && !isResponsibleTeacher) {
+            if (!isAdmin && !isResponsibleTeacher && !hasCalendarOverride) {
                 return res.status(403).json({
-                    error: "Only admins or the responsible teacher can move exam dates",
+                    error: "Only admins, the responsible teacher, or users granted calendar permission can move exam dates",
                 });
             }
 

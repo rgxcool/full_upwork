@@ -148,7 +148,24 @@ describe("StudentEnrollment model", () => {
 
         expect(enrollment.completedAt).toBeNull();
         expect(enrollment.dropoutDate).toBeNull();
-        expect(enrollment.dropoutBy).toBeUndefined();
+        // Cleared (not left undefined) so a status change explicitly removes
+        // stale dropout metadata instead of relying on field absence.
+        expect(enrollment.dropoutBy).toBeNull();
+    });
+
+    it("clears dropout metadata when a dropped enrollment is reinstated", async () => {
+        const updaterId = new mongoose.Types.ObjectId();
+        const enrollment = buildEnrollment();
+
+        await enrollment.changeStatus("dropped", null, null, updaterId);
+        expect(enrollment.dropoutDate).toBeInstanceOf(Date);
+        expect(enrollment.dropoutBy.toString()).toBe(updaterId.toString());
+
+        await enrollment.changeStatus("active");
+
+        expect(enrollment.dropoutDate).toBeNull();
+        expect(enrollment.dropoutBy).toBeNull();
+        expect(enrollment.completedAt).toBeNull();
     });
 
     it("calculates duration in days", () => {

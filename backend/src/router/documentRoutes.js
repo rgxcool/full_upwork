@@ -35,13 +35,35 @@ const DANGEROUS_EXTENSIONS = [
   '.jsp', '.asp', '.aspx', '.vbs', '.cmd', '.pl', '.cgi', '.msi', '.jar', '.scr'
 ];
 
+// Only well-known document/image formats are accepted. A blocklist alone is
+// not enough: an unexpected extension (e.g. ".svg" or ".zip") could otherwise
+// be served back to a browser with an active content type.
+const ALLOWED_EXTENSIONS = new Set([
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.txt', '.rtf', '.odt', '.ods', '.odp', '.csv',
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic',
+]);
+
+const ALLOWED_DOCUMENT_TYPES = new Set([
+  'GENERAL', 'ACTION_PLAN', 'REPORT', 'COURSE_ARCHIVE', 'TEACHER_DOCUMENT',
+  'APL_CONTRACT', 'APL_CV', 'CV',
+]);
+
+const getFileType = (filename) =>
+  path.extname(filename || '').replace('.', '').toLowerCase() || null;
+
 const fileFilter = (req, file, cb) => {
-  const ext = path.extname(file.originalname).toLowerCase();
-  const contentType = file.mimetype || mime.lookup(file.originalname) || 'application/octet-stream';
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const contentType = String(
+    file.mimetype || mime.lookup(file.originalname) || 'application/octet-stream'
+  ).toLowerCase();
   if (
+    !ALLOWED_EXTENSIONS.has(ext) ||
     DANGEROUS_EXTENSIONS.includes(ext) ||
     contentType.startsWith('text/html') ||
-    contentType.startsWith('application/x-msdownload')
+    contentType.includes('javascript') ||
+    contentType.startsWith('application/x-msdownload') ||
+    contentType.startsWith('application/x-executable')
   ) {
     req.rejectedFileType = true;
     return cb(null, false);
@@ -145,6 +167,50 @@ async function canUploadForStudent(user, studentId) {
   return false;
 }
 
+/**
+ * Convert a Document lean object into the public API shape.
+ *
+ * `uploadedBy` stays a plain id (existing clients compare it to a user id),
+ * while `uploader` carries the populated human-readable uploader details. File
+ * metadata is backfilled for documents created before those fields existed.
+ */
+const serializeDocument = (document) => {
+  const raw = document?.toObject ? document.toObject() : { ...document };
+  let uploader = null;
+
+  if (raw.uploadedBy && typeof raw.uploadedBy === 'object' && (raw.uploadedBy.name || raw.uploadedBy.email)) {
+    uploader = {
+      _id: String(raw.uploadedBy._id),
+      name: raw.uploadedBy.name || raw.uploadedBy.email,
+      email: raw.uploadedBy.email || null,
+    };
+    raw.uploadedBy = raw.uploadedBy._id;
+  }
+
+  raw.uploader = uploader;
+  raw.fileType = raw.fileType || getFileType(raw.originalName);
+  raw.mimeType = raw.mimeType || mime.lookup(raw.originalName) || null;
+
+  return raw;
+};
+
+const buildFileMetadata = (file) => ({
+  mimeType: file.mimetype || mime.lookup(file.originalname) || null,
+  size: typeof file.size === 'number' ? file.size : null,
+  fileType: getFileType(file.originalname),
+});
+
+// Remove a file multer already wrote to disk when the request is rejected
+// before a Document row is created, so denied uploads leave no orphans.
+const removeUploadedFile = (file) => {
+  if (!file?.path) return;
+  try {
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+  } catch (err) {
+    logger.warn({ err, path: file.path }, "Could not remove rejected upload");
+  }
+};
+
 // Error handling middleware for multer
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -160,6 +226,7 @@ const handleMulterError = (err, req, res, next) => {
 };
 
 router.post('/documents/upload', authenticateUser, upload.single('file'), handleMulterError, async (req, res) => {
+  let documentCreated = false;
   try {
     if (req.rejectedFileType) {
       return res.status(400).json({ message: 'Ogiltigt filformat. Denna filtyp är inte tillåten av säkerhetsskäl.' });
@@ -168,7 +235,12 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
     if (!req.file) {
       return res.status(400).json({ message: 'File is missing in the request' });
     }
-    
+
+    if (!req.file.size) {
+      removeUploadedFile(req.file);
+      return res.status(400).json({ message: 'Filen är tom. Ladda upp en fil med innehåll.' });
+    }
+
     logger.info({ file: req.file, bodyKeys: req.body ? Object.keys(req.body) : [], user: req.user }, "File upload details")
 
     const { studentId, teacherId, type, enrollmentId } = req.body;
@@ -176,6 +248,15 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
     
     if (!user || !user.userId) {
       return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const normalizedType = (typeof type === 'string' && type.trim())
+      ? type.trim()
+      : (studentId ? 'GENERAL' : 'TEACHER_DOCUMENT');
+
+    if (!ALLOWED_DOCUMENT_TYPES.has(normalizedType)) {
+      removeUploadedFile(req.file);
+      return res.status(400).json({ message: 'Ogiltig dokumenttyp.' });
     }
     
     const userRoles = getUserRoles(user);
@@ -191,6 +272,7 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
       
       const allowed = await canUploadForStudent(user, studentId);
       if (!allowed) {
+        removeUploadedFile(req.file);
         return res.status(403).json({ message: 'Du har inte behörighet att ladda upp dokument för denna elev' });
       }
 
@@ -199,10 +281,12 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
         uploadedBy: user.userId,
         filename: req.file.filename,
         originalName: req.file.originalname,
-        type: type || 'GENERAL',
+        type: normalizedType,
         enrollmentId: enrollmentId || null,
+        ...buildFileMetadata(req.file),
       });
-      return res.status(201).json(doc);
+      documentCreated = true;
+      return res.status(201).json(serializeDocument(doc));
     } else if (teacherId) {
       // Teacher document upload
       // Check permissions: teacher can upload for themselves, admins can upload for any teacher
@@ -213,11 +297,13 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
       
       const teacherAllowed = await canAccessTeacherDocuments(user, teacherId);
       if (!teacherAllowed) {
+        removeUploadedFile(req.file);
         return res.status(403).json({ message: 'Du har inte behörighet att ladda upp dokument för denna lärare' });
       }
 
       // Validate that teacherId is provided
       if (!teacherId || teacherId.trim() === '') {
+        removeUploadedFile(req.file);
         return res.status(400).json({ message: 'teacherId is required' });
       }
 
@@ -228,13 +314,16 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
         uploadedBy: user.userId,
         filename: req.file.filename,
         originalName: req.file.originalname,
-        type: type || 'TEACHER_DOCUMENT',
+        type: normalizedType,
         enrollmentId: null,
+        ...buildFileMetadata(req.file),
       });
       
+      documentCreated = true;
       logger.info({ docId: doc._id }, "Document created successfully")
-      return res.status(201).json(doc);
+      return res.status(201).json(serializeDocument(doc));
     } else {
+      removeUploadedFile(req.file);
       return res.status(400).json({ message: 'Either studentId or teacherId must be provided' });
     }
     
@@ -245,7 +334,11 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
     }
   } catch (error) {
     logger.error({ err: error }, "Error during upload")
-    
+
+    if (!documentCreated) {
+      removeUploadedFile(req.file);
+    }
+
     // Handle validation errors specifically
     if (error.name === 'ValidationError' || error instanceof mongoose.Error.ValidationError || error.message?.includes('must be specified')) {
       const errorMessages = error.errors ? Object.values(error.errors).map(e => e.message || e) : '';
@@ -270,11 +363,42 @@ router.post('/documents/upload', authenticateUser, upload.single('file'), handle
   }
 });
 
+/**
+ * List every document that was explicitly shared with the current user.
+ *
+ * Sharing is intentionally separate from the owner's document list: granting
+ * access to one file (e.g. a grading-support document shared between two
+ * teachers) must not expose the rest of the owner's uploads.
+ */
+router.get('/documents/shared', authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const docs = await Document.find({ sharedWith: userId })
+      .sort({ createdAt: -1 })
+      .populate({ path: 'uploadedBy', select: 'name email' })
+      .populate({ path: 'teacher', select: 'name email' });
+
+    return res.json(docs.map(serializeDocument));
+  } catch (error) {
+    logger.error({ err: error }, "Error fetching shared documents");
+    return res.status(500).json({ message: 'Kunde inte hämta delade dokument' });
+  }
+});
+
 router.get('/documents/:id', authenticateUser, async (req, res) => {
   try {
     const { type, enrollmentId, entityType } = req.query;
     const id = req.params.id;
     const user = req.user;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Ogiltigt ID-format' });
+    }
+
     const isTeacherEntity = ["teacher", "lärare"].includes(
       String(entityType || "").toLowerCase()
     );
@@ -295,11 +419,128 @@ router.get('/documents/:id', authenticateUser, async (req, res) => {
     if (type) filter.type = type;
     if (enrollmentId) filter.enrollmentId = enrollmentId;
 
-    const docs = await Document.find(filter).sort({ createdAt: -1 });
-    return res.json(docs);
+    const docs = await Document.find(filter)
+      .sort({ createdAt: -1 })
+      .populate({ path: 'uploadedBy', select: 'name email' });
+    return res.json(docs.map(serializeDocument));
   } catch (error) {
     logger.error({ err: error }, "Error fetching documents")
     res.status(500).json({ message: 'Kunde inte hämta dokument' });
+  }
+});
+
+/**
+ * Protected download endpoint.
+ *
+ * The caller only supplies a document id; the server resolves the stored
+ * filename and re-checks authorization, so changing the id or a URL path can
+ * neither expose another student's file nor escape the uploads directory.
+ */
+router.get('/documents/download/:id', authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(404).json({ message: 'Dokument hittades inte' });
+    }
+
+    const document = await Document.findById(id);
+    if (!document) {
+      return res.status(404).json({ message: 'Dokument hittades inte' });
+    }
+
+    const allowed = await canAccessDocument(req.user, document);
+    if (!allowed) {
+      return res.status(403).json({ message: 'Du har inte behörighet att hämta detta dokument' });
+    }
+
+    const filePath = path.resolve(uploadsDir, document.filename || '');
+    if (
+      path.dirname(filePath) !== uploadsDir ||
+      path.basename(filePath) !== document.filename ||
+      !fs.existsSync(filePath)
+    ) {
+      return res.status(404).json({ message: 'Filen hittades inte' });
+    }
+
+    const safeName = String(document.originalName || 'dokument').replace(/["\r\n]/g, '_');
+    const asciiName = safeName.replace(/[^\x20-\x7E]/g, '_');
+    const contentType = document.mimeType || mime.lookup(document.originalName) || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`
+    );
+
+    return res.sendFile(filePath, (error) => {
+      if (error && !res.headersSent) {
+        logger.error({ err: error, documentId: id }, "Error sending document file");
+        res.status(500).json({ message: 'Kunde inte hämta dokumentet' });
+      }
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Error downloading document")
+    return res.status(500).json({ message: 'Kunde inte hämta dokumentet' });
+  }
+});
+
+/**
+ * Share (or unshare) a single document with other staff users.
+ *
+ * Only the uploader or an administrator may change the share list. Passing an
+ * empty `userIds` array removes every share.
+ */
+router.put('/documents/:id/share', authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Ogiltigt ID-format' });
+    }
+
+    const document = await Document.findById(id);
+    if (!document) {
+      return res.status(404).json({ message: 'Dokument hittades inte' });
+    }
+
+    const userRoles = getUserRoles(req.user);
+    const isAdmin = userRoles.has('admin') || userRoles.has('systemadmin');
+    const isUploader = String(document.uploadedBy ?? '') === String(req.user?.userId ?? '');
+
+    if (!isAdmin && !isUploader) {
+      return res.status(403).json({ message: 'Du har inte behörighet att dela detta dokument' });
+    }
+
+    const body = req.body || {};
+    const requestedIds = Array.isArray(body.userIds) ? [...body.userIds] : [];
+    if (body.email) requestedIds.push(body.email);
+
+    const sharedIds = [];
+    for (const value of requestedIds) {
+      if (mongoose.isValidObjectId(value)) {
+        sharedIds.push(String(value));
+        continue;
+      }
+
+      if (typeof value !== 'string' || !value.includes('@')) {
+        return res.status(400).json({ message: 'Ogiltigt användar-ID eller e-postadress' });
+      }
+
+      const User = mongoose.model('User');
+      const sharedUser = await User.findOne({ email: value.trim().toLowerCase() }).select('_id').lean();
+      if (!sharedUser) {
+        return res.status(404).json({ message: `Ingen användare hittades för ${value}` });
+      }
+      sharedIds.push(String(sharedUser._id));
+    }
+
+    document.sharedWith = [...new Set(sharedIds)];
+    await document.save();
+
+    return res.json(serializeDocument(document));
+  } catch (error) {
+    logger.error({ err: error }, "Error sharing document");
+    return res.status(500).json({ message: 'Kunde inte dela dokumentet' });
   }
 });
 

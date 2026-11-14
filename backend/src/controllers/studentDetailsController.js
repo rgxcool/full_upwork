@@ -398,6 +398,10 @@ export const editComment = async (req, res) => {
             success: true,
             message: "Comment edited successfully",
             comment: targetComment,
+            // Return the full history as well so clients can replace their
+            // cached list without a second round-trip. `addComment` already
+            // does this; keeping the shapes aligned avoids UI drift.
+            commentHistory: student.commentHistory,
         });
     } catch (error) {
         logger.error({ err: error }, "Error editing comment");

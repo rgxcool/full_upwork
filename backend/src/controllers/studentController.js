@@ -3,6 +3,7 @@
  * Handles student data, normalization, municipality matching, and related utilities.
  * Uses Student, Program, Course, User, Teacher, and CoursePackage models.
  */
+import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
@@ -341,6 +342,15 @@ async function uploadXlsx(req, res) {
 
         const warnings = [];
         const larteametCandidates = [];
+        // The education entries written on the student document must reference a
+        // real ObjectId (`addedBy`) or Mongoose rejects the whole bulkWrite.
+        const uploaderId = mongoose.Types.ObjectId.isValid(req.user?.userId)
+            ? req.user.userId
+            : null;
+        // Keep the mapped entries (with refId/type/dates) per student so the
+        // enrollment step below processes exactly the same data as the manual
+        // POST /student flow.
+        const educationByEmail = new Map();
         const bulkOps = await Promise.all(
             mergedStudents.map(async (student) => {
                 const existing = existingMap.get(student.email);
@@ -370,84 +380,92 @@ async function uploadXlsx(req, res) {
 
                 // Convert education entries → { refId, type, ... }
                 const studentWarnings = [];
-                const newEducation = student.education.map((entry) => {
-                    // Normalize as code using the same function as database codes
-                    // (entry.name already has cleanCourseName applied during parsing)
-                    let normalized = normalizeCodeForMatching(entry.name || "");
+                const newEducation = (student.education || [])
+                    .map((entry) => {
+                        // Skip blank rows; the parser already trims names but an
+                        // empty entry must never reach the student document.
+                        if (!entry?.name || !entry.name.trim()) return null;
 
-                    // Distinguish course vs package by name ending
-                    const isCourse = /NIVÅ\s*\d+$/i.test(normalized);
-                    let type = isCourse ? "Course" : "CoursePackage";
+                        // Normalize as code using the same function as database codes
+                        // (entry.name already has cleanCourseName applied during parsing)
+                        const normalized = normalizeCodeForMatching(entry.name || "");
+                        if (!normalized) return null;
 
-                    // Always log normalized input and all normalized package keys
-                    logger.debug({ normalized, packageKeys: Object.keys(normalizedPackageMap) }, "Normalized input and package keys");
+                        // Name ending is only a hint. The actual collection match
+                        // below decides the type so a course code without the
+                        // "NIVÅ N" suffix is still stored as a Course.
+                        const looksLikeCourse = /NIVÅ\s*\d+$/i.test(normalized);
 
-                    // Only exact match - no fuzzy matching
-                    function strictMatch(target, candidates) {
-                        if (candidates.includes(target)) return target;
-                        return null;
-                    }
+                        // Always log normalized input and all normalized package keys
+                        logger.debug({ normalized, packageKeys: Object.keys(normalizedPackageMap) }, "Normalized input and package keys");
 
-                    const matchProgram = strictMatch(
-                        normalized,
-                        Object.keys(normalizedProgramMap)
-                    );
-                    const matchPackage = strictMatch(
-                        normalized,
-                        Object.keys(normalizedPackageMap)
-                    );
-                    const matchCourse = strictMatch(
-                        normalized,
-                        Object.keys(normalizedCourseMap)
-                    );
-
-                    let refId = null;
-
-                    if (matchProgram) {
-                        refId = programMap[normalizedProgramMap[matchProgram]];
-                        type = "Program";
-                    } else if (type === "CoursePackage" && matchPackage) {
-                        refId = packageMap[normalizedPackageMap[matchPackage]];
-                        type = "CoursePackage";
-                    } else if (type === "Course" && matchCourse) {
-                        refId = courseMap[normalizedCourseMap[matchCourse]];
-                        type = "Course";
-                    } else {
-                        if (!type || type === "Auto") type = "Course";
-                        // Log for debugging
-                        let bestPkg = null,
-                            bestPkgDist = Infinity;
-                        for (const candidate of Object.keys(
-                            normalizedPackageMap
-                        )) {
-                            const d = distance(normalized, candidate);
-                            if (d < bestPkgDist) {
-                                bestPkgDist = d;
-                                bestPkg = candidate;
-                            }
+                        // Only exact match - no fuzzy matching
+                        function strictMatch(target, candidates) {
+                            if (candidates.includes(target)) return target;
+                            return null;
                         }
-                        let bestCourse = null,
-                            bestCourseDist = Infinity;
-                        for (const candidate of Object.keys(
-                            normalizedCourseMap
-                        )) {
-                            const d = distance(normalized, candidate);
-                            if (d < bestCourseDist) {
-                                bestCourseDist = d;
-                                bestCourse = candidate;
-                            }
-                        }
-                        logger.warn({
-                            entryName: entry.name,
+
+                        const matchProgram = strictMatch(
                             normalized,
-                            bestPackage: bestPkg,
-                            bestPackageDistance: bestPkgDist,
-                            bestCourse,
-                            bestCourseDistance: bestCourseDist,
-                            packageKeys: Object.keys(normalizedPackageMap),
-                        }, "No match found");
-                        // Only push warning for unmatched courses, unless the name matches a known package
-                        if (type === "Course" && !matchPackage) {
+                            Object.keys(normalizedProgramMap)
+                        );
+                        const matchPackage = strictMatch(
+                            normalized,
+                            Object.keys(normalizedPackageMap)
+                        );
+                        const matchCourse = strictMatch(
+                            normalized,
+                            Object.keys(normalizedCourseMap)
+                        );
+
+                        let type = looksLikeCourse ? "Course" : "CoursePackage";
+                        let refId = null;
+
+                        if (matchProgram) {
+                            type = "Program";
+                            refId = programMap[normalizedProgramMap[matchProgram]];
+                        } else if (matchPackage) {
+                            type = "CoursePackage";
+                            refId = packageMap[normalizedPackageMap[matchPackage]];
+                        } else if (matchCourse) {
+                            type = "Course";
+                            refId = courseMap[normalizedCourseMap[matchCourse]];
+                        } else {
+                            // No exact match: default to Course and surface a
+                            // non-blocking warning so the uploader can fix the
+                            // row without the whole file being rejected.
+                            type = "Course";
+                            let bestPkg = null,
+                                bestPkgDist = Infinity;
+                            for (const candidate of Object.keys(
+                                normalizedPackageMap
+                            )) {
+                                const d = distance(normalized, candidate);
+                                if (d < bestPkgDist) {
+                                    bestPkgDist = d;
+                                    bestPkg = candidate;
+                                }
+                            }
+                            let bestCourse = null,
+                                bestCourseDist = Infinity;
+                            for (const candidate of Object.keys(
+                                normalizedCourseMap
+                            )) {
+                                const d = distance(normalized, candidate);
+                                if (d < bestCourseDist) {
+                                    bestCourseDist = d;
+                                    bestCourse = candidate;
+                                }
+                            }
+                            logger.warn({
+                                entryName: entry.name,
+                                normalized,
+                                bestPackage: bestPkg,
+                                bestPackageDistance: bestPkgDist,
+                                bestCourse,
+                                bestCourseDistance: bestCourseDist,
+                                packageKeys: Object.keys(normalizedPackageMap),
+                            }, "No match found");
                             logger.warn({
                                 entryName: entry.name,
                                 type,
@@ -461,20 +479,28 @@ async function uploadXlsx(req, res) {
                                 message: `No matching course found for \"${entry.name}\"`,
                             });
                         }
-                    }
 
-                    return {
-                        type,
-                        refId,
-                        name: entry.name,
-                        grade: null,
-                        addedAt: now,
-                        addedBy:
-                            student.teacher?.trim() ||
-                            teacherNameFallbackForMetadata,
-                        removedAt: null,
-                    };
-                });
+                        return {
+                            type,
+                            refId,
+                            name: entry.name,
+                            // Dates are required for APL period derivation and
+                            // for de-duplicating re-uploads of the same row.
+                            startDate: entry.startDate
+                                ? new Date(entry.startDate)
+                                : undefined,
+                            endDate: entry.endDate
+                                ? new Date(entry.endDate)
+                                : undefined,
+                            grade: null,
+                            addedAt: now,
+                            // Must be an ObjectId-compatible value; a teacher
+                            // name here made Mongoose reject the bulkWrite.
+                            addedBy: uploaderId,
+                            removedAt: null,
+                        };
+                    })
+                    .filter(Boolean);
                 // After processing this student, add their warnings to the global array
                 warnings.push(...studentWarnings);
 
@@ -492,6 +518,10 @@ async function uploadXlsx(req, res) {
                     );
                     if (!exists) mergedEducation.push(e);
                 }
+
+                // Remember the resolved entries so the enrollment step uses the
+                // same refId/type/dates that were written above.
+                educationByEmail.set(student.email, newEducation);
 
                 let teacherDoc = null;
                 if (student.teacher) {
@@ -543,11 +573,11 @@ async function uploadXlsx(req, res) {
 
         await Student.bulkWrite(bulkOps);
 
-        // Student.education was removed from the schema in favour of
-        // StudentEnrollment. Persist the imported education through the same
-        // service used by manual student creation so courses/packages are not
-        // silently dropped. A single student's enrollment failure must not
-        // abort the rest of the import.
+        // Persist the imported education through the same service used by
+        // manual student creation (POST /student) so courses/packages are not
+        // silently dropped and both upload methods produce equivalent
+        // enrollment/education records for APL. A single student's enrollment
+        // failure must not abort the rest of the import.
         try {
             const savedStudents = await Student.find({
                 email: { $in: emails },
@@ -563,7 +593,11 @@ async function uploadXlsx(req, res) {
 
             for (const student of mergedStudents) {
                 const saved = savedByEmail.get(student.email);
-                if (!saved || !student.education?.length) continue;
+                const processedEducation =
+                    educationByEmail.get(student.email) ||
+                    student.education ||
+                    [];
+                if (!saved || processedEducation.length === 0) continue;
 
                 try {
                     // An explicit STUDIETAKT cell makes the pace authoritative:
@@ -573,15 +607,22 @@ async function uploadXlsx(req, res) {
                         ? Number(student.pace)
                         : null;
                     const applyPace = parsedPace !== null;
-                    await CourseMatchingService.processStudentEducation(
-                        saved._id,
-                        student.education,
-                        req.user?.userId || null,
-                        {
-                            pace: parsedPace || saved.pace || 100,
-                            applyPace,
-                        }
-                    );
+                    const result =
+                        await CourseMatchingService.processStudentEducation(
+                            saved._id,
+                            processedEducation,
+                            uploaderId,
+                            {
+                                pace: parsedPace || saved.pace || 100,
+                                applyPace,
+                            }
+                        );
+                    if (result?.errors?.length) {
+                        logger.error(
+                            { errors: result.errors, email: student.email },
+                            "Enrollment errors from Excel import"
+                        );
+                    }
 
                     if (applyPace) {
                         const { recalculateStudentScheduleSummary } =

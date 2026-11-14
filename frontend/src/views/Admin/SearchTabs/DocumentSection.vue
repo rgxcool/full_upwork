@@ -21,7 +21,22 @@
             <span v-if="doc.uploadedBy && doc.uploadedBy !== entityId" class="uploaded-by">
               (uppladdad av admin)
             </span>
+            <span v-if="doc.sharedWith?.length" class="shared-count">
+              Delad med {{ doc.sharedWith.length }} användare
+            </span>
+            <button v-if="canShare(doc)" class="share-btn" @click="startShare(doc)">Dela</button>
             <button v-if="canDelete(doc)" class="delete-btn" @click="deleteFile(doc._id)">🗑️</button>
+            <div v-if="sharingDocId === doc._id" class="share-controls">
+              <input
+                v-model="shareEmail"
+                type="email"
+                placeholder="E-postadress till kollega"
+                class="share-input"
+                @keyup.enter="submitShare(doc)"
+              />
+              <button :disabled="!shareEmail.trim()" @click="submitShare(doc)">Spara</button>
+              <button @click="cancelShare">Avbryt</button>
+            </div>
           </li>
         </ul>
       </div>
@@ -59,6 +74,12 @@ export default {
       type: String,
       default: null,
     },
+    // When true, uploaders/admins can share individual documents with a
+    // colleague by e-mail. Student document lists leave this disabled.
+    allowSharing: {
+      type: Boolean,
+      default: false,
+    },
   },
   setup(props) {
     const store = useStore();
@@ -66,6 +87,8 @@ export default {
     const documents = ref([]);
     const selectedFile = ref(null);
     const baseURL = import.meta.env.VITE_API_URL || '';
+    const sharingDocId = ref(null);
+    const shareEmail = ref('');
 
     // Determine if this is a student
     const isStudent = computed(() => {
@@ -120,6 +143,41 @@ export default {
       // Teachers can delete their own documents
       if (isTeacher.value && currentUser.value?.userId === entityId.value) return true;
       return false;
+    };
+
+    const canShare = (doc) => {
+      if (!props.allowSharing || !isTeacher.value) return false;
+      if (isAdmin.value) return true;
+      return Boolean(
+        doc.uploadedBy &&
+          currentUser.value?.userId === doc.uploadedBy.toString()
+      );
+    };
+
+    const startShare = (doc) => {
+      sharingDocId.value = doc._id;
+      shareEmail.value = '';
+    };
+
+    const cancelShare = () => {
+      sharingDocId.value = null;
+      shareEmail.value = '';
+    };
+
+    const submitShare = async (doc) => {
+      const email = shareEmail.value.trim();
+      if (!email) return;
+      try {
+        await client.put(`/documents/${doc._id}/share`, { email });
+        toast.success('Dokumentet delades');
+        cancelShare();
+        await fetchDocuments();
+      } catch (error) {
+        console.error('Error sharing document:', error);
+        toast.error(
+          error.response?.data?.message || 'Kunde inte dela dokumentet'
+        );
+      }
     };
 
     const fetchDocuments = async () => {
@@ -215,6 +273,12 @@ export default {
       entityId,
       canUpload,
       canDelete,
+      canShare,
+      startShare,
+      cancelShare,
+      submitShare,
+      sharingDocId,
+      shareEmail,
       handleFileChange,
       uploadFile,
       deleteFile,
@@ -281,6 +345,7 @@ export default {
 .document-item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 12px;
   margin-bottom: 8px;
@@ -323,6 +388,54 @@ export default {
 
 .delete-btn:hover {
   transform: scale(1.2);
+}
+
+.shared-count {
+  color: #6c757d;
+  font-size: 0.8rem;
+}
+
+.share-btn {
+  background: none;
+  border: 1px solid #1976d2;
+  color: #1976d2;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.share-btn:hover {
+  background: #1976d2;
+  color: white;
+}
+
+.share-controls {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-controls .share-input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.share-controls button {
+  padding: 6px 10px;
+  border: 1px solid #1976d2;
+  border-radius: 4px;
+  background: white;
+  color: #1976d2;
+  cursor: pointer;
+}
+
+.share-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .no-documents {

@@ -33,7 +33,6 @@
             v-model="selectedDate"
             :format="'yyyy-MM-dd'"
             :placeholder="'Välj datum'"
-            @change="handleSearch"
           />
 
           <div v-if="searchQuery || selectedDate" class="clear-icon" @click="clearSearch">✕</div>
@@ -459,6 +458,7 @@
   import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
   import '@vuepic/vue-datepicker/dist/main.css'
   import { remainingLabel } from '@/utils/taskTime.js'
+  import { isDateOnly, toDateOnly } from '@/utils/dateOnly.js'
 
   export default {
     components: { DatePicker },
@@ -739,22 +739,35 @@
           const isDateSearch = selectedSearchType.value === 'Datum'
 
           if (isDateSearch) {
-            if (!selectedDate.value || isNaN(new Date(selectedDate.value).getTime())) {
+            if (!selectedDate.value) {
               searchResults.value = []
               showResults.value = false
               return
             }
-            const date = new Date(selectedDate.value)
-            const formattedDate = date.toISOString().split('T')[0]
+            // Use the local calendar date, not toISOString(): the latter
+            // shifts the day backwards in timezones ahead of UTC.
+            const formattedDate = toDateOnly(selectedDate.value)
+            if (!formattedDate) {
+              searchResults.value = []
+              searchError.value = 'Ogiltigt datum. Välj ett giltigt datum.'
+              showResults.value = true
+              return
+            }
             params.append('type', 'Datum')
             params.append('date', formattedDate)
           } else if (
             selectedSearchType.value === 'Alla' &&
-            searchQuery.value &&
-            /^\d{4}-\d{2}-\d{2}$/.test(searchQuery.value)
+            isDateOnly(searchQuery.value.trim())
           ) {
+            const formattedDate = toDateOnly(searchQuery.value)
+            if (!formattedDate) {
+              searchResults.value = []
+              searchError.value = 'Ogiltigt datum. Välj ett giltigt datum.'
+              showResults.value = true
+              return
+            }
             params.append('type', 'Datum')
-            params.append('date', searchQuery.value)
+            params.append('date', formattedDate)
           } else {
             if (!searchQuery.value || searchQuery.value.length < 3) {
               searchResults.value = []
@@ -771,7 +784,8 @@
           searchResults.value = res.data
           showResults.value = true
         } catch (err) {
-          searchError.value = err.message || 'Sökningen misslyckades'
+          searchError.value =
+            err.response?.data?.message || err.message || 'Sökningen misslyckades'
           searchResults.value = []
           showResults.value = true
         } finally {

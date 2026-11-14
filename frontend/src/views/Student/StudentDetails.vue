@@ -36,6 +36,15 @@
           <p>Denna elev har markerats som avbrott (inaktiv).</p>
         </div>
 
+        <div v-if="revisedEnrollments.length > 0" class="revision-banner">
+          <h2>REVIDERAD</h2>
+          <p>
+            Studieplanen har reviderats för {{ revisedEnrollments.length }}
+            kurs{{ revisedEnrollments.length === 1 ? '' : 'er' }}. Se Studieplan
+            för detaljer.
+          </p>
+        </div>
+
         <!-- Certificate & Diploma Generation Section -->
         <div v-if="canGenerateCertificates" class="certificate-generation-section">
           <div class="card">
@@ -134,6 +143,7 @@ import CourseArchiveTab from './tabs/CourseArchiveTab.vue';
 import AplTab from './tabs/AplTab.vue';
 import LogbookTab from './tabs/LogbookTab.vue';
 import ActionPlanTab from '../Admin/SearchTabs/ActionPlanTab.vue';
+import { shouldShowLogbookTab } from '@/utils/aplKits.js';
 
 export default {
   name: 'StudentDetails',
@@ -168,6 +178,20 @@ export default {
         : []
     );
     const canGenerateCertificates = computed(() => completedEnrollments.value.length > 0);
+
+    // Course-level revisions are surfaced at profile level so staff immediately
+    // sees that a study plan deviates from the original plan.
+    const revisedEnrollments = computed(() => {
+      const enrollments = Array.isArray(student.value?.enrollments)
+        ? student.value.enrollments.filter((e) => e.status === 'reviderad')
+        : [];
+      const education = Array.isArray(student.value?.education)
+        ? student.value.education.filter(
+            (e) => e.isEnrollment && e.status === 'reviderad'
+          )
+        : [];
+      return enrollments.length > 0 ? enrollments : education;
+    });
 
     const isAdmin = computed(() => store.getters.isAdmin);
     const isSystemAdmin = computed(
@@ -204,6 +228,7 @@ export default {
         { name: 'Allmänt', component: GeneralTab, alwaysShow: true, description: 'Elevens grundinformation och kontaktuppgifter' },
         { name: 'Studieplan', component: StudyPlanTab, alwaysShow: true, description: 'Kurser, perioder och studieuppehåll' },
         { name: 'Kursarkiv', component: CourseArchiveTab, alwaysShow: true, description: 'Historik över genomförda kurser' },
+        { name: 'Dokument', component: DocumentsTab, alwaysShow: true, description: 'Alla dokument som hör till eleven' },
       ];
 
       // Conditionally show APL tab - work placement. Staff profiles never expose student APL tabs.
@@ -268,23 +293,17 @@ export default {
         }
       }
 
-      // Conditionally show Documents tab
-      if (student.value && student.value.enrollments && student.value.enrollments.length > 0) {
-        const hasCompleted = student.value.enrollments.some(e => e.status === 'completed');
-        if (hasCompleted) {
-          allTabs.push({
-            name: 'Filarkiv',
-            component: DocumentsTab,
-            alwaysShow: false,
-            description: 'Genererade intygg och diplom',
-          });
-        }
-      }
-
-      // Show the Logbook tab for APL-managed students or when logbook entries already exist
-      if (student.value) {
-        const hasLogbookEntries = Array.isArray(student.value.logbook) && student.value.logbook.length > 0;
-        if (hasLogbookEntries) allTabs.push({ name: 'Loggbok', component: LogbookTab });
+      // Show the Logbook (APL kit) tab for APL-managed students or when logbook
+      // entries already exist. The API only allows admin/systemadmin/teacher,
+      // so other roles must not be offered a tab that can only fail.
+      if (
+        shouldShowLogbookTab({
+          student: student.value,
+          role: store.getters.userRole || store.state.user?.role,
+          manualAplIds: manualAplIds.value,
+        })
+      ) {
+        allTabs.push({ name: 'Loggbok', component: LogbookTab });
       }
 
       if (isAdmin.value) allTabs.push({ name: 'Behörigheter', component: PermissionsTab });
@@ -423,6 +442,7 @@ export default {
       deletingStudent,
       canGenerateCertificates,
       completedEnrollments,
+      revisedEnrollments,
       downloadingDocument,
       downloadDocument,
     };
@@ -511,5 +531,24 @@ export default {
 .inactive-banner p {
   margin: 0;
   font-size: 1.1rem;
+}
+.revision-banner {
+  background-color: #6f42c1;
+  color: white;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+.revision-banner h2 {
+  margin: 0 0 6px 0;
+  font-size: 1.5rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+.revision-banner p {
+  margin: 0;
+  font-size: 1rem;
 }
 </style>

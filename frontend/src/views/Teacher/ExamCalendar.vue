@@ -107,6 +107,16 @@
       isAdminOrTeacher() {
         return ['systemadmin', 'teacher', 'admin'].includes(this.userRole)
       },
+      // Explicit per-user grant (e.g. Angelina) that lets a non-admin move exam
+      // dates even though the role matrix only grants calendar *view* access.
+      hasCalendarOverride() {
+        const permissions = this.$store.state.user?.permissions
+        return (
+          !!permissions &&
+          typeof permissions === 'object' &&
+          permissions.calendar_final_exam === true
+        )
+      },
       isSYVOrSpecped() {
         return ['syv', 'specped', 'systemadmin', 'admin'].includes(this.userRole)
       },
@@ -226,7 +236,8 @@
                 extendedProps: { ...(event.extendedProps || {}), saved: true },
               })),
             ...syncedEvents.data.map((event) => {
-              // Make synced events editable for admins and the responsible teacher
+              // Make synced events editable for admins, the responsible
+              // teacher, or a user with an explicit calendar override.
               const isAdmin = ['admin', 'systemadmin'].includes(this.userRole)
               const eventTeacherId =
                 event.extendedProps?.teacherId?._id?.toString() ||
@@ -235,7 +246,7 @@
                 eventTeacherId &&
                 this.userRole === 'teacher' &&
                 this.currentTeacherId === eventTeacherId
-              const isEditable = isAdmin || isResponsibleTeacher
+              const isEditable = isAdmin || isResponsibleTeacher || this.hasCalendarOverride
 
               return {
                 id: event.id, // comes from /calendar-events/syncable
