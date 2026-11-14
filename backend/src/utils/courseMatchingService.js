@@ -141,14 +141,21 @@ class CourseMatchingService {
      * error instead of silently warning about an unmatched name.
      */
     static async resolveEntryCourse(entry) {
-        if (entry?.refId && mongoose.isValidObjectId(entry.refId)) {
+        // Spreadsheet imports carry a plain id, while populated or edited
+        // entries may carry `{ _id }`. Normalise both before the lookup.
+        const refId =
+            typeof entry?.refId === "object"
+                ? entry.refId?._id
+                : entry?.refId;
+
+        if (refId && mongoose.isValidObjectId(refId)) {
             const { default: Course } = await import("../models/Course.js");
-            const course = await Course.findById(entry.refId);
-            return { course, resolvedByRef: true };
+            const course = await Course.findById(refId);
+            return { course, resolvedByRef: true, refId };
         }
 
         const match = await this.findBestCourseMatch(entry?.name);
-        return { course: match?.course || null, resolvedByRef: false };
+        return { course: match?.course || null, resolvedByRef: false, refId };
     }
 
     /**
@@ -434,17 +441,17 @@ class CourseMatchingService {
                 ) {
                     // Prefer the explicit course id from the placement wizard.
                     // Spreadsheet imports fall back to strict code matching.
-                    const { course, resolvedByRef } =
+                    const { course, resolvedByRef, refId } =
                         await this.resolveEntryCourse(entry);
 
                     if (!course) {
                         if (resolvedByRef) {
                             results.errors.push({
                                 type: "no_course",
-                                courseId: entry.refId,
+                                courseId: refId,
                                 courseName: entry.name,
                                 studentId: studentId,
-                                message: `Kursen med id "${entry.refId}" hittades inte.`,
+                                message: `Kursen med id "${refId}" hittades inte.`,
                             });
                         } else {
                             results.warnings.push({
@@ -1184,16 +1191,16 @@ class CourseMatchingService {
 
                     // Prefer the explicit course id from the placement wizard.
                     // Spreadsheet imports fall back to strict code matching.
-                    const { course, resolvedByRef } =
+                    const { course, resolvedByRef, refId } =
                         await this.resolveEntryCourse(entry);
                     if (!course) {
                         if (resolvedByRef) {
                             results.errors.push({
                                 type: "no_course",
-                                courseId: entry.refId,
+                                courseId: refId,
                                 courseName: entry.name,
                                 studentId: studentId,
-                                message: `Kursen med id "${entry.refId}" hittades inte.`,
+                                message: `Kursen med id "${refId}" hittades inte.`,
                             });
                         } else {
                             results.warnings.push({

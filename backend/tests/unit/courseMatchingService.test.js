@@ -183,6 +183,79 @@ describe("CourseMatchingService.findCourseMatchForEntry", () => {
     });
 });
 
+describe("CourseMatchingService.resolveEntryCourse", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("resolves a string refId before matching the display name", async () => {
+        const course = { _id: "course-1", courseName: "Matematik 1" };
+        const refId = new mongoose.Types.ObjectId().toString();
+        vi.spyOn(Course, "findById").mockResolvedValue(course);
+        const findBestCourseMatch = vi.spyOn(
+            CourseMatchingService,
+            "findBestCourseMatch"
+        );
+
+        const result = await CourseMatchingService.resolveEntryCourse({
+            refId,
+            name: "Matematik 1",
+        });
+
+        expect(Course.findById).toHaveBeenCalledWith(refId);
+        expect(findBestCourseMatch).not.toHaveBeenCalled();
+        expect(result).toEqual({ course, resolvedByRef: true, refId });
+    });
+
+    it("accepts a populated refId object and uses its _id", async () => {
+        const course = { _id: "course-2", courseName: "Fysik 1" };
+        const refId = new mongoose.Types.ObjectId().toString();
+        vi.spyOn(Course, "findById").mockResolvedValue(course);
+
+        const result = await CourseMatchingService.resolveEntryCourse({
+            refId: { _id: refId },
+            name: "Fysik 1",
+        });
+
+        expect(Course.findById).toHaveBeenCalledWith(refId);
+        expect(result).toEqual({ course, resolvedByRef: true, refId });
+    });
+
+    it("falls back to exact code matching when refId is absent", async () => {
+        const course = { _id: "course-3", courseCode: "FYFFY01" };
+        vi.spyOn(CourseMatchingService, "findBestCourseMatch").mockResolvedValue({
+            course,
+            score: 1.0,
+        });
+
+        const result = await CourseMatchingService.resolveEntryCourse({
+            name: "FYFFY01",
+        });
+
+        expect(result).toEqual({ course, resolvedByRef: false, refId: undefined });
+    });
+
+    it("falls back to name matching when refId is not an ObjectId", async () => {
+        const course = { _id: "course-4", courseCode: "FYFFY01" };
+        const findBestCourseMatch = vi.spyOn(
+            CourseMatchingService,
+            "findBestCourseMatch"
+        ).mockResolvedValue({ course, score: 1.0 });
+
+        const result = await CourseMatchingService.resolveEntryCourse({
+            refId: "not-an-object-id",
+            name: "FYFFY01",
+        });
+
+        expect(findBestCourseMatch).toHaveBeenCalledWith("FYFFY01");
+        expect(result).toEqual({
+            course,
+            resolvedByRef: false,
+            refId: "not-an-object-id",
+        });
+    });
+});
+
 describe("CourseMatchingService.resolveCourseTemplate", () => {
     afterEach(() => {
         vi.restoreAllMocks();
