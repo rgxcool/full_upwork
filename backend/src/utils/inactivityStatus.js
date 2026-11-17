@@ -73,6 +73,9 @@ function daysBetween(later, earlier) {
  *   submission date across the student's current enrollments.
  * @param {number} [params.openSubmissions] - submissions not yet accepted.
  * @param {Date} [params.today] - reference date (injectable for tests).
+ * @param {{withdrawDays?: number, warningDays?: number}} [params.thresholds]
+ *   - optional runtime thresholds from the admin settings. Missing/invalid
+ *   values fall back to the env defaults, so existing callers are unchanged.
  * @returns {{
  *   evaluated: boolean, relevantCount: number,
  *   windowStart: (Date|null), windowEnd: (Date|null),
@@ -90,7 +93,12 @@ export function computeInactivitySignal({
     lastLearningActivityAt = null,
     openSubmissions = 0,
     today = new Date(),
+    thresholds = {},
 }) {
+    const validDays = (value, fallback) =>
+        Number.isFinite(value) && value >= 1 ? Math.floor(value) : fallback;
+    const withdrawDays = validDays(thresholds.withdrawDays, INACTIVITY_WITHDRAW_DAYS);
+    const warningDays = validDays(thresholds.warningDays, INACTIVITY_WARNING_DAYS);
     const now = startOfDay(today);
 
     const relevant = (enrollments || []).filter((enrollment) => {
@@ -149,11 +157,10 @@ export function computeInactivitySignal({
         // with recently meaningful activity must never be flagged purely because
         // their last *login* timestamp is stale — login alone is only used as a
         // fallback when no other activity signal exists (i.e. the window start).
-        mustWithdraw = activityBasis !== null && activityBasis >= INACTIVITY_WITHDRAW_DAYS;
-        inactiveForWarning =
-            activityBasis !== null && activityBasis >= INACTIVITY_WARNING_DAYS;
+        mustWithdraw = activityBasis !== null && activityBasis >= withdrawDays;
+        inactiveForWarning = activityBasis !== null && activityBasis >= warningDays;
         daysUntilWithdraw =
-            activityBasis === null ? null : Math.max(0, INACTIVITY_WITHDRAW_DAYS - activityBasis);
+            activityBasis === null ? null : Math.max(0, withdrawDays - activityBasis);
 
         if (mustWithdraw) level = "withdraw";
         else if (inactiveForWarning) level = "warning";

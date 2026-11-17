@@ -7,11 +7,9 @@ import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import Conversation from "../models/Conversation.js";
 import Notification from "../models/Notification.js";
 import NOTIFICATION_TYPES from "./notificationTypes.js";
-import { municipalityInScope } from "../utils/tenantScope.js";
+import { getUserMunicipalities, municipalityInScope } from "../utils/tenantScope.js";
 import {
     ACTIVE_ENROLLMENT_STATUSES,
-    INACTIVITY_WITHDRAW_DAYS,
-    INACTIVITY_WARNING_DAYS,
     computeInactivitySignal,
 } from "../utils/inactivityStatus.js";
 import {
@@ -30,6 +28,8 @@ import {
     runInactivityScan,
 } from "../services/inactivityScanner.js";
 import { performStudentDropout } from "../services/dropoutService.js";
+import { getInactivitySettingsSnapshot } from "../services/inactivitySettingsService.js";
+import { InactivitySettings } from "../models/inactivitySettingsModel.js";
 
 const uniq = (values) => [...new Set(values.filter(Boolean))];
 
@@ -50,11 +50,11 @@ const latestInactivityWarning = (student) => {
     };
 };
 
-const buildReport = (today) => ({
+const buildReport = (today, thresholds) => ({
     generatedAt: today,
     thresholds: {
-        withdrawDays: INACTIVITY_WITHDRAW_DAYS,
-        warningDays: INACTIVITY_WARNING_DAYS,
+        withdrawDays: thresholds.withdrawDays,
+        warningDays: thresholds.warningDays,
     },
     summary: {
         evaluated: 0,
@@ -73,6 +73,11 @@ const buildReport = (today) => ({
  */
 export const getInactivityReport = async (req, res) => {
     const today = new Date();
+    const settings = await getInactivitySettingsSnapshot();
+    const thresholds = {
+        withdrawDays: settings.withdrawDays,
+        warningDays: settings.warningDays,
+    };
     const isTeacherScope = req.user?.role === "teacher";
 
     let teacherIds = null;
@@ -82,7 +87,7 @@ export const getInactivityReport = async (req, res) => {
             .lean();
         teacherIds = teacherRecords.map((t) => t._id.toString());
         if (teacherIds.length === 0) {
-            return res.status(200).json(buildReport(today));
+            return res.status(200).json(buildReport(today, thresholds));
         }
     }
 
@@ -99,7 +104,7 @@ export const getInactivityReport = async (req, res) => {
         .lean();
 
     if (enrollments.length === 0) {
-        return res.status(200).json(buildReport(today));
+        return res.status(200).json(buildReport(today, thresholds));
     }
 
     const studentIds = uniq(enrollments.map((e) => e.studentId));
@@ -210,6 +215,7 @@ export const getInactivityReport = async (req, res) => {
             lastLearningActivityAt: student.lastLearningActivityAt || null,
             openSubmissions: activity?.open || 0,
             today,
+            thresholds,
         });
         if (!signal.evaluated) continue;
 
@@ -275,10 +281,7 @@ lastLearningActivityAt: student.lastLearningActivityAt || null,
 
     res.status(200).json({
         generatedAt: today,
-        thresholds: {
-            withdrawDays: INACTIVITY_WITHDRAW_DAYS,
-            warningDays: INACTIVITY_WARNING_DAYS,
-        },
+        thresholds,
         summary: {
             evaluated: scopedRows.length,
             mustWithdraw: scopedRows.filter((r) => r.mustWithdraw).length,
@@ -312,9 +315,10 @@ export const runInactivityScanHandler = async (req, res) => {
  */
 export const getInactivityScanStatus = async (_req, res) => {
     const summary = getLastScanSummary();
+    const settings = await getInactivitySettingsSnapshot();
     res.status(200).json({
         success: true,
-        autoWarningEnabled: process.env.INACTIVITY_AUTO_WARNING_ENABLED !== "false",
+        autoWarningEnabled: settings.autoWarningEnabled,
         lastScan: summary,
     });
 };
@@ -323,16 +327,24 @@ export const getInactivityScanStatus = async (_req, res) => {
  * Send the inactivity warning email for a student and open the teacher
  * discussion loop. Shared by the report action and the notification action so
  * both paths behave identically.
- * @param {{ studentId: string, actor: { userId: string, role: string } }} args
+ * @param {{ studentId: string, actor: { userId: string, role: string }, resend?: boolean }} args
  * @returns {Promise<{sent: boolean, reason?: string, emailResult?: Object, warningSentAt?: Date, withdrawalDate?: Date, conversationId?: string|null}>}
  */
-export const performInactivityWarning = async ({ studentId, actor }) => {
+export const performInactivityWarning = async ({ studentId, actor, resend = false }) => {
     const student = await Student.findById(studentId).select("name email changeHistory");
     if (!student) return { sent: false, reason: "student_not_found" };
     if (!student.email) return { sent: false, reason: "no_email" };
 
+    const hasPreviousWarning = (student.changeHistory || []).some((item) =>
+        (item.changes || []).includes("inactivity_warning_email")
+    );
+    if (resend && !hasPreviousWarning) {
+        return { sent: false, reason: "no_previous_warning" };
+    }
+
+    const settings = await getInactivitySettingsSnapshot();
     const withdrawalDate = new Date();
-    withdrawalDate.setDate(withdrawalDate.getDate() + INACTIVITY_WITHDRAW_DAYS);
+    withdrawalDate.setDate(withdrawalDate.getDate() + settings.withdrawDays);
 
     const result = await sendInactivityWarningEmail({
         studentName: student.name,
@@ -350,7 +362,9 @@ export const performInactivityWarning = async ({ studentId, actor }) => {
         timestamp: warningSentAt,
         changedBy: actor.userId,
         changedByRole: actor.role,
-        changes: ["inactivity_warning_email"],
+        changes: resend
+            ? ["inactivity_warning_email", "resend"]
+            : ["inactivity_warning_email"],
         newValues: { withdrawalDate },
     });
     await student.save();
@@ -380,7 +394,9 @@ export const performInactivityWarning = async ({ studentId, actor }) => {
             adminUserId: actor.userId,
             teacherUserId: responsible.userId,
             studentName: student.name,
-            actionLabel: "Varningsmail om inaktivitet har skickats",
+            actionLabel: resend
+                ? "Varningsmail om inaktivitet har skickats om"
+                : "Varningsmail om inaktivitet har skickats",
             signalSummary,
         });
         conversationId = thread?._id?.toString() || null;
@@ -399,7 +415,7 @@ export const performInactivityWarning = async ({ studentId, actor }) => {
 /**
  * POST /api/inactivity/:studentId/warning-email
  * Admin action (Phase 4B): send the inactivity warning email to a flagged
- * student, stating the withdrawal date (today + INACTIVITY_WITHDRAW_DAYS).
+ * student, stating the withdrawal date (today + the configured withdrawDays).
  * Records the send in the student's change history; the report then surfaces
  * warningSentAt/warnedWithdrawalDate.
  */
@@ -432,6 +448,86 @@ export const sendInactivityWarning = async (req, res) => {
         warningSentAt: result.warningSentAt,
         withdrawalDate: result.withdrawalDate,
         conversationId: result.conversationId || null,
+    });
+};
+
+/**
+ * POST /api/inactivity/:studentId/warning-email/resend
+ * Explicitly resend an inactivity warning that was already sent once. The
+ * change-history entry is marked with "resend" so a first send and a resend
+ * can be told apart, while the report's latest-warning lookup still works.
+ */
+export const resendInactivityWarning = async (req, res) => {
+    const { studentId } = req.params;
+
+    const scopeCheck = await Student.findById(studentId).select("municipality").lean();
+    if (!scopeCheck) {
+        return res.status(404).json({ error: "Student not found" });
+    }
+    if (!municipalityInScope(req.user, municipalityLabel(scopeCheck.municipality))) {
+        return res.status(403).json({ error: "Forbidden: student outside your municipality scope" });
+    }
+
+    const result = await performInactivityWarning({
+        studentId,
+        actor: { userId: req.user.userId, role: req.user.role },
+        resend: true,
+    });
+
+    if (result.reason === "student_not_found") {
+        return res.status(404).json({ error: "Student not found" });
+    }
+    if (result.reason === "no_previous_warning") {
+        return res.status(400).json({ error: "No previous inactivity warning to resend" });
+    }
+    if (result.reason === "no_email") {
+        return res.status(400).json({ error: "Student has no email address" });
+    }
+
+    res.status(result.sent ? 200 : 502).json({
+        success: result.sent,
+        emailResult: result.emailResult,
+        warningSentAt: result.warningSentAt,
+        withdrawalDate: result.withdrawalDate,
+        conversationId: result.conversationId || null,
+    });
+};
+
+/** GET /api/inactivity/settings — org-level automation settings. */
+export const getInactivitySettings = async (_req, res) => {
+    res.json(await getInactivitySettingsSnapshot());
+};
+
+const SETTINGS_FIELDS = [
+    "withdrawDays",
+    "warningDays",
+    "autoWarningEnabled",
+    "autoWithdrawEnabled",
+    "scanHourUtc",
+];
+
+/** PUT /api/inactivity/settings — admin-only update; settings are org-wide. */
+export const updateInactivitySettings = async (req, res) => {
+    if (getUserMunicipalities(req.user).length > 0) {
+        return res.status(403).json({ error: "Only global admins may change inactivity settings" });
+    }
+
+    const filtered = {};
+    for (const field of SETTINGS_FIELDS) {
+        if (req.body?.[field] !== undefined) filtered[field] = req.body[field];
+    }
+    const current = await InactivitySettings.findOneAndUpdate(
+        {},
+        {
+            $set: { ...filtered, updatedBy: req.user?.userId || null },
+            $inc: { configVersion: 1 },
+        },
+        { new: true, upsert: true, returnDocument: "after", runValidators: true }
+    ).lean();
+
+    res.json({
+        ...current,
+        ...(await getInactivitySettingsSnapshot()),
     });
 };
 

@@ -6,6 +6,7 @@ import { validateParticipants, dispatchMessageEmailCopies } from "../services/me
 import { userScopeFilter } from "../utils/tenantScope.js";
 import { escapeRegExp } from "../utils/escapeRegExp.js";
 import logger from "../utils/logger.js";
+import { MESSAGING_STAFF_ROLES } from "../config/permissions.js";
 
 const getCurrentUserId = (req) => req.userId || req.user?.userId || req.user?._id || req.user?.id;
 
@@ -242,7 +243,7 @@ export const getRecipients = async (req, res) => {
     const user = req.user;
     const userRoles = user.roles || (user.role ? [user.role] : []);
     const userRole = user.role || userRoles[0];
-    const staffRoles = ["admin", "systemadmin", "teacher", "syv", "specped", "coordinator"];
+    const staffRoles = MESSAGING_STAFF_ROLES;
 
     let query = { _id: { $ne: user._id } };
 

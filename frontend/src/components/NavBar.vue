@@ -197,6 +197,7 @@
           >
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
+          <span v-if="unreadMessageCount > 0" class="notis-badge">{{ unreadMessageCount }}</span>
         </router-link>
 
 
@@ -454,11 +455,12 @@
   import { useStore } from 'vuex'
   import { useRouter } from 'vue-router'
   import client from '@/api/client.js'
+  import { messagingApi } from '@/api/messaging.js'
   import { useToast } from '@/composables/useToast.js'
   import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
   import '@vuepic/vue-datepicker/dist/main.css'
   import { remainingLabel } from '@/utils/taskTime.js'
-  import { isDateOnly, toDateOnly } from '@/utils/dateOnly.js'
+  import { isDateOnly, isPartialDate, toDateOnly } from '@/utils/dateOnly.js'
 
   export default {
     components: { DatePicker },
@@ -471,6 +473,13 @@
       const canSeeNotifications = computed(() =>
         ['teacher', 'admin', 'systemadmin', 'student'].includes(userRole.value)
       )
+      const canUseMessaging = computed(() =>
+        ['student', 'teacher', 'syv', 'specped', 'admin', 'systemadmin', 'coordinator'].includes(userRole.value)
+      )
+      const canPoll = computed(
+        () => isLoggedIn.value && (canSeeNotifications.value || canUseMessaging.value)
+      )
+      const unreadMessageCount = ref(0)
 
       // Dölja navbar på login-sidan
       const isLoginPage = computed(() => {
@@ -547,20 +556,32 @@
         }
       }
 
+      const fetchUnreadCount = async () => {
+        if (!isLoggedIn.value || !canUseMessaging.value) return
+        try {
+          const res = await messagingApi.getUnreadCount()
+          unreadMessageCount.value = Number(res.data?.unreadCount) || 0
+        } catch (_err) {
+          unreadMessageCount.value = 0
+        }
+      }
+
       // Start polling for notifications
       const startNotificationPolling = () => {
         // Clear any existing interval
         stopNotificationPolling()
 
-        // Only start if user is logged in and can see notifications
-        if (isLoggedIn.value && canSeeNotifications.value) {
-          // Fetch immediately
-          fetchNotifications()
+        // Poll notifications and the messaging unread badge together. Some
+        // messaging roles (SYV, specped, coordinator) do not see notifications,
+        // but still need their unread count.
+        if (isLoggedIn.value && (canSeeNotifications.value || canUseMessaging.value)) {
+          if (canSeeNotifications.value) fetchNotifications()
+          fetchUnreadCount()
 
-          // Then poll at regular intervals
           notificationPollInterval = setInterval(() => {
             if (!isPollingPaused) {
-              fetchNotifications()
+              if (canSeeNotifications.value) fetchNotifications()
+              fetchUnreadCount()
             }
           }, NOTIFICATION_POLL_INTERVAL)
         }
@@ -581,8 +602,9 @@
         } else {
           isPollingPaused = false
           // Immediately fetch when tab becomes visible
-          if (isLoggedIn.value && canSeeNotifications.value) {
-            fetchNotifications()
+          if (isLoggedIn.value) {
+            if (canSeeNotifications.value) fetchNotifications()
+            fetchUnreadCount()
           }
         }
       }
@@ -768,6 +790,14 @@
             }
             params.append('type', 'Datum')
             params.append('date', formattedDate)
+          } else if (
+            selectedSearchType.value === 'Alla' &&
+            isPartialDate(searchQuery.value.trim())
+          ) {
+            searchResults.value = []
+            searchError.value = 'Använd ett fullständigt datum, t.ex. 2026-11-17.'
+            showResults.value = true
+            return
           } else {
             if (!searchQuery.value || searchQuery.value.length < 3) {
               searchResults.value = []
@@ -881,6 +911,7 @@
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
         { name: 'Schemaparametrar', link: '/schedule-parameters', role: ['admin', 'systemadmin', 'teacher'] },
+        { name: 'Datumplanering', link: '/date-planning', role: ['admin', 'systemadmin'] },
         { name: 'Kursmallar', link: '/course-templates', role: ['admin', 'teacher'] },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },
         { name: 'Kursmatchning', link: '/course-matching', role: 'admin' },
@@ -889,6 +920,7 @@
         { name: 'Elever', link: '/students', role: ['admin', 'teacher'] },
         { name: 'Inaktiva elever', link: '/inaktiva-elever', role: ['admin', 'systemadmin'] },
         { name: 'Inaktivitetsrapport', link: '/admin/inactivity', role: ['admin', 'systemadmin', 'teacher'] },
+        { name: 'Resursbesök', link: '/admin/resource-visits', role: ['admin', 'systemadmin', 'teacher', 'coordinator', 'syv', 'specped'] },
         { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: 'teacher' },
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
@@ -977,33 +1009,25 @@
       }
       // Watch for user login to start/stop polling
       watch(
-        isLoggedIn,
-        (loggedIn) => {
-          if (loggedIn && canSeeNotifications.value) {
+        canPoll,
+        (shouldPoll) => {
+          if (shouldPoll) {
             startNotificationPolling()
           } else {
             stopNotificationPolling()
             notifications.value = []
+            unreadMessageCount.value = 0
           }
         },
         { immediate: true }
       )
-
-      // Watch for role changes that affect notification visibility
-      watch(canSeeNotifications, (canSee) => {
-        if (canSee && isLoggedIn.value) {
-          startNotificationPolling()
-        } else {
-          stopNotificationPolling()
-        }
-      })
 
       onMounted(() => {
         document.addEventListener('mousedown', handleClickOutside)
         document.addEventListener('visibilitychange', handleVisibilityChange)
 
         // Start polling if user is already logged in
-        if (isLoggedIn.value && canSeeNotifications.value) {
+        if (canPoll.value) {
           startNotificationPolling()
         }
       })
@@ -1049,6 +1073,7 @@
         searchResults,
         searchLoading,
         searchError,
+        unreadMessageCount,
         isLoggedIn,
         logout,
         filteredMenuItems,

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import CourseInstance from "../models/CourseInstance.js";
 import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
+import { PLAN_LENGTHS, resolveSectionOffsets } from "../utils/datePlan.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import User from "../models/User.js";
@@ -68,13 +69,9 @@ export const calculateActivityStatus = async (params) => {
 
         // Use defaults if no saved parameters
         if (sectionOffsets.length === 0) {
-            const lengthWeeks = instance.modules ? instance.modules.length : 5;
-            const defaults = {
-                5: [0, 1, 2, 3, 4],
-                10: [0, 2, 4, 6, 8],
-                20: [0, 4, 8, 12, 16],
-            };
-            sectionOffsets = defaults[lengthWeeks] || [0, 1, 2, 3, 4];
+            const moduleCount = instance.modules ? instance.modules.length : 5;
+            const lengthWeeks = PLAN_LENGTHS.includes(moduleCount) ? moduleCount : 5;
+            sectionOffsets = resolveSectionOffsets(lengthWeeks).offsets;
         }
 
         // Calculate section dates based on course start date

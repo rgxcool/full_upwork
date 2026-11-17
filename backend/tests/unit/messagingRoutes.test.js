@@ -84,6 +84,7 @@ import {
   getRecipients,
 } from "../../src/controllers/messagingController.js";
 import { canMessage, dispatchMessageEmailCopies, sendEmailCopyOfMessage, validateParticipants } from "../../src/services/messagingService.js";
+import { MESSAGING_STAFF_ROLES } from "../../src/config/permissions.js";
 import { sendEmail, renderMessageCopyEmail } from "../../src/services/emailService.js";
 
 const createRes = () => {
@@ -151,6 +152,12 @@ describe("Messaging Service & Controller", () => {
     it("disallows student to message another student", async () => {
       const allowed = await canMessage(studentUser, otherStudent);
       expect(allowed).toBe(false);
+    });
+
+    it("recognizes every staff role from the shared configuration", async () => {
+      for (const role of MESSAGING_STAFF_ROLES) {
+        expect(await canMessage({ role, roles: [role] }, { role: "admin", roles: ["admin"] })).toBe(true);
+      }
     });
   });
 

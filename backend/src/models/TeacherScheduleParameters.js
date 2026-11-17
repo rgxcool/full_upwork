@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { PLAN_LENGTHS, resolveSectionOffsets } from "../utils/datePlan.js";
 
 const TeacherScheduleParametersSchema = new mongoose.Schema({
     teacherId: {
@@ -37,16 +38,10 @@ const TeacherScheduleParametersSchema = new mongoose.Schema({
 
 // Helper: resolve section offsets — use saved if present, otherwise default
 TeacherScheduleParametersSchema.methods.getSectionOffsets = function () {
-    if (this.sectionOffsets && this.sectionOffsets.length === 5) {
-        return this.sectionOffsets;
-    }
-    // No saved parameters → evenly-spaced defaults for this length
-    const defaultOffsets = {
-        5: [0, 1, 2, 3, 4],
-        10: [0, 2, 4, 6, 8],
-        20: [0, 4, 8, 12, 16],
-    };
-    return defaultOffsets[this.lengthWeeks] || [0, 1, 2, 3, 4];
+    const lengthWeeks = PLAN_LENGTHS.includes(this.lengthWeeks)
+        ? this.lengthWeeks
+        : 5;
+    return resolveSectionOffsets(lengthWeeks, this.sectionOffsets).offsets;
 };
 
 // Index for fast lookup by teacher + course + length

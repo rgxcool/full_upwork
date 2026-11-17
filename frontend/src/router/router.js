@@ -17,6 +17,7 @@ const EducationEditor = () => import('@/views/Admin/EducationEditor.vue')
 const ProgramsAndCourses = () => import('@/views/Admin/ProgramsAndCourses.vue')
 const ProgramsAndPackages = () => import('@/views/Admin/ProgramsAndPackages.vue')
 const ScheduleParameters = () => import('@/views/Admin/ScheduleParameters.vue')
+const DatePlanning = () => import('@/views/Admin/DatePlanning.vue')
 const GradeLookups = () => import('@/views/Admin/GradeLookups.vue')
 const AddUser = () => import('@/views/Admin/AddUser.vue')
 const EditStudent = () => import('@/views/Admin/EditStudent.vue')
@@ -212,6 +213,12 @@ const routes = [
     meta: { title: 'Schemaparametrar', role: ['admin', 'systemadmin', 'teacher'] },
   },
   {
+    path: '/date-planning',
+    name: 'DatePlanning',
+    component: DatePlanning,
+    meta: { title: 'Datumplanering', role: ['admin', 'systemadmin'] },
+  },
+  {
     path: '/grade-lookups',
     name: 'GradeLookups',
     component: GradeLookups,
@@ -288,6 +295,15 @@ const routes = [
     name: 'InactivityReport',
     component: () => import('@/views/Admin/InactivityReport.vue'),
     meta: { title: 'Inaktivitetsrapport', role: ['admin', 'systemadmin', 'teacher'] },
+  },
+  {
+    path: '/admin/resource-visits',
+    name: 'ResourceVisitsReport',
+    component: () => import('@/views/Admin/ResourceVisitsReport.vue'),
+    meta: {
+      title: 'Resursbesök',
+      role: ['admin', 'systemadmin', 'teacher', 'coordinator', 'syv', 'specped'],
+    },
   },
   {
     path: '/admin/reports',

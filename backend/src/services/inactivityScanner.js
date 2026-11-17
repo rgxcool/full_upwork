@@ -28,7 +28,6 @@ import CourseInstance from "../models/CourseInstance.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import {
     ACTIVE_ENROLLMENT_STATUSES,
-    INACTIVITY_WITHDRAW_DAYS,
     computeInactivitySignal,
 } from "../utils/inactivityStatus.js";
 import { sendInactivityWarningEmail } from "./emailService.js";
@@ -40,6 +39,7 @@ import {
     summarizeInactivitySignal,
 } from "./inactivityDiscussionService.js";
 import { performStudentDropout } from "./dropoutService.js";
+import { getInactivitySettingsSnapshot } from "./inactivitySettingsService.js";
 
 const uniq = (values) => [...new Set(values.filter(Boolean))];
 
@@ -83,9 +83,10 @@ export const latestInactivityWarning = (student) => {
  * Load every student currently expected to study, batched, and compute their
  * inactivity signal — the same evaluation the report endpoint performs.
  * @param {Date} today
+ * @param {{withdrawDays: number, warningDays: number}} thresholds
  * @returns {Promise<Array<{ student, user, signal, enrollments, teacherUserId, teacherName }>>}
  */
-async function evaluateActiveStudents(today) {
+async function evaluateActiveStudents(today, thresholds) {
     const enrollments = await StudentEnrollment.find({
         status: { $in: ACTIVE_ENROLLMENT_STATUSES },
         endDate: { $gte: today },
@@ -189,6 +190,7 @@ async function evaluateActiveStudents(today) {
             lastLearningActivityAt: student.lastLearningActivityAt || null,
             openSubmissions: activity?.open || 0,
             today,
+            thresholds,
         });
         if (!signal.evaluated) continue;
 
@@ -239,10 +241,10 @@ async function evaluateActiveStudents(today) {
  * Mirrors the manual admin path (sendInactivityWarning) so the report's
  * warningSentAt/warnedWithdrawalDate and the teacher discussion thread behave
  * identically for automated sends.
- * @param {{ studentId: string, student: Object, signal: Object, teacherId: string|null, teacherUserId: string|null, teacherName: string, today: Date }} ctx
+ * @param {{ studentId: string, student: Object, signal: Object, teacherId: string|null, teacherUserId: string|null, teacherName: string, today: Date, withdrawDays: number }} ctx
  * @returns {Promise<{sent: boolean, reason?: string, error?: string}>}
  */
-async function warnStudent({ studentId, student, signal, teacherId, teacherUserId, teacherName: _teacherName, today }) {
+async function warnStudent({ studentId, student, signal, teacherId, teacherUserId, teacherName: _teacherName, today, withdrawDays }) {
     if (!student.email) {
         return { sent: false, reason: "no_email" };
     }
@@ -251,7 +253,7 @@ async function warnStudent({ studentId, student, signal, teacherId, teacherUserI
     }
 
     const withdrawalDate = new Date(today);
-    withdrawalDate.setDate(withdrawalDate.getDate() + INACTIVITY_WITHDRAW_DAYS);
+    withdrawalDate.setDate(withdrawalDate.getDate() + withdrawDays);
 
     const result = await sendInactivityWarningEmail({
         studentName: student.name,
@@ -380,7 +382,14 @@ async function withdrawStudent(row) {
  * @param {{ today?: Date, autoSend?: boolean }} [options]
  * @returns {Promise<{ evaluated: number, reviewNotifications: number, inactiveForWarning: number, warned: number, alreadyWarned: number, noEmail: number, autoWithdrawn: number, withdrawPending: number, failed: number, autoSend: boolean, autoWithdraw: boolean, failures: Array<{studentId: string, reason: string}> }>}
  */
-export async function runInactivityScan({ today = new Date(), autoSend = AUTO_WARNING_ENABLED } = {}) {
+export async function runInactivityScan(options = {}) {
+    const settings = await getInactivitySettingsSnapshot();
+    const today = options.today || new Date();
+    const autoSend = options.autoSend ?? settings.autoWarningEnabled;
+    const thresholds = {
+        withdrawDays: settings.withdrawDays,
+        warningDays: settings.warningDays,
+    };
     const summary = {
         evaluated: 0,
         reviewNotifications: 0,
@@ -392,12 +401,12 @@ export async function runInactivityScan({ today = new Date(), autoSend = AUTO_WA
         withdrawPending: 0,
         failed: 0,
         autoSend,
-        autoWithdraw: AUTO_WITHDRAW_ENABLED,
+        autoWithdraw: settings.autoWithdrawEnabled,
         failures: [],
     };
 
     try {
-        const rows = await evaluateActiveStudents(today);
+        const rows = await evaluateActiveStudents(today, thresholds);
         summary.evaluated = rows.length;
 
         // First-five-days pass: a student flagged for withdrawal (no login in
@@ -452,6 +461,7 @@ export async function runInactivityScan({ today = new Date(), autoSend = AUTO_WA
                     teacherUserId,
                     teacherName,
                     today,
+                    withdrawDays: settings.withdrawDays,
                 });
                 if (result.sent) {
                     summary.warned += 1;
@@ -471,7 +481,7 @@ export async function runInactivityScan({ today = new Date(), autoSend = AUTO_WA
         // Auto-withdraw pass: students whose warning email's stated withdrawal
         // date has passed without resumed activity. Runs after the warning pass
         // so a warning sent today schedules the next scan's withdrawal.
-        if (AUTO_WITHDRAW_ENABLED) {
+        if (settings.autoWithdrawEnabled) {
             for (const row of rows) {
                 const { studentId } = row;
                 try {

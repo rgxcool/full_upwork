@@ -406,6 +406,53 @@ describe("Search Routes", () => {
             }
         });
 
+        it("accepts Swedish date formats in the API", async () => {
+            const student = await Student.create({
+                name: "Swedish Format Student",
+                personalNumber: "590101-5901",
+                email: "swedish-format@example.com",
+            });
+            await StudentEnrollment.create({
+                studentId: student._id,
+                courseInstanceId: new mongoose.Types.ObjectId(),
+                mainCourseId: new mongoose.Types.ObjectId(),
+                startDate: new Date("2026-11-17T00:00:00.000Z"),
+                endDate: new Date("2026-12-17T00:00:00.000Z"),
+            });
+
+            for (const date of ["17/11/2026", "17.11.2026", "17-11-2026"]) {
+                const response = await request(searchApp)
+                    .get("/api/search")
+                    .query({ type: "Datum", date })
+                    .expect(200);
+
+                expect(response.body).toEqual([
+                    {
+                        id: student._id.toString(),
+                        name: "Swedish Format Student",
+                        type: "Elev",
+                        extra: "Email: swedish-format@example.com",
+                    },
+                ]);
+            }
+        });
+
+        it("rejects partial dates and date ranges with a validation error", async () => {
+            for (const date of [
+                "2026-11",
+                "17/11",
+                "2026-11-17 - 2026-11-30",
+                "17/11.2026",
+            ]) {
+                const response = await request(searchApp)
+                    .get("/api/search")
+                    .query({ type: "Datum", date })
+                    .expect(400);
+
+                expect(response.body).toEqual({ message: "Ogiltigt datum" });
+            }
+        });
+
         it("paginates date search results without dropping or duplicating students", async () => {
             const students = [];
             for (let index = 0; index < 3; index += 1) {

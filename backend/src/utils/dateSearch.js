@@ -1,11 +1,12 @@
 /**
  * Helpers for interpreting date-only search values as calendar days.
  *
- * Search dates are entered as calendar dates (YYYY-MM-DD), not as instants.
- * Converting them with `new Date("YYYY-MM-DD")` depends on the server's
- * timezone, which makes the same search return different results on different
- * machines. The helpers below turn a calendar date into an explicit instant
- * range for the application's timezone instead.
+ * Search dates are entered as calendar dates (YYYY-MM-DD or the Swedish
+ * DD/MM/YYYY, DD.MM.YYYY and DD-MM-YYYY forms), not as instants. Converting
+ * them with `new Date(...)` depends on the server's timezone and locale, which
+ * makes the same search return different results on different machines. The
+ * helpers below normalize the supported forms and turn a calendar date into an
+ * explicit instant range for the application's timezone instead.
  */
 
 // The application serves Swedish municipalities and formats dates with sv-SE
@@ -13,6 +14,11 @@
 export const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Europe/Stockholm";
 
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ALT_DATE_PATTERNS = [
+    /^(\d{2})\/(\d{2})\/(\d{4})$/,
+    /^(\d{2})\.(\d{2})\.(\d{4})$/,
+    /^(\d{2})-(\d{2})-(\d{4})$/,
+];
 const ISO_DATE_PREFIX_PATTERN = /^(\d{4}-\d{2}-\d{2})T/;
 
 const formatterCache = new Map();
@@ -65,16 +71,31 @@ export const getTimeZoneOffsetMs = (date, timeZone = APP_TIME_ZONE) => {
 };
 
 /**
- * Strictly parses a YYYY-MM-DD value and verifies that it is a real calendar
- * date (for example, rejects 2024-02-30 instead of letting Date roll it over).
+ * Strictly parses a supported date-only value and verifies that it is a real
+ * calendar date (for example, rejects 2024-02-30 instead of letting Date roll
+ * it over). Swedish day-first forms are normalized to ISO before validation;
+ * partial dates, ranges and mixed separators are rejected.
  *
  * @param {unknown} value
  * @returns {{year: number, month: number, day: number, dateOnly: string}|null}
  */
-export const parseDateOnly = (value) => {
+const normalizeToIso = (value) => {
     if (typeof value !== "string") return null;
-
     const trimmed = value.trim();
+    let m = DATE_ONLY_PATTERN.exec(trimmed);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    for (const pat of ALT_DATE_PATTERNS) {
+        m = pat.exec(trimmed);
+        if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    }
+    return null;
+};
+
+export const parseDateOnly = (value) => {
+    const iso = normalizeToIso(value);
+    if (!iso) return null;
+
+    const trimmed = iso;
     const match = DATE_ONLY_PATTERN.exec(trimmed);
     if (!match) return null;
 

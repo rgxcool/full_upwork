@@ -7,6 +7,7 @@ import {
   sharesTenant,
 } from "../utils/tenantScope.js";
 import { sendEmail, renderMessageCopyEmail } from "./emailService.js";
+import { MESSAGING_STAFF_ROLES } from "../config/permissions.js";
 
 /**
  * Send an email copy of an internal message to a student recipient.
@@ -126,7 +127,7 @@ export const canMessage = async (sender, recipient) => {
   const senderRole = sender.role || (sender.roles && sender.roles[0]);
   const recipientRole = recipient.role || (recipient.roles && recipient.roles[0]);
 
-  const staffRoles = ["admin", "systemadmin", "teacher", "syv", "specped", "coordinator"];
+  const staffRoles = MESSAGING_STAFF_ROLES;
 
   // Staff to Staff
   if (staffRoles.includes(senderRole) && staffRoles.includes(recipientRole)) {

@@ -4,6 +4,7 @@ import {
     addWeeks,
     getNextMonday,
     isDateOnly,
+    isPartialDate,
     toDateOnly,
 } from "../../../src/utils/dateOnly.js";
 
@@ -34,17 +35,45 @@ describe("toDateOnly", () => {
         expect(toDateOnly(iso)).toBe("2026-03-15");
     });
 
-    it.each(["", null, undefined, "not-a-date", "2024-02-30", "2024-13-01"])(
-        "returns an empty string for invalid value %p",
-        (value) => {
-            expect(toDateOnly(value)).toBe("");
+    it("accepts Swedish day-first dates and normalizes them to ISO", () => {
+        for (const value of ["17/11/2026", "17.11.2026", "17-11-2026"]) {
+            expect(toDateOnly(value)).toBe("2026-11-17");
         }
-    );
+    });
+
+    it.each([
+        "",
+        null,
+        undefined,
+        "not-a-date",
+        "2024-02-30",
+        "2024-13-01",
+        "29/02/2026",
+        "31/11/2026",
+        "2026-11",
+        "17/11",
+        "17/11.2026",
+    ])("returns an empty string for invalid value %p", (value) => {
+        expect(toDateOnly(value)).toBe("");
+    });
 
     it("identifies date-only strings", () => {
         expect(isDateOnly("2026-03-15")).toBe(true);
+        expect(isDateOnly("17/11/2026")).toBe(true);
+        expect(isDateOnly("17.11.2026")).toBe(true);
         expect(isDateOnly("2026-3-15")).toBe(false);
+        expect(isDateOnly("17/11.2026")).toBe(false);
         expect(isDateOnly("2026-03-15T10:00:00Z")).toBe(false);
+    });
+
+    it("identifies partial dates without treating full dates as partial", () => {
+        expect(isPartialDate("2026-11")).toBe(true);
+        expect(isPartialDate("17/11")).toBe(true);
+        expect(isPartialDate("17.11")).toBe(true);
+        expect(isPartialDate("2026/11")).toBe(true);
+        expect(isPartialDate("2026-11-17")).toBe(false);
+        expect(isPartialDate("17/11/2026")).toBe(false);
+        expect(isPartialDate("not-a-date")).toBe(false);
     });
 });
 
