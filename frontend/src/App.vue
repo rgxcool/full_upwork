@@ -23,6 +23,7 @@
   </div>
 </template>
 
+<style src="@/styles/tokens.css"></style>
 <script>
   import { computed } from 'vue'
   import { useRoute } from 'vue-router'
