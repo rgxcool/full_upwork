@@ -1,6 +1,30 @@
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import { courseModuleSchema } from "./courseModuleSchema.js";
+import { PLAN_LENGTHS } from "../utils/datePlan.js";
+
+// Optional snapshot of a 5/10/20 week plan applied by the date-planning UI.
+// The legacy `sectionDates` and module dates remain the dates that drive
+// students' course cards; this field records the plan that produced them.
+const datePlanSchema = new mongoose.Schema(
+    {
+        lengthWeeks: { type: Number, enum: PLAN_LENGTHS },
+        startDate: Date,
+        endDate: Date,
+        sectionOffsets: [Number],
+        sectionDates: [Date],
+        moduleDates: [
+            {
+                startDate: Date,
+                endDate: Date,
+                _id: false,
+            },
+        ],
+        source: String,
+        appliedAt: { type: Date, default: Date.now },
+    },
+    { _id: false }
+);
 
 const courseInstanceSchema = new mongoose.Schema(
     {
@@ -62,6 +86,9 @@ const courseInstanceSchema = new mongoose.Schema(
         // Populated at instance creation from teacher's saved schedule parameters,
         // or evenly-spaced defaults if no parameters exist.
         sectionDates: [{ type: Date }],
+
+        // Optional saved plan from the date-planning preview/apply endpoints
+        datePlan: { type: datePlanSchema, default: null },
 
         // Course card content (instructions, assignment descriptions, etc.)
         // Admins/systemadmin and the responsible teacher can view/edit all content.

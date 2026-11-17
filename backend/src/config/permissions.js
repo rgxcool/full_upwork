@@ -25,6 +25,16 @@ export const ROLES = {
   STUDENT: 'student',
 };
 
+/** Staff roles that may use internal messaging (students may message staff too). */
+export const MESSAGING_STAFF_ROLES = Object.freeze([
+  ROLES.ADMIN,
+  ROLES.SYSTEMADMIN,
+  ROLES.TEACHER,
+  ROLES.SYV,
+  ROLES.SPECPED,
+  ROLES.COORDINATOR,
+]);
+
 /**
  * Permission matrix based on the requirements
  * Key: feature, Value: array of roles that have access

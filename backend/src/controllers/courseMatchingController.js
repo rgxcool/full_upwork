@@ -9,12 +9,14 @@ import { normalizeMunicipalityName } from "./studentController.js";
 import Course from "../models/Course.js";
 import CourseTemplate from "../models/CourseTemplate.js";
 import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
+import { resolveSectionOffsets } from "../utils/datePlan.js";
 import { distance } from "fastest-levenshtein";
 import { cloneModules } from "../models/courseModuleSchema.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 import * as enrollmentService from "../services/enrollmentService.js";
 import { recordStudentLearningActivity } from "../utils/learningActivity.js";
+import { recordResourceVisit } from "../services/resourceVisitService.js";
 import { recordAudit } from "../utils/auditLog.js";
 
 /**
@@ -1509,6 +1511,13 @@ export const getMyCourseCards = async (req, res) => {
         // Course-card access is meaningful learning activity for the inactive-
         // student automation (fellowship login-only detection).
         await recordStudentLearningActivity(student._id).catch(() => {});
+        // Durable, deduplicated usage log for the resource-visit report.
+        await recordResourceVisit({
+            studentId: student._id,
+            resourceType: "course_card",
+            resourceId: "course-cards",
+            resourceName: "Mina kurser",
+        });
         res.json({ success: true, student: { _id: student._id, name: student.name }, cards });
     } catch (error) {
         logger.error({ err: error }, "Error fetching my course cards");
@@ -1878,9 +1887,10 @@ export const createCourseInstance = async (req, res) => {
                     lengthWeeks,
                 }).catch(() => null);
 
-                const offsets = params?.sectionOffsets?.length === 5
-                    ? params.sectionOffsets
-                    : { 5: [0, 1, 2, 3, 4], 10: [0, 2, 4, 6, 8], 20: [0, 4, 8, 12, 16] }[lengthWeeks] || [0, 1, 2, 3, 4];
+                const { offsets } = resolveSectionOffsets(
+                    lengthWeeks,
+                    params?.sectionOffsets
+                );
 
                 const msPerWeek = 7 * 24 * 60 * 60 * 1000;
                 sectionDates = offsets.map((weekOffset) => new Date(startMs + weekOffset * msPerWeek));

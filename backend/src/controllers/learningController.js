@@ -9,6 +9,7 @@ import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import logger from "../utils/logger.js";
 import { buildVisibleModules } from "../utils/courseContentVisibility.js";
 import { recordStudentLearningActivity } from "../utils/learningActivity.js";
+import { recordResourceVisit } from "../services/resourceVisitService.js";
 
 const STAFF_ROLES = ["systemadmin", "admin", "tester"];
 const SUBMITTABLE_STATUSES = ["enrolled", "active"];
@@ -124,6 +125,14 @@ export const getInstanceModules = async (req, res) => {
             // Lesson content access is meaningful learning activity for the
             // inactive-student automation (never login alone).
             await recordStudentLearningActivity(student._id).catch(() => {});
+            // Durable, deduplicated usage log for the resource-visit report.
+            await recordResourceVisit({
+                studentId: student._id,
+                resourceType: "lesson",
+                resourceId: String(instance._id),
+                resourceName: instance.courseName || "",
+                courseInstanceId: instance._id,
+            });
 
             const submissions = await AssignmentSubmission.find({
                 studentId: student._id,

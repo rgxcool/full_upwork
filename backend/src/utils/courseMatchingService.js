@@ -3,6 +3,7 @@ import { cloneModules } from "../models/courseModuleSchema.js";
 import logger from "./logger.js";
 import mongoose from "mongoose";
 import TeacherScheduleParameters from "../models/TeacherScheduleParameters.js";
+import { PLAN_LENGTHS, resolveSectionOffsets } from "./datePlan.js";
 import CourseInstance from "../models/CourseInstance.js";
 import Course from "../models/Course.js";
 
@@ -311,12 +312,8 @@ class CourseMatchingService {
 
         // 3. If no saved parameters (or no teacher), use evenly-spaced defaults
         if (sectionDates.length === 0) {
-            const defaultOffsets = {
-                5: [0, 1, 2, 3, 4],
-                10: [0, 2, 4, 6, 8],
-                20: [0, 4, 8, 12, 16],
-            };
-            const offsets = defaultOffsets[lengthWeeks] || [0, 1, 2, 3, 4];
+            const planLength = PLAN_LENGTHS.includes(lengthWeeks) ? lengthWeeks : 5;
+            const { offsets } = resolveSectionOffsets(planLength);
             sectionDates = offsets.map((offsetWeeks) => {
                 const date = new Date(courseStart);
                 date.setDate(date.getDate() + offsetWeeks * 7);

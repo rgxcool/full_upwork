@@ -28,6 +28,22 @@
         </span>
       </div>
 
+      <!-- Inactivity thresholds (admin configurable) -->
+      <div v-if="isAdmin" class="settings-section">
+        <h4>Tröskelvärden för inaktivitet</h4>
+        <div class="settings-row">
+          <label>Varningsdagar:</label>
+          <input v-model.number="settings.warningDays" type="number" min="1" class="form-control settings-input" />
+          <label>Avbrottsdagar:</label>
+          <input v-model.number="settings.withdrawDays" type="number" min="1" class="form-control settings-input" />
+          <label>Återsändnings-spärr (timmar):</label>
+          <input v-model.number="settings.resendCooldownHours" type="number" min="0" class="form-control settings-input" />
+          <button class="btn btn-primary btn-sm" :disabled="savingSettings" @click="saveSettings">
+            {{ savingSettings ? 'Sparar...' : 'Spara' }}
+          </button>
+        </div>
+      </div>
+
       <!-- Error message -->
       <div v-if="errorMessage" class="alert alert-danger">
         {{ errorMessage }}
@@ -141,6 +157,14 @@
                     </button>
                     <span v-else class="badge bg-warning text-dark">Varning skickad</span>
                     <button
+                      v-if="student.warningSentAt"
+                      class="btn btn-outline-warning btn-sm"
+                      :disabled="sendingWarningFor === student.studentId"
+                      @click="resendWarningEmail(student)"
+                    >
+                      {{ sendingWarningFor === student.studentId ? 'Skickar...' : 'Återsänd varning' }}
+                    </button>
+                    <button
                       v-if="student.responsibleTeacherUserId"
                       class="btn btn-success btn-sm"
                       @click="discussStudent(student)"
@@ -213,6 +237,8 @@ const withdrawStudent = ref(null)
 const withdrawing = ref(false)
 const scanning = ref(false)
 const scanStatus = ref(null)
+const settings = ref({ warningDays: 14, withdrawDays: 5, resendCooldownHours: 24 })
+const savingSettings = ref(false)
 
 const isAdmin = computed(() => store.getters.isAdmin)
 
@@ -255,6 +281,42 @@ async function loadScanStatus() {
     scanStatus.value = response.data?.lastScan || null
   } catch {
     scanStatus.value = null
+  }
+}
+
+async function loadSettings() {
+  try {
+    const response = await client.get('/inactivity/settings')
+    settings.value = response.data || settings.value
+  } catch (error) {
+    // keep defaults
+  }
+}
+
+async function saveSettings() {
+  savingSettings.value = true
+  try {
+    const response = await client.put('/inactivity/settings', settings.value)
+    settings.value = response.data || settings.value
+    thresholds.value = { withdrawDays: settings.value.withdrawDays, warningDays: settings.value.warningDays }
+    toast.success('Inställningar sparade')
+  } catch (error) {
+    toast.error(error.response?.data?.error || 'Kunde inte spara inställningar')
+  } finally {
+    savingSettings.value = false
+  }
+}
+
+async function resendWarningEmail(student) {
+  sendingWarningFor.value = student.studentId
+  try {
+    await client.post('/inactivity/resend-warning', { studentId: student.studentId })
+    toast.success(`Varningsmail skickat till ${student.name}`)
+    await loadReport()
+  } catch (error) {
+    toast.error(error.response?.data?.error || 'Kunde inte skicka varningsmail')
+  } finally {
+    sendingWarningFor.value = null
   }
 }
 

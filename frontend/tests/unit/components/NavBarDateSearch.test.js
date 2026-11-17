@@ -89,6 +89,27 @@ describe("NavBar date search", () => {
         );
     });
 
+    it("normalizes a typed Swedish date in 'Alla' mode", async () => {
+        const wrapper = mountNavBar();
+
+        wrapper.vm.searchQuery = "17/11/2026";
+        await wrapper.vm.handleSearch();
+        await flushPromises();
+
+        expect(searchCalls()).toContain("/search?type=Datum&date=2026-11-17");
+    });
+
+    it("shows an error for a partial date typed in 'Alla' mode", async () => {
+        const wrapper = mountNavBar();
+
+        wrapper.vm.searchQuery = "2026-11";
+        await wrapper.vm.handleSearch();
+        await flushPromises();
+
+        expect(wrapper.text()).toContain("Använd ett fullständigt datum");
+        expect(searchCalls()).toHaveLength(0);
+    });
+
     it("shows an error instead of searching when the date is invalid", async () => {
         const wrapper = mountNavBar();
 

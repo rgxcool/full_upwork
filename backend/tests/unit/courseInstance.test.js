@@ -117,4 +117,39 @@ describe("CourseInstance model", () => {
 
         expect(durationInstance.getDuration()).toBe(2);
     });
+
+    it("keeps datePlan optional and validates its course length", async () => {
+        const withoutPlan = buildInstance();
+        expect(withoutPlan.datePlan).toBeNull();
+
+        const withPlan = buildInstance({
+            datePlan: {
+                lengthWeeks: 10,
+                startDate: new Date("2024-01-01T00:00:00.000Z"),
+                endDate: new Date("2024-03-11T00:00:00.000Z"),
+                sectionOffsets: [0, 2, 4, 6, 8],
+                sectionDates: [
+                    new Date("2024-01-01T00:00:00.000Z"),
+                    new Date("2024-01-15T00:00:00.000Z"),
+                ],
+                moduleDates: [
+                    {
+                        startDate: new Date("2024-01-01T00:00:00.000Z"),
+                        endDate: new Date("2024-01-15T00:00:00.000Z"),
+                    },
+                ],
+                source: "default",
+            },
+        });
+        await withPlan.validate();
+        expect(withPlan.datePlan.lengthWeeks).toBe(10);
+        expect(withPlan.datePlan.appliedAt).toBeInstanceOf(Date);
+
+        const invalid = buildInstance({
+            datePlan: { lengthWeeks: 7 },
+        });
+        const error = await invalid.validate().catch((err) => err);
+        expect(error).toBeInstanceOf(mongoose.Error.ValidationError);
+        expect(error.errors["datePlan.lengthWeeks"]).toBeDefined();
+    });
 });

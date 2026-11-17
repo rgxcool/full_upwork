@@ -24,6 +24,17 @@ describe("dateSearch helpers", () => {
             });
         });
 
+        it("accepts Swedish day-first dates and normalizes them to ISO", () => {
+            for (const value of ["17/11/2026", "17.11.2026", "17-11-2026"]) {
+                expect(parseDateOnly(value)).toMatchObject({
+                    year: 2026,
+                    month: 11,
+                    day: 17,
+                    dateOnly: "2026-11-17",
+                });
+            }
+        });
+
         it.each([
             "2024-02-30",
             "2023-02-29",
@@ -31,7 +42,13 @@ describe("dateSearch helpers", () => {
             "2024-00-10",
             "2024-01-00",
             "2024-1-5",
-            "05/01/2024",
+            "29/02/2026",
+            "31/11/2026",
+            "17/11.2026",
+            "2026/11/17",
+            "2026-11",
+            "17/11",
+            "2026-11-17 - 2026-11-30",
             "not-a-date",
             "",
             null,
@@ -43,8 +60,11 @@ describe("dateSearch helpers", () => {
     });
 
     describe("parseSearchDate", () => {
-        it("accepts date-only values", () => {
+        it("accepts date-only values in every supported format", () => {
             expect(parseSearchDate("2024-01-05")?.dateOnly).toBe("2024-01-05");
+            expect(parseSearchDate("05/01/2024")?.dateOnly).toBe("2024-01-05");
+            expect(parseSearchDate("05.01.2024")?.dateOnly).toBe("2024-01-05");
+            expect(parseSearchDate("05-01-2024")?.dateOnly).toBe("2024-01-05");
         });
 
         it("accepts a valid ISO timestamp for backwards compatibility", () => {
@@ -53,9 +73,12 @@ describe("dateSearch helpers", () => {
             );
         });
 
-        it("rejects invalid timestamps and impossible dates", () => {
+        it("rejects invalid timestamps, partial dates, ranges and impossible dates", () => {
             expect(parseSearchDate("2024-01-05Tnot-a-timeZ")).toBeNull();
             expect(parseSearchDate("2024-02-30T12:00:00.000Z")).toBeNull();
+            expect(parseSearchDate("2024-01")).toBeNull();
+            expect(parseSearchDate("05/01")).toBeNull();
+            expect(parseSearchDate("2024-01-05 - 2024-01-10")).toBeNull();
         });
     });
 

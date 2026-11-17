@@ -9,6 +9,14 @@
  * @param {Date|string|number|null|undefined} value
  * @returns {string} YYYY-MM-DD, or an empty string when the value is invalid
  */
+const ISO_DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+// Swedish convention is day-first; the separator must be the same twice so
+// ambiguous values such as 17/11.2026 are not silently accepted.
+const SWEDISH_DATE_PATTERN = /^(\d{2})([./-])(\d{2})\2(\d{4})$/
+// Digits and separators only: catches partial dates, mixed separators and
+// single-digit components before Date can parse them unpredictably.
+const DATE_LIKE_PATTERN = /^\d{1,4}[./-]\d{1,2}(?:[./-]\d{1,4})?$/
+
 export const toDateOnly = (value) => {
   if (value === null || value === undefined || value === '') return ''
 
@@ -17,7 +25,13 @@ export const toDateOnly = (value) => {
     if (!trimmed) return ''
 
     // Already a date-only value: validate it without any UTC conversion.
-    const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed)
+    const swedishMatch = SWEDISH_DATE_PATTERN.exec(trimmed)
+    if (swedishMatch) {
+      const [, dd, , mm, yyyy] = swedishMatch
+      return toDateOnly(`${yyyy}-${mm}-${dd}`)
+    }
+
+    const dateOnlyMatch = ISO_DATE_ONLY_PATTERN.exec(trimmed)
     if (dateOnlyMatch) {
       const year = Number(dateOnlyMatch[1])
       const month = Number(dateOnlyMatch[2])
@@ -33,6 +47,8 @@ export const toDateOnly = (value) => {
       return trimmed
     }
 
+    if (DATE_LIKE_PATTERN.test(trimmed)) return ''
+
     const parsed = new Date(trimmed)
     if (Number.isNaN(parsed.getTime())) return ''
     return toDateOnly(parsed)
@@ -47,7 +63,16 @@ export const toDateOnly = (value) => {
   return `${year}-${month}-${day}`
 }
 
-export const isDateOnly = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+export const isDateOnly = (value) =>
+  typeof value === 'string' &&
+  (ISO_DATE_ONLY_PATTERN.test(value.trim()) || SWEDISH_DATE_PATTERN.test(value.trim()))
+
+/** Detects input that clearly intends a date but omits part of it. */
+export const isPartialDate = (value) => {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  return /^\d{4}[./-]\d{1,2}$/.test(trimmed) || /^\d{1,2}[./-]\d{1,2}$/.test(trimmed)
+}
 
 const formatUtcDateOnly = (date) =>
   `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(
