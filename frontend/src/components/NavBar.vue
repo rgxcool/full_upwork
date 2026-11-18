@@ -205,8 +205,8 @@
         <button
           v-if="isLoggedIn"
           class="burger-btn"
-          aria-label="Öppna meny"
-          @click.stop.prevent="toggleMobileMenu"
+          aria-label="Visa eller dölj navigationen"
+          @click.stop.prevent="toggleSidebar"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -464,7 +464,8 @@
 
   export default {
     components: { DatePicker },
-    setup() {
+    emits: ['toggle-sidebar'],
+    setup(props, { emit }) {
       const store = useStore()
       const router = useRouter()
       const toast = useToast()
@@ -528,6 +529,13 @@
 
       const closeMobileMenu = () => {
         isMobileMenuOpen.value = false
+      }
+
+      // The burger now controls the shared right-side navigation instead of
+      // the legacy mobile overlay.
+      const toggleSidebar = () => {
+        isMobileMenuOpen.value = false
+        emit('toggle-sidebar')
       }
 
       const totalNotifications = computed(() => notifications.value.length)
@@ -671,9 +679,29 @@
 
       const notificationTypeLabel = (type) => notificationTypeLabels[type] || type
 
+      // Older notifications contain paths that were never real SPA routes.
+      // Normalise them here so existing records stay clickable.
+      const normalizeNotificationUrl = (url) => {
+        if (!url) return null
+        const studentMatch = url.match(/^\/students\/([^/?#]+)(?:\/education)?/)
+        if (studentMatch) return `/student/${studentMatch[1]}`
+        const diplomaMatch = url.match(/^\/diploma\/([^/?#]+)\/pdf/)
+        if (diplomaMatch) return `/api/diploma/${diplomaMatch[1]}/pdf`
+        return url
+      }
+
       const openNotification = (notification) => {
-        if (notification.meta?.url) {
-          router.push(notification.meta.url)
+        const url = normalizeNotificationUrl(notification.meta?.url)
+        if (url) {
+          // PDF links are API downloads, not SPA pages.
+          if (url.startsWith('/api/')) {
+            window.location.assign(url)
+            return
+          }
+          const resolved = router.resolve(url)
+          const isKnownRoute = resolved.matched.length > 0 &&
+            !resolved.matched.some((record) => record.name === 'NotFound')
+          router.push(isKnownRoute ? url : '/')
         } else if (notification.type === 'action_plan_required' && notification.meta?.studentId) {
           router.push(`/student/${notification.meta.studentId}?showActionPlan=true`)
         } else if (notification.type === 'signing_required') {
@@ -723,6 +751,8 @@
           router.push(`/education/${result.id}`)
         } else if (['Elev', 'Student'].includes(result.type)) {
           router.push(`/student/${result.id}`)
+        } else if (['Lärare', 'Teacher'].includes(result.type)) {
+          router.push(`/teacher/${result.id}`)
         } else {
           router.push(`/detaljer/${result.type}/${result.id}`) // Vanlig vy
         }
@@ -886,10 +916,9 @@
       // Remove these from main nav bar and add to secret menu
       const secretMenuNames = [
         'Utbildning',
-              'Student Inskrivningar',
+        'Student Inskrivningar',
         'Elev+',
         'PDF',
-        'Prövningar',
         'Earnings',
         'Stats',
       ]
@@ -1061,6 +1090,7 @@
         endDateNotifications,
         missingGradeNotifications,
         toggleNotificationPanel,
+        openNotification,
         canSeeNotifications,
         buildVersion,
         filter,
@@ -1112,6 +1142,7 @@
         isMobileMenuOpen,
         toggleMobileMenu,
         closeMobileMenu,
+        toggleSidebar,
       }
     },
   }

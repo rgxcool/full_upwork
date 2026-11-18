@@ -151,7 +151,7 @@ const routes = [
     path: '/detaljer/:type/:id',
     component: SearchResultDetails,
     props: true,
-    meta: { title: 'Search Result Details', role: ['teacher', 'syv', 'specped'] },
+    meta: { title: 'Search Result Details', role: ['teacher', 'coordinator', 'syv', 'specped', 'admin', 'systemadmin'] },
     beforeEnter: (to, from, next) => {
       // Redirect Elev type to student view
       if (to.params.type === 'Elev' || to.params.type === 'Student') {
@@ -181,7 +181,7 @@ const routes = [
     name: 'EducationDetials',
     component: EducationDetails,
     props: true,
-    meta: { title: 'Education Details', role: ['admin', 'syv', 'specped'] },
+    meta: { title: 'Education Details', role: ['teacher', 'coordinator', 'syv', 'specped', 'admin', 'systemadmin'] },
   },
   {
     path: '/students',
