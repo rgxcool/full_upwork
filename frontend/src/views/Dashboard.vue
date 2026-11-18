@@ -9,14 +9,14 @@
     </section>
     <section class="dashboard-hero">
       <div>
-        <p class="eyebrow">Mindful Learning · Skolöversikt</p>
+        <p class="eyebrow">Mindful Learning · Översikt</p>
         <h1>{{ greeting }}, {{ displayName }}</h1>
-        <p class="hero-copy">En samlad arbetsyta för dagens undervisning, uppföljning och nästa viktiga steg.</p>
+        <p class="hero-copy">Samlad arbetsyta för undervisning, uppföljning och nästa steg.</p>
       </div>
       <div class="hero-actions">
         <router-link class="primary-action" :to="primaryAction.to">{{ primaryAction.label }}</router-link>
-        <router-link class="secondary-action" to="/messages">Öppna meddelanden</router-link>
-        <button class="hero-refresh" type="button" :disabled="refreshing" aria-live="polite" @click="loadDashboard">{{ refreshing ? 'Uppdaterar...' : 'Uppdatera notifieringar' }}</button>
+        <router-link class="secondary-action" to="/messages">Meddelanden</router-link>
+        <button class="hero-refresh" type="button" :disabled="refreshing" aria-live="polite" @click="loadDashboard">{{ refreshing ? 'Uppdaterar...' : 'Uppdatera' }}</button>
       </div>
     </section>
 
@@ -54,38 +54,38 @@
       <article v-else class="panel today-panel">
         <div class="panel-heading"><div><p class="eyebrow">Idag</p><h2>Din arbetsyta</h2></div><span class="status-pill">{{ roleLabel }}</span></div>
         <ul class="check-list">
-          <li><span class="check-dot">1</span><span><strong>Kontrollera nya meddelanden</strong><small>Håll kommunikationen samlad i inkorgen.</small></span></li>
-          <li><span class="check-dot">2</span><span><strong>Följ upp aktiva ärenden</strong><small>Se uppgifter, betyg, APL och studieplaner.</small></span></li>
-          <li><span class="check-dot">3</span><span><strong>Planera nästa steg</strong><small>Använd kalendern för möten, prov och deadlines.</small></span></li>
+          <li><span class="check-dot">1</span><span><strong>Kontrollera meddelanden</strong><small>Håll kommunikationen samlad i inkorgen.</small></span></li>
+          <li><span class="check-dot">2</span><span><strong>Följ upp ärenden</strong><small>Uppgifter, betyg, APL och studieplaner.</small></span></li>
+          <li><span class="check-dot">3</span><span><strong>Planera nästa steg</strong><small>Kalender för möten, prov och deadlines.</small></span></li>
         </ul>
       </article>
     </section>
 
-    <section v-if="role === 'admin' || role === 'systemadmin'" class="completions-panel">
+    <section v-if="role === 'admin' || role === 'systemadmin'" class="completions-panel panel">
       <div class="panel-heading">
         <div><p class="eyebrow">Kursgenomförande</p><h2>Nyligen avslutade</h2></div>
         <router-link class="panel-link" to="/admin/completions">Visa alla →</router-link>
       </div>
-      <p class="panel-copy">Kurser och kurspaket som nyligen markerats som avklarade — upptäckt automatiskt av genomförandescanen.</p>
-      <div v-if="completions.length === 0" class="completions-empty">Inga avslutade kurser än. De visas här när kurser och paket fullföljts och godkänts.</div>
+      <p class="panel-copy">Nyligen avklarade kurser och kurspaket.</p>
+      <div v-if="completions.length === 0" class="completions-empty">Inga avslutade kurser ännu.</div>
       <ul v-else class="completion-list">
         <li v-for="event in completions" :key="event._id" class="completion-row">
-          <span class="completion-type" :title="event.completionType === 'course_package' ? 'Kurspaket' : 'Kurs'">{{ event.completionType === 'course_package' ? 'Paket' : 'Kurs' }}</span>
+          <span class="completion-type">{{ event.completionType === 'course_package' ? 'Paket' : 'Kurs' }}</span>
           <span class="completion-body">
             <strong>{{ event.completionType === 'course_package' ? event.packageName : event.courseName }}</strong>
             <small>{{ event.studentName }} · {{ formatDate(event.completionDate) }}</small>
           </span>
           <span class="completion-meta">
-            <small v-if="event.teacherName || event.teacherUserId">Ansv. lärare: {{ event.teacherName || 'Se detaljer' }}</small>
+            <small v-if="event.teacherName || event.teacherUserId">{{ event.teacherName || 'Lärare' }}</small>
             <small>{{ event.municipality || 'Intern' }}</small>
           </span>
         </li>
       </ul>
     </section>
 
-    <section class="role-note" aria-label="Rollinformation">
-      <div><p class="eyebrow">Rollbaserad vy</p><h2>Allt du behöver, utan brus.</h2><p>Menyn och snabbvägarna anpassas efter dina behörigheter. Befintliga elev-, lärar-, APL-, rapport- och administrationsflöden finns kvar och nås från sina respektive arbetsytor.</p></div>
-      <router-link class="secondary-action" to="/profile">Visa min profil</router-link>
+    <section class="role-note panel" aria-label="Rollinformation">
+      <div><p class="eyebrow">Rollbaserad vy</p><h2>Allt du behöver, utan brus.</h2><p>Menyn anpassas efter behörighet. Alla befintliga flöden finns kvar.</p></div>
+      <router-link class="secondary-action" to="/profile">Min profil</router-link>
     </section>
     </template>
   </main>
@@ -182,11 +182,59 @@ export default {
 </script>
 
 <style scoped>
-.dashboard-page { min-height: 100%; padding: 2rem clamp(1rem, 4vw, 4rem) 4rem; background: var(--color-canvas); color: var(--color-ink); }.dashboard-loading,.dashboard-error { max-width: 900px; margin: 4rem auto; padding: 2rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); }.skeleton { background: linear-gradient(90deg, var(--status-neutral-tint) 25%, var(--color-bg-secondary) 50%, var(--status-neutral-tint) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }.skeleton-wide { height: 10rem; margin-bottom: 1rem; }.skeleton-title { width: 55%; height: 2.5rem; margin-bottom: .8rem; }.skeleton-copy { width: 80%; height: 1rem; }.dashboard-error { display: grid; gap: .6rem; color: var(--color-error-ink); }.dashboard-error button { width: fit-content; border: 0; border-radius: var(--radius-sm); padding: .65rem 1rem; background: var(--color-primary); color: var(--color-primary-contrast); cursor: pointer; }.hero-refresh { border: 1px solid rgba(255,255,255,.5); border-radius: var(--radius-sm); padding: .7rem 1rem; background: rgba(255,255,255,.12); color: #fff; cursor: pointer; font-weight: 800; }.hero-refresh:hover:not(:disabled) { background: rgba(255,255,255,.22); }.hero-refresh:disabled { opacity: .6; cursor: wait; }@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-.dashboard-hero { display: flex; justify-content: space-between; gap: 2rem; align-items: end; max-width: 1400px; margin: 0 auto; padding: 2.5rem clamp(1rem, 3vw, 3rem); border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary-hover) 100%); color: var(--color-primary-contrast); }
-.eyebrow { margin: 0 0 .5rem; color: var(--color-secondary-light); text-transform: uppercase; letter-spacing: .12em; font-size: .72rem; font-weight: 800; }
-h1,h2,p { margin-top: 0; } h1 { max-width: 700px; margin-bottom: .75rem; font-size: clamp(2rem, 5vw, 4.5rem); line-height: .98; letter-spacing: -.05em; } h2 { margin-bottom: .4rem; font-size: 1.3rem; letter-spacing: -.02em; }.hero-copy { max-width: 600px; margin-bottom: 0; color: rgba(255,255,255,.85); line-height: 1.6; }.hero-actions { display: flex; flex-wrap: wrap; gap: .75rem; }.primary-action,.secondary-action { display: inline-flex; align-items: center; justify-content: center; min-height: 2.7rem; padding: .7rem 1rem; border-radius: var(--radius-sm); text-decoration: none; font-weight: 800; font-size: .82rem; transition: background var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease); }.primary-action { background: var(--color-surface); color: var(--color-primary-hover); }.primary-action:hover { background: var(--color-primary-light); }.secondary-action { border: 1px solid rgba(255,255,255,.55); color: inherit; }.dashboard-hero .secondary-action:hover { border-color: rgba(255,255,255,.9); background: rgba(255,255,255,.12); }
-.stat-grid,.workspace-grid,.role-note { max-width: 1400px; margin: 1.25rem auto 0; }.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--color-border); border: 1px solid var(--color-border); border-radius: var(--radius-card); overflow: hidden; }.stat-card { display: flex; flex-direction: column; gap: .35rem; padding: 1.25rem; background: var(--color-surface); }.stat-label,.stat-note { color: var(--color-text-muted); font-size: .75rem; }.stat-card strong { font-size: 1.35rem; }.workspace-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 1.25rem; }.panel,.role-note { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 1.5rem; }.panel-heading { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem; }.status-pill { padding: .4rem .6rem; border-radius: var(--radius-pill); background: var(--color-primary-light); color: var(--color-primary-hover); font-size: .72rem; font-weight: 800; }.quick-links { display: grid; gap: .55rem; }.quick-link { display: grid; grid-template-columns: 2rem 1fr auto; gap: .8rem; align-items: center; padding: .85rem; border-radius: var(--radius-sm); color: var(--color-ink); text-decoration: none; border: 1px solid var(--color-border); transition: border-color var(--motion-duration) var(--motion-ease), background var(--motion-duration) var(--motion-ease); }.quick-link:hover,.quick-link:focus-visible { border-color: var(--color-secondary); background: var(--color-secondary-light); }.quick-link strong,.quick-link small { display: block; }.quick-link small,.check-list small { margin-top: .2rem; color: var(--color-text-muted); font-size: .75rem; }.quick-icon,.check-dot { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: var(--radius-sm); background: var(--color-primary-light); color: var(--color-primary-hover); font-size: .7rem; font-weight: 900; }.completions-panel { max-width: 1400px; margin: 1.25rem auto 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 1.5rem; }.completions-panel .panel-heading { display: flex; justify-content: space-between; align-items: start; margin-bottom: .75rem; }.completions-panel .panel-link { color: var(--color-secondary); text-decoration: none; font-weight: 800; font-size: .8rem; }.completions-panel .panel-copy { margin-bottom: 1rem; color: var(--color-text-muted); font-size: .85rem; }.completions-empty { padding: 1.5rem; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); color: var(--color-text-muted); font-size: .85rem; }.completion-list { display: grid; gap: .6rem; margin: 0; padding: 0; list-style: none; }.completion-row { display: grid; grid-template-columns: auto 1fr auto; gap: .9rem; align-items: center; padding: .8rem .9rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }.completion-type { display: grid; place-items: center; min-width: 3.2rem; padding: .3rem .5rem; border-radius: var(--radius-pill); background: var(--color-primary-light); color: var(--color-primary-hover); font-size: .68rem; font-weight: 900; text-transform: uppercase; }.completion-body strong,.completion-body small { display: block; }.completion-body small,.completion-meta small { color: var(--color-text-muted); font-size: .75rem; }.completion-meta { display: grid; justify-items: end; gap: .2rem; }.check-list { display: grid; gap: 1.1rem; padding: 0; margin: 1.5rem 0 0; list-style: none; }.check-list li { display: flex; gap: .8rem; align-items: start; }.check-dot { flex: 0 0 auto; border-radius: 50%; }.check-list strong { display: block; font-size: .86rem; }.role-note { display: flex; justify-content: space-between; align-items: center; gap: 2rem; margin-top: 1.25rem; background: var(--color-primary-light); }.role-note p:not(.eyebrow) { max-width: 720px; margin-bottom: 0; color: var(--color-text-secondary); line-height: 1.6; }.role-note .secondary-action { border-color: var(--color-border-strong); color: var(--color-primary-hover); white-space: nowrap; }.role-note .secondary-action:hover { border-color: var(--color-primary); background: var(--color-surface); }
-@media (max-width: 800px) { .dashboard-hero,.role-note { flex-direction: column; align-items: stretch; }.workspace-grid { grid-template-columns: 1fr; }.stat-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 480px) { .dashboard-page { padding: 1rem .75rem 2rem; }.dashboard-hero { padding: 1.5rem; }.hero-actions { flex-direction: column; }.hero-actions a { width: 100%; }.stat-card { padding: .9rem; }.panel,.role-note { padding: 1rem; } }
+.dashboard-page {
+  min-height: 100%;
+  padding: 32px 40px 48px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.dashboard-hero, .panel, .role-note, .dashboard-loading, .dashboard-error, .completions-panel { background: var(--color-surface); border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.dashboard-hero { padding: 28px 32px; display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; margin-bottom: 24px; }
+.eyebrow { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--color-muted); font-weight: 600; }
+h1 { margin: 0; font-size: clamp(1.75rem, 2.5vw, 2.25rem); line-height: 1.2; color: var(--color-primary); }
+.hero-copy { margin: 8px 0 0; max-width: 560px; color: var(--color-muted); font-size: 15px; }
+.hero-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.primary-action, .secondary-action, .hero-refresh { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 16px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; transition: all .15s; }
+.primary-action { background: var(--color-primary); color: #fff; }
+.primary-action:hover { background: #162d4a; }
+.secondary-action, .hero-refresh { border: 1px solid #d1d5db; color: var(--color-text); background: #fff; cursor: pointer; }
+.secondary-action:hover, .hero-refresh:hover { background: #f9fafb; border-color: #9ca3af; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: var(--color-surface); border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; }
+.stat-label { display: block; color: var(--color-muted); font-size: 13px; margin-bottom: 6px; }
+.stat-card strong { display: block; font-size: 1.75rem; color: var(--color-primary); line-height: 1.2; }
+.stat-note { display: block; margin-top: 4px; color: var(--color-muted); font-size: 13px; }
+.workspace-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 20px; margin-bottom: 24px; }
+.panel { padding: 24px; }
+.panel-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 16px; }
+.panel-heading h2, .role-note h2 { margin: 0; font-size: 1.25rem; color: var(--color-text); }
+.quick-links { display: grid; gap: 10px; }
+.quick-link { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 10px; background: #f9fafb; border: 1px solid #f3f4f6; color: inherit; text-decoration: none; transition: all .15s; }
+.quick-link:hover { background: #f3f4f6; border-color: #e5e7eb; }
+.quick-link strong, .check-list strong { display: block; font-size: 14px; }
+.quick-link small, .check-list small { display: block; color: var(--color-muted); margin-top: 2px; font-size: 13px; }
+.quick-icon, .check-dot { width: 36px; height: 36px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: #eef2f7; color: var(--color-primary); font-weight: 700; }
+.status-pill { display: inline-flex; padding: 4px 12px; border-radius: 999px; background: #eef2f7; color: var(--color-primary); font-weight: 600; font-size: 13px; }
+.check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.check-list li { display: grid; grid-template-columns: auto 1fr; gap: 12px; }
+.completions-panel { margin-bottom: 24px; }
+.panel-copy { color: var(--color-muted); margin: 0 0 12px; font-size: 14px; }
+.panel-link { color: var(--color-secondary); text-decoration: none; font-weight: 600; font-size: 14px; }
+.completion-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.completion-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; background: #f9fafb; border-radius: 8px; }
+.completion-type { font-size: 12px; font-weight: 600; color: var(--color-primary); background: #eef2f7; padding: 4px 10px; border-radius: 999px; }
+.completion-body strong { display: block; font-size: 14px; }
+.completion-body small, .completion-meta small { color: var(--color-muted); font-size: 13px; }
+.completion-meta { text-align: right; display: grid; gap: 2px; }
+.completions-empty { color: var(--color-muted); font-size: 14px; padding: 8px 0; }
+.role-note { padding: 24px; display: flex; justify-content: space-between; gap: 24px; align-items: center; margin-bottom: 24px; }
+.role-note p:last-child { margin: 8px 0 0; color: var(--color-muted); max-width: 720px; }
+.dashboard-loading, .dashboard-error { padding: 20px; margin-bottom: 20px; }
+.dashboard-error { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.skeleton { height: 16px; border-radius: 4px; background: #e5e7eb; margin-bottom: 12px; }
+.skeleton-wide { width: 40%; }
+.skeleton-title { width: 60%; height: 24px; }
+.skeleton-copy { width: 80%; }
+@media (max-width: 1024px) { .dashboard-hero, .workspace-grid, .role-note { grid-template-columns: 1fr; flex-direction: column; align-items: stretch; } .stat-grid { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 640px) { .dashboard-page { padding: 16px; } .stat-grid { grid-template-columns: 1fr; } .dashboard-hero { padding: 20px; } }
 </style>
