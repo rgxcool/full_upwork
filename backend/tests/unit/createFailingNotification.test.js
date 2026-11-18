@@ -114,7 +114,7 @@ describe("createFailingStudentNotification", () => {
         expect(notification.message).toContain("Marcus Åberg");
         expect(notification.message).toContain("Engelska 5");
         expect(notification.meta.courseId.toString()).toBe(course._id.toString());
-        expect(notification.meta.url).toBe(`/students/${student._id}`);
+        expect(notification.meta.url).toBe(`/student/${student._id}`);
     });
 
     it("does not duplicate an unresolved failing_grade notification", async () => {

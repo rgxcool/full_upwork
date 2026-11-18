@@ -293,7 +293,7 @@ describe("Completion scan (course + package + diploma trigger)", () => {
         expect(adminNote).toBeTruthy();
         expect(adminNote.message).toContain("Ebba Lindgren");
         expect(adminNote.meta.studentMunicipality).toBe("Sollentuna");
-        expect(adminNote.meta.url).toBe(`/diploma/${enrollment._id}/pdf`);
+        expect(adminNote.meta.url).toBe(`/api/diploma/${enrollment._id}/pdf`);
 
         const teacherNote = await Notification.findOne({
             type: NOTIFICATION_TYPES.DIPLOMA_READY,

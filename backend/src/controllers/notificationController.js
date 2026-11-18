@@ -238,7 +238,7 @@ export async function evaluateActionPlanStatusAndNotify() {
             studentId: student._id,
             educationId: education?._id,
             courseId: education?.refId || null,
-            url: `/students/${student._id}/education`
+            url: `/student/${student._id}`
         }
     });
     await notification.save();

@@ -69,13 +69,17 @@
                   </span>
                   <span v-if="element.isEnrollment" class="enrollment-badge">{{ getStatusLabel(element.status || 'enrolled') }}</span>
                   <span v-if="element.type === 'Course' && (element.courseInstanceId || element.refId?._id)" class="education-name">
-                    <router-link 
-                      :to="getCourseLink(element)" 
+                    <router-link
+                      v-if="getCourseLink(element)"
+                      :to="getCourseLink(element)"
                       class="course-link"
                       @click.stop
                     >
                       {{ getEducationName(element) }}<span v-if="getCourseInstanceCode(element)"> - {{ getCourseInstanceCode(element) }}</span>
                     </router-link>
+                    <template v-else>
+                      {{ getEducationName(element) }}<span v-if="getCourseInstanceCode(element)"> - {{ getCourseInstanceCode(element) }}</span>
+                    </template>
                   </span>
                   <span v-else class="education-name">
                     {{ getEducationName(element) }}
@@ -486,13 +490,14 @@ export default {
         return `/education/${instanceId}?type=instance`;
       }
       // Fallback: if no course instance ID, try refId (shouldn't happen for enrollments)
-      if (edu.refId?._id) {
+      const refId = typeof edu.refId === 'object' ? edu.refId?._id : edu.refId;
+      if (refId) {
         // This is a legacy case - should not happen for new enrollments
         console.warn('Linking to Course instead of CourseInstance - this should not happen for enrollments');
-        return `/education/${edu.refId._id}`;
+        return `/education/${refId}`;
       }
-      // Fallback to empty string if no ID available
-      return '#';
+      // No linkable id — render plain text instead of a dead '#' link.
+      return null;
     };
 
     const getTeacherName = (edu) => {

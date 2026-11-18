@@ -310,7 +310,7 @@
         this.$router.push(`/student/${studentId}`);
       },
       viewTeacher(teacherId) {
-        this.$router.push(`/detaljer/Lärare/${teacherId}`);
+        this.$router.push(`/teacher/${teacherId}`);
       },
     },
   };
