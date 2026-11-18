@@ -3,7 +3,7 @@
     <div class="ml-sidebar__header">
       <span v-if="!collapsed" class="ml-sidebar__title">Mindful Learning</span>
       <button class="ml-sidebar__toggle" :aria-label="collapsed ? 'Expandera' : 'Minimera'" @click="$emit('toggle')">
-        {{ collapsed ? '»' : '«' }}
+        {{ collapsed ? '«' : '»' }}
       </button>
     </div>
     <nav class="ml-sidebar__nav">
@@ -40,23 +40,24 @@ const TEACHER = ['teacher']
 const SYV = ['syv']
 const SPECPED = ['specped']
 const COORD = ['coordinator']
+const STUDENT = ['student']
 
 const groups = [
   {
     label: 'Översikt',
     items: [
-      { to: '/dashboard', label: 'Dashboard', icon: '🏠', roles: [...ADMIN_SYS, ...TEACHER, ...SYV, ...SPECPED, ...COORD] },
-      { to: '/profile', label: 'Min profil', icon: '👤', roles: [...ADMIN_SYS, ...TEACHER, ...SYV, ...SPECPED, ...COORD] },
+      { to: '/dashboard', label: 'Dashboard', icon: '🏠', roles: [...ADMIN_SYS, ...TEACHER, ...SYV, ...SPECPED, ...COORD, ...STUDENT] },
+      { to: '/profile', label: 'Min profil', icon: '👤', roles: [...ADMIN_SYS, ...TEACHER, ...SYV, ...SPECPED, ...COORD, ...STUDENT] },
     ],
   },
   {
     label: 'Elever',
     items: [
-      { to: '/admin/users', label: 'Sök användare', icon: '🔎', roles: ADMIN },
-      { to: '/addstudent', label: 'Lägg till elev', icon: '➕', roles: ADMIN },
-      { to: '/manual-add-student', label: 'Manuell registrering', icon: '📝', roles: ADMIN },
+      { to: '/admin/users', label: 'Sök användare', icon: '🔎', roles: ADMIN_SYS },
+      { to: '/addstudent', label: 'Lägg till elev', icon: '➕', roles: ADMIN_SYS },
+      { to: '/manual-add-student', label: 'Manuell registrering', icon: '📝', roles: ADMIN_SYS },
       { to: '/students', label: 'Elevlista', icon: '👥', roles: [...ADMIN, ...TEACHER] },
-      { to: '/student-enrollments', label: 'Elevregistreringar', icon: '📋', roles: ADMIN },
+      { to: '/student-enrollments', label: 'Elevregistreringar', icon: '📋', roles: ADMIN_SYS },
       { to: '/inaktiva-elever', label: 'Inaktiva elever', icon: '⏸️', roles: ADMIN_SYS },
       { to: '/admin/inactivity', label: 'Inaktivitetsrapport', icon: '⚠️', roles: [...ADMIN_SYS, ...TEACHER] },
     ],
@@ -64,33 +65,33 @@ const groups = [
   {
     label: 'Personal',
     items: [
-      { to: '/lagg-till-anvandare', label: 'Lägg till användare', icon: '👤', roles: ADMIN },
-      { to: '/lagg-till-larare', label: 'Lägg till lärare', icon: '🧑‍🏫', roles: ADMIN },
-      { to: '/teacher-management', label: 'Lärarhantering', icon: '👨‍🏫', roles: ADMIN },
+      { to: '/lagg-till-anvandare', label: 'Lägg till användare', icon: '👤', roles: ADMIN_SYS },
+      { to: '/lagg-till-larare', label: 'Lägg till lärare', icon: '🧑‍🏫', roles: ADMIN_SYS },
+      { to: '/teacher-management', label: 'Lärarhantering', icon: '👨‍🏫', roles: ADMIN_SYS },
       { to: '/admin/permissions', label: 'Behörigheter', icon: '🔐', roles: ADMIN_SYS },
     ],
   },
   {
     label: 'Utbildning',
     items: [
-      { to: '/education', label: 'Utbildningsredigerare', icon: '🏫', roles: ADMIN },
-      { to: '/programsandcourses', label: 'Program & kurser', icon: '📚', roles: ADMIN },
-      { to: '/programsandpackages', label: 'Program & paket', icon: '📦', roles: ADMIN },
-      { to: '/course-instances', label: 'Kursinstanser', icon: '📘', roles: ADMIN },
+      { to: '/education', label: 'Utbildningsredigerare', icon: '🏫', roles: ADMIN_SYS },
+      { to: '/programsandcourses', label: 'Program & kurser', icon: '📚', roles: ADMIN_SYS },
+      { to: '/programsandpackages', label: 'Program & paket', icon: '📦', roles: ADMIN_SYS },
+      { to: '/course-instances', label: 'Kursinstanser', icon: '📘', roles: ADMIN_SYS },
       { to: '/course-templates', label: 'Kursmallar', icon: '🧩', roles: [...ADMIN, ...TEACHER] },
-      { to: '/course-matching', label: 'Kursmatchning', icon: '🔗', roles: ADMIN },
+      { to: '/course-matching', label: 'Kursmatchning', icon: '🔗', roles: ADMIN_SYS },
       { to: '/schedule-parameters', label: 'Schemaparametrar', icon: '⏱️', roles: [...ADMIN_SYS, ...TEACHER] },
       { to: '/date-planning', label: 'Datumplanering', icon: '📅', roles: ADMIN_SYS },
-      { to: '/larare/kurser', label: 'Mina kurser', icon: '📖', roles: TEACHER },
+      { to: '/larare/kurser', label: 'Mina kurser', icon: '📖', roles: [...TEACHER, ...ADMIN_SYS] },
     ],
   },
   {
     label: 'Kurskort & innehåll',
     items: [
       { to: '/admin/course-content', label: 'Kursinnehåll', icon: '📝', roles: [...ADMIN_SYS, ...TEACHER] },
-      { to: '/admin/student-course-cards', label: 'Elevens kurskort', icon: '🗂️', roles: ADMIN },
-      { to: '/admin/course-statistics', label: 'Kursstatistik', icon: '📈', roles: ADMIN },
-      { to: '/stats/courses', label: 'Kursöversikt', icon: '📊', roles: ADMIN },
+      { to: '/admin/student-course-cards', label: 'Elevens kurskort', icon: '🗂️', roles: ADMIN_SYS },
+      { to: '/admin/course-statistics', label: 'Kursstatistik', icon: '📈', roles: ADMIN_SYS },
+      { to: '/stats/courses', label: 'Kursöversikt', icon: '📊', roles: ADMIN_SYS },
     ],
   },
   {
@@ -102,25 +103,34 @@ const groups = [
   {
     label: 'Bedömning',
     items: [
-      { to: '/betyg', label: 'Betygssättning', icon: '✅', roles: TEACHER },
+      { to: '/betyg', label: 'Betygssättning', icon: '✅', roles: [...TEACHER, ...ADMIN_SYS] },
       { to: '/submissions', label: 'Inlämningar', icon: '📥', roles: [...ADMIN_SYS, ...TEACHER] },
       { to: '/signering', label: 'Betygssignering', icon: '✍️', roles: [...ADMIN_SYS, ...TEACHER] },
       { to: '/admin/betygsrapporter', label: 'Betygsrapporter', icon: '📄', roles: ADMIN_SYS },
       { to: '/admin/betygsskala', label: 'Betygsskalor', icon: '⚖️', roles: ADMIN_SYS },
       { to: '/admin/completions', label: 'Kursgenomförande', icon: '🏁', roles: ADMIN_SYS },
       { to: '/admin/reports', label: 'Kompletionsrapporter', icon: '📑', roles: [...ADMIN_SYS, ...TEACHER] },
-      { to: '/grade-lookups', label: 'Betygsuppföljning', icon: '🔍', roles: ADMIN },
+      { to: '/grade-lookups', label: 'Betygsuppföljning', icon: '🔍', roles: ADMIN_SYS },
       { to: '/provningar', label: 'Prövningar', icon: '🧪', roles: ADMIN_SYS },
       { to: '/larare/fragebank', label: 'Frågebank', icon: '❓', roles: [...ADMIN_SYS, ...TEACHER] },
       { to: '/larare/generera-exam', label: 'Generera prov', icon: '🧾', roles: [...ADMIN_SYS, ...TEACHER] },
     ],
   },
   {
+    label: 'Elevverktyg',
+    items: [
+      { to: '/course-cards', label: 'Mina kurser', icon: '🗂️', roles: STUDENT },
+      { to: '/examform', label: 'Prövningar', icon: '🧪', roles: STUDENT },
+      { to: '/student/fragebank', label: 'Frågebank', icon: '❓', roles: STUDENT },
+      { to: '/chatbot', label: 'Studieassistent', icon: '🤖', roles: STUDENT },
+    ],
+  },
+  {
     label: 'Kommunikation',
     items: [
-      { to: '/messages', label: 'Meddelanden', icon: '💬', roles: [...ADMIN_SYS, ...TEACHER, ...SYV, ...SPECPED, ...COORD] },
-      { to: '/admin/notifications', label: 'Notifikationer', icon: '🔔', roles: ADMIN },
-      { to: '/admin/activity-feed', label: 'Aktivitetsflöde', icon: '📰', roles: ADMIN },
+      { to: '/messages', label: 'Meddelanden', icon: '💬', roles: [...ADMIN_SYS, ...TEACHER, ...SYV, ...SPECPED, ...COORD, ...STUDENT] },
+      { to: '/admin/notifications', label: 'Notifikationer', icon: '🔔', roles: ADMIN_SYS },
+      { to: '/admin/activity-feed', label: 'Aktivitetsflöde', icon: '📰', roles: ADMIN_SYS },
     ],
   },
   {
@@ -129,7 +139,7 @@ const groups = [
       { to: '/admin/certificates', label: 'Intyg & diplom', icon: '🎓', roles: ADMIN_SYS },
       { to: '/admin/resource-visits', label: 'Besöksrapport', icon: '📊', roles: [...ADMIN_SYS, ...TEACHER, ...COORD, ...SYV, ...SPECPED] },
       { to: '/admin/analytics', label: 'Rapporter & analys', icon: '📉', roles: ADMIN_SYS },
-      { to: '/earnings', label: 'Ekonomiöversikt', icon: '💰', roles: ADMIN },
+      { to: '/earnings', label: 'Ekonomiöversikt', icon: '💰', roles: ADMIN_SYS },
     ],
   },
   {
@@ -138,14 +148,16 @@ const groups = [
       { to: '/kalender', label: 'Kalender', icon: '🗓️', roles: [...ADMIN_SYS, ...TEACHER, ...SYV, ...SPECPED] },
       { to: '/syv/appointments', label: 'SYV-samtal', icon: '🗣️', roles: [...ADMIN_SYS, ...SYV] },
       { to: '/specped/appointments', label: 'Specped-samtal', icon: '🤝', roles: [...ADMIN_SYS, ...SPECPED] },
-      { to: '/admin/calendar-housekeeping', label: 'Kalenderunderhåll', icon: '🧹', roles: ADMIN },
+      { to: '/admin/calendar-housekeeping', label: 'Kalenderunderhåll', icon: '🧹', roles: ADMIN_SYS },
     ],
   },
   {
     label: 'System',
     items: [
-      { to: '/admin/action-plans', label: 'Handlingsplaner', icon: '🗺️', roles: ADMIN },
-      { to: '/admin/learning-management', label: 'Inlämningar & deltagare', icon: '⚙️', roles: ADMIN },
+      { to: '/admin/action-plans', label: 'Handlingsplaner', icon: '🗺️', roles: ADMIN_SYS },
+      { to: '/admin/learning-management', label: 'Inlämningar & deltagare', icon: '⚙️', roles: ADMIN_SYS },
+      { to: '/admin/chatbot-faq', label: 'Vanliga frågor (Chatbot)', icon: '💬', roles: ADMIN_SYS },
+      { to: '/larare/chatbot-faq', label: 'Vanliga frågor (Lärare)', icon: '❓', roles: [...ADMIN_SYS, ...TEACHER] },
     ],
   },
 ]
@@ -163,7 +175,7 @@ const visibleGroups = computed(() => {
   width: 260px;
   min-height: 100vh;
   background: var(--color-surface);
-  border-right: 1px solid #e5e7eb;
+  border-left: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
   transition: width 0.2s ease;
@@ -205,9 +217,10 @@ const visibleGroups = computed(() => {
 
 @media (max-width: 768px) {
   .ml-sidebar {
+    order: -1;
     width: 100%;
     min-height: auto;
-    border-right: none;
+    border-left: none;
     border-bottom: 1px solid #e5e7eb;
   }
   .ml-sidebar.collapsed { width: 100%; }

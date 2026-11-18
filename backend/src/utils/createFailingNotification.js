@@ -33,7 +33,7 @@ export const createFailingStudentNotification = async (studentId, courseId) => {
         studentId: student._id,
         courseId,
         teacherId: student.teacher || null,
-        url: `/students/${student._id}`,  // Frontend-länk
+        url: `/student/${student._id}`,  // Frontend-länk
       },
     });
 

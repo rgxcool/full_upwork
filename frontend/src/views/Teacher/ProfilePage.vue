@@ -218,7 +218,6 @@ export default {
     const isLoggedIn = computed(() => store.getters.isLoggedIn);
     onMounted(() => { if (!isLoggedIn.value) router.push('/login'); });
     onMounted(() => { store.dispatch('fetchTasks'); });
-    onMounted(loadSharedDocuments);
 
     const roleLabel = computed(() => {
       const role = store.getters.userRole;
@@ -253,6 +252,10 @@ export default {
       }
     };
 
+    // Register the hook after the function is initialised (calling it earlier
+    // would throw a temporal-dead-zone ReferenceError and blank the page).
+    onMounted(loadSharedDocuments);
+
     const sharedDownloadUrl = (doc) =>
       `${baseURL}/api/documents/download/${doc._id}`;
 
@@ -276,11 +279,14 @@ export default {
     const tasks = computed(() => store.getters.tasks);
     const now = ref(new Date());
 
+    let clockTimer = null;
     onMounted(() => {
       const tick = () => { now.value = new Date(); };
       tick();
-      const interval = setInterval(tick, 30000);
-      onBeforeUnmount(() => clearInterval(interval));
+      clockTimer = setInterval(tick, 30000);
+    });
+    onBeforeUnmount(() => {
+      if (clockTimer) clearInterval(clockTimer);
     });
 
     const remainingLabelFor = (task) =>

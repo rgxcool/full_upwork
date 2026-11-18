@@ -444,7 +444,7 @@ export async function runCompletionScan() {
             const account = await resolveStudentAccount(student.email);
             const scope = { studentId, coursePackageId };
             const url = primaryEnrollment
-                ? `/diploma/${primaryEnrollment._id}/pdf`
+                ? `/api/diploma/${primaryEnrollment._id}/pdf`
                 : `/student/${studentId}`;
 
             if (!(await hasUnresolvedNotification(NOTIFICATION_TYPES.DIPLOMA_READY, scope))) {
