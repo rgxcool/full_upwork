@@ -27,6 +27,7 @@
 </template>
 
 <style src="@/styles/tokens.css"></style>
+<style src="@/styles/admin-ui.css"></style>
 <script>
   import { computed, ref } from 'vue'
   import { useRoute } from 'vue-router'
