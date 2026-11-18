@@ -93,6 +93,6 @@
   }
 
   @media (max-width: 768px) {
-    .app-shell { flex-direction: column; }
+    .app-shell.with-sidebar { flex-direction: column; }
   }
 </style>

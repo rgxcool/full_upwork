@@ -202,4 +202,17 @@ const visibleGroups = computed(() => {
 .ml-sidebar__item.router-link-active { background: #eef2f7; color: var(--color-primary); font-weight: 600; }
 .ml-sidebar__icon { width: 20px; text-align: center; flex-shrink: 0; }
 .ml-sidebar.collapsed .ml-sidebar__item { justify-content: center; padding: 10px; }
+
+@media (max-width: 768px) {
+  .ml-sidebar {
+    width: 100%;
+    min-height: auto;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .ml-sidebar.collapsed { width: 100%; }
+  .ml-sidebar__nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .ml-sidebar__group-label { width: 100%; padding-top: 8px; }
+  .ml-sidebar__item { padding: 8px 10px; }
+}
 </style>
