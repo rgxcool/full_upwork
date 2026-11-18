@@ -31,8 +31,9 @@
           <DatePicker
             v-if="selectedSearchType === 'Datum'"
             v-model="selectedDate"
-            :format="'yyyy-MM-dd'"
-            :placeholder="'Välj datum'"
+            :formats="{ input: 'yyyy-MM-dd' }"
+            :enable-time-picker="false"
+            placeholder="Välj datum"
           />
 
           <div v-if="searchQuery || selectedDate" class="clear-icon" @click="clearSearch">✕</div>
