@@ -116,4 +116,66 @@ describe('LearningManagement.vue', () => {
         expect(wrapper.vm.formatDateTime('not-a-date')).toBe('Aldrig')
         wrapper.unmount()
     })
+
+    const participantRows = [
+        {
+            participantId: 'stu-1',
+            name: 'Anna Andersson',
+            role: 'student',
+            lastActivity: { type: 'submission', at: '2026-02-10T10:00:00.000Z' },
+        },
+        {
+            participantId: 'stu-2',
+            name: 'Erik Eriksson',
+            role: 'student',
+            lastActivity: { type: 'login', at: '2026-02-11T09:00:00.000Z' },
+        },
+        { participantId: 'stu-3', name: 'Ingen aktiv', role: 'student', lastActivity: null },
+        { participantId: 'tea-1', name: 'Lärare', role: 'staff', lastActivity: { type: 'login', at: '2026-02-12T08:00:00.000Z' } },
+    ]
+
+    it('renders backend lastActivity directly without per-participant access-last requests', async () => {
+        client.get.mockImplementation((url) => {
+            if (url === '/course-instances') return Promise.resolve({ data: [instance] })
+            if (url.endsWith('/participants')) return Promise.resolve({ data: { participants: participantRows } })
+            return Promise.resolve({ data: [] })
+        })
+
+        const wrapper = await mountView()
+        wrapper.vm.selectedInstanceId = 'inst-1'
+        await wrapper.vm.loadParticipants()
+        await flushPromises()
+
+        const text = wrapper.text()
+        expect(text).toContain('Senast aktivitet')
+        expect(text).not.toContain('Senast aktiv på kurskort')
+        expect(text).toContain('Inlämning')
+        expect(text).toContain('Inloggning')
+        expect(text).toContain('2026-02-10')
+        expect(text).toContain('Aldrig')
+        expect(client.get.mock.calls.map(([url]) => url).some((url) => url.includes('/access-last/'))).toBe(false)
+        expect(wrapper.vm.participants).toEqual(participantRows)
+        wrapper.unmount()
+    })
+
+    it('removes a participant using participantId and reloads the list', async () => {
+        client.get.mockImplementation((url) => {
+            if (url === '/course-instances') return Promise.resolve({ data: [instance] })
+            if (url.endsWith('/participants')) return Promise.resolve({ data: { participants: participantRows } })
+            return Promise.resolve({ data: [] })
+        })
+
+        const wrapper = await mountView()
+        wrapper.vm.selectedInstanceId = 'inst-1'
+        await wrapper.vm.loadParticipants()
+        await flushPromises()
+
+        const removeButtons = wrapper.findAll('button').filter((b) => b.text().includes('Ta bort'))
+        expect(removeButtons).toHaveLength(3)
+        await removeButtons[0].trigger('click')
+        await flushPromises()
+
+        expect(client.delete).toHaveBeenCalledWith('/learning/instances/inst-1/participants/stu-1')
+        wrapper.unmount()
+    })
 })
