@@ -309,6 +309,116 @@ describe("buildCourseCards", () => {
         expect(AssignmentSubmissionMock.find).not.toHaveBeenCalled();
     });
 
+    it("picks the first assignment-bearing module without an accepted submission", async () => {
+        const validEnrollmentId = "999999999999999999999999";
+        const instance = {
+            _id: INSTANCE_1,
+            courseName: "Svenska 1",
+            courseCode: "SVEENG01",
+            coursePoints: "100",
+            courseExtent: "5",
+            startDate: new Date("2026-01-05"),
+            endDate: new Date("2026-02-09"),
+            mainCourseId: { _id: "c1", courseName: "Svenska 1", courseCode: "SVEENG01" },
+            modules: [
+                { moduleNumber: 1, title: "M1", assignment: { title: "Uppgift 1" } },
+                { moduleNumber: 2, title: "M2" },
+                { moduleNumber: 3, title: "M3", assignment: { title: "Uppgift 3" } },
+            ],
+        };
+        StudentEnrollmentMock.find
+            .mockReturnValueOnce(createFindChain({ result: [{
+                _id: validEnrollmentId,
+                courseInstanceId: instance,
+                mainCourseId: instance.mainCourseId,
+                startDate: instance.startDate,
+                endDate: instance.endDate,
+                status: "active",
+            }] }))
+            .mockReturnValueOnce(createFindChain({ result: [], resolveOn: "select" }));
+        AssignmentSubmissionMock.find.mockResolvedValue([
+            { moduleNumber: 1, enrollmentId: validEnrollmentId, feedback: { status: "godkänd" } },
+        ]);
+
+        const cards = await buildCourseCards(STUDENT_1);
+
+        expect(cards[0].currentModule).toEqual({
+            moduleNumber: 3,
+            title: "M3",
+            status: "Pågår",
+        });
+        expect(cards[0].currentModuleNumber).toBe(3);
+        expect(cards[0].progress).toEqual({ completed: 1, total: 2, percent: 50 });
+    });
+
+    it("clears currentModule when every assignment-bearing module is accepted", async () => {
+        const validEnrollmentId = "999999999999999999999999";
+        const instance = {
+            _id: INSTANCE_1,
+            courseName: "Svenska 1",
+            courseCode: "SVEENG01",
+            coursePoints: "100",
+            courseExtent: "5",
+            startDate: new Date("2026-01-05"),
+            endDate: new Date("2026-02-09"),
+            mainCourseId: { _id: "c1", courseName: "Svenska 1", courseCode: "SVEENG01" },
+            modules: [
+                { moduleNumber: 1, title: "M1", assignment: { title: "Uppgift 1" } },
+                { moduleNumber: 2, title: "M2", assignment: { title: "Uppgift 2" } },
+            ],
+        };
+        StudentEnrollmentMock.find
+            .mockReturnValueOnce(createFindChain({ result: [{
+                _id: validEnrollmentId,
+                courseInstanceId: instance,
+                mainCourseId: instance.mainCourseId,
+                startDate: instance.startDate,
+                endDate: instance.endDate,
+                status: "active",
+            }] }))
+            .mockReturnValueOnce(createFindChain({ result: [], resolveOn: "select" }));
+        AssignmentSubmissionMock.find.mockResolvedValue([
+            { moduleNumber: 1, enrollmentId: validEnrollmentId, feedback: { status: "godkänd" } },
+            { moduleNumber: 2, enrollmentId: validEnrollmentId, feedback: { status: "godkänd" } },
+        ]);
+
+        const cards = await buildCourseCards(STUDENT_1);
+
+        expect(cards[0].currentModule).toBeNull();
+        expect(cards[0].currentModuleNumber).toBeNull();
+        expect(cards[0].progress).toEqual({ completed: 2, total: 2, percent: 100 });
+    });
+
+    it("reports no currentModule for cards without assignment modules", async () => {
+        const instance = {
+            _id: INSTANCE_1,
+            courseName: "Svenska 1",
+            courseCode: "SVEENG01",
+            coursePoints: "100",
+            courseExtent: "5",
+            startDate: new Date("2026-01-05"),
+            endDate: new Date("2026-02-09"),
+            mainCourseId: { _id: "c1", courseName: "Svenska 1", courseCode: "SVEENG01" },
+            modules: [{ moduleNumber: 1, title: "M1" }, { moduleNumber: 2, title: "M2" }],
+        };
+        StudentEnrollmentMock.find
+            .mockReturnValueOnce(createFindChain({ result: [{
+                _id: "enrA",
+                courseInstanceId: instance,
+                mainCourseId: instance.mainCourseId,
+                startDate: instance.startDate,
+                endDate: instance.endDate,
+                status: "active",
+            }] }))
+            .mockReturnValueOnce(createFindChain({ result: [], resolveOn: "select" }));
+
+        const cards = await buildCourseCards(STUDENT_1);
+
+        expect(cards[0].currentModule).toBeNull();
+        expect(cards[0].currentModuleNumber).toBeNull();
+        expect(cards[0].progress).toBeNull();
+    });
+
     it("overlays teacher content and hides modules flagged isHiddenFromStudent", async () => {
         const instance = {
             _id: INSTANCE_1,

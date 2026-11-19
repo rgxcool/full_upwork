@@ -7,11 +7,11 @@
           <p v-if="student" class="student-name">{{ student.name }}</p>
         </div>
         <div class="header-column header-right">
-          <span class="stat-item">
+          <span v-if="!loading && !error" class="stat-item">
             <strong>{{ cards.length }}</strong>
             kurser
           </span>
-          <span class="stat-item">
+          <span v-if="!loading && !error" class="stat-item">
             <strong>{{ activeCards }}</strong>
             pågående
           </span>
@@ -20,7 +20,17 @@
 
       <div class="card-body">
         <div v-if="loading" class="loading-state">Laddar kurser...</div>
-        <div v-else-if="error" class="error-state">{{ error }}</div>
+        <div v-else-if="error" class="error-state">
+          <p>{{ error }}</p>
+          <button
+            type="button"
+            class="refresh-btn"
+            :disabled="loading"
+            @click="loadCourseCards"
+          >
+            {{ loading ? 'Laddar...' : 'Försök igen' }}
+          </button>
+        </div>
         <div v-else-if="cards.length === 0" class="empty-state">
           Inga kurser ännu. Din studieplan visas här när du har kurser inlagda.
         </div>
@@ -66,9 +76,14 @@
               </div>
             </div>
 
-            <div v-if="card.currentModule || card.currentModuleNumber" class="current-module" aria-label="Aktuell modul">
-              <span class="date-label">Aktuell modul</span>
-              <strong>{{ card.currentModule?.title || card.currentModule?.name || `Modul ${card.currentModuleNumber}` }}</strong>
+            <div
+              v-if="card.currentModule || isCourseComplete(card)"
+              class="current-module"
+              :class="{ 'current-module--complete': !card.currentModule }"
+              aria-label="Modulstatus"
+            >
+              <span class="date-label">{{ card.currentModule ? 'Aktuell modul' : 'Kursen är klar' }}</span>
+              <strong>{{ currentModuleLabel(card) }}</strong>
               <span v-if="card.currentModule?.status" class="module-status">{{ card.currentModule.status }}</span>
             </div>
 
@@ -109,6 +124,10 @@
                 </div>
               </div>
 
+              <p v-if="learningLoading[card.courseInstanceId]" class="document-hint">Laddar studiedokument...</p>
+              <p v-else-if="learningError[card.courseInstanceId]" class="submit-error">
+                {{ learningError[card.courseInstanceId] }}
+              </p>
               <div v-if="getEnrollmentId(card)" class="document-actions" aria-label="Studiedokument">
                 <button
                   v-if="card.status === 'completed'"
@@ -132,8 +151,22 @@
               </div>
 
               <div class="activity-feed">
-                <div class="activity-heading"><h5>Anslagstavla och aktivitet</h5><button type="button" class="refresh-btn" @click="loadActivity(card)">Uppdatera</button></div>
+                <div class="activity-heading">
+                  <h5>Anslagstavla och aktivitet</h5>
+                  <button
+                    type="button"
+                    class="refresh-btn"
+                    :disabled="!!activityLoading[card.courseInstanceId]"
+                    @click="loadActivity(card)"
+                  >
+                    {{ activityLoading[card.courseInstanceId] ? 'Uppdaterar...' : 'Uppdatera' }}
+                  </button>
+                </div>
                 <p v-if="activityLoading[card.courseInstanceId]" class="activity-muted">Laddar meddelanden...</p>
+                <p v-else-if="activityError[card.courseInstanceId]" class="activity-muted activity-error">
+                  {{ activityError[card.courseInstanceId] }}
+                  <button type="button" class="refresh-btn" @click="loadActivity(card)">Försök igen</button>
+                </p>
                 <p v-else-if="!activities[card.courseInstanceId]?.length" class="activity-muted">Inga nya meddelanden.</p>
                 <article v-for="item in activities[card.courseInstanceId] || []" :key="item.id" class="activity-item" :class="{ 'staff-notice': item.isNotice || item.type === 'notice' || item.createdByRole === 'admin' }">
                   <span v-if="item.isNotice || item.type === 'notice' || item.createdByRole === 'admin'" class="notice-label">Personalmeddelande</span>
@@ -151,16 +184,26 @@
                   :class="{
                     'chip-partial-exam': module.isPartialExam,
                     'chip-case-study': module.isCaseStudy,
+                    'module-chip-current': isCurrentModule(card, module),
                   }"
                 >
                   <span class="module-number">{{ module.moduleNumber }}.</span>
                   {{ module.title }}
+                  <span v-if="isCurrentModule(card, module)" class="chip-tag chip-tag-current">Aktuell</span>
                   <span v-if="module.isPartialExam" class="chip-tag">Delprov</span>
                   <span v-if="module.isCaseStudy" class="chip-tag">Case</span>
                 </span>
               </div>
-              <details v-for="module in card.modules" :key="'d' + module.moduleNumber" class="module-details">
-                <summary>{{ module.title }}</summary>
+              <details
+                 v-for="module in card.modules"
+                 :key="'d' + module.moduleNumber"
+                 class="module-details"
+                 :class="{ 'module-details-current': isCurrentModule(card, module) }"
+               >
+                <summary>
+                  {{ module.title }}
+                  <span v-if="isCurrentModule(card, module)" class="current-module-marker">Aktuell</span>
+                </summary>
                 <p v-if="module.instructions" class="module-instructions">{{ module.instructions }}</p>
                 <ul class="section-list">
                   <li v-for="(section, i) in module.sections || []" :key="i" class="section-item">
@@ -243,6 +286,7 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import client from '@/api/client.js'
+import { currentModuleLabel, isCourseComplete, isCurrentModule } from '@/utils/currentModule.js'
 
 const route = useRoute()
 
@@ -256,6 +300,9 @@ const submitting = reactive({})
 const submitError = reactive({})
 const activities = reactive({})
 const activityLoading = reactive({})
+const activityError = reactive({})
+const learningLoading = reactive({})
+const learningError = reactive({})
 const downloading = ref('')
 
 const activeCards = computed(() => cards.value.filter((c) => c.isCurrentlyActive).length)
@@ -277,11 +324,13 @@ const getEnrollmentId = (card) => learning.value[card.courseInstanceId]?.enrollm
 const loadActivity = async (card) => {
   if (!card.courseInstanceId) return
   activityLoading[card.courseInstanceId] = true
+  activityError[card.courseInstanceId] = ''
   try {
     const { data } = await client.get(`/course-instances/${card.courseInstanceId}/activity-feed`)
     activities[card.courseInstanceId] = data.activityFeed || []
   } catch {
     activities[card.courseInstanceId] = []
+    activityError[card.courseInstanceId] = 'Kunde inte hämta meddelanden.'
   } finally {
     activityLoading[card.courseInstanceId] = false
   }
@@ -326,6 +375,9 @@ const formatDateTime = (value) => {
 }
 
 const loadLearning = async (card) => {
+  if (!card.courseInstanceId) return
+  learningLoading[card.courseInstanceId] = true
+  learningError[card.courseInstanceId] = ''
   try {
     const { data } = await client.get(`/learning/instances/${card.courseInstanceId}/modules`)
     learning.value[card.courseInstanceId] = {
@@ -334,6 +386,9 @@ const loadLearning = async (card) => {
     }
   } catch (e) {
     learning.value[card.courseInstanceId] = { submissions: {}, enrollmentId: null }
+    learningError[card.courseInstanceId] = 'Kunde inte hämta studiedokument.'
+  } finally {
+    learningLoading[card.courseInstanceId] = false
   }
 }
 
@@ -633,6 +688,64 @@ onMounted(loadCourseCards)
   background: #f9fafb;
 }
 
+.current-module {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #a7d5c4;
+  border-left: 3px solid #1d4f43;
+  border-radius: 6px;
+  background: #f0f7f4;
+}
+
+.current-module--complete {
+  border-color: #cbd5e1;
+  border-left-color: #64748b;
+  background: #f8fafc;
+}
+
+.current-module strong {
+  color: #1f2937;
+  font-size: 0.9rem;
+}
+
+.module-status {
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  background: #1d4f43;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.module-chip-current {
+  border-color: #1d4f43;
+  background: #e7f3ee;
+  box-shadow: inset 0 0 0 1px #1d4f43;
+}
+
+.chip-tag-current {
+  color: #1d4f43;
+  font-weight: 700;
+}
+
+.module-details-current > summary {
+  color: #1d4f43;
+}
+
+.current-module-marker {
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  background: #e7f3ee;
+  color: #1d4f43;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
 .chip-partial-exam {
   border-color: #fca5a5;
   background: #fef2f2;
@@ -725,7 +838,7 @@ onMounted(loadCourseCards)
 .document-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; margin-top: .85rem; padding-top: .75rem; border-top: 1px dashed #e5e7eb; }
 .document-btn { border: 1px solid #1d4f43; background: #1d4f43; color: #fff; padding: .5rem .7rem; cursor: pointer; font-size: .78rem; font-weight: 700; }
 .document-btn:disabled { opacity: .55; cursor: wait; }.document-btn-secondary { background: #fff; color: #1d4f43; }.document-hint { color: #6b7280; font-size: .75rem; }
-.activity-feed { margin-top: 1rem; padding: .85rem; border: 1px solid #dbe4df; background: #fbfcfb; }.activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.activity-heading h5 { margin: 0; color: #374151; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }.refresh-btn { border: 0; background: transparent; color: #1d4f43; cursor: pointer; font-size: .75rem; }.activity-muted { color: #6b7280; font-size: .8rem; }.activity-item { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; padding: .65rem 0; border-top: 1px solid #e5ebe7; font-size: .82rem; }.activity-item time { color: #7b8881; white-space: nowrap; font-size: .72rem; }.activity-item.staff-notice { padding: .65rem; border-left: 3px solid #1d4f43; background: #f0f7f4; }.notice-label { flex-basis: 100%; color: #1d4f43; font-size: .7rem; font-weight: 700; text-transform: uppercase; }
+.activity-feed { margin-top: 1rem; padding: .85rem; border: 1px solid #dbe4df; background: #fbfcfb; }.activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.activity-heading h5 { margin: 0; color: #374151; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }.refresh-btn { border: 0; background: transparent; color: #1d4f43; cursor: pointer; font-size: .75rem; }.activity-muted { color: #6b7280; font-size: .8rem; }.activity-error { color: #b91c1c; }.activity-item { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; padding: .65rem 0; border-top: 1px solid #e5ebe7; font-size: .82rem; }.activity-item time { color: #7b8881; white-space: nowrap; font-size: .72rem; }.activity-item.staff-notice { padding: .65rem; border-left: 3px solid #1d4f43; background: #f0f7f4; }.notice-label { flex-basis: 100%; color: #1d4f43; font-size: .7rem; font-weight: 700; text-transform: uppercase; }
 
 .assignment-block {
   margin: 0.6rem 0 0.2rem 1rem;
