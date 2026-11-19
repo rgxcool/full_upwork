@@ -95,19 +95,38 @@
             <tr>
               <th class="text-left">Namn</th>
               <th class="text-left">Typ</th>
-              <th class="text-left">Senast aktiv på kurskort</th>
+              <th class="text-left">Senast aktivitet</th>
               <th class="text-left">Åtgärd</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in participants" :key="p._id || p.studentId">
+            <tr v-for="p in participants" :key="participantIdOf(p)">
               <td>{{ p.name || p.studentName || '–' }}</td>
               <td>{{ p.role || p.type || 'student' }}</td>
-              <td>{{ formatDateTime(p.lastActiveOnCourse || p.lastActiveAt || p.courseLastActiveAt) }}</td>
               <td>
-                <v-btn size="x-small" variant="tonal" color="error" :loading="removingId === (p._id || p.studentId)" @click="removeParticipant(p)">
+                <div class="d-flex align-center flex-wrap ga-2">
+                  <span>{{ formatDateTime(p.lastActivity?.at) }}</span>
+                  <v-chip
+                    v-if="activityTypeLabel(p.lastActivity?.type)"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ activityTypeLabel(p.lastActivity?.type) }}
+                  </v-chip>
+                </div>
+              </td>
+              <td>
+                <v-btn
+                  v-if="(p.role || p.type) !== 'staff'"
+                  size="x-small"
+                  variant="tonal"
+                  color="error"
+                  :loading="removingId === participantIdOf(p)"
+                  @click="removeParticipant(p)"
+                >
                   Ta bort
                 </v-btn>
+                <span v-else class="text-caption text-grey">–</span>
               </td>
             </tr>
             <tr v-if="participants.length === 0">
@@ -213,6 +232,12 @@ const formatDateTime = (d) => {
   return date.toLocaleString('sv-SE')
 }
 
+// The participants endpoint sends the student/teacher id as `participantId`.
+const participantIdOf = (p) => p?.participantId || p?.studentId || p?._id
+
+const ACTIVITY_TYPE_LABELS = { login: 'Inloggning', submission: 'Inlämning' }
+const activityTypeLabel = (type) => ACTIVITY_TYPE_LABELS[type] || ''
+
 const loadSubmissions = async () => {
   if (!selectedInstanceId.value) return
   subLoading.value = true
@@ -234,39 +259,10 @@ const loadParticipants = async () => {
   partError.value = null
   try {
     const { data } = await client.get(`/learning/instances/${selectedInstanceId.value}/participants`)
-    let list = Array.isArray(data) ? data : data.participants || []
-
-    // Enrich with per-student "last active on course" (backend data exists on
-    // /learning/instances/:instanceId/access-last/:studentId).
-    const ids = list
-      .map((p) => p.participantId || p.studentId || p._id)
-      .filter(Boolean)
-    if (ids.length > 0) {
-      const stamps = await Promise.all(
-        ids.map(async (sid) => {
-          try {
-            const { data: d } = await client.get(
-              `/learning/instances/${selectedInstanceId.value}/access-last/${sid}`
-            )
-            const last = d.lastSubmission || d.lastLogin
-            return { sid: String(sid), last }
-          } catch {
-            return { sid: String(sid), last: null }
-          }
-        })
-      )
-      const byId = {}
-      stamps.forEach((s) => { byId[s.sid] = s.last })
-      list = list.map((p) => {
-        const sid = String(p.participantId || p.studentId || p._id)
-        return {
-          ...p,
-          lastActiveOnCourse: byId[sid] || p.lastActiveOnCourse || p.lastActiveAt || p.courseLastActiveAt,
-        }
-      })
-    }
-
-    participants.value = list
+    // `lastActivity: { type, at }` is already computed by the backend using the
+    // most recent of login/submission. Rendering it directly avoids N+1 requests
+    // and a second, divergent precedence rule in the client.
+    participants.value = Array.isArray(data) ? data : data.participants || []
   } catch (err) {
     partError.value = 'Kunde inte hämta deltagare.'
     toast.error(partError.value)
@@ -305,7 +301,7 @@ const addParticipant = async () => {
 }
 
 const removeParticipant = async (p) => {
-  const id = p._id || p.studentId
+  const id = participantIdOf(p)
   if (!id || !confirm('Ta bort deltagare från kursen?')) return
   removingId.value = id
   try {
