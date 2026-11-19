@@ -85,6 +85,34 @@ describe('Submissions.vue', () => {
         wrapper.unmount()
     })
 
+    it('can refresh submissions from the header', async () => {
+        const wrapper = await mountView()
+        await wrapper.find('button.refresh-btn').trigger('click')
+        await flushPromises()
+        expect(client.get).toHaveBeenCalledTimes(4)
+        wrapper.unmount()
+    })
+
+    it('shows a course-specific empty state after the last filtered submission is graded', async () => {
+        const wrapper = await mountView()
+        await wrapper.find('select#course-filter').setValue('inst-1')
+        await wrapper.find('select.status-select').setValue('godkänd')
+        await wrapper.find('button.save-btn').trigger('click')
+        await flushPromises()
+        expect(wrapper.text()).toContain('Inga väntande inlämningar för vald kurs.')
+        wrapper.unmount()
+    })
+
+    it('shows a retry button when submissions cannot be fetched', async () => {
+        client.get.mockRejectedValue(new Error('network'))
+        const wrapper = await mountView()
+        expect(wrapper.text()).toContain('Kunde inte hämta inlämningarna.')
+        await wrapper.findAll('button.refresh-btn')[1].trigger('click')
+        await flushPromises()
+        expect(client.get).toHaveBeenCalledTimes(2)
+        wrapper.unmount()
+    })
+
     it('saves feedback and removes the submission from the list', async () => {
         const wrapper = await mountView()
         await wrapper.find('select.status-select').setValue('godkänd')

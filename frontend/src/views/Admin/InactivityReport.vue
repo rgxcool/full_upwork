@@ -33,11 +33,17 @@
         <h4>Tröskelvärden för inaktivitet</h4>
         <div class="settings-row">
           <label>Varningsdagar:</label>
-          <input v-model.number="settings.warningDays" type="number" min="1" class="form-control settings-input" />
+          <input v-model.number="settings.warningDays" type="number" min="1" max="365" class="form-control settings-input" />
           <label>Avbrottsdagar:</label>
-          <input v-model.number="settings.withdrawDays" type="number" min="1" class="form-control settings-input" />
-          <label>Återsändnings-spärr (timmar):</label>
-          <input v-model.number="settings.resendCooldownHours" type="number" min="0" class="form-control settings-input" />
+          <input v-model.number="settings.withdrawDays" type="number" min="1" max="365" class="form-control settings-input" />
+          <label>
+            <input v-model="settings.autoWarningEnabled" type="checkbox" />
+            Auto-varning
+          </label>
+          <label>
+            <input v-model="settings.autoWithdrawEnabled" type="checkbox" />
+            Auto-avbrott
+          </label>
           <button class="btn btn-primary btn-sm" :disabled="savingSettings" @click="saveSettings">
             {{ savingSettings ? 'Sparar...' : 'Spara' }}
           </button>
@@ -237,7 +243,12 @@ const withdrawStudent = ref(null)
 const withdrawing = ref(false)
 const scanning = ref(false)
 const scanStatus = ref(null)
-const settings = ref({ warningDays: 14, withdrawDays: 5, resendCooldownHours: 24 })
+const settings = ref({
+  warningDays: 14,
+  withdrawDays: 5,
+  autoWarningEnabled: true,
+  autoWithdrawEnabled: true,
+})
 const savingSettings = ref(false)
 
 const isAdmin = computed(() => store.getters.isAdmin)
@@ -310,7 +321,7 @@ async function saveSettings() {
 async function resendWarningEmail(student) {
   sendingWarningFor.value = student.studentId
   try {
-    await client.post('/inactivity/resend-warning', { studentId: student.studentId })
+    await client.post(`/inactivity/${student.studentId}/warning-email/resend`)
     toast.success(`Varningsmail skickat till ${student.name}`)
     await loadReport()
   } catch (error) {
@@ -403,7 +414,10 @@ async function confirmWithdraw() {
 
 onMounted(() => {
   loadReport()
-  if (isAdmin.value) loadScanStatus()
+  if (isAdmin.value) {
+    loadScanStatus()
+    loadSettings()
+  }
 })
 </script>
 

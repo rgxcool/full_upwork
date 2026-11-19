@@ -102,12 +102,70 @@ describe('CourseCards.vue', () => {
         wrapper.unmount()
     })
 
+    it('shows an activity error with retry instead of an empty feed', async () => {
+        client.get.mockImplementation((url) => {
+            if (url === '/course-cards/mine') {
+                return Promise.resolve({ data: { student: { _id: 'student-1', name: 'Anna' }, cards: [sampleCard] } })
+            }
+            if (url.includes('/modules')) return Promise.resolve({ data: { submissions: {}, enrollmentId: 'enrA' } })
+            if (url.includes('/activity-feed')) return Promise.reject(new Error('offline'))
+            return Promise.resolve({ data: {} })
+        })
+        const wrapper = await mountView()
+        expect(wrapper.text()).toContain('Kunde inte hämta meddelanden.')
+        expect(wrapper.text()).toContain('Försök igen')
+        wrapper.unmount()
+    })
+
+    it('shows a learning error when document data cannot be fetched', async () => {
+        client.get.mockImplementation((url) => {
+            if (url === '/course-cards/mine') {
+                return Promise.resolve({ data: { student: { _id: 'student-1', name: 'Anna' }, cards: [sampleCard] } })
+            }
+            if (url.includes('/modules')) return Promise.reject(new Error('offline'))
+            return Promise.resolve({ data: {} })
+        })
+        const wrapper = await mountView()
+        expect(wrapper.text()).toContain('Kunde inte hämta studiedokument.')
+        wrapper.unmount()
+    })
+
     it('shows the backend error message on failure', async () => {
         client.get.mockRejectedValue({
             response: { data: { error: 'Konto saknar e-postadress' } },
         })
         const wrapper = await mountView()
         expect(wrapper.text()).toContain('Konto saknar e-postadress')
+        wrapper.unmount()
+    })
+
+    it('retries loading courses from the error state without a reload', async () => {
+        let attempts = 0
+        client.get.mockImplementation((url) => {
+            if (url === '/course-cards/mine') {
+                attempts += 1
+                if (attempts === 1) return Promise.reject(new Error('offline'))
+                return Promise.resolve({
+                    data: {
+                        student: { _id: 'student-1', name: 'Anna' },
+                        cards: [sampleCard],
+                    },
+                })
+            }
+            return Promise.resolve({ data: { submissions: {}, enrollmentId: 'enrA' } })
+        })
+        const wrapper = await mountView()
+        expect(wrapper.text()).toContain('Kunde inte hämta kurserna.')
+
+        const retry = wrapper.find('div.error-state button.refresh-btn')
+        expect(retry.exists()).toBe(true)
+        expect(retry.text()).toBe('Försök igen')
+        await retry.trigger('click')
+        await flushPromises()
+
+        expect(attempts).toBe(2)
+        expect(wrapper.text()).not.toContain('Kunde inte hämta kurserna.')
+        expect(wrapper.text()).toContain('Svenska 1')
         wrapper.unmount()
     })
 
@@ -197,6 +255,64 @@ describe('CourseCards.vue', () => {
         client.get.mockResolvedValue({ data: { ...studentData, cards: [card] } })
         const wrapper = await mountView()
         expect(wrapper.text()).toContain('Framsteg: 1/2 (50%)')
+        wrapper.unmount()
+    })
+
+    const mountCard = async (card) => {
+        client.get.mockImplementation((url) => {
+            if (url === '/course-cards/mine') {
+                return Promise.resolve({ data: { ...studentData, cards: [card] } })
+            }
+            return Promise.resolve({ data: { submissions: {}, enrollmentId: 'enrA' } })
+        })
+        return mountView()
+    }
+
+    it('shows the current module with its number and highlights the matching chip and detail', async () => {
+        const card = {
+            ...sampleCard,
+            currentModule: { moduleNumber: 3, title: 'Delprov', status: 'Pågår' },
+            currentModuleNumber: 3,
+            progress: { completed: 2, total: 4, percent: 50 },
+        }
+        const wrapper = await mountCard(card)
+
+        const block = wrapper.find('.current-module')
+        expect(block.exists()).toBe(true)
+        expect(block.text()).toContain('Aktuell modul')
+        expect(block.text()).toContain('Modul 3 · Delprov')
+        expect(block.text()).toContain('Pågår')
+        expect(wrapper.findAll('.module-chip-current')).toHaveLength(1)
+        expect(wrapper.find('.module-chip-current').text()).toContain('Aktuell')
+        expect(wrapper.find('.module-details-current summary').text()).toContain('Aktuell')
+        wrapper.unmount()
+    })
+
+    it('shows the completed fallback when every assignment is accepted', async () => {
+        const card = {
+            ...sampleCard,
+            currentModule: null,
+            currentModuleNumber: null,
+            progress: { completed: 2, total: 2, percent: 100 },
+        }
+        const wrapper = await mountCard(card)
+
+        const block = wrapper.find('.current-module')
+        expect(block.exists()).toBe(true)
+        expect(block.classes()).toContain('current-module--complete')
+        expect(block.text()).toContain('Kursen är klar')
+        expect(block.text()).toContain('Alla moduler klara')
+        expect(block.text()).not.toContain('Aktuell modul')
+        expect(wrapper.findAll('.module-chip-current')).toHaveLength(0)
+        wrapper.unmount()
+    })
+
+    it('hides the module block for cards without assignment modules', async () => {
+        const card = { ...sampleCard, currentModule: null, currentModuleNumber: null, progress: null }
+        const wrapper = await mountCard(card)
+
+        expect(wrapper.find('.current-module').exists()).toBe(false)
+        expect(wrapper.text()).not.toContain('Alla moduler klara')
         wrapper.unmount()
     })
 })

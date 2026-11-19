@@ -1,8 +1,15 @@
 <template>
   <div class="submissions-page">
     <div class="page-header">
-      <h2>Inlämningar</h2>
-      <p class="subtitle">Oklara inlämningsuppgifter från elever — lämna återkoppling.</p>
+      <div class="header-row">
+        <div>
+          <h2>Inlämningar</h2>
+          <p class="subtitle">Oklara inlämningsuppgifter från elever — lämna återkoppling.</p>
+        </div>
+        <button class="refresh-btn" :disabled="loading" @click="loadSubmissions">
+          {{ loading ? 'Laddar...' : 'Uppdatera' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="courses.length > 0" class="filter-row">
@@ -16,9 +23,12 @@
     </div>
 
     <div v-if="loading" class="state-block">Laddar inlämningar...</div>
-    <div v-else-if="error" class="state-block error-state">{{ error }}</div>
+    <div v-else-if="error" class="state-block error-state">
+      {{ error }}
+      <button class="refresh-btn" @click="loadSubmissions">Försök igen</button>
+    </div>
     <div v-else-if="filteredSubmissions.length === 0" class="state-block">
-      Inga väntande inlämningar just nu.
+      {{ selectedCourseId ? 'Inga väntande inlämningar för vald kurs.' : 'Inga väntande inlämningar just nu.' }}
     </div>
 
     <div v-else class="submissions-list">
@@ -76,7 +86,11 @@
         </div>
 
         <!-- Comment thread -->
-        <div v-if="submissionComments[submission._id]?.length > 0" class="comment-thread">
+        <div v-if="commentsLoading[submission._id]" class="comment-thread">
+          <h4 class="thread-title">Kommentarer</h4>
+          <p class="subtitle">Laddar kommentarer...</p>
+        </div>
+        <div v-else-if="submissionComments[submission._id]?.length > 0" class="comment-thread">
           <h4 class="thread-title">Kommentarer</h4>
           <SubmissionsCommentThread
             :comments="commentTree(submissionComments[submission._id])"
@@ -107,7 +121,10 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import client from '@/api/client.js'
+import { useToast } from '@/composables/useToast.js'
 import SubmissionsCommentThread from '@/components/SubmissionsCommentThread.vue'
+
+const toast = useToast()
 
 const loading = ref(false)
 const error = ref('')
@@ -120,6 +137,7 @@ const saving = reactive({})
 const submissionComments = reactive({})
 const newSubmissionComment = reactive({})
 const commentSaving = reactive({})
+const commentsLoading = reactive({})
 
 const courses = computed(() => {
   const map = new Map()
@@ -190,6 +208,7 @@ const saveFeedback = async (submission) => {
     const index = submissions.value.findIndex((submission) => submission._id === id)
     if (index !== -1) {
       submissions.value.splice(index, 1)
+      toast.success('Återkoppling sparad.')
     }
     delete feedbackStatus[id]
     delete feedbackComment[id]
@@ -238,11 +257,14 @@ const commentTree = (comments) => {
 }
 
 const loadSubmissionComments = async (submissionId) => {
+  commentsLoading[submissionId] = true
   try {
     const { data } = await client.get(`/learning/submissions/${submissionId}/comments`)
     submissionComments[submissionId] = data.comments || []
   } catch {
     submissionComments[submissionId] = []
+  } finally {
+    commentsLoading[submissionId] = false
   }
 }
 
@@ -274,6 +296,22 @@ onMounted(loadSubmissions)
 
 .page-header {
   margin-bottom: 1rem;
+}
+
+.refresh-btn {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 4px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
 }
 
 .page-header h2 {

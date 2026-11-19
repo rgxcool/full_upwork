@@ -54,6 +54,26 @@
                 <div v-else-if="card.startDate" class="text-body-2 text-grey mt-1">
                   Senast aktiv: –
                 </div>
+                <div v-if="card.currentModule || isCourseComplete(card)" class="mt-2">
+                  <div class="text-caption text-grey">
+                    {{ card.currentModule ? 'Aktuell modul' : 'Kursen är klar' }}
+                  </div>
+                  <div class="d-flex align-center flex-wrap ga-2">
+                    <span class="text-body-2 font-weight-medium">{{ currentModuleLabel(card) }}</span>
+                    <v-chip v-if="card.currentModule?.status" size="x-small">{{ card.currentModule.status }}</v-chip>
+                  </div>
+                </div>
+                <div v-if="card.progress" class="text-body-2 text-grey mt-2">
+                  Framsteg: {{ card.progress.completed }}/{{ card.progress.total }} ({{ card.progress.percent }}%)
+                </div>
+                <v-progress-linear
+                  v-if="card.progress"
+                  :model-value="card.progress.percent"
+                  color="primary"
+                  height="6"
+                  rounded
+                  class="mt-1"
+                />
               </div>
             </div>
           </v-card>
@@ -69,6 +89,7 @@
 import { ref, computed, onMounted } from 'vue'
 import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
+import { currentModuleLabel, isCourseComplete } from '@/utils/currentModule.js'
 
 const toast = useToast()
 

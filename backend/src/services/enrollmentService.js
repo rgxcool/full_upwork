@@ -209,28 +209,34 @@ export const buildCourseCards = async (studentId, { applyStudentVisibility = fal
         };
     }
 
-    // "Student's current module": the first module (by moduleNumber) that has
-    // not been accepted yet. Mirrors the persisted CourseInstance.sectionPositions
-    // map but is computed at read-time so it never goes stale.
+    // "Student's current module": the first assignment-bearing module (by
+    // moduleNumber) without an accepted submission. Uses the same module set as
+    // `progress` above so the two never disagree — modules without an assignment
+    // are not steps the student can complete. Computed at read-time so it never
+    // goes stale. Null when there is nothing left to work on.
     for (const card of cards) {
-        const modules = [...(card.modules || [])].sort(
-            (a, b) => (a.moduleNumber ?? 0) - (b.moduleNumber ?? 0)
-        );
-        if (modules.length === 0) continue;
+        const assignmentModules = [...(card.modules || [])]
+            .filter((m) => m.assignment?.title || m.assignment?.description)
+            .sort((a, b) => (a.moduleNumber ?? 0) - (b.moduleNumber ?? 0));
+        if (assignmentModules.length === 0) {
+            card.currentModule = null;
+            card.currentModuleNumber = null;
+            continue;
+        }
         const accepted = new Set(
             (submissionsByEnrollment.get(String(card.enrollmentId)) || [])
                 .filter((s) => s.feedback?.status === "godkänd")
                 .map((s) => s.moduleNumber)
         );
-        const current =
-            modules.find((m) => !accepted.has(m.moduleNumber)) ||
-            modules[modules.length - 1];
-        card.currentModule = {
-            moduleNumber: current.moduleNumber,
-            title: current.title || `Modul ${current.moduleNumber}`,
-            status: accepted.size === modules.length ? "Slutförd" : "Pågår",
-        };
-        card.currentModuleNumber = current.moduleNumber;
+        const current = assignmentModules.find((m) => !accepted.has(m.moduleNumber));
+        card.currentModule = current
+            ? {
+                moduleNumber: current.moduleNumber,
+                title: current.title || `Modul ${current.moduleNumber}`,
+                status: "Pågår",
+              }
+            : null;
+        card.currentModuleNumber = current?.moduleNumber ?? null;
     }
 
     // Attach lastAccess: most recent of lastLoginAt or last submission per student

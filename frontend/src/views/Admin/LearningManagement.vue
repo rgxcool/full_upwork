@@ -18,10 +18,20 @@
             label="Kursinstans"
             item-title="title"
             item-value="value"
+            :loading="instancesLoading"
+            :disabled="instancesLoading"
             clearable
             @update:model-value="loadAll"
           />
+          <v-alert v-if="instancesError" type="error" class="my-3">{{ instancesError }}</v-alert>
         </v-card-text>
+      </v-card>
+
+      <!-- No instance selected -->
+      <v-card v-if="!selectedInstanceId" class="pa-5 mb-5">
+        <div class="text-center text-grey py-8">
+          Välj en kursinstans ovan för att se inlämningar, deltagare och rapport.
+        </div>
       </v-card>
 
       <!-- Submissions -->
@@ -131,6 +141,9 @@
 
         <v-progress-linear v-if="reportLoading" indeterminate color="primary" class="my-4" />
         <v-alert v-else-if="reportError" type="error" class="my-3">{{ reportError }}</v-alert>
+        <v-alert v-else-if="!report" type="info" variant="tonal" class="my-3">
+          Ingen rapport tillgänglig för den här kursinstansen.
+        </v-alert>
 
         <v-card-text v-else-if="report" class="pa-0 mt-3">
           <v-row dense>
@@ -166,6 +179,8 @@ const toast = useToast()
 
 const instances = ref([])
 const selectedInstanceId = ref(null)
+const instancesLoading = ref(false)
+const instancesError = ref('')
 
 const submissions = ref([])
 const subLoading = ref(false)
@@ -191,7 +206,12 @@ const instanceOptions = computed(() =>
   }))
 )
 
-const formatDateTime = (d) => d ? new Date(d).toLocaleString('sv-SE') : '–'
+const formatDateTime = (d) => {
+  if (!d) return 'Aldrig'
+  const date = new Date(d)
+  if (Number.isNaN(date.getTime())) return 'Aldrig'
+  return date.toLocaleString('sv-SE')
+}
 
 const loadSubmissions = async () => {
   if (!selectedInstanceId.value) return
@@ -256,6 +276,9 @@ const loadParticipants = async () => {
 }
 
 const loadAll = () => {
+  subError.value = null
+  partError.value = null
+  reportError.value = null
   if (!selectedInstanceId.value) { submissions.value = []; participants.value = []; report.value = null; return }
   loadSubmissions()
   loadParticipants()
@@ -312,11 +335,16 @@ const loadReport = async () => {
 }
 
 onMounted(async () => {
+  instancesLoading.value = true
+  instancesError.value = ''
   try {
     const { data } = await client.get('/course-instances')
     instances.value = Array.isArray(data) ? data : []
   } catch {
-    toast.error('Kunde inte hämta kursinstanser.')
+    instancesError.value = 'Kunde inte hämta kursinstanser.'
+    toast.error(instancesError.value)
+  } finally {
+    instancesLoading.value = false
   }
 })
 </script>
