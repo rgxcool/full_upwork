@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
     buildDefaultModules,
+    buildSyntheticAvsnitt,
     cloneModules,
+    ensureAvsnitt,
+    ensureModuleAvsnitt,
+    SYNTHETIC_AVSNITT_TITLE,
 } from "../../src/models/courseModuleSchema.js";
 
 describe("courseModuleSchema helpers", () => {
@@ -107,5 +111,133 @@ describe("courseModuleSchema helpers", () => {
         const cloned = cloneModules(original);
 
         expect(cloned[0].assignment).toBeUndefined();
+    });
+});
+
+describe("Avsnitt backfill helpers", () => {
+    it("creates one synthetic Avsnitt with a deterministic id", () => {
+        const avsnitt = buildSyntheticAvsnitt({
+            moduleNumber: 3,
+            title: "Delprov",
+        });
+
+        expect(avsnitt).toEqual({
+            avsnittId: "m3-a1",
+            title: SYNTHETIC_AVSNITT_TITLE,
+            order: 1,
+            contentItems: [],
+        });
+        expect(SYNTHETIC_AVSNITT_TITLE).toBe("Avsnitt 1");
+    });
+
+    it("keeps the legacy assignment field and copies it into an uppgift item", () => {
+        const module = {
+            moduleNumber: 2,
+            title: "Skrivande",
+            assignment: { title: "Inlämning", description: "Skriv en text." },
+        };
+
+        const migrated = ensureModuleAvsnitt(module);
+
+        expect(migrated.assignment).toEqual({
+            title: "Inlämning",
+            description: "Skriv en text.",
+        });
+        expect(migrated.avsnitt).toEqual([
+            {
+                avsnittId: "m2-a1",
+                title: "Avsnitt 1",
+                order: 1,
+                contentItems: [
+                    {
+                        contentId: "m2-a1-c1",
+                        type: "uppgift",
+                        title: "Inlämning",
+                        order: 1,
+                        uppgift: {
+                            title: "Inlämning",
+                            description: "Skriv en text.",
+                        },
+                    },
+                ],
+            },
+        ]);
+        // Input is not mutated.
+        expect(module.avsnitt).toBeUndefined();
+    });
+
+    it("leaves the Avsnitt empty when the module has no assignment", () => {
+        const migrated = ensureModuleAvsnitt({
+            moduleNumber: 4,
+            title: "Utan uppgift",
+        });
+
+        expect(migrated.avsnitt).toHaveLength(1);
+        expect(migrated.avsnitt[0].contentItems).toEqual([]);
+    });
+
+    it("does not invent items from the default empty assignment placeholder", () => {
+        const migrated = ensureModuleAvsnitt({
+            moduleNumber: 1,
+            assignment: { title: "", description: "" },
+        });
+
+        expect(migrated.avsnitt[0].contentItems).toEqual([]);
+    });
+
+    it("treats existing non-empty Avsnitt as already migrated", () => {
+        const existing = [
+            {
+                avsnittId: "custom",
+                title: "Egna avsnittet",
+                order: 7,
+                contentItems: [
+                    { contentId: "lektion-1", type: "lektion", title: "Film", order: 1 },
+                ],
+            },
+        ];
+        const module = {
+            moduleNumber: 1,
+            avsnitt: existing,
+            assignment: { title: "Inlämning", description: "" },
+        };
+
+        const migrated = ensureModuleAvsnitt(module);
+
+        expect(migrated).toBe(module);
+        expect(migrated.avsnitt).toEqual(existing);
+        expect(migrated.avsnitt).toHaveLength(1);
+    });
+
+    it("backfills an empty avsnitt array (the Mongoose default on legacy docs)", () => {
+        const module = { moduleNumber: 5, avsnitt: [] };
+
+        const migrated = ensureModuleAvsnitt(module);
+
+        expect(migrated).not.toBe(module);
+        expect(migrated.avsnitt).toEqual([
+            expect.objectContaining({ avsnittId: "m5-a1", title: "Avsnitt 1" }),
+        ]);
+    });
+
+    it("ensures Avsnitt across a modules array without changing untouched modules", () => {
+        const migratedModule = { moduleNumber: 1, title: "Modul 1" };
+        const alreadyMigrated = {
+            moduleNumber: 2,
+            avsnitt: [{ avsnittId: "keep", title: "Befintligt", order: 1, contentItems: [] }],
+        };
+        const modules = [migratedModule, alreadyMigrated];
+
+        const updated = ensureAvsnitt(modules);
+
+        expect(updated).not.toBe(modules);
+        expect(updated[0].avsnitt[0].avsnittId).toBe("m1-a1");
+        expect(updated[1]).toBe(alreadyMigrated);
+        expect(ensureAvsnitt(updated)).toBe(updated);
+    });
+
+    it("handles empty module lists", () => {
+        expect(ensureAvsnitt()).toEqual([]);
+        expect(ensureAvsnitt([])).toEqual([]);
     });
 });
