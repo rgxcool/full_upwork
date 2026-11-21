@@ -4,29 +4,20 @@
       <div>
         <h1>Kurskortsbyggare</h1>
         <p class="subtitle">
-          Bygg moduler och delmoment med färgkodade textblock, inbäddad video och filer – eller
-          spara till mall-banken.
+          Bygg moduler och delmoment med färgkodade textblock, inbäddad video och filer – spara och ladda fritt i mall-banken.
         </p>
       </div>
       <div class="header-actions">
         <button type="button" class="btn btn-secondary" @click="togglePreview">
-          {{ previewMode ? 'Tillbaka till redigering' : 'Förhandsgranska kurskort' }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="isSaving || isSavingTemplate || isUploading"
-          @click="saveAsTemplate"
-        >
-          {{ isSavingTemplate ? 'Sparar mall...' : 'Spara som mall' }}
+          {{ previewMode ? 'Tillbaka till redigering' : 'Förhandsgranska' }}
         </button>
         <button
           type="button"
           class="btn btn-primary"
-          :disabled="isSaving || isSavingTemplate || isUploading"
-          @click="saveCourseCard"
+          :disabled="isSavingTemplate || isUploading"
+          @click="saveAsTemplate"
         >
-          {{ isSaving ? 'Sparar...' : 'Spara kurskort' }}
+          {{ isSavingTemplate ? 'Sparar mall...' : 'Spara som mall' }}
         </button>
       </div>
     </header>
@@ -35,36 +26,27 @@
       {{ statusMessage }}
     </div>
 
-    <!-- Grunduppgifter, mall-bank & val av befintlig kursinstans -->
+    <!-- Grunduppgifter & Mall-bank -->
     <section v-if="!previewMode" class="meta-card">
       <h2>Grunduppgifter &amp; Mall-bank</h2>
       <div class="meta-grid">
         <label class="field">
-          <span>Kurskortets / Mallens titel</span>
+          <span>Mallens titel</span>
           <input
             v-model="cardData.title"
             type="text"
-            placeholder="T.ex. Svenska 1 – Kurskort VT27"
+            placeholder="T.ex. Svenska 1 – Grundstruktur"
           />
         </label>
         <label class="field">
           <span>Kurskod / Benämning</span>
           <input v-model="cardData.courseCode" type="text" placeholder="T.ex. SVESVE01" />
         </label>
-        <label class="field">
-          <span>Startdatum</span>
-          <input v-model="cardData.startDate" type="date" />
-        </label>
-        <label class="field">
-          <span>Slutdatum</span>
-          <input v-model="cardData.endDate" type="date" />
-        </label>
       </div>
 
-      <!-- Hämta struktur & innehåll från mall-banken utan kursinstans -->
       <div class="instance-bar">
         <label class="field field-grow">
-          <span>Ladda från mall-banken (utan kursinstans)</span>
+          <span>Välj mall från mall-banken</span>
           <select
             v-model="selectedTemplateId"
             class="instance-select"
@@ -75,7 +57,7 @@
               {{
                 isLoadingTemplates
                   ? 'Laddar mallar...'
-                  : '-- Välj en sparad mall från mall-banken --'
+                  : '-- Välj en sparad mall i menyn --'
               }}
             </option>
             <option
@@ -95,71 +77,7 @@
             :disabled="isLoadingTemplates"
             @click="fetchCourseTemplates"
           >
-            Uppdatera mallar
-          </button>
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="!selectedTemplateId || isLoadingTemplate"
-            @click="loadTemplateById(selectedTemplateId)"
-          >
-            {{ isLoadingTemplate ? 'Hämtar mall...' : 'Ladda mall' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Koppling till kursinstans (valfritt om du bara sparar till mall-banken) -->
-      <div class="instance-bar">
-        <label class="field field-grow">
-          <span>Välj befintlig kursinstans (vid sparning av kurskort)</span>
-          <select
-            v-model="activeInstanceId"
-            class="instance-select"
-            :disabled="isLoadingInstances"
-            @change="onInstanceSelectionChange"
-          >
-            <option value="">
-              {{
-                isLoadingInstances
-                  ? 'Laddar kursinstanser...'
-                  : '-- Ingen kursinstans vald (valfritt för mall) --'
-              }}
-            </option>
-            <option
-              v-for="inst in courseInstances"
-              :key="inst._id || inst.id"
-              :value="inst._id || inst.id"
-            >
-              {{ formatInstanceLabel(inst) }}
-            </option>
-          </select>
-        </label>
-
-        <label class="field field-grow">
-          <span>Kursinstans-ID (ObjectId)</span>
-          <input
-            v-model="activeInstanceId"
-            type="text"
-            placeholder="Eller klistra in instanceId manuellt"
-          />
-        </label>
-
-        <div class="instance-buttons">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="isLoadingInstances"
-            @click="fetchCourseInstances"
-          >
             Uppdatera lista
-          </button>
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="!activeInstanceId || isLoadingInstance"
-            @click="loadInstanceContent(activeInstanceId)"
-          >
-            {{ isLoadingInstance ? 'Hämtar...' : 'Ladda innehåll' }}
           </button>
         </div>
       </div>
@@ -167,7 +85,9 @@
 
     <!-- Moduler & Sektioner -->
     <div v-if="!previewMode" class="modules-toolbar">
-      <button type="button" class="btn btn-secondary" @click="addModule">+ Lägg till modul</button>
+      <button type="button" class="btn btn-secondary" @click="addModule">
+        + Lägg till modul
+      </button>
     </div>
 
     <section class="modules-list">
@@ -348,7 +268,6 @@
                       {{ getFileIcon(block) }}
                     </span>
 
-                    <!-- Bild eller PDF öppnas i ny flik/sida -->
                     <a
                       v-if="opensInNewTab(block)"
                       :href="resolveMediaUrl(block.url)"
@@ -359,7 +278,6 @@
                       {{ block.title || block.fileName }}
                     </a>
 
-                    <!-- Övriga filer laddas ner vid klick -->
                     <a
                       v-else
                       :href="resolveMediaUrl(block.downloadUrl || block.url)"
@@ -398,366 +316,379 @@
 </template>
 
 <script setup>
-  import { reactive, ref, onMounted, onBeforeUnmount } from 'vue'
-  import { useRoute } from 'vue-router'
-  import api from '@/api/client'
+import { reactive, ref, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
+import api from '@/api/client'
 
-  const props = defineProps({
-    instanceId: {
-      type: String,
-      default: '',
-    },
-  })
+const emit = defineEmits(['template-saved'])
+const route = useRoute()
 
-  const emit = defineEmits(['saved', 'save', 'template-saved'])
+const previewMode = ref(false)
+const inputRefs = ref({})
+const objectUrls = new Set()
 
-  const route = useRoute()
+const selectedTemplateId = ref(String(route.query?.templateId || ''))
+const courseTemplates = ref([])
+const isLoadingTemplates = ref(false)
+const isLoadingTemplate = ref(false)
 
-  const previewMode = ref(false)
-  const inputRefs = ref({})
-  const objectUrls = new Set()
+const isSavingTemplate = ref(false)
+const isUploading = ref(false)
+const statusMessage = ref('')
+const statusType = ref('info')
 
-  const activeInstanceId = ref(props.instanceId || '')
-  const courseInstances = ref([])
-  const isLoadingInstances = ref(false)
-  const isLoadingInstance = ref(false)
-
-  const selectedTemplateId = ref(String(route.query?.templateId || ''))
-  const courseTemplates = ref([])
-  const isLoadingTemplates = ref(false)
-  const isLoadingTemplate = ref(false)
-
-  const isSaving = ref(false)
-  const isSavingTemplate = ref(false)
-  const isUploading = ref(false)
-  const statusMessage = ref('')
-  const statusType = ref('info')
-
-  const toSafeText = (val) => {
-    if (val === null || val === undefined) return ''
-    if (typeof val === 'string' || typeof val === 'number') return String(val)
-    if (typeof val === 'object') {
-      return String(val.title ?? val.name ?? val.label ?? '')
-    }
-    return ''
+const toSafeText = (val) => {
+  if (val === null || val === undefined) return ''
+  if (typeof val === 'string' || typeof val === 'number') return String(val)
+  if (typeof val === 'object') {
+    return String(val.title ?? val.name ?? val.label ?? '')
   }
+  return ''
+}
 
-  function setStatus(msg, type = 'info') {
-    statusMessage.value = msg
-    statusType.value = type
-  }
+function setStatus(msg, type = 'info') {
+  statusMessage.value = msg
+  statusType.value = type
+}
 
-  function formatInstanceLabel(inst) {
-    const id = inst._id || inst.id || ''
-    const name =
-      toSafeText(inst.title) ||
-      toSafeText(inst.name) ||
-      toSafeText(inst.courseTitle) ||
-      toSafeText(inst.courseName) ||
-      toSafeText(inst.courseCode) ||
-      'Namnlös instans'
-    const period = [inst.startDate, inst.endDate]
-      .filter(Boolean)
-      .map((d) => String(d).slice(0, 10))
-      .join(' -> ')
-    return period ? `${name} (${period}) [${id}]` : `${name} [${id}]`
-  }
+function formatTemplateLabel(tpl) {
+  const name = toSafeText(
+    tpl.templateName || tpl.title || tpl.name || tpl.courseCode || 'Namnlös mall'
+  )
+  const modCount = Array.isArray(tpl.modules) ? tpl.modules.length : 0
+  return `${name} (${modCount} moduler)`
+}
 
-  function formatTemplateLabel(tpl) {
-    const id = tpl._id || tpl.id || ''
-    const name = toSafeText(
-      tpl.templateName || tpl.title || tpl.name || tpl.courseCode || 'Namnlös mall'
+function extractTemplatesList(data) {
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.templates)) return data.templates
+  if (Array.isArray(data?.courseTemplates)) return data.courseTemplates
+  if (Array.isArray(data?.data)) return data.data
+  return []
+}
+
+async function fetchCourseTemplates() {
+  isLoadingTemplates.value = true
+  try {
+    const { data } = await api.get('/course-templates')
+    courseTemplates.value = extractTemplatesList(data)
+  } catch (err) {
+    setStatus(
+      `Kunde inte hämta mallar från mall-banken (${err?.response?.data?.message || err.message}).`,
+      'warning'
     )
-    const modCount = Array.isArray(tpl.modules) ? tpl.modules.length : 0
-    return `${name} (${modCount} moduler) [${id}]`
+  } finally {
+    isLoadingTemplates.value = false
   }
+}
 
-  function extractInstancesList(data) {
-    if (Array.isArray(data)) return data
-    if (Array.isArray(data?.courseInstances)) return data.courseInstances
-    if (Array.isArray(data?.instances)) return data.instances
-    if (Array.isArray(data?.data)) return data.data
-    return []
+function onTemplateSelectionChange() {
+  if (selectedTemplateId.value) {
+    loadTemplateById(selectedTemplateId.value)
   }
+}
 
-  function extractTemplatesList(data) {
-    if (Array.isArray(data)) return data
-    if (Array.isArray(data?.templates)) return data.templates
-    if (Array.isArray(data?.courseTemplates)) return data.courseTemplates
-    if (Array.isArray(data?.data)) return data.data
-    return []
+function formatUploadError(err, fallbackLabel) {
+  const status = err?.response?.status
+  const serverMsg = err?.response?.data?.message
+  if (status === 401) {
+    return 'Du behöver vara inloggad för att ladda upp kurskortsmaterial.'
   }
-
-  async function fetchCourseInstances() {
-    isLoadingInstances.value = true
-    try {
-      const { data } = await api.get('/course-instances')
-      courseInstances.value = extractInstancesList(data)
-    } catch (err) {
-      setStatus(
-        `Kunde inte hämta kursinstanser (${err?.response?.data?.message || err.message}). Du kan fortfarande spara som mall utan kursinstans.`,
-        'warning'
-      )
-    } finally {
-      isLoadingInstances.value = false
-    }
+  if (status === 403) {
+    return (
+      serverMsg ||
+      'Du saknar behörighet (lärare, admin eller systemadmin) för att ladda upp kurskortsmaterial.'
+    )
   }
+  return serverMsg || `Kunde inte ladda upp "${fallbackLabel}" (${err.message}).`
+}
 
-  async function fetchCourseTemplates() {
-    isLoadingTemplates.value = true
-    try {
-      const { data } = await api.get('/course-templates')
-      courseTemplates.value = extractTemplatesList(data)
-    } catch (err) {
-      setStatus(
-        `Kunde inte hämta mallar från mall-banken (${err?.response?.data?.message || err.message}).`,
-        'warning'
-      )
-    } finally {
-      isLoadingTemplates.value = false
-    }
-  }
-
-  function onInstanceSelectionChange() {
-    if (activeInstanceId.value) {
-      loadInstanceContent(activeInstanceId.value)
-    }
-  }
-
-  function onTemplateSelectionChange() {
-    if (selectedTemplateId.value) {
-      loadTemplateById(selectedTemplateId.value)
-    }
-  }
-
-  function formatUploadError(err, fallbackLabel) {
-    const status = err?.response?.status
-    const serverMsg = err?.response?.data?.message
-    if (status === 401) {
-      return 'Du behöver vara inloggad för att ladda upp kurskortsmaterial.'
-    }
-    if (status === 403) {
-      return (
-        serverMsg ||
-        'Du saknar behörighet (lärare, admin eller systemadmin) för att ladda upp kurskortsmaterial.'
-      )
-    }
-    return serverMsg || `Kunde inte ladda upp "${fallbackLabel}" (${err.message}).`
-  }
-
-  function createDefaultModules() {
-    return Array.from({ length: 5 }, (_, idx) => {
-      const moduleNumber = idx + 1
-      return {
-        id: `mod-${moduleNumber}-${crypto.randomUUID?.() || idx}`,
-        moduleNumber,
-        title: `Modul ${moduleNumber}`,
-        isPartialExam: moduleNumber === 3,
-        isCaseStudy: moduleNumber === 5,
-        sections: [
-          {
-            id: `sec-${moduleNumber}-1-${crypto.randomUUID?.() || 'a'}`,
-            title: `Delmoment ${moduleNumber}.1`,
-            blocks: [],
-          },
-        ],
-      }
-    })
-  }
-
-  function normalizeLoadedModules(rawModules = []) {
-    return (Array.isArray(rawModules) ? rawModules : []).map((m, idx) => {
-      const modNum = Number(m?.moduleNumber ?? idx + 1)
-      const sections = Array.isArray(m?.sections) ? m.sections : []
-
-      return {
-        ...m,
-        id: m?.id || `mod-${modNum}-${idx}-${crypto.randomUUID?.() || idx}`,
-        moduleNumber: modNum,
-        title: toSafeText(m?.title) || `Modul ${modNum}`,
-        isPartialExam: Boolean(m?.isPartialExam),
-        isCaseStudy: Boolean(m?.isCaseStudy),
-        sections: sections.map((sec, sIdx) => ({
-          ...sec,
-          id: sec?.id || `sec-${modNum}-${sIdx + 1}-${sIdx}-${crypto.randomUUID?.() || sIdx}`,
-          title: toSafeText(sec?.title) || `Delmoment ${modNum}.${sIdx + 1}`,
-          blocks: Array.isArray(sec?.blocks) ? sec.blocks : [],
-        })),
-      }
-    })
-  }
-
-  const cardData = reactive({
-    title: '',
-    courseCode: '',
-    startDate: '',
-    endDate: '',
-    modules: createDefaultModules(),
-  })
-
-  function addModule() {
-    const nextNumber =
-      (cardData.modules || []).reduce((max, m, idx) => {
-        const num = Number(m?.moduleNumber ?? idx + 1)
-        return Number.isFinite(num) && num > max ? num : max
-      }, 0) + 1
-
-    cardData.modules.push({
-      id: `mod-${nextNumber}-${crypto.randomUUID?.() || Date.now()}`,
-      moduleNumber: nextNumber,
-      title: `Modul ${nextNumber}`,
-      isPartialExam: nextNumber === 3,
-      isCaseStudy: nextNumber === 5,
+function createDefaultModules() {
+  return Array.from({ length: 5 }, (_, idx) => {
+    const moduleNumber = idx + 1
+    return {
+      id: `mod-${moduleNumber}-${crypto.randomUUID?.() || idx}`,
+      moduleNumber,
+      title: `Modul ${moduleNumber}`,
+      isPartialExam: moduleNumber === 3,
+      isCaseStudy: moduleNumber === 5,
       sections: [
         {
-          id: `sec-${nextNumber}-1-${crypto.randomUUID?.() || 'a'}`,
-          title: `Delmoment ${nextNumber}.1`,
+          id: `sec-${moduleNumber}-1-${crypto.randomUUID?.() || 'a'}`,
+          title: `Delmoment ${moduleNumber}.1`,
           blocks: [],
         },
       ],
-    })
-  }
+    }
+  })
+}
 
-  function removeModule(mIdx) {
-    if (!Array.isArray(cardData.modules) || cardData.modules.length <= 1) return
-    const [removed] = cardData.modules.splice(mIdx, 1)
+function normalizeLoadedModules(rawModules = []) {
+  return (Array.isArray(rawModules) ? rawModules : []).map((m, idx) => {
+    const modNum = Number(m?.moduleNumber ?? idx + 1)
+    const sections = Array.isArray(m?.sections) ? m.sections : []
 
-    for (const sec of removed?.sections || []) {
-      for (const blk of sec?.blocks || []) {
-        if (blk?.url && objectUrls.has(blk.url)) {
-          URL.revokeObjectURL(blk.url)
-          objectUrls.delete(blk.url)
-        }
+    return {
+      ...m,
+      id: m?.id || `mod-${modNum}-${idx}-${crypto.randomUUID?.() || idx}`,
+      moduleNumber: modNum,
+      title: toSafeText(m?.title) || `Modul ${modNum}`,
+      isPartialExam: Boolean(m?.isPartialExam),
+      isCaseStudy: Boolean(m?.isCaseStudy),
+      sections: sections.map((sec, sIdx) => ({
+        ...sec,
+        id: sec?.id || `sec-${modNum}-${sIdx + 1}-${sIdx}-${crypto.randomUUID?.() || sIdx}`,
+        title: toSafeText(sec?.title) || `Delmoment ${modNum}.${sIdx + 1}`,
+        blocks: Array.isArray(sec?.blocks) ? sec.blocks : [],
+      })),
+    }
+  })
+}
+
+const cardData = reactive({
+  title: '',
+  courseCode: '',
+  modules: createDefaultModules(),
+})
+
+function addModule() {
+  const nextNumber =
+    (cardData.modules || []).reduce((max, m, idx) => {
+      const num = Number(m?.moduleNumber ?? idx + 1)
+      return Number.isFinite(num) && num > max ? num : max
+    }, 0) + 1
+
+  cardData.modules.push({
+    id: `mod-${nextNumber}-${crypto.randomUUID?.() || Date.now()}`,
+    moduleNumber: nextNumber,
+    title: `Modul ${nextNumber}`,
+    isPartialExam: nextNumber === 3,
+    isCaseStudy: nextNumber === 5,
+    sections: [
+      {
+        id: `sec-${nextNumber}-1-${crypto.randomUUID?.() || 'a'}`,
+        title: `Delmoment ${nextNumber}.1`,
+        blocks: [],
+      },
+    ],
+  })
+}
+
+function removeModule(mIdx) {
+  if (!Array.isArray(cardData.modules) || cardData.modules.length <= 1) return
+  const [removed] = cardData.modules.splice(mIdx, 1)
+
+  for (const sec of removed?.sections || []) {
+    for (const blk of sec?.blocks || []) {
+      if (blk?.url && objectUrls.has(blk.url)) {
+        URL.revokeObjectURL(blk.url)
+        objectUrls.delete(blk.url)
       }
     }
-
-    cardData.modules.forEach((mod, idx) => {
-      mod.moduleNumber = idx + 1
-    })
   }
 
-  function resolveMediaUrl(url) {
-    if (!url) return ''
-    if (url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) {
-      return url
-    }
-    const base = (api?.defaults?.baseURL || '').replace(/\/+$/, '')
-    if (url.startsWith('/api/') && base.endsWith('/api')) {
-      return `${base.slice(0, -4)}${url}`
-    }
-    return `${base}${url.startsWith('/') ? '' : '/'}${url}`
-  }
+  cardData.modules.forEach((mod, idx) => {
+    mod.moduleNumber = idx + 1
+  })
+}
 
-  function setInputRef(el, key) {
-    if (el) {
-      inputRefs.value[key] = el
-    }
-  }
-
-  function togglePreview() {
-    previewMode.value = !previewMode.value
-  }
-
-  function addSection(mIdx) {
-    const mod = cardData.modules[mIdx]
-    if (!Array.isArray(mod.sections)) mod.sections = []
-    const nextNum = mod.sections.length + 1
-    mod.sections.push({
-      id: `sec-${mod.moduleNumber}-${nextNum}-${crypto.randomUUID?.() || nextNum}`,
-      title: `Delmoment ${mod.moduleNumber}.${nextNum}`,
-      blocks: [],
-    })
-  }
-
-  function removeSection(mIdx, sIdx) {
-    const mod = cardData.modules?.[mIdx]
-    if (!mod || !Array.isArray(mod.sections)) return
-    if (mod.sections.length <= 1) {
-      setStatus('En modul måste ha minst en sektion.', 'warning')
-      return
-    }
-    mod.sections.splice(sIdx, 1)
-  }
-
-  function addTextBlock(mIdx, sIdx) {
-    const sec = cardData.modules[mIdx].sections[sIdx]
-    if (!Array.isArray(sec.blocks)) sec.blocks = []
-    sec.blocks.push({
-      id: `blk-${crypto.randomUUID?.() || Date.now()}-${Math.random()}`,
-      type: 'text',
-      heading: '',
-      body: '',
-      colorCode: 'default',
-    })
-  }
-
-  function removeBlock(mIdx, sIdx, bIdx) {
-    const blocks = cardData.modules[mIdx].sections[sIdx].blocks
-    const [removed] = blocks.splice(bIdx, 1)
-    if (removed?.url && objectUrls.has(removed.url)) {
-      URL.revokeObjectURL(removed.url)
-      objectUrls.delete(removed.url)
-    }
-  }
-
-  function triggerVideoPicker(mIdx, sIdx) {
-    inputRefs.value[`video-${mIdx}-${sIdx}`]?.click()
-  }
-
-  function triggerFilePicker(mIdx, sIdx) {
-    inputRefs.value[`file-${mIdx}-${sIdx}`]?.click()
-  }
-
-  function registerObjectUrl(file) {
-    const url = URL.createObjectURL(file)
-    objectUrls.add(url)
+function resolveMediaUrl(url) {
+  if (!url) return ''
+  if (url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) {
     return url
   }
-
-  async function uploadToBackend(file) {
-    const formData = new FormData()
-    formData.append('file', file)
-    if (activeInstanceId.value) {
-      formData.append('courseInstanceId', activeInstanceId.value)
-    }
-
-    const { data } = await api.post('/documents/course-material', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-    return data
+  const base = (api?.defaults?.baseURL || '').replace(/\/+$/, '')
+  if (url.startsWith('/api/') && base.endsWith('/api')) {
+    return `${base.slice(0, -4)}${url}`
   }
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`
+}
 
-  async function onVideoSelected(event, mIdx, sIdx) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
+function setInputRef(el, key) {
+  if (el) {
+    inputRefs.value[key] = el
+  }
+}
 
-    const sec = cardData.modules[mIdx].sections[sIdx]
-    if (!Array.isArray(sec.blocks)) sec.blocks = []
+function togglePreview() {
+  previewMode.value = !previewMode.value
+}
 
+function addSection(mIdx) {
+  const mod = cardData.modules[mIdx]
+  if (!Array.isArray(mod.sections)) mod.sections = []
+  const nextNum = mod.sections.length + 1
+  mod.sections.push({
+    id: `sec-${mod.moduleNumber}-${nextNum}-${crypto.randomUUID?.() || nextNum}`,
+    title: `Delmoment ${mod.moduleNumber}.${nextNum}`,
+    blocks: [],
+  })
+}
+
+function removeSection(mIdx, sIdx) {
+  const mod = cardData.modules?.[mIdx]
+  if (!mod || !Array.isArray(mod.sections)) return
+  if (mod.sections.length <= 1) {
+    setStatus('En modul måste ha minst en sektion.', 'warning')
+    return
+  }
+  mod.sections.splice(sIdx, 1)
+}
+
+function addTextBlock(mIdx, sIdx) {
+  const sec = cardData.modules[mIdx].sections[sIdx]
+  if (!Array.isArray(sec.blocks)) sec.blocks = []
+  sec.blocks.push({
+    id: `blk-${crypto.randomUUID?.() || Date.now()}-${Math.random()}`,
+    type: 'text',
+    heading: '',
+    body: '',
+    colorCode: 'default',
+  })
+}
+
+function removeBlock(mIdx, sIdx, bIdx) {
+  const blocks = cardData.modules[mIdx].sections[sIdx].blocks
+  const [removed] = blocks.splice(bIdx, 1)
+  if (removed?.url && objectUrls.has(removed.url)) {
+    URL.revokeObjectURL(removed.url)
+    objectUrls.delete(removed.url)
+  }
+}
+
+function triggerVideoPicker(mIdx, sIdx) {
+  inputRefs.value[`video-${mIdx}-${sIdx}`]?.click()
+}
+
+function triggerFilePicker(mIdx, sIdx) {
+  inputRefs.value[`file-${mIdx}-${sIdx}`]?.click()
+}
+
+function registerObjectUrl(file) {
+  const url = URL.createObjectURL(file)
+  objectUrls.add(url)
+  return url
+}
+
+async function uploadToBackend(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const { data } = await api.post('/documents/course-material', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
+async function onVideoSelected(event, mIdx, sIdx) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+
+  const sec = cardData.modules[mIdx].sections[sIdx]
+  if (!Array.isArray(sec.blocks)) sec.blocks = []
+
+  const fallbackUrl = registerObjectUrl(file)
+  const block = reactive({
+    id: `vid-${crypto.randomUUID?.() || Date.now()}`,
+    type: 'video',
+    title: file.name.replace(/\.[^/.]+$/, ''),
+    fileName: file.name,
+    mimeType: file.type || 'video/mp4',
+    size: file.size,
+    url: fallbackUrl,
+    fileId: null,
+  })
+
+  sec.blocks.push(block)
+  isUploading.value = true
+
+  try {
+    const uploaded = await uploadToBackend(file)
+    block.url = uploaded.url
+    block.fileId = uploaded.fileId
+    block.mimeType = uploaded.mimeType || block.mimeType
+    URL.revokeObjectURL(fallbackUrl)
+    objectUrls.delete(fallbackUrl)
+    setStatus(`Videon "${file.name}" laddades upp.`, 'success')
+  } catch (err) {
+    const status = err?.response?.status
+    const msg = formatUploadError(err, file.name)
+    if (status === 401 || status === 403) {
+      setStatus(`${msg} Visas tillfälligt lokalt i förhandsgranskningen.`, 'error')
+    } else {
+      setStatus(`${msg} Visas lokalt för förhandsgranskning.`, 'warning')
+    }
+  } finally {
+    isUploading.value = false
+  }
+}
+
+function isImageOrPdf(item) {
+  if (typeof item.openInNewTab === 'boolean') return item.openInNewTab
+  const mime = (item.mimeType || '').toLowerCase()
+  const name = (item.fileName || item.title || '').toLowerCase()
+  return (
+    mime.startsWith('image/') ||
+    mime === 'application/pdf' ||
+    /\.(png|jpe?g|gif|webp|bmp|tif|tiff|heic|pdf)$/i.test(name)
+  )
+}
+
+function opensInNewTab(item) {
+  return isImageOrPdf(item)
+}
+
+function getFileIcon(item) {
+  const mime = (item.mimeType || '').toLowerCase()
+  const name = (item.fileName || item.title || '').toLowerCase()
+
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return '📄'
+  if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tif|tiff|heic)$/i.test(name))
+    return '🖼️'
+  if (/\.(doc|docx|odt|rtf)$/i.test(name)) return '📝'
+  if (/\.(xls|xlsx|csv|ods)$/i.test(name)) return '📊'
+  if (/\.(ppt|pptx|odp)$/i.test(name)) return '📽️'
+  return '📎'
+}
+
+async function onFilesSelected(event, mIdx, sIdx) {
+  const files = Array.from(event.target.files || [])
+  event.target.value = ''
+  if (!files.length) return
+
+  const sec = cardData.modules[mIdx].sections[sIdx]
+  if (!Array.isArray(sec.blocks)) sec.blocks = []
+  const targetBlocks = sec.blocks
+  isUploading.value = true
+
+  for (const file of files) {
     const fallbackUrl = registerObjectUrl(file)
     const block = reactive({
-      id: `vid-${crypto.randomUUID?.() || Date.now()}`,
-      type: 'video',
-      title: file.name.replace(/\.[^/.]+$/, ''),
+      id: `file-${crypto.randomUUID?.() || Date.now()}-${Math.random()}`,
+      type: 'file',
+      title: file.name,
       fileName: file.name,
-      mimeType: file.type || 'video/mp4',
+      mimeType: file.type || 'application/octet-stream',
       size: file.size,
       url: fallbackUrl,
+      downloadUrl: fallbackUrl,
+      openInNewTab: isImageOrPdf({ fileName: file.name, mimeType: file.type }),
       fileId: null,
     })
-
-    sec.blocks.push(block)
-    isUploading.value = true
+    targetBlocks.push(block)
 
     try {
       const uploaded = await uploadToBackend(file)
       block.url = uploaded.url
+      block.downloadUrl = uploaded.downloadUrl || uploaded.url
       block.fileId = uploaded.fileId
       block.mimeType = uploaded.mimeType || block.mimeType
+      block.openInNewTab =
+        typeof uploaded.openInNewTab === 'boolean' ? uploaded.openInNewTab : block.openInNewTab
       URL.revokeObjectURL(fallbackUrl)
       objectUrls.delete(fallbackUrl)
-      setStatus(`Videon "${file.name}" laddades upp.`, 'success')
+      setStatus(`Filen "${file.name}" laddades upp.`, 'success')
     } catch (err) {
       const status = err?.response?.status
       const msg = formatUploadError(err, file.name)
@@ -766,708 +697,534 @@
       } else {
         setStatus(`${msg} Visas lokalt för förhandsgranskning.`, 'warning')
       }
-    } finally {
-      isUploading.value = false
     }
   }
 
-  function isImageOrPdf(item) {
-    if (typeof item.openInNewTab === 'boolean') return item.openInNewTab
-    const mime = (item.mimeType || '').toLowerCase()
-    const name = (item.fileName || item.title || '').toLowerCase()
-    return (
-      mime.startsWith('image/') ||
-      mime === 'application/pdf' ||
-      /\.(png|jpe?g|gif|webp|bmp|tif|tiff|heic|pdf)$/i.test(name)
+  isUploading.value = false
+}
+
+function serializeModuleContentMap() {
+  const mapPayload = {}
+  ;(cardData.modules || []).forEach((mod, idx) => {
+    const key = String(mod.moduleNumber ?? idx + 1)
+    const firstSection = mod.sections?.[0]
+    const firstTextBlock = firstSection?.blocks?.find((b) => b.type === 'text')
+    const instructions =
+      toSafeText(mod.instructions) ||
+      toSafeText(firstSection?.instructions) ||
+      toSafeText(firstTextBlock?.body) ||
+      ''
+
+    mapPayload[key] = {
+      title: toSafeText(mod.title) || `Modul ${key}`,
+      instructions,
+      isHiddenFromStudent: Boolean(mod.isHiddenFromStudent),
+    }
+  })
+  return mapPayload
+}
+
+function serializeContent() {
+  const cleanModules = (cardData.modules || []).map((mod, idx) => ({
+    id: mod.id || `mod-${idx + 1}`,
+    moduleNumber: Number(mod.moduleNumber ?? idx + 1),
+    title: toSafeText(mod.title) || `Modul ${idx + 1}`,
+    isPartialExam: !!mod.isPartialExam,
+    isCaseStudy: !!mod.isCaseStudy,
+    sections:
+      Array.isArray(mod.sections) && mod.sections.length > 0
+        ? mod.sections.map((sec, sIdx) => ({
+            id: sec.id || `sec-${idx + 1}-${sIdx + 1}`,
+            title: toSafeText(sec.title) || `Delmoment ${idx + 1}.${sIdx + 1}`,
+            blocks: (sec.blocks || []).map((blk) => ({
+              id: blk.id,
+              type: blk.type,
+              title: toSafeText(blk.title),
+              heading: toSafeText(blk.heading),
+              body: toSafeText(blk.body),
+              colorCode: blk.colorCode || 'default',
+              fileId: blk.fileId || null,
+              fileName: toSafeText(blk.fileName),
+              mimeType: toSafeText(blk.mimeType),
+              size: blk.size || 0,
+              url: blk.url && !String(blk.url).startsWith('blob:') ? String(blk.url) : '',
+              downloadUrl:
+                blk.downloadUrl && !String(blk.downloadUrl).startsWith('blob:')
+                  ? String(blk.downloadUrl)
+                  : '',
+              openInNewTab: !!blk.openInNewTab,
+            })),
+          }))
+        : [
+            {
+              id: `sec-${idx + 1}-1`,
+              title: `Delmoment ${idx + 1}.1`,
+              blocks: [],
+            },
+          ],
+  }))
+
+  return {
+    title: toSafeText(cardData.title),
+    courseCode: toSafeText(cardData.courseCode),
+    modules: cleanModules,
+  }
+}
+
+async function loadTemplateById(templateId) {
+  if (!templateId) return
+  isLoadingTemplate.value = true
+  try {
+    const fromList = (courseTemplates.value || []).find(
+      (t) => String(t._id || t.id) === String(templateId)
     )
-  }
-
-  function opensInNewTab(item) {
-    return isImageOrPdf(item)
-  }
-
-  function getFileIcon(item) {
-    const mime = (item.mimeType || '').toLowerCase()
-    const name = (item.fileName || item.title || '').toLowerCase()
-
-    if (mime === 'application/pdf' || name.endsWith('.pdf')) return '📄'
-    if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tif|tiff|heic)$/i.test(name))
-      return '🖼️'
-    if (/\.(doc|docx|odt|rtf)$/i.test(name)) return '📝'
-    if (/\.(xls|xlsx|csv|ods)$/i.test(name)) return '📊'
-    if (/\.(ppt|pptx|odp)$/i.test(name)) return '📽️'
-    return '📎'
-  }
-
-  async function onFilesSelected(event, mIdx, sIdx) {
-    const files = Array.from(event.target.files || [])
-    event.target.value = ''
-    if (!files.length) return
-
-    const sec = cardData.modules[mIdx].sections[sIdx]
-    if (!Array.isArray(sec.blocks)) sec.blocks = []
-    const targetBlocks = sec.blocks
-    isUploading.value = true
-
-    for (const file of files) {
-      const fallbackUrl = registerObjectUrl(file)
-      const block = reactive({
-        id: `file-${crypto.randomUUID?.() || Date.now()}-${Math.random()}`,
-        type: 'file',
-        title: file.name,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        size: file.size,
-        url: fallbackUrl,
-        downloadUrl: fallbackUrl,
-        openInNewTab: isImageOrPdf({ fileName: file.name, mimeType: file.type }),
-        fileId: null,
-      })
-      targetBlocks.push(block)
-
-      try {
-        const uploaded = await uploadToBackend(file)
-        block.url = uploaded.url
-        block.downloadUrl = uploaded.downloadUrl || uploaded.url
-        block.fileId = uploaded.fileId
-        block.mimeType = uploaded.mimeType || block.mimeType
-        block.openInNewTab =
-          typeof uploaded.openInNewTab === 'boolean' ? uploaded.openInNewTab : block.openInNewTab
-        URL.revokeObjectURL(fallbackUrl)
-        objectUrls.delete(fallbackUrl)
-        setStatus(`Filen "${file.name}" laddades upp.`, 'success')
-      } catch (err) {
-        const status = err?.response?.status
-        const msg = formatUploadError(err, file.name)
-        if (status === 401 || status === 403) {
-          setStatus(`${msg} Visas tillfälligt lokalt i förhandsgranskningen.`, 'error')
-        } else {
-          setStatus(`${msg} Visas lokalt för förhandsgranskning.`, 'warning')
-        }
-      }
+    let tpl = fromList
+    if (!tpl) {
+      const { data } = await api.get(`/course-templates/${encodeURIComponent(templateId)}`)
+      tpl = data?.template || data?.data || data
     }
 
-    isUploading.value = false
-  }
-
-  function serializeModuleContentMap() {
-    const mapPayload = {}
-    ;(cardData.modules || []).forEach((mod, idx) => {
-      const key = String(mod.moduleNumber ?? idx + 1)
-      const firstSection = mod.sections?.[0]
-      const firstTextBlock = firstSection?.blocks?.find((b) => b.type === 'text')
-      const instructions =
-        toSafeText(mod.instructions) ||
-        toSafeText(firstSection?.instructions) ||
-        toSafeText(firstTextBlock?.body) ||
-        ''
-
-      mapPayload[key] = {
-        title: toSafeText(mod.title) || `Modul ${key}`,
-        instructions,
-        isHiddenFromStudent: Boolean(mod.isHiddenFromStudent),
-      }
-    })
-    return mapPayload
-  }
-
-  function serializeContent() {
-    const cleanModules = (cardData.modules || []).map((mod, idx) => ({
-      id: mod.id || `mod-${idx + 1}`,
-      moduleNumber: Number(mod.moduleNumber ?? idx + 1),
-      title: toSafeText(mod.title) || `Modul ${idx + 1}`,
-      isPartialExam: !!mod.isPartialExam,
-      isCaseStudy: !!mod.isCaseStudy,
-      sections:
-        Array.isArray(mod.sections) && mod.sections.length > 0
-          ? mod.sections.map((sec, sIdx) => ({
-              id: sec.id || `sec-${idx + 1}-${sIdx + 1}`,
-              title: toSafeText(sec.title) || `Delmoment ${idx + 1}.${sIdx + 1}`,
-              blocks: (sec.blocks || []).map((blk) => ({
-                id: blk.id,
-                type: blk.type,
-                title: toSafeText(blk.title),
-                heading: toSafeText(blk.heading),
-                body: toSafeText(blk.body),
-                colorCode: blk.colorCode || 'default',
-                fileId: blk.fileId || null,
-                fileName: toSafeText(blk.fileName),
-                mimeType: toSafeText(blk.mimeType),
-                size: blk.size || 0,
-                url: blk.url && !String(blk.url).startsWith('blob:') ? String(blk.url) : '',
-                downloadUrl:
-                  blk.downloadUrl && !String(blk.downloadUrl).startsWith('blob:')
-                    ? String(blk.downloadUrl)
-                    : '',
-                openInNewTab: !!blk.openInNewTab,
-              })),
-            }))
-          : [
-              {
-                id: `sec-${idx + 1}-1`,
-                title: `Delmoment ${idx + 1}.1`,
-                blocks: [],
-              },
-            ],
-    }))
-
-    return {
-      title: toSafeText(cardData.title),
-      courseCode: toSafeText(cardData.courseCode),
-      startDate: toSafeText(cardData.startDate),
-      endDate: toSafeText(cardData.endDate),
-      modules: cleanModules,
-    }
-  }
-
-  async function loadTemplateById(templateId) {
-    if (!templateId) return
-    isLoadingTemplate.value = true
-    try {
-      const fromList = (courseTemplates.value || []).find(
-        (t) => String(t._id || t.id) === String(templateId)
-      )
-      let tpl = fromList
-      if (!tpl) {
-        const { data } = await api.get(`/course-templates/${encodeURIComponent(templateId)}`)
-        tpl = data?.template || data?.data || data
-      }
-
-      if (!tpl) {
-        setStatus('Mallen kunde inte hittas i mall-banken.', 'warning')
-        return
-      }
-
-      cardData.title = toSafeText(tpl.title || tpl.name)
-      cardData.courseCode = toSafeText(tpl.courseCode)
-      if (Array.isArray(tpl.modules) && tpl.modules.length) {
-        cardData.modules = normalizeLoadedModules(tpl.modules)
-      }
-
-      setStatus(
-        `Hämtade mallen "${toSafeText(tpl.title || tpl.name || templateId)}" från mall-banken.`,
-        'success'
-      )
-    } catch (err) {
-      setStatus(
-        `Kunde inte ladda mall: ${err?.response?.data?.message || err?.response?.data?.error || err.message}`,
-        'error'
-      )
-    } finally {
-      isLoadingTemplate.value = false
-    }
-  }
-
-  async function saveAsTemplate() {
-    const snapshot = serializeContent()
-    const templateTitle =
-      toSafeText(cardData.title).trim() ||
-      (toSafeText(cardData.courseCode).trim()
-        ? `${toSafeText(cardData.courseCode).trim()} – Kursmall`
-        : `Kursmall (${new Date().toISOString().slice(0, 10)})`)
-
-    isSavingTemplate.value = true
-    try {
-      const cleanTitle = toSafeText(cardData.title).trim()
-      const cleanCode = toSafeText(cardData.courseCode).trim()
-      const templateTitle =
-        cleanTitle ||
-        (cleanCode
-          ? `${cleanCode} – Kursmall`
-          : `Kursmall (${new Date().toISOString().slice(0, 10)})`)
-
-      const payload = {
-        templateName: templateTitle,
-        title: templateTitle,
-        name: templateTitle,
-        courseCode: cleanCode,
-        description: `Fristående kursmall (${snapshot.modules.length} moduler).`,
-        modules: snapshot.modules,
-        content: serializeModuleContentMap(),
-        isTemplate: true,
-      }
-
-      const { data } = await api.post('/course-templates', payload)
-      const created = data?.template || data?.data || data
-      const createdId = created?._id || created?.id || ''
-
-      await fetchCourseTemplates()
-      if (createdId) {
-        selectedTemplateId.value = String(createdId)
-      }
-
-      setStatus(
-        `Sparad som mall i mall-banken ("${templateTitle}") utan koppling till kursinstans.`,
-        'success'
-      )
-      emit('template-saved', created)
-    } catch (err) {
-      const status = err?.response?.status
-      const data = err?.response?.data
-      const serverMsg =
-        typeof data === 'string'
-          ? data
-          : data?.error ||
-            data?.message ||
-            (Array.isArray(data?.errors)
-              ? data.errors.map((e) => e.msg || e.message).join(', ')
-              : '')
-
-      setStatus(
-        `Kunde inte spara som mall${status ? ` (${status})` : ''}: ${serverMsg || err.message}`,
-        'error'
-      )
-    } finally {
-      isSavingTemplate.value = false
-    }
-  }
-
-  async function loadInstanceContent(instanceId) {
-    if (!instanceId) return
-    isLoadingInstance.value = true
-    try {
-      const matchedInstance = (courseInstances.value || []).find(
-        (inst) => String(inst._id || inst.id) === String(instanceId)
-      )
-      if (matchedInstance) {
-        cardData.title = toSafeText(matchedInstance.courseName || matchedInstance.title)
-        cardData.courseCode = toSafeText(matchedInstance.courseCode)
-        cardData.startDate = matchedInstance.startDate
-          ? String(matchedInstance.startDate).slice(0, 10)
-          : ''
-        cardData.endDate = matchedInstance.endDate
-          ? String(matchedInstance.endDate).slice(0, 10)
-          : ''
-        if (Array.isArray(matchedInstance.modules) && matchedInstance.modules.length) {
-          cardData.modules = normalizeLoadedModules(matchedInstance.modules)
-        }
-      }
-
-      const { data } = await api.get(`/course-instances/${encodeURIComponent(instanceId)}/content`)
-      const loadedContent = data?.content && typeof data.content === 'object' ? data.content : {}
-
-      if (Array.isArray(cardData.modules)) {
-        cardData.modules.forEach((mod, idx) => {
-          const key = String(mod.moduleNumber ?? idx + 1)
-          const modEntry = loadedContent[key]
-          if (modEntry && typeof modEntry === 'object') {
-            if (modEntry.title) mod.title = toSafeText(modEntry.title)
-            if (typeof modEntry.isHiddenFromStudent === 'boolean') {
-              mod.isHiddenFromStudent = modEntry.isHiddenFromStudent
-            }
-          }
-        })
-      }
-
-      setStatus('Kurskortets innehåll hämtades från servern.', 'success')
-    } catch (err) {
-      setStatus(
-        `Kunde inte hämta kursinstans: ${err?.response?.data?.message || err.message}`,
-        'error'
-      )
-    } finally {
-      isLoadingInstance.value = false
-    }
-  }
-
-  async function saveCourseCard() {
-    const cardSnapshot = serializeContent()
-    const moduleContentPayload = serializeModuleContentMap()
-    emit('save', cardSnapshot)
-
-    if (!activeInstanceId.value) {
-      setStatus(
-        'Ingen kursinstans vald – använd "Spara som mall" för att spara i mall-banken utan kursinstans, eller välj en kursinstans.',
-        'info'
-      )
+    if (!tpl) {
+      setStatus('Mallen kunde inte hittas i mall-banken.', 'warning')
       return
     }
 
-    isSaving.value = true
-    try {
-      await api.put(`/course-instances/${encodeURIComponent(activeInstanceId.value)}/content`, {
-        content: moduleContentPayload,
-        syncModules: true,
-      })
-      setStatus('Kurskort och delmoment sparades i databasen!', 'success')
-      emit('saved', { instanceId: activeInstanceId.value, content: cardSnapshot })
-    } catch (err) {
-      setStatus(
-        `Kunde inte spara kurskortet: ${err?.response?.data?.message || err.message}`,
-        'error'
-      )
-    } finally {
-      isSaving.value = false
+    cardData.title = toSafeText(tpl.templateName || tpl.title || tpl.name)
+    cardData.courseCode = toSafeText(tpl.courseCode)
+    if (Array.isArray(tpl.modules) && tpl.modules.length) {
+      cardData.modules = normalizeLoadedModules(tpl.modules)
     }
+
+    setStatus(
+      `Laddade mallen "${toSafeText(tpl.templateName || tpl.title || tpl.name || 'Mall')}" från mall-banken.`,
+      'success'
+    )
+  } catch (err) {
+    setStatus(
+      `Kunde inte ladda mall: ${err?.response?.data?.message || err?.response?.data?.error || err.message}`,
+      'error'
+    )
+  } finally {
+    isLoadingTemplate.value = false
   }
+}
 
-  onMounted(async () => {
-    await Promise.all([fetchCourseInstances(), fetchCourseTemplates()])
-    if (selectedTemplateId.value) {
-      await loadTemplateById(selectedTemplateId.value)
-    } else if (activeInstanceId.value) {
-      await loadInstanceContent(activeInstanceId.value)
-    }
-  })
+async function saveAsTemplate() {
+  const snapshot = serializeContent()
+  const cleanTitle = toSafeText(cardData.title).trim()
+  const cleanCode = toSafeText(cardData.courseCode).trim()
+  const templateTitle =
+    cleanTitle ||
+    (cleanCode ? `${cleanCode} – Kursmall` : `Kursmall (${new Date().toISOString().slice(0, 10)})`)
 
-  onBeforeUnmount(() => {
-    for (const url of objectUrls) {
-      URL.revokeObjectURL(url)
+  isSavingTemplate.value = true
+  try {
+    const payload = {
+      templateName: templateTitle,
+      title: templateTitle,
+      name: templateTitle,
+      courseCode: cleanCode,
+      description: `Fristående kursmall (${snapshot.modules.length} moduler).`,
+      modules: snapshot.modules,
+      content: serializeModuleContentMap(),
+      isTemplate: true,
     }
-    objectUrls.clear()
-  })
+
+    const { data } = await api.post('/course-templates', payload)
+    const created = data?.template || data?.data || data
+    const createdId = created?._id || created?.id || ''
+
+    await fetchCourseTemplates()
+    if (createdId) {
+      selectedTemplateId.value = String(createdId)
+    }
+
+    setStatus(
+      `Sparade "${templateTitle}" i mall-banken.`,
+      'success'
+    )
+    emit('template-saved', created)
+  } catch (err) {
+    const status = err?.response?.status
+    const data = err?.response?.data
+    const serverMsg =
+      typeof data === 'string'
+        ? data
+        : data?.error ||
+          data?.message ||
+          (Array.isArray(data?.errors) ? data.errors.map((e) => e.msg || e.message).join(', ') : '')
+
+    setStatus(
+      `Kunde inte spara som mall${status ? ` (${status})` : ''}: ${serverMsg || err.message}`,
+      'error'
+    )
+  } finally {
+    isSavingTemplate.value = false
+  }
+}
+
+onMounted(async () => {
+  await fetchCourseTemplates()
+  if (selectedTemplateId.value) {
+    await loadTemplateById(selectedTemplateId.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  for (const url of objectUrls) {
+    URL.revokeObjectURL(url)
+  }
+  objectUrls.clear()
+})
 </script>
 
 <style scoped>
-  .course-card-builder {
-    max-width: 980px;
-    margin: 0 auto;
-    padding: 24px;
-    font-family:
-      system-ui,
-      -apple-system,
-      sans-serif;
-    color: #1f2937;
-  }
+.course-card-builder {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #1f2937;
+}
 
-  .builder-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    margin-bottom: 18px;
-    flex-wrap: wrap;
-  }
+.builder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
 
-  .subtitle {
-    margin: 4px 0 0;
-    color: #6b7280;
-  }
+.subtitle {
+  margin: 4px 0 0;
+  color: #6b7280;
+}
 
-  .header-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
+.header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
-  .status-banner {
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-    border: 1px solid transparent;
-  }
+.status-banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
 
-  .status-info {
-    background: #eff6ff;
-    border-color: #bfdbfe;
-    color: #1e40af;
-  }
+.status-info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
 
-  .status-success {
-    background: #f0fdf4;
-    border-color: #bbf7d0;
-    color: #166534;
-  }
+.status-success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
 
-  .status-warning {
-    background: #fffbeb;
-    border-color: #fde68a;
-    color: #92400e;
-  }
+.status-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
 
-  .status-error {
-    background: #fef2f2;
-    border-color: #fecaca;
-    color: #991b1b;
-  }
+.status-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
 
-  .meta-card,
-  .module-card {
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    padding: 18px;
-    margin-bottom: 20px;
-  }
+.meta-card,
+.module-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
 
-  .meta-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px;
-    margin-top: 12px;
-  }
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
 
-  .instance-bar {
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    margin-top: 14px;
-    flex-wrap: wrap;
-  }
+.instance-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
 
-  .instance-buttons {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
+.instance-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
-  .field-grow {
-    flex: 1;
-    min-width: 240px;
-  }
+.field-grow {
+  flex: 1;
+  min-width: 240px;
+}
 
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 0.9rem;
-  }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+}
 
-  .field input,
-  .instance-select {
-    padding: 8px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    background: #ffffff;
-  }
+.field input,
+.instance-select {
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+}
 
-  .modules-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 12px;
-  }
+.modules-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
 
-  .module-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-  }
+.module-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
 
-  .module-title-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    flex: 1;
-  }
+.module-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1;
+}
 
-  .module-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+.module-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-  .module-badge {
-    background: #eef2ff;
-    color: #3730a3;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 0.85rem;
-  }
+.module-badge {
+  background: #eef2ff;
+  color: #3730a3;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
 
-  .module-title-input,
-  .section-title-input,
-  .block-heading-input {
-    padding: 7px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 0.95rem;
-  }
+.module-title-input,
+.section-title-input,
+.block-heading-input {
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
 
-  .module-title-input {
-    min-width: 220px;
-  }
+.module-title-input {
+  min-width: 220px;
+}
 
-  .tag {
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 6px;
-  }
+.tag {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
 
-  .tag-exam {
-    background: #fef2f2;
-    color: #b91c1c;
-  }
+.tag-exam {
+  background: #fef2f2;
+  color: #b91c1c;
+}
 
-  .tag-case {
-    background: #f0fdf4;
-    color: #15803d;
-  }
+.tag-case {
+  background: #f0fdf4;
+  color: #15803d;
+}
 
-  .section-box {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 14px;
-    margin-top: 12px;
-    background: #f9fafb;
-  }
+.section-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 12px;
+  background: #f9fafb;
+}
 
-  .section-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-  }
+.section-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
 
-  .block-toolbar {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
+.block-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
-  .blocks-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
+.blocks-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
-  .block-item {
-    border-radius: 8px;
-    padding: 12px 14px;
-    border-left: 4px solid #9ca3af;
-    background: #ffffff;
-  }
+.block-item {
+  border-radius: 8px;
+  padding: 12px 14px;
+  border-left: 4px solid #9ca3af;
+  background: #ffffff;
+}
 
-  .theme-default {
-    border-left-color: #6b7280;
-    background: #ffffff;
-  }
+.theme-default {
+  border-left-color: #6b7280;
+  background: #ffffff;
+}
 
-  .theme-info {
-    border-left-color: #2563eb;
-    background: #eff6ff;
-  }
+.theme-info {
+  border-left-color: #2563eb;
+  background: #eff6ff;
+}
 
-  .theme-success {
-    border-left-color: #16a34a;
-    background: #f0fdf4;
-  }
+.theme-success {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+}
 
-  .theme-warning {
-    border-left-color: #d97706;
-    background: #fffbeb;
-  }
+.theme-warning {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
 
-  .theme-danger {
-    border-left-color: #dc2626;
-    background: #fef2f2;
-  }
+.theme-danger {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+}
 
-  .block-controls,
-  .block-top-row,
-  .file-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
+.block-controls,
+.block-top-row,
+.file-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 
-  .block-heading-input {
-    width: 100%;
-    margin-bottom: 8px;
-    background: #ffffff;
-  }
+.block-heading-input {
+  width: 100%;
+  margin-bottom: 8px;
+  background: #ffffff;
+}
 
-  .block-body-textarea {
-    width: 100%;
-    padding: 8px 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    background: #ffffff;
-    resize: vertical;
-  }
+.block-body-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  resize: vertical;
+}
 
-  .block-heading {
-    margin: 0 0 6px;
-  }
+.block-heading {
+  margin: 0 0 6px;
+}
 
-  .block-body {
-    margin: 0;
-    white-space: pre-line;
-  }
+.block-body {
+  margin: 0;
+  white-space: pre-line;
+}
 
-  .embedded-video {
-    width: 100%;
-    max-height: 360px;
-    border-radius: 6px;
-    background: #000000;
-  }
+.embedded-video {
+  width: 100%;
+  max-height: 360px;
+  border-radius: 6px;
+  background: #000000;
+}
 
-  .file-link-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
+.file-link-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
-  .file-link {
-    font-weight: 600;
-    color: #1d4ed8;
-    text-decoration: underline;
-  }
+.file-link {
+  font-weight: 600;
+  color: #1d4ed8;
+  text-decoration: underline;
+}
 
-  .file-action-hint,
-  .file-meta,
-  .empty-section,
-  .empty-media {
-    font-size: 0.85rem;
-    color: #6b7280;
-  }
+.file-action-hint,
+.file-meta,
+.empty-section,
+.empty-media {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
 
-  .color-select {
-    padding: 4px 8px;
-    border-radius: 6px;
-    border: 1px solid #d1d5db;
-    background: #ffffff;
-    font-size: 0.85rem;
-  }
+.color-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  font-size: 0.85rem;
+}
 
-  .btn {
-    padding: 8px 14px;
-    border-radius: 6px;
-    border: 1px solid #d1d5db;
-    background: #ffffff;
-    cursor: pointer;
-    font-weight: 500;
-  }
+.btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  cursor: pointer;
+  font-weight: 500;
+}
 
-  .btn-primary {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: #ffffff;
-  }
+.btn-primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
 
-  .btn-secondary {
-    background: #f3f4f6;
-  }
+.btn-secondary {
+  background: #f3f4f6;
+}
 
-  .btn-sm {
-    padding: 5px 10px;
-    font-size: 0.85rem;
-  }
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 0.85rem;
+}
 
-  .btn-ghost,
-  .btn-danger-ghost,
-  .btn-icon {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-  }
+.btn-ghost,
+.btn-danger-ghost,
+.btn-icon {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
 
-  .btn-danger-ghost {
-    color: #b91c1c;
-  }
+.btn-danger-ghost {
+  color: #b91c1c;
+}
 
-  .hidden-input {
-    display: none;
-  }
+.hidden-input {
+  display: none;
+}
 </style>
