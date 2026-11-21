@@ -52,7 +52,7 @@
                   Senast aktiv: {{ formatDateTime(card.lastAccess) }}
                 </div>
                 <div v-else-if="card.startDate" class="text-body-2 text-grey mt-1">
-                  Senast aktiv: –
+                  Senast aktiv: Aldrig
                 </div>
                 <div v-if="card.currentModule || isCourseComplete(card)" class="mt-2">
                   <div class="text-caption text-grey">
@@ -107,7 +107,12 @@ const studentOptions = computed(() =>
 )
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('sv-SE') : '–'
-const formatDateTime = (d) => d ? new Date(d).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '–'
+const formatDateTime = (d) => {
+  if (!d) return 'Aldrig'
+  const date = new Date(d)
+  if (Number.isNaN(date.getTime())) return 'Aldrig'
+  return date.toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' })
+}
 
 const statusColor = (s) => {
   if (s === 'active') return 'success'
