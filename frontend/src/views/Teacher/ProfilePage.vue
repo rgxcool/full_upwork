@@ -82,20 +82,23 @@
                     autocomplete="new-password"
                     class="form-control"
                   />
-                  <span v-if="confirmPassword && confirmPassword !== newPassword" class="field-error">
+                  <span
+                    v-if="confirmPassword && confirmPassword !== newPassword"
+                    class="field-error"
+                  >
                     Lösenorden matchar inte.
                   </span>
                 </div>
 
-                <div v-if="message" class="alert" :class="messageType === 'success' ? 'alert-success' : 'alert-danger'">
+                <div
+                  v-if="message"
+                  class="alert"
+                  :class="messageType === 'success' ? 'alert-success' : 'alert-danger'"
+                >
                   {{ message }}
                 </div>
 
-                <button
-                  type="submit"
-                  class="btn btn-primary"
-                  :disabled="isLoading"
-                >
+                <button type="submit" class="btn btn-primary" :disabled="isLoading">
                   {{ isLoading ? 'Byter...' : 'Byt lösenord' }}
                 </button>
               </form>
@@ -115,9 +118,7 @@
                   <a :href="sharedDownloadUrl(doc)" target="_blank" rel="noopener">
                     {{ doc.originalName }}
                   </a>
-                  <span class="shared-owner">
-                    delat av {{ sharedOwnerName(doc) }}
-                  </span>
+                  <span class="shared-owner">delat av {{ sharedOwnerName(doc) }}</span>
                 </li>
               </ul>
             </div>
@@ -159,7 +160,11 @@
                       </div>
                     </div>
                   </div>
-                  <div v-if="task.dueDate || task.dueTime" class="task-countdown" :class="{ overdue: isTaskOverdueFor(task) }">
+                  <div
+                    v-if="task.dueDate || task.dueTime"
+                    class="task-countdown"
+                    :class="{ overdue: isTaskOverdueFor(task) }"
+                  >
                     {{ remainingLabelFor(task) }}
                   </div>
                   <button class="btn-delete" @click="deleteTask(task._id)">Ta bort</button>
@@ -178,7 +183,9 @@
                 <button class="btn btn-primary" @click="addTask">Lägg till</button>
               </div>
               <div v-if="tasks.length" class="task-footer">
-                <button class="btn btn-outline-danger btn-sm" @click="deleteAllTasks">Rensa alla</button>
+                <button class="btn btn-outline-danger btn-sm" @click="deleteAllTasks">
+                  Rensa alla
+                </button>
               </div>
             </div>
           </div>
@@ -189,542 +196,553 @@
 </template>
 
 <script>
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
-import { useRouter } from 'vue-router';
-import { useStore } from 'vuex';
-import { useToast } from '@/composables/useToast.js';
-import client from '@/api/client.js';
-import { remainingLabel, isTaskOverdue } from '@/utils/taskTime.js';
+  import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+  import { useRouter } from 'vue-router'
+  import { useStore } from 'vuex'
+  import { useToast } from '@/composables/useToast.js'
+  import client from '@/api/client.js'
+  import { remainingLabel, isTaskOverdue } from '@/utils/taskTime.js'
 
-const ROLE_LABELS = {
-  admin: 'Administratör',
-  systemadmin: 'Systemadministratör',
-  teacher: 'Lärare',
-  coordinator: 'Samordnare',
-  syv: 'SYV',
-  specped: 'Specialpedagog',
-  student: 'Elev',
-  user: 'Användare',
-};
+  const ROLE_LABELS = {
+    admin: 'Administratör',
+    systemadmin: 'Systemadministratör',
+    teacher: 'Lärare',
+    coordinator: 'Samordnare',
+    syv: 'SYV',
+    specped: 'Specialpedagog',
+    student: 'Elev',
+    user: 'Användare',
+  }
 
-export default {
-  name: 'ProfilePage',
-  setup() {
-    const store = useStore();
-    const router = useRouter();
-    const toast = useToast();
+  export default {
+    name: 'ProfilePage',
+    setup() {
+      const store = useStore()
+      const router = useRouter()
+      const toast = useToast()
 
-    const user = computed(() => store.state.user);
-    const isLoggedIn = computed(() => store.getters.isLoggedIn);
-    onMounted(() => { if (!isLoggedIn.value) router.push('/login'); });
-    onMounted(() => { store.dispatch('fetchTasks'); });
-    onMounted(loadSharedDocuments);
+      const user = computed(() => store.state.user)
+      const isLoggedIn = computed(() => store.getters.isLoggedIn)
+      onMounted(() => {
+        if (!isLoggedIn.value) router.push('/login')
+      })
+      onMounted(() => {
+        store.dispatch('fetchTasks')
+      })
 
-    const roleLabel = computed(() => {
-      const role = store.getters.userRole;
-      return ROLE_LABELS[role] || role;
-    });
+      const roleLabel = computed(() => {
+        const role = store.getters?.userRole
+        return (role && ROLE_LABELS[role]) || role || 'Ej angivet'
+      })
 
-    const menuItems = [
-      { key: 'info',     label: 'Min profil',  icon: '👤' },
-      { key: 'password', label: 'Byt lösenord', icon: '🔒' },
-      { key: 'shared',   label: 'Delade dokument', icon: '📁' },
-      { key: 'tasks',    label: 'Att göra',     icon: '📋' },
-    ];
-    const activeSection = ref('info');
+      const menuItems = [
+        { key: 'info', label: 'Min profil', icon: '👤' },
+        { key: 'password', label: 'Byt lösenord', icon: '🔒' },
+        { key: 'shared', label: 'Delade dokument', icon: '📁' },
+        { key: 'tasks', label: 'Att göra', icon: '📋' },
+      ]
+      const activeSection = ref('info')
 
-    // Documents other staff members have explicitly shared with this user
-    // (e.g. a grading-support document shared between two teachers).
-    const baseURL = import.meta.env.VITE_API_URL || '';
-    const sharedDocuments = ref([]);
-    const sharedLoading = ref(false);
+      // Documents other staff members have explicitly shared with this user
+      // (e.g. a grading-support document shared between two teachers).
+      const baseURL = import.meta.env.VITE_API_URL || ''
+      const sharedDocuments = ref([])
+      const sharedLoading = ref(false)
 
-    const loadSharedDocuments = async () => {
-      if (sharedLoading.value) return;
-      sharedLoading.value = true;
-      try {
-        const response = await client.get('/documents/shared');
-        sharedDocuments.value = Array.isArray(response.data) ? response.data : [];
-      } catch (error) {
-        console.error('Error fetching shared documents:', error);
-        toast.error('Kunde inte hämta delade dokument');
-      } finally {
-        sharedLoading.value = false;
-      }
-    };
-
-    const sharedDownloadUrl = (doc) =>
-      `${baseURL}/api/documents/download/${doc._id}`;
-
-    const sharedOwnerName = (doc) =>
-      doc.uploader?.name ||
-      doc.uploadedBy?.name ||
-      doc.uploadedBy?.email ||
-      'okänd';
-
-    const currentPassword = ref('');
-    const newPassword = ref('');
-    const confirmPassword = ref('');
-    const newPasswordError = ref('');
-    const message = ref('');
-    const messageType = ref('error');
-    const isLoading = ref(false);
-
-    const newTask = ref('');
-    const taskDate = ref('');
-    const taskTime = ref('');
-    const tasks = computed(() => store.getters.tasks);
-    const now = ref(new Date());
-
-    onMounted(() => {
-      const tick = () => { now.value = new Date(); };
-      tick();
-      const interval = setInterval(tick, 30000);
-      onBeforeUnmount(() => clearInterval(interval));
-    });
-
-    const remainingLabelFor = (task) =>
-      remainingLabel(task.dueDate, task.dueTime, now.value);
-    const isTaskOverdueFor = (task) =>
-      isTaskOverdue(task.dueDate, task.dueTime, now.value);
-
-    const addTask = () => {
-      if (!newTask.value.trim()) return;
-      store.dispatch('addTask', {
-        description: newTask.value,
-        dueDate: taskDate.value || null,
-        dueTime: taskTime.value || null,
-      });
-      newTask.value = '';
-      taskDate.value = '';
-      taskTime.value = '';
-    };
-
-    const updateTaskSchedule = (task) => {
-      store.dispatch('updateTask', {
-        ...task,
-        dueDate: task.dueDate || null,
-        dueTime: task.dueTime || null,
-      });
-    };
-
-    const toggleTaskCompletion = (task) => {
-      store.dispatch('updateTask', { ...task, isDone: !task.isDone });
-    };
-
-    const deleteTask = (taskId) => {
-      store.dispatch('deleteTask', taskId);
-    };
-
-    const deleteAllTasks = () => {
-      store.dispatch('deleteAllTasks');
-    };
-
-    const validatePassword = (password) => {
-      if (!password) return 'Ange ett nytt lösenord.';
-      const checks = [
-        { ok: password.length >= 8, msg: 'Lösenordet måste vara minst 8 tecken långt.' },
-        { ok: /[A-Z]/.test(password), msg: 'Lösenordet måste innehålla minst en stor bokstav (A–Z).' },
-        { ok: /[a-z]/.test(password), msg: 'Lösenordet måste innehålla minst en liten bokstav (a–z).' },
-        { ok: /\d/.test(password), msg: 'Lösenordet måste innehålla minst en siffra (0–9).' },
-        { ok: /[!@#$%^&*(),.?":{}|<>]/.test(password), msg: 'Lösenordet måste innehålla ett specialtecken, t.ex. ! @ # $ % ^ & * ( ) , . ? " : { } | < >' },
-      ];
-      return checks.find((c) => !c.ok)?.msg || '';
-    };
-
-    const handleChangePassword = async () => {
-      if (isLoading.value) return;
-      message.value = '';
-      newPasswordError.value = '';
-
-      const validationError = validatePassword(newPassword.value);
-      if (validationError) {
-        newPasswordError.value = validationError;
-        message.value = validationError;
-        messageType.value = 'error';
-        return;
-      }
-      if (newPassword.value !== confirmPassword.value) {
-        message.value = 'De nya lösenorden matchar inte.';
-        messageType.value = 'error';
-        return;
-      }
-
-      isLoading.value = true;
-      try {
-        const result = await store.dispatch('changePassword', {
-          currentPassword: currentPassword.value,
-          newPassword: newPassword.value,
-        });
-        if (result.success) {
-          toast.success('Lösenordet har ändrats!');
-          message.value = 'Lösenordet har ändrats.';
-          messageType.value = 'success';
-          currentPassword.value = '';
-          newPassword.value = '';
-          confirmPassword.value = '';
-        } else {
-          message.value = result.message || 'Lösenordsändringen misslyckades.';
-          messageType.value = 'error';
+      const loadSharedDocuments = async () => {
+        if (sharedLoading.value) return
+        sharedLoading.value = true
+        try {
+          const response = await client.get('/documents/shared')
+          sharedDocuments.value = Array.isArray(response.data) ? response.data : []
+        } catch (error) {
+          console.error('Error fetching shared documents:', error)
+          toast.error('Kunde inte hämta delade dokument')
+        } finally {
+          sharedLoading.value = false
         }
-      } catch {
-        message.value = 'Ett fel uppstod. Försök igen.';
-        messageType.value = 'error';
-      } finally {
-        isLoading.value = false;
       }
-    };
+      onMounted(loadSharedDocuments)
 
-    return {
-      user,
-      roleLabel,
-      menuItems,
-      activeSection,
-      currentPassword,
-      newPassword,
-      confirmPassword,
-      newPasswordError,
-      message,
-      messageType,
-      isLoading,
-      validatePassword,
-      handleChangePassword,
-      newTask,
-      taskDate,
-      taskTime,
-      tasks,
-      addTask,
-      updateTaskSchedule,
-      remainingLabelFor,
-      isTaskOverdueFor,
-      toggleTaskCompletion,
-      deleteTask,
-      deleteAllTasks,
-      sharedDocuments,
-      sharedLoading,
-      loadSharedDocuments,
-      sharedDownloadUrl,
-      sharedOwnerName,
-    };
-  },
-};
+      const sharedDownloadUrl = (doc) => `${baseURL}/api/documents/download/${doc._id}`
+
+      const sharedOwnerName = (doc) =>
+        doc.uploader?.name || doc.uploadedBy?.name || doc.uploadedBy?.email || 'okänd'
+
+      const currentPassword = ref('')
+      const newPassword = ref('')
+      const confirmPassword = ref('')
+      const newPasswordError = ref('')
+      const message = ref('')
+      const messageType = ref('error')
+      const isLoading = ref(false)
+
+      const newTask = ref('')
+      const taskDate = ref('')
+      const taskTime = ref('')
+      const tasks = computed(() => store.getters.tasks)
+      const now = ref(new Date())
+
+      onMounted(() => {
+        const tick = () => {
+          now.value = new Date()
+        }
+        tick()
+        const interval = setInterval(tick, 30000)
+        onBeforeUnmount(() => clearInterval(interval))
+      })
+
+      const remainingLabelFor = (task) => remainingLabel(task.dueDate, task.dueTime, now.value)
+      const isTaskOverdueFor = (task) => isTaskOverdue(task.dueDate, task.dueTime, now.value)
+
+      const addTask = () => {
+        if (!newTask.value.trim()) return
+        store.dispatch('addTask', {
+          description: newTask.value,
+          dueDate: taskDate.value || null,
+          dueTime: taskTime.value || null,
+        })
+        newTask.value = ''
+        taskDate.value = ''
+        taskTime.value = ''
+      }
+
+      const updateTaskSchedule = (task) => {
+        store.dispatch('updateTask', {
+          ...task,
+          dueDate: task.dueDate || null,
+          dueTime: task.dueTime || null,
+        })
+      }
+
+      const toggleTaskCompletion = (task) => {
+        store.dispatch('updateTask', { ...task, isDone: !task.isDone })
+      }
+
+      const deleteTask = (taskId) => {
+        store.dispatch('deleteTask', taskId)
+      }
+
+      const deleteAllTasks = () => {
+        store.dispatch('deleteAllTasks')
+      }
+
+      const validatePassword = (password) => {
+        if (!password) return 'Ange ett nytt lösenord.'
+        const checks = [
+          { ok: password.length >= 8, msg: 'Lösenordet måste vara minst 8 tecken långt.' },
+          {
+            ok: /[A-Z]/.test(password),
+            msg: 'Lösenordet måste innehålla minst en stor bokstav (A–Z).',
+          },
+          {
+            ok: /[a-z]/.test(password),
+            msg: 'Lösenordet måste innehålla minst en liten bokstav (a–z).',
+          },
+          { ok: /\d/.test(password), msg: 'Lösenordet måste innehålla minst en siffra (0–9).' },
+          {
+            ok: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+            msg: 'Lösenordet måste innehålla ett specialtecken, t.ex. ! @ # $ % ^ & * ( ) , . ? " : { } | < >',
+          },
+        ]
+        return checks.find((c) => !c.ok)?.msg || ''
+      }
+
+      const handleChangePassword = async () => {
+        if (isLoading.value) return
+        message.value = ''
+        newPasswordError.value = ''
+
+        const validationError = validatePassword(newPassword.value)
+        if (validationError) {
+          newPasswordError.value = validationError
+          message.value = validationError
+          messageType.value = 'error'
+          return
+        }
+        if (newPassword.value !== confirmPassword.value) {
+          message.value = 'De nya lösenorden matchar inte.'
+          messageType.value = 'error'
+          return
+        }
+
+        isLoading.value = true
+        try {
+          const result = await store.dispatch('changePassword', {
+            currentPassword: currentPassword.value,
+            newPassword: newPassword.value,
+          })
+          if (result.success) {
+            toast.success('Lösenordet har ändrats!')
+            message.value = 'Lösenordet har ändrats.'
+            messageType.value = 'success'
+            currentPassword.value = ''
+            newPassword.value = ''
+            confirmPassword.value = ''
+          } else {
+            message.value = result.message || 'Lösenordsändringen misslyckades.'
+            messageType.value = 'error'
+          }
+        } catch {
+          message.value = 'Ett fel uppstod. Försök igen.'
+          messageType.value = 'error'
+        } finally {
+          isLoading.value = false
+        }
+      }
+
+      return {
+        user,
+        roleLabel,
+        menuItems,
+        activeSection,
+        currentPassword,
+        newPassword,
+        confirmPassword,
+        newPasswordError,
+        message,
+        messageType,
+        isLoading,
+        validatePassword,
+        handleChangePassword,
+        newTask,
+        taskDate,
+        taskTime,
+        tasks,
+        addTask,
+        updateTaskSchedule,
+        remainingLabelFor,
+        isTaskOverdueFor,
+        toggleTaskCompletion,
+        deleteTask,
+        deleteAllTasks,
+        sharedDocuments,
+        sharedLoading,
+        loadSharedDocuments,
+        sharedDownloadUrl,
+        sharedOwnerName,
+      }
+    },
+  }
 </script>
 
 <style scoped>
-.page-title {
-  font-size: 1.6rem;
-  color: #2c3e50;
-  margin-bottom: 16px;
-}
+  .page-title {
+    font-size: 1.6rem;
+    color: #2c3e50;
+    margin-bottom: 16px;
+  }
 
-.profile-layout {
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-}
+  .profile-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
 
-.profile-sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  overflow: hidden;
-}
+  .profile-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
 
-.sidebar-menu {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
+  .sidebar-menu {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
 
-.sidebar-menu li {
-  padding: 14px 20px;
-  cursor: pointer;
-  color: #495057;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background 0.15s, color 0.15s;
-}
+  .sidebar-menu li {
+    padding: 14px 20px;
+    cursor: pointer;
+    color: #495057;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #f0f0f0;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
 
-.sidebar-menu li:last-child {
-  border-bottom: none;
-}
+  .sidebar-menu li:last-child {
+    border-bottom: none;
+  }
 
-.sidebar-menu li:hover {
-  background: #f8f9fa;
-}
+  .sidebar-menu li:hover {
+    background: #f8f9fa;
+  }
 
-.sidebar-menu li.active {
-  background: #007bff;
-  color: white;
-}
+  .sidebar-menu li.active {
+    background: #007bff;
+    color: white;
+  }
 
-.sidebar-icon {
-  font-size: 1.1rem;
-}
+  .sidebar-icon {
+    font-size: 1.1rem;
+  }
 
-.profile-content {
-  flex: 1;
-  min-width: 0;
-}
+  .profile-content {
+    flex: 1;
+    min-width: 0;
+  }
 
-.card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
+  .card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
 
-.card-header {
-  background: #f8f9fa;
-  padding: 14px 20px;
-  border-bottom: 1px solid #dee2e6;
-}
+  .card-header {
+    background: #f8f9fa;
+    padding: 14px 20px;
+    border-bottom: 1px solid #dee2e6;
+  }
 
-.card-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  color: #2c3e50;
-}
+  .card-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #2c3e50;
+  }
 
-.card-body {
-  padding: 20px;
-}
+  .card-body {
+    padding: 20px;
+  }
 
-.info-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
 
-.info-item label {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: #6c757d;
-  margin-bottom: 4px;
-}
+  .info-item label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #6c757d;
+    margin-bottom: 4px;
+  }
 
-.info-item span {
-  font-size: 1rem;
-  color: #212529;
-}
+  .info-item span {
+    font-size: 1rem;
+    color: #212529;
+  }
 
-.password-form {
-  max-width: 480px;
-}
+  .password-form {
+    max-width: 480px;
+  }
 
-.form-group {
-  margin-bottom: 16px;
-}
+  .form-group {
+    margin-bottom: 16px;
+  }
 
-.form-group label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #495057;
-  margin-bottom: 6px;
-}
+  .form-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 6px;
+  }
 
-.form-control {
-  width: 100%;
-  padding: 10px 12px;
-  border: 2px solid #dee2e6;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  outline: none;
-  transition: border-color 0.2s;
-}
+  .form-control {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
 
-.form-control:focus {
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0,123,255,0.15);
-}
+  .form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+  }
 
-.form-control.input-error {
-  border-color: #dc3545;
-}
+  .form-control.input-error {
+    border-color: #dc3545;
+  }
 
-.field-error {
-  display: block;
-  color: #dc3545;
-  font-size: 0.8125rem;
-  margin-top: 4px;
-}
+  .field-error {
+    display: block;
+    color: #dc3545;
+    font-size: 0.8125rem;
+    margin-top: 4px;
+  }
 
-.alert {
-  padding: 12px 16px;
-  border-radius: 6px;
-  margin-bottom: 16px;
-  font-size: 0.9rem;
-}
+  .alert {
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+  }
 
-.alert-success {
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
+  .alert-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+  }
 
-.alert-danger {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-}
+  .alert-danger {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+  }
 
-.task-list {
-  list-style: none;
-  margin: 0 0 16px;
-  padding: 0;
-}
+  .task-list {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+  }
 
-.task-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
+  .task-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
 
-.task-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
+  .task-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
 
-.task-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
+  .task-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
 
-.task-schedule {
-  display: flex;
-  gap: 8px;
-}
+  .task-schedule {
+    display: flex;
+    gap: 8px;
+  }
 
-.task-schedule-input {
-  width: auto;
-  padding: 4px 6px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  font-size: 0.8rem;
-}
+  .task-schedule-input {
+    width: auto;
+    padding: 4px 6px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 0.8rem;
+  }
 
-.task-countdown {
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #667eea;
-  background: #eef2ff;
-  padding: 3px 8px;
-  border-radius: 12px;
-  white-space: nowrap;
-}
+  .task-countdown {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #667eea;
+    background: #eef2ff;
+    padding: 3px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
+  }
 
-.task-countdown.overdue {
-  color: #dc3545;
-  background: #fde8e8;
-}
+  .task-countdown.overdue {
+    color: #dc3545;
+    background: #fde8e8;
+  }
 
-.task-check {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
+  .task-check {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
 
-.task-text {
-  font-size: 0.95rem;
-  color: #212529;
-  word-break: break-word;
-}
+  .task-text {
+    font-size: 0.95rem;
+    color: #212529;
+    word-break: break-word;
+  }
 
-.task-item.done .task-text {
-  text-decoration: line-through;
-  color: #6c757d;
-}
+  .task-item.done .task-text {
+    text-decoration: line-through;
+    color: #6c757d;
+  }
 
-.btn-delete {
-  background: none;
-  border: none;
-  color: #dc3545;
-  font-size: 0.875rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
+  .btn-delete {
+    background: none;
+    border: none;
+    color: #dc3545;
+    font-size: 0.875rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
 
-.btn-delete:hover {
-  text-decoration: underline;
-}
+  .btn-delete:hover {
+    text-decoration: underline;
+  }
 
-.task-input-row {
-  display: flex;
-  gap: 10px;
-}
+  .task-input-row {
+    display: flex;
+    gap: 10px;
+  }
 
-.task-input-row .form-control {
-  flex: 1;
-}
+  .task-input-row .form-control {
+    flex: 1;
+  }
 
-.task-footer {
-  margin-top: 12px;
-  text-align: right;
-}
+  .task-footer {
+    margin-top: 12px;
+    text-align: right;
+  }
 
-.btn-outline-danger {
-  border: 1px solid #dc3545;
-  color: #dc3545;
-  background: transparent;
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
+  .btn-outline-danger {
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    background: transparent;
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
 
-.btn-outline-danger:hover {
-  background: #dc3545;
-  color: white;
-}
+  .btn-outline-danger:hover {
+    background: #dc3545;
+    color: white;
+  }
 
-.muted {
-  color: #6c757d;
-}
+  .muted {
+    color: #6c757d;
+  }
 
-.shared-documents {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
+  .shared-documents {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
 
-.shared-document {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
+  .shared-document {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
 
-.shared-document:last-child {
-  border-bottom: none;
-}
+  .shared-document:last-child {
+    border-bottom: none;
+  }
 
-.shared-document a {
-  color: #1976d2;
-  text-decoration: none;
-  font-weight: 500;
-}
+  .shared-document a {
+    color: #1976d2;
+    text-decoration: none;
+    font-weight: 500;
+  }
 
-.shared-document a:hover {
-  text-decoration: underline;
-}
+  .shared-document a:hover {
+    text-decoration: underline;
+  }
 
-.shared-owner {
-  color: #6c757d;
-  font-size: 0.85rem;
-}
+  .shared-owner {
+    color: #6c757d;
+    font-size: 0.85rem;
+  }
 </style>
