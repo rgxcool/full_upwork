@@ -1,232 +1,150 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import NotificationManager from '@/views/Admin/NotificationManager.vue'
 
 vi.mock('@/api/client.js', () => ({
     default: {
         get: vi.fn(),
-        post: vi.fn(),
         put: vi.fn(),
-        delete: vi.fn(),
         interceptors: {
             request: { use: vi.fn() },
             response: { use: vi.fn() },
         },
     },
-    normalizeError: (err) => ({
-        status: err?.status ?? null,
-        message: err?.message || 'Ett fel uppstod.',
-        code: 'HTTP_500',
-    }),
 }))
 
-vi.mock('vue-router', () => ({
-    useRouter: () => ({ push: vi.fn() }),
+const mockToast = vi.hoisted(() => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
 }))
 
 vi.mock('@/composables/useToast.js', () => ({
-    useToast: () => ({
-        success: vi.fn(),
-        error: vi.fn(),
-        warning: vi.fn(),
-        info: vi.fn(),
-    }),
+    useToast: () => mockToast,
 }))
 
 import client from '@/api/client.js'
 
-const adminPageResponse = ({ notifications = [], total = 0, page = 1, limit = 20, totalPages = 0 } = {}) =>
-    Promise.resolve({
-        data: { notifications, total, page, limit, totalPages },
-    })
-
-const note = (overrides = {}) => ({
-    _id: 'note-1',
+const notification = (overrides = {}) => ({
+    _id: 'notification-1',
     type: 'grades_pending',
     message: 'Betyg väntar för Anna',
     resolved: false,
-    resolvedByUsers: [],
-    resolvedByMe: false,
-    meta: { studentId: 'stu-1', studentName: 'Anna Elev' },
-    createdAt: '2026-01-01T10:00:00Z',
     ...overrides,
 })
 
-describe('NotificationManager.vue - Notifikationer', () => {
-    let wrapper
+const mountPage = async () => {
+    const wrapper = mount(NotificationManager)
+    await flushPromises()
+    return wrapper
+}
 
-    const mountPage = async (responder) => {
-        if (responder) {
-            client.get.mockImplementation(responder)
-        }
-        wrapper = mount(NotificationManager)
-        await wrapper.vm.$nextTick()
-        await new Promise((r) => setTimeout(r, 0))
-        await wrapper.vm.$nextTick()
-    }
-
+describe('NotificationManager.vue', () => {
     beforeEach(() => {
-        vi.resetAllMocks()
-        client.get.mockResolvedValue(adminPageResponse())
-        client.post.mockResolvedValue({ data: { success: true } })
-        client.put.mockResolvedValue({ data: { message: 'ok' } })
+        vi.clearAllMocks()
     })
 
-    // NOTE: The tests below are skipped because they target the superseded rich
-    // admin-inbox design (per-user resolve, withdraw/confirm dialogs, reset-all,
-    // inactivity actions, `/notifications/admin` with status/type/search params).
-    // The current NotificationManager.vue is a minimal list backed by
-    // GET /notifications + PUT /notifications/:id/reset only; the richer feature
-    // set was never implemented on this component. See git history (test written
-    // at 9d51135 after component's last change 0df1771).
-    it.skip('loads the admin list with default params and renders rows', async () => {
-        const grades = note()
-        const handled = note({
-            _id: 'note-2',
-            type: 'inactivity_action',
-            message: 'Inaktiv elev',
-            resolvedByMe: true,
-            resolvedByUsers: ['me'],
+    it('loads notifications and displays their message, type, and status', async () => {
+        client.get.mockResolvedValueOnce({
+            data: [
+                notification(),
+                notification({
+                    _id: 'notification-2',
+                    message: 'Intyg klart',
+                    resolved: true,
+                }),
+            ],
         })
-        const responder = vi.fn().mockResolvedValue(
-            adminPageResponse({ notifications: [grades, handled], total: 2, totalPages: 1 })
-        )
 
-        await mountPage(responder)
+        const wrapper = await mountPage()
 
-        expect(client.get).toHaveBeenCalledWith('/notifications/admin', {
-            params: {
-                status: 'open',
-                page: 1,
-                limit: 20,
-                type: undefined,
-                search: undefined,
-            },
-        })
-        expect(wrapper.text()).toContain('Betyg väntar')
+        expect(client.get).toHaveBeenCalledWith('/notifications')
         expect(wrapper.text()).toContain('Betyg väntar för Anna')
-        expect(wrapper.text()).toContain('Anna Elev')
-        expect(wrapper.text()).toContain('Obehandlad')
+        expect(wrapper.text()).toContain('grades_pending')
+        expect(wrapper.text()).toContain('Ohanterad')
         expect(wrapper.text()).toContain('Hanterad')
-        expect(wrapper.text()).toContain('Inaktivitetsärende')
     })
 
-    it.skip('shows the inactivity action buttons for inactivity notifications', async () => {
-        const responder = vi.fn().mockResolvedValue(
-            adminPageResponse({
-                notifications: [
-                    note({ _id: 'act-1', type: 'inactivity_action', meta: { studentId: 'stu-1' } }),
-                ],
-                total: 1,
-                totalPages: 1,
-            })
-        )
+    it('shows an empty state when the API returns no notifications', async () => {
+        client.get.mockResolvedValueOnce({ data: { notifications: [] } })
 
-        await mountPage(responder)
-
-        expect(wrapper.text()).toContain('Varningsmail')
-        expect(wrapper.text()).toContain('Avsluta')
-    })
-
-    it('shows an empty state when there are no notifications', async () => {
-        await mountPage()
+        const wrapper = await mountPage()
 
         expect(wrapper.text()).toContain('Inga notifieringar.')
     })
 
-    it.skip('reloads with the selected status filter', async () => {
-        const responder = vi.fn().mockResolvedValue(adminPageResponse({ total: 0 }))
-        await mountPage(responder)
+    it('shows a loading indicator until the request finishes', async () => {
+        let resolveRequest
+        client.get.mockReturnValueOnce(new Promise((resolve) => {
+            resolveRequest = resolve
+        }))
 
-        wrapper.vm.status = 'resolved_by_me'
-        await wrapper.vm.$nextTick()
+        const wrapper = mount(NotificationManager)
+        expect(wrapper.find('.v-progress-linear').exists()).toBe(true)
 
-        expect(responder).toHaveBeenLastCalledWith('/notifications/admin', {
-            params: {
-                status: 'resolved_by_me',
-                page: 1,
-                limit: 20,
-                type: undefined,
-                search: undefined,
-            },
+        resolveRequest({ data: [] })
+        await flushPromises()
+
+        expect(wrapper.vm.loading).toBe(false)
+        expect(wrapper.text()).toContain('Inga notifieringar.')
+    })
+
+    it('shows an error and notifies the user when loading fails', async () => {
+        client.get.mockRejectedValueOnce(new Error('network failure'))
+
+        const wrapper = await mountPage()
+
+        expect(wrapper.text()).toContain('Kunde inte hämta notifieringar.')
+        expect(mockToast.error).toHaveBeenCalledWith('Kunde inte hämta notifieringar.')
+    })
+
+    it('reloads notifications when the refresh button is clicked', async () => {
+        client.get.mockResolvedValueOnce({ data: [] })
+        const wrapper = await mountPage()
+        client.get.mockResolvedValueOnce({ data: [notification()] })
+
+        await wrapper.find('button').trigger('click')
+        await flushPromises()
+
+        expect(client.get).toHaveBeenCalledTimes(2)
+        expect(wrapper.text()).toContain('Betyg väntar för Anna')
+    })
+
+    it('resets a resolved notification and reloads the list', async () => {
+        client.get
+            .mockResolvedValueOnce({ data: [notification({ resolved: true })] })
+            .mockResolvedValueOnce({ data: [] })
+        client.put.mockResolvedValueOnce({ data: { message: 'ok' } })
+
+        const wrapper = await mountPage()
+        const resetButton = wrapper.findAll('button').find((button) =>
+            button.text().includes('Återställ')
+        )
+
+        await resetButton.trigger('click')
+        await flushPromises()
+
+        expect(client.put).toHaveBeenCalledWith('/notifications/notification-1/reset')
+        expect(client.get).toHaveBeenCalledTimes(2)
+        expect(mockToast.success).toHaveBeenCalledWith('Notifiering återställd.')
+        expect(wrapper.text()).toContain('Inga notifieringar.')
+    })
+
+    it('reports an error when resetting a notification fails', async () => {
+        client.get.mockResolvedValueOnce({
+            data: [notification({ resolved: true })],
         })
-    })
+        client.put.mockRejectedValueOnce(new Error('network failure'))
 
-    it.skip('resolves a notification with a per-user resolve call', async () => {
-        const responder = vi.fn().mockResolvedValue(
-            adminPageResponse({
-                notifications: [note()],
-                total: 1,
-                totalPages: 1,
-            })
+        const wrapper = await mountPage()
+        const resetButton = wrapper.findAll('button').find((button) =>
+            button.text().includes('Återställ')
         )
-        await mountPage(responder)
 
-        await wrapper.vm.resolveNotification('note-1')
+        await resetButton.trigger('click')
+        await flushPromises()
 
-        expect(client.put).toHaveBeenCalledWith('/notifications/note-1/resolve')
-        expect(responder).toHaveBeenCalledTimes(2)
-    })
-
-    it('resets a resolved notification', async () => {
-        const responder = vi.fn().mockResolvedValue(
-            adminPageResponse({
-                notifications: [note({ resolvedByMe: true, resolvedByUsers: ['me'] })],
-                total: 1,
-                totalPages: 1,
-            })
-        )
-        await mountPage(responder)
-
-        await wrapper.vm.resetNotification('note-1')
-
-        expect(client.put).toHaveBeenCalledWith('/notifications/note-1/reset')
-    })
-
-    it.skip('resets all notifications after confirmation', async () => {
-        await mountPage()
-
-        wrapper.vm.resetAllDialog = true
-        await wrapper.vm.resetAllNotifications()
-
-        expect(client.put).toHaveBeenCalledWith('/notifications/reset-all')
-        expect(wrapper.vm.resetAllDialog).toBe(false)
-    })
-
-    it.skip('sends a warning email for inactivity notifications', async () => {
-        const responder = vi.fn().mockResolvedValue(
-            adminPageResponse({
-                notifications: [note({ _id: 'act-1', type: 'inactivity_action' })],
-                total: 1,
-                totalPages: 1,
-            })
-        )
-        await mountPage(responder)
-
-        await wrapper.vm.performInactivityAction(note({ _id: 'act-1', type: 'inactivity_action' }), 'warning')
-
-        expect(client.post).toHaveBeenCalledWith('/inactivity/notifications/act-1/action', {
-            action: 'warning',
-        })
-    })
-
-    it.skip('withdraws a student through the confirm dialog', async () => {
-        const responder = vi.fn().mockResolvedValue(
-            adminPageResponse({
-                notifications: [note({ _id: 'act-1', type: 'inactivity_action' })],
-                total: 1,
-                totalPages: 1,
-            })
-        )
-        await mountPage(responder)
-
-        wrapper.vm.openWithdrawDialog(note({ _id: 'act-1', type: 'inactivity_action' }))
-
-        await wrapper.vm.confirmWithdraw()
-
-        expect(client.post).toHaveBeenCalledWith('/inactivity/notifications/act-1/action', {
-            action: 'withdraw',
-        })
-        expect(wrapper.vm.withdrawDialog).toBe(false)
+        expect(mockToast.error).toHaveBeenCalledWith('Kunde inte återställa notifiering.')
     })
 })

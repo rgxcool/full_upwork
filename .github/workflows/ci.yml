@@ -31,27 +31,5 @@ jobs:
     needs: lint
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 25
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Backend tests
-        working-directory: backend
-        run: npx vitest run --reporter=verbose
-        env:
-          NODE_ENV: test
-      - name: Frontend tests
-        working-directory: frontend
-        run: npx vitest run --reporter=verbose
-
-  docker:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build and run Docker test suite
-        run: docker build --target cicd -t mindful-citest . && docker run --rm mindful-citest
+      - name: Build and run test suite in Docker
+        run: make citest

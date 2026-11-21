@@ -167,12 +167,8 @@ describe("Upload Routes", () => {
     it("stores fallback metadata when no user is present", async () => {
         const appWithoutUser = buildAppWithoutUser();
         const studentId = new mongoose.Types.ObjectId().toString();
-        const response = await uploadTestFile(
-            studentId,
-            "fallback.txt",
-            "fallback content",
-            appWithoutUser
-        );
+        const response = await request(appWithoutUser)
+            .post(`/api/uploads/${studentId}`);
 
         expect(response.status).toBe(401);
     });
@@ -583,21 +579,15 @@ describe("Upload Routes - Auth Enforcement", () => {
     describe("POST /:studentId (upload)", () => {
         it("returns 401 without auth token", async () => {
             const studentId = new mongoose.Types.ObjectId().toString();
-            const { tempDir, filePath } = createTempFile("test.txt", "content");
             const response = await request(noAuthApp)
-                .post(`/api/uploads/${studentId}`)
-                .attach("file", filePath);
-            cleanupTempDir(tempDir);
+                .post(`/api/uploads/${studentId}`);
             expect(response.status).toBe(401);
         });
 
         it("returns 403 for student role", async () => {
             const studentId = new mongoose.Types.ObjectId().toString();
-            const { tempDir, filePath } = createTempFile("test.txt", "content");
             const response = await request(studentApp)
-                .post(`/api/uploads/${studentId}`)
-                .attach("file", filePath);
-            cleanupTempDir(tempDir);
+                .post(`/api/uploads/${studentId}`);
             expect(response.status).toBe(403);
         });
     });
