@@ -1,0 +1,19 @@
+name: Idé till parkeringsplatsen
+description: Logga en ny funktionsidé eller förbättring för framtida specificering och prissättning
+labels: ["parking-lot"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Vad ska detta uppnå?
+      placeholder: Beskriv arbetsflödet eller problemet ni vill lösa...
+    validations:
+      required: true
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Prioritet inför Etapp 2
+      options:
+        - Bra att ha
+        - Viktigt inför nästa sprint
+        - Affärskritiskt behov

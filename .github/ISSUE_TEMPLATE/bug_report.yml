@@ -1,0 +1,17 @@
+name: Felrapport (Bugg)
+description: Rapportera trasigt beteende i en redan levererad funktion
+labels: ["bug"]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steg för att återskapa felet
+      placeholder: "1. Gå till...\n2. Klicka på...\n3. Se felmeddelande..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Förväntat vs. faktiskt beteende
+    validations:
+      required: true

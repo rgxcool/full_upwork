@@ -1,0 +1,29 @@
+name: Specificerad funktion (Offertad)
+description: Godkänd eller offertad funktion med checklista för dolt arbete
+labels: ["feature"]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Överenskommen omfattning & acceptanskriterier
+      placeholder: Vad ingår – och vad ingår uttryckligen INTE?
+    validations:
+      required: true
+  - type: checkboxes
+    id: overhead
+    attributes:
+      label: Checklista för dolt arbete & overhead (inkludera i estimatet)
+      options:
+        - label: Roll- och behörighetskontroller (t.ex. admin / lärare / elev)
+        - label: Tomma lägen (empty states), laddningsindikatorer & felhantering
+        - label: Formulärvalidering & gränsfall (edge cases)
+        - label: Responsivitet / mobilanpassning
+        - label: Enhets-/integrationstester & driftsättning till staging
+        - label: Demoinspelning till kund & 1 revideringsrunda
+  - type: input
+    id: estimate
+    attributes:
+      label: Buffrat estimat & offert
+      placeholder: "t.ex. 12 tim (buffrat) – Offertad i Etapp 2 Sprint 1"
+    validations:
+      required: true
