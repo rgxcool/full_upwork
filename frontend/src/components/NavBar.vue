@@ -28,12 +28,51 @@
             @focus="handleInputFocus"
           />
 
-          <DatePicker
-            v-if="selectedSearchType === 'Datum'"
-            v-model="selectedDate"
-            :format="'yyyy-MM-dd'"
-            :placeholder="'Välj datum'"
-          />
+          <div v-else class="custom-date-search">
+            <button
+              type="button"
+              class="date-icon-btn"
+              aria-label="Öppna eller stäng kalender"
+              title="Öppna eller stäng kalender"
+              @mousedown.prevent
+              @click.stop="toggleDatePicker"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+
+            <DatePicker
+              ref="datePickerRef"
+              v-model="selectedDate"
+              class="search-date-picker"
+              model-type="yyyy-MM-dd"
+              format="yyyy-MM-dd"
+              preview-format="yyyy-MM-dd"
+              :formats="{ input: 'yyyy-MM-dd', preview: 'yyyy-MM-dd' }"
+              placeholder="yyyy-mm-dd"
+              :enable-time-picker="false"
+              :time-config="{ enableTimePicker: false }"
+              :auto-apply="true"
+              :clearable="false"
+              :hide-input-icon="true"
+              :text-input="{ format: 'yyyy-MM-dd', openMenu: false, enterSubmit: false }"
+              @open="isDateMenuOpen = true"
+              @closed="isDateMenuOpen = false"
+              @keydown.esc.stop="handleEscapeKey"
+            />
+          </div>
 
           <div v-if="searchQuery || selectedDate" class="clear-icon" @click="clearSearch">✕</div>
         </div>
@@ -462,35 +501,34 @@
       const router = useRouter()
       const toast = useToast()
 
-      const userRole = computed(() => store.getters.userRole || 'guest') // Default to 'guest' if undefined
+      const userRole = computed(() => store.getters.userRole || 'guest')
       const canSeeNotifications = computed(() =>
         ['teacher', 'admin', 'systemadmin', 'student'].includes(userRole.value)
       )
 
-      // Dölja navbar på login-sidan
       const isLoginPage = computed(() => {
         return router.currentRoute.value.path === '/login'
       })
 
       const notifications = ref([])
-
       const showNotisPanel = ref(false)
       const notisPanel = ref(null)
       const notificationIcon = ref(null)
 
-      // Notification polling configuration
-      const NOTIFICATION_POLL_INTERVAL = 60000 // 60 seconds (increased to avoid rate limiting)
+      const NOTIFICATION_POLL_INTERVAL = 60000
       let notificationPollInterval = null
       let isPollingPaused = false
-      // Fix missing properties
+
       const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
       const searchQuery = ref('')
       const searchResults = ref([])
       const showResults = ref(false)
       const showFilters = ref(false)
-      const filter = ref('all') // Aktivt filter
+      const filter = ref('all')
       const selectedCourse = ref('')
       const selectedDate = ref(null)
+      const datePickerRef = ref(null)
+      const isDateMenuOpen = ref(false)
       const allCourses = ref([])
       const showNotification = ref(false)
       const showProfileMenu = ref(false)
@@ -498,13 +536,30 @@
 
       const endDateNotifications = ref([])
       const missingGradeNotifications = ref([])
-
       const isMobileMenuOpen = ref(false)
 
       const selectedSearchType = ref('Alla')
       const showSearchTypeDropdown = ref(false)
       const searchLoading = ref(false)
       const searchError = ref('')
+      const busyNotificationId = ref(null)
+
+      const closeDatePicker = () => {
+        datePickerRef.value?.closeMenu?.()
+        isDateMenuOpen.value = false
+      }
+
+      const toggleDatePicker = () => {
+        const dp = datePickerRef.value
+        if (!dp) return
+
+        if (isDateMenuOpen.value) {
+          closeDatePicker()
+        } else {
+          dp.openMenu?.()
+          isDateMenuOpen.value = true
+        }
+      }
 
       const toggleMobileMenu = (event) => {
         event?.preventDefault()
@@ -519,7 +574,6 @@
       const totalNotifications = computed(() => notifications.value.length)
 
       const fetchNotifications = async () => {
-        // Skip if polling is paused (tab hidden)
         if (isPollingPaused) {
           return
         }
@@ -528,31 +582,21 @@
           const res = await client.get('/notifications')
           notifications.value = res.data
         } catch (error) {
-          // Handle rate limiting gracefully
           if (error.response?.status === 429) {
-            // Keep the previous notification list during rate limiting.
-            // Don't clear notifications on rate limit, just skip this fetch
             return
           }
-          // Notification polling failures should not interrupt navigation.
-          // Only clear notifications on non-rate-limit errors
           if (error.response?.status !== 429) {
             notifications.value = []
           }
         }
       }
 
-      // Start polling for notifications
       const startNotificationPolling = () => {
-        // Clear any existing interval
         stopNotificationPolling()
 
-        // Only start if user is logged in and can see notifications
         if (isLoggedIn.value && canSeeNotifications.value) {
-          // Fetch immediately
           fetchNotifications()
 
-          // Then poll at regular intervals
           notificationPollInterval = setInterval(() => {
             if (!isPollingPaused) {
               fetchNotifications()
@@ -561,7 +605,6 @@
         }
       }
 
-      // Stop polling for notifications
       const stopNotificationPolling = () => {
         if (notificationPollInterval) {
           clearInterval(notificationPollInterval)
@@ -569,13 +612,11 @@
         }
       }
 
-      // Handle page visibility changes (pause polling when tab is hidden)
       const handleVisibilityChange = () => {
         if (document.hidden) {
           isPollingPaused = true
         } else {
           isPollingPaused = false
-          // Immediately fetch when tab becomes visible
           if (isLoggedIn.value && canSeeNotifications.value) {
             fetchNotifications()
           }
@@ -602,8 +643,6 @@
           toast.error('Kunde inte återställa notifikationer.')
         }
       }
-
-      const busyNotificationId = ref(null)
 
       const performInactivityAction = async (notification, action) => {
         busyNotificationId.value = notification._id
@@ -657,11 +696,10 @@
         }
       }
 
-      const toggleNotificationPanel = (event) => {
+      const toggleNotificationPanel = () => {
         const wasOpen = showNotisPanel.value
         showNotisPanel.value = !showNotisPanel.value
 
-        // Fetch immediately when opening the panel
         if (!wasOpen && showNotisPanel.value && isLoggedIn.value && canSeeNotifications.value) {
           fetchNotifications()
         }
@@ -671,7 +709,6 @@
         showResults.value = false
         searchQuery.value = ''
 
-        // Gå till special vy om det är kurs eller program eller kurspaket
         const courseTypes = [
           'Kurs',
           'Course',
@@ -682,7 +719,6 @@
         ]
 
         if (courseTypes.includes(result.type)) {
-          // Generella kurser (mallar) ska visa alla aktiva kursinstanser
           if (['Kurs', 'Course'].includes(result.type)) {
             router.push({
               path: `/education/${result.id}`,
@@ -691,7 +727,6 @@
             return
           }
 
-          // Kursinstanser ska visa instansvyn med elever
           if (['Kursinstans', 'CourseInstance'].includes(result.type)) {
             router.push({
               path: `/education/${result.id}`,
@@ -700,20 +735,17 @@
             return
           }
 
-          // Övriga kursrelaterade typer (t.ex. Program, CoursePackage) använder befintlig vy
           router.push(`/education/${result.id}`)
         } else if (['Elev', 'Student'].includes(result.type)) {
           router.push(`/student/${result.id}`)
         } else {
-          router.push(`/detaljer/${result.type}/${result.id}`) // Vanlig vy
+          router.push(`/detaljer/${result.type}/${result.id}`)
         }
       }
 
       const hasPermission = (role) => store.getters.hasPermission(role)
-
       const isLoggedIn = computed(() => store.getters.isLoggedIn)
 
-      // Check if user role is "teacher" or higher
       const canSeeSearch = computed(() => {
         const allowedRoles = ['teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin']
         return isLoggedIn.value && allowedRoles.includes(userRole.value)
@@ -727,6 +759,9 @@
       const selectSearchType = (type) => {
         selectedSearchType.value = type
         showSearchTypeDropdown.value = false
+        if (type !== 'Datum') {
+          closeDatePicker()
+        }
         handleSearch()
       }
 
@@ -747,8 +782,6 @@
               showResults.value = false
               return
             }
-            // Use the local calendar date, not toISOString(): the latter
-            // shifts the day backwards in timezones ahead of UTC.
             const formattedDate = toDateOnly(selectedDate.value)
             if (!formattedDate) {
               searchResults.value = []
@@ -796,7 +829,6 @@
         }
       }
 
-      // Reagera på datumändring om "Datum" är aktivt
       watch(selectedDate, (val) => {
         if (selectedSearchType.value === 'Datum' && val) {
           handleSearch()
@@ -829,6 +861,7 @@
       const clearSearch = () => {
         searchQuery.value = ''
         selectedDate.value = null
+        closeDatePicker()
         searchResults.value = []
         showResults.value = false
         searchLoading.value = false
@@ -850,7 +883,31 @@
         fetchCourses()
       }
 
-      // Remove these from main nav bar and add to secret menu
+      const handleEscapeKey = (event) => {
+        if (event?.key && event.key !== 'Escape') return
+
+        let handled = false
+
+        if (isDateMenuOpen.value) {
+          closeDatePicker()
+          handled = true
+        }
+
+        if (showSearchTypeDropdown.value) {
+          showSearchTypeDropdown.value = false
+          handled = true
+        }
+
+        if (showResults.value) {
+          showResults.value = false
+          handled = true
+        }
+
+        if (handled && event?.preventDefault) {
+          event.preventDefault()
+        }
+      }
+
       const secretMenuNames = [
         'Utbildning',
         'Student Inskrivningar',
@@ -860,6 +917,7 @@
         'Earnings',
         'Stats',
       ]
+
       const menuItems = [
         {
           name: 'Översikt',
@@ -958,29 +1016,25 @@
 
       const filteredMenuItems = computed(() => {
         if (!isLoggedIn.value) return []
-        const userRole = store.getters.userRole
-        const isAdmin = store.getters.isAdmin
-        const filtered = menuItems.filter((item) => {
+        const currentRole = store.getters.userRole
+        const adminFlag = store.getters.isAdmin
+        return menuItems.filter((item) => {
           if (secretMenuNames.includes(item.name)) return false
           if (!item.role) return true
 
-          // Admins and systemadmins can see all menus
-          if (isAdmin) return true
+          if (adminFlag) return true
 
-          // Special handling for SYV Samtal and Specped Samtal - only show to exact role
           if (item.name === 'SYV Samtal') {
-            return userRole === 'syv'
+            return currentRole === 'syv'
           }
           if (item.name === 'Specped Samtal') {
-            return userRole === 'specped'
+            return currentRole === 'specped'
           }
 
-          // For all other items, use the standard permission check
-          const hasPerm = hasPermission(item.role)
-          return hasPerm
+          return hasPermission(item.role)
         })
-        return filtered
       })
+
       const secretMenuItems = computed(() => {
         return menuItems.filter((item) => {
           if (!secretMenuNames.includes(item.name)) return false
@@ -988,15 +1042,14 @@
           return hasPermission(item.role)
         })
       })
+
       const toggleProfileMenu = (event) => {
         event?.preventDefault()
         event?.stopPropagation()
         showProfileMenu.value = !showProfileMenu.value
       }
 
-      // Close profile menu and notis panel when clicking outside
       const handleClickOutside = (event) => {
-        // Profile dropdown
         if (showProfileMenu.value) {
           if (
             profileDropdown.value &&
@@ -1006,7 +1059,6 @@
             showProfileMenu.value = false
           }
         }
-        // Notis panel
         if (showNotisPanel.value) {
           if (
             notisPanel.value &&
@@ -1017,7 +1069,7 @@
           }
         }
       }
-      // Watch for user login to start/stop polling
+
       watch(
         isLoggedIn,
         (loggedIn) => {
@@ -1031,7 +1083,6 @@
         { immediate: true }
       )
 
-      // Watch for role changes that affect notification visibility
       watch(canSeeNotifications, (canSee) => {
         if (canSee && isLoggedIn.value) {
           startNotificationPolling()
@@ -1043,8 +1094,8 @@
       onMounted(() => {
         document.addEventListener('mousedown', handleClickOutside)
         document.addEventListener('visibilitychange', handleVisibilityChange)
+        document.addEventListener('keydown', handleEscapeKey)
 
-        // Start polling if user is already logged in
         if (isLoggedIn.value && canSeeNotifications.value) {
           startNotificationPolling()
         }
@@ -1053,6 +1104,7 @@
       onBeforeUnmount(() => {
         document.removeEventListener('mousedown', handleClickOutside)
         document.removeEventListener('visibilitychange', handleVisibilityChange)
+        document.removeEventListener('keydown', handleEscapeKey)
         stopNotificationPolling()
       })
 
@@ -1060,7 +1112,6 @@
       const versionRef = ref(null)
       const secretMenuStyle = computed(() => {
         if (!showSecretMenu.value || !versionRef.value) return {}
-        // Position dropdown below the version number, relative to nav
         const navRect = versionRef.value.closest('nav').getBoundingClientRect()
         const rect = versionRef.value.getBoundingClientRect()
         return {
@@ -1070,6 +1121,7 @@
           zIndex: 3000,
         }
       })
+
       const toggleSecretMenu = () => {
         showSecretMenu.value = !showSecretMenu.value
       }
@@ -1099,10 +1151,15 @@
         toggleSecretMenu,
         navigateToDetails,
         setFilter,
+        openSearchPanel,
         selectedCourse,
         allCourses,
         fetchCourses,
         selectedDate,
+        datePickerRef,
+        isDateMenuOpen,
+        toggleDatePicker,
+        handleEscapeKey,
         showNotification,
         totalNotifications,
         resolveNote,
@@ -1129,14 +1186,13 @@
         isMobileMenuOpen,
         toggleMobileMenu,
         closeMobileMenu,
+        busyNotificationId,
       }
     },
   }
 </script>
 
 <style scoped>
-  /* Navbar */
-
   .logo-version-group {
     display: flex;
     align-items: center;
@@ -1158,6 +1214,7 @@
     gap: 12px;
     margin: 0;
   }
+
   .navbar {
     background: white;
     font-family:
@@ -1186,7 +1243,6 @@
     gap: 2rem;
   }
 
-  /* Logo */
   .nav-brand {
     display: flex;
     align-items: center;
@@ -1223,7 +1279,6 @@
     color: var(--color-primary);
   }
 
-  /* Sökruta exakt till vänster */
   .search-container {
     display: flex;
     justify-content: center;
@@ -1331,11 +1386,6 @@
     color: gray;
   }
 
-  .logo {
-    height: 50px;
-  }
-
-  /* Actions */
   .nav-actions {
     display: flex;
     align-items: center;
@@ -1344,7 +1394,6 @@
     justify-self: end;
   }
 
-  /* Burger button */
   .burger-btn {
     display: flex;
     align-items: center;
@@ -1357,7 +1406,7 @@
     color: #374151;
     cursor: pointer;
     transition: all 0.2s ease;
-    order: 2; /* Ensure it appears after profile button */
+    order: 2;
     position: relative;
     z-index: 100;
     pointer-events: auto;
@@ -1374,7 +1423,6 @@
     transform: scale(0.95);
   }
 
-  /* Notification icon */
   .notification-icon {
     position: relative;
     display: flex;
@@ -1422,7 +1470,6 @@
     position: relative;
   }
 
-  /* Notification panel */
   .notification-panel {
     position: absolute;
     top: calc(100% + 0.5rem);
@@ -1623,10 +1670,9 @@
     font-style: italic;
   }
 
-  /* Profile button för inloggade */
   .profile-dropdown-wrapper {
     position: relative;
-    order: 1; /* Ensure it appears before burger button */
+    order: 1;
   }
 
   .profile-btn {
@@ -1695,8 +1741,6 @@
     text-align: center;
   }
 
-  /* Ej använd längre - enkel navbar */
-
   .nav-link {
     display: block;
     text-decoration: none;
@@ -1714,13 +1758,11 @@
     background: var(--color-primary-light);
   }
 
-  /* Logout Button - Styled to Match Links */
   .logout-btn {
     appearance: none;
     border: none;
     background: none;
     font-size: 1rem;
-
     color: blue;
     padding: 4px 8px;
     border-radius: 4px;
@@ -1774,6 +1816,7 @@
     user-select: none;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    flex-shrink: 0;
   }
 
   .search-type:hover {
@@ -1790,10 +1833,64 @@
     font-size: 15px;
   }
 
+  .custom-date-search {
+    display: inline-flex;
+    align-items: center;
+    flex: 1 1 auto;
+    gap: 8px;
+    min-width: 0;
+    width: auto;
+  }
+
+  .date-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .date-icon-btn:hover {
+    background: #667eea;
+    border-color: #667eea;
+    color: #ffffff;
+  }
+
+  .search-date-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+  }
+
+  .search-date-picker :deep(.dp__input_icon),
+  .search-date-picker :deep(.dp__clear_icon),
+  .search-date-picker :deep([class*='calendar-icon']) {
+    display: none !important;
+  }
+
+  .search-date-picker :deep(.dp__input) {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 15px;
+    padding: 4px 8px !important;
+    color: #111827;
+    width: 100%;
+  }
+
   .clear-icon {
     cursor: pointer;
     font-size: 18px;
     color: #aaa;
+    flex-shrink: 0;
   }
 
   .search-type-dropdown {
@@ -1834,17 +1931,6 @@
     color: #fff;
   }
 
-  .search-bar {
-    background: #fff;
-    border: 1px solid #ddd;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
-    border-radius: 30px;
-    padding: 8px 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
   .search-type-toggle button {
     background-color: #f5f5f5;
     border-radius: 15px;
@@ -1880,10 +1966,6 @@
     margin-right: 10px;
     transform: scale(1.2);
     accent-color: #6c63ff;
-  }
-
-  .icon-container {
-    position: relative; /* viktigt! */
   }
 
   .mobile-menu-btn {
@@ -1922,7 +2004,6 @@
     }
   }
 
-  /* Responsiv design */
   @media (max-width: 768px) {
     .nav-container {
       padding: 0.75rem 1rem;
@@ -1985,7 +2066,7 @@
   }
 
   .mobile-menu.open {
-    transform: translateX(0); /* Detta visar menyn */
+    transform: translateX(0);
     visibility: visible;
     opacity: 1;
   }
@@ -2069,7 +2150,6 @@
     color: red;
   }
 
-  /* Mobile menu */
   .mobile-overlay {
     position: fixed !important;
     top: 0 !important;
@@ -2104,7 +2184,6 @@
     }
   }
 
-  /* Hover effects for mobile menu links */
   .mobile-nav-link:hover {
     background: #667eea !important;
     color: white !important;
@@ -2220,6 +2299,7 @@
     width: 24px;
     height: 24px;
   }
+
   .burger-menu:hover svg {
     stroke: #6c63ff;
   }
@@ -2282,6 +2362,7 @@
     gap: 10px;
     margin-left: 16px;
   }
+
   .login-btn {
     display: flex;
     align-items: center;
@@ -2310,6 +2391,7 @@
     transform: translateY(0);
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   }
+
   .register-btn {
     background: #ece6f0;
     color: #6c63ff;
@@ -2319,38 +2401,29 @@
     font-weight: 600;
     transition: background 0.2s;
   }
+
   .register-btn:hover {
     background: #dcd4e6;
   }
+
   .navbar-auth-buttons {
-    /* position: absolute; top: 20px; right: 40px; z-index: 2000; */
     position: static !important;
     display: flex;
     align-items: center;
     gap: 10px;
     margin-left: 16px;
   }
-  .top-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    margin-bottom: 0;
-    gap: 24px;
-  }
-  .logo-version-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+
   .logo-version-group .logo {
     height: 44px;
   }
+
   .logo-version-group .build-counter {
     font-size: 1.1rem;
     color: #6c63ff;
     font-weight: 600;
   }
+
   .secret-menu-dropdown {
     background: #ffffff;
     border: 1.5px solid #6c63ff;
@@ -2360,16 +2433,18 @@
     min-width: 200px;
     z-index: 3000;
   }
+
   .secret-menu-dropdown ul {
     list-style: none;
     padding: 0;
     margin: 0;
   }
+
   .secret-menu-dropdown li {
     margin-bottom: 8px;
   }
+
   .secret-menu-dropdown li:last-child {
     margin-bottom: 0;
   }
-  /* Navbar styling moved to main styles above */
 </style>
