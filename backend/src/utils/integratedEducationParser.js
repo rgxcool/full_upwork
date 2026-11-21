@@ -36,7 +36,7 @@ async function parseEducation(filePath) {
       currentProgram = await Program.findOneAndUpdate(
         { programName },
         { programName, programCourses: [] }, 
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
       );
       orderCounter = 1;
       logger.info({ programName }, "Program processed");
@@ -82,7 +82,7 @@ async function parseEducation(filePath) {
         currentProgram = await Program.findOneAndUpdate(
           { programName },
           { programName },
-          { new: true, upsert: true }
+          { returnDocument: 'after', upsert: true }
         );
         logger.info({ programName }, "Program updated");
       }
@@ -97,7 +97,7 @@ async function parseEducation(filePath) {
             coursePackageExtent: itemExtent,
             coursePackageCourses: []
           },
-          { new: true, upsert: true }
+          { returnDocument: 'after', upsert: true }
         );
 
         await Program.findByIdAndUpdate(currentProgram._id, {
@@ -109,7 +109,7 @@ async function parseEducation(filePath) {
         const course = await Course.findOneAndUpdate(
           { courseName: itemName, courseCode: itemCode },
           { courseName: itemName, courseCode: itemCode, courseExtent: itemExtent },
-          { new: true, upsert: true }
+          { returnDocument: 'after', upsert: true }
         );
 
         await CoursePackage.findByIdAndUpdate(currentPackage._id, {

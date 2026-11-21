@@ -328,7 +328,7 @@ describe("questionBankRoutes", () => {
                     selectedQuestions: [validObjectId],
                     selectedCount: 1,
                 },
-                { new: true }
+                { returnDocument: 'after' }
             );
             expect(res.body.success).toBe(true);
         });
@@ -847,7 +847,7 @@ describe("questionBankRoutes", () => {
                     moduleNumber: 3,
                     active: true,
                 }),
-                expect.objectContaining({ new: true, runValidators: true })
+                expect.objectContaining({ returnDocument: 'after', runValidators: true })
             );
         });
     });
@@ -879,7 +879,7 @@ describe("questionBankRoutes", () => {
             expect(Question.findByIdAndUpdate).toHaveBeenCalledWith(
                 validObjectId,
                 { active: false },
-                { new: true }
+                { returnDocument: 'after' }
             );
             expect(res.body.message).toMatch(/tagits bort/);
         });

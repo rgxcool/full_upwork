@@ -2130,7 +2130,7 @@ describe("PUT /student/:id", () => {
                     teacherId: "teacher-linked",
                 }),
             }),
-            { new: true }
+            { returnDocument: 'after' }
         );
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ error: "Failed to update student" });

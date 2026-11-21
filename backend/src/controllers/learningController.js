@@ -215,7 +215,7 @@ export const submitAssignment = async (req, res) => {
                     feedback: { comment: "", status: "", by: null, at: null },
                 },
             },
-            { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', runValidators: true, setDefaultsOnInsert: true }
         );
 
         // A resubmission invalidates any prior "godkänd" marking for the module.

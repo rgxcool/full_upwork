@@ -327,7 +327,7 @@ export async function nextCertificateNumber(prefix = "ML") {
     const counter = await Counters.findByIdAndUpdate(
         `certificate-${year}`,
         { $inc: { seq: 1 } },
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
     );
     const seq = String(counter.seq).padStart(5, "0");
     return `${prefix}-${year}-${seq}`;
