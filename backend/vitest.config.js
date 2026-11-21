@@ -23,7 +23,7 @@ export default defineConfig({
         setupFiles: ["./tests/setup.js"],
         exclude: ["node_modules/**", "dist/**"],
         include: ["tests/**/*.test.js"],
-        maxWorkers: 2,
+        maxWorkers: 1,
         silent: true
     },
 });
