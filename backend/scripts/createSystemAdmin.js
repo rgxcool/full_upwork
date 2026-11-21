@@ -29,7 +29,7 @@ export async function createSystemAdmin(options = {}) {
     console.log("✅ Connected to MongoDB");
 
     // Check if a systemadmin already exists
-    const existingAdmin = await User.findOne({ roles: "systemadmin" });
+    const existingAdmin = await User.findOne({ email: email });
     if (existingAdmin) {
         console.log("⚠️ System Admin already exists:", existingAdmin.email);
         throw new Error("System admin already exists");
@@ -45,7 +45,7 @@ export async function createSystemAdmin(options = {}) {
         username,
         email,
         password: hashedPassword,
-        role: "systemadmin",
+        roles: "systemadmin",
         mustChangePassword: usesDefaultPassword,
         createdAt: new Date(),
         updatedAt: new Date(),
