@@ -39,6 +39,7 @@ const ActionPlanManager = () => import('@/views/Admin/ActionPlanManager.vue')
 const LearningManagement = () => import('@/views/Admin/LearningManagement.vue')
 const NotificationManager = () => import('@/views/Admin/NotificationManager.vue')
 const CalendarHousekeeping = () => import('@/views/Admin/CalendarHousekeeping.vue')
+const CourseCardBuilder = () => import('@/views/Admin/CourseCardBuilder.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
@@ -59,7 +60,6 @@ import CourseCards from '@/views/Student/CourseCards.vue'
 import Dashboard from '@/views/Dashboard.vue'
 const ChatbotView = () => import('@/views/Student/ChatbotView.vue')
 const MessagingView = () => import('@/views/MessagingView.vue')
-
 
 const routes = [
   // Public Routes
@@ -111,8 +111,17 @@ const routes = [
   },
   { path: '/anvandare', component: SearchUser, meta: { title: 'Search Users', role: 'admin' } },
   { path: '/admin/users', component: SearchUser, meta: { title: 'Admin Users', role: 'admin' } },
-  { path: '/admin/edit-user/:id', component: EditUser, props: true, meta: { title: 'Redigera användare', role: ['admin', 'systemadmin'] } },
-  { path: '/admin/permissions', component: PermissionsTab, meta: { title: 'Behörigheter', role: ['admin', 'systemadmin'] } },
+  {
+    path: '/admin/edit-user/:id',
+    component: EditUser,
+    props: true,
+    meta: { title: 'Redigera användare', role: ['admin', 'systemadmin'] },
+  },
+  {
+    path: '/admin/permissions',
+    component: PermissionsTab,
+    meta: { title: 'Behörigheter', role: ['admin', 'systemadmin'] },
+  },
   {
     path: '/addstudent',
     name: 'AddStudent',
@@ -132,9 +141,20 @@ const routes = [
       // Preserve query parameters if any
       return {
         path: `/student/${to.params.id}`,
-        query: to.query
+        query: to.query,
       }
-    }
+    },
+  },
+  // CourseCardBuilder route for admins and system admins
+  {
+    path: '/admin/course-card-builder',
+    name: 'CourseCardBuilder',
+    component: CourseCardBuilder,
+    meta: {
+      title: 'Kurskortsbyggare',
+      requiresAuth: true,
+      requiredRoles: ['admin', 'systemadmin'],
+    },
   },
   // Redirect /detaljer/Kursinstans/:id to /education/:id?type=instance
   {
@@ -142,9 +162,9 @@ const routes = [
     redirect: (to) => {
       return {
         path: `/education/${to.params.id}`,
-        query: { ...to.query, type: 'instance' }
+        query: { ...to.query, type: 'instance' },
       }
-    }
+    },
   },
   {
     path: '/detaljer/:type/:id',
@@ -156,24 +176,24 @@ const routes = [
       if (to.params.type === 'Elev' || to.params.type === 'Student') {
         next({
           path: `/student/${to.params.id}`,
-          query: to.query
+          query: to.query,
         })
       } else if (to.params.type === 'Kursinstans' || to.params.type === 'CourseInstance') {
         // Redirect Kursinstans to education view
         next({
           path: `/education/${to.params.id}`,
-          query: { ...to.query, type: 'instance' }
+          query: { ...to.query, type: 'instance' },
         })
       } else if (to.params.type === 'Lärare' || to.params.type === 'Teacher') {
         // Redirect Lärare to staff profile view
         next({
           path: `/teacher/${to.params.id}`,
-          query: to.query
+          query: to.query,
         })
       } else {
         next()
       }
-    }
+    },
   },
   {
     path: '/education/:id',
@@ -318,7 +338,7 @@ const routes = [
     path: '/provningar',
     name: 'ProvningarCrud',
     component: () => import('@/views/Provningar/ProvningarCrud.vue'),
-    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin'], requiresAuth: true }
+    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin'], requiresAuth: true },
   },
 
   // Chatbot FAQ / Knowledge Base management (same view for admin & teacher;
@@ -341,7 +361,7 @@ const routes = [
     path: '/larare/kurser',
     name: 'TeacherKurser',
     component: () => import('@/views/Teacher/TeacherKurserPage.vue'),
-    meta: { title: 'Kurser', role: 'teacher' }
+    meta: { title: 'Kurser', role: 'teacher' },
   },
   {
     path: '/kalender',
@@ -358,7 +378,11 @@ const routes = [
     path: '/specped/appointments',
     name: 'SpecpedAppointments',
     component: RoleBasedAppointments,
-    meta: { title: 'Specped Samtal', role: 'specped', requiredRoles: ['specped', 'admin', 'systemadmin'] },
+    meta: {
+      title: 'Specped Samtal',
+      role: 'specped',
+      requiredRoles: ['specped', 'admin', 'systemadmin'],
+    },
   },
   { path: '/betyg', component: BetygSattning, meta: { title: 'Grade Setting', role: 'teacher' } },
   {
@@ -465,7 +489,7 @@ const routes = [
     },
   },
 
-// Remove duplicate /betyg route
+  // Remove duplicate /betyg route
   // Admin Category A – Activity Feed
   {
     path: '/admin/activity-feed',
@@ -538,8 +562,10 @@ const router = createRouter({
 })
 
 router.onError((error, to) => {
-  if (/Failed to fetch dynamically imported module/.test(error.message) ||
-      /Loading chunk .* failed/.test(error.message)) {
+  if (
+    /Failed to fetch dynamically imported module/.test(error.message) ||
+    /Loading chunk .* failed/.test(error.message)
+  ) {
     console.error('Chunk load failed, reloading page:', error)
     window.location.href = to.fullPath
   }

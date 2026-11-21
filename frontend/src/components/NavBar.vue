@@ -61,15 +61,11 @@
 
         <!-- Search results -->
         <div v-if="showResults" class="search-results">
-          <div v-if="searchLoading" class="search-status">
-            Söker...
-          </div>
+          <div v-if="searchLoading" class="search-status">Söker...</div>
           <div v-else-if="searchError" class="search-status search-error">
             {{ searchError }}
           </div>
-          <div v-else-if="filteredResults.length === 0" class="search-status">
-            Inga träffar
-          </div>
+          <div v-else-if="filteredResults.length === 0" class="search-status">Inga träffar</div>
           <ul v-else class="result-list">
             <li
               v-for="result in filteredResults"
@@ -154,14 +150,8 @@
         </div>
 
         <!-- Notification icon + panel wrapper -->
-        <div
-          v-if="isLoggedIn && canSeeNotifications"
-          class="notification-wrapper"
-        >
-          <div
-            class="notification-icon"
-            @click="toggleNotificationPanel"
-          >
+        <div v-if="isLoggedIn && canSeeNotifications" class="notification-wrapper">
+          <div class="notification-icon" @click="toggleNotificationPanel">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
@@ -184,7 +174,7 @@
           to="/messages"
           class="notification-icon"
           title="Meddelanden"
-          style="color: inherit; text-decoration: none;"
+          style="color: inherit; text-decoration: none"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -198,7 +188,6 @@
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
         </router-link>
-
 
         <!-- Burger menu button -->
         <button
@@ -404,7 +393,11 @@
 
           <div class="notis-list">
             <div v-for="notification in notifications" :key="notification._id" class="notis-item">
-              <div class="notis-content" :class="{ 'is-clickable': notification.meta?.url }" @click="openNotification(notification)">
+              <div
+                class="notis-content"
+                :class="{ 'is-clickable': notification.meta?.url }"
+                @click="openNotification(notification)"
+              >
                 <span class="notis-type">{{ notificationTypeLabel(notification.type) }}</span>
                 <span class="notis-message">{{ notification.message }}</span>
               </div>
@@ -415,7 +408,9 @@
                   class="task-reminder-row"
                 >
                   <span class="task-reminder-desc">{{ task.description }}</span>
-                  <span class="task-reminder-time">{{ remainingLabel(task.dueDate, task.dueTime) }}</span>
+                  <span class="task-reminder-time">
+                    {{ remainingLabel(task.dueDate, task.dueTime) }}
+                  </span>
                 </div>
               </div>
               <div class="notis-actions">
@@ -656,7 +651,8 @@
           router.push(`/student/${notification.meta.studentId}?showActionPlan=true`)
         } else if (notification.type === 'signing_required') {
           const roles = store.getters.userRoles || []
-          const isTeacherOnly = roles.includes('teacher') && !roles.includes('admin') && !roles.includes('systemadmin')
+          const isTeacherOnly =
+            roles.includes('teacher') && !roles.includes('admin') && !roles.includes('systemadmin')
           router.push(isTeacherOnly ? '/signering' : '/admin/betygsrapporter')
         }
       }
@@ -676,7 +672,14 @@
         searchQuery.value = ''
 
         // Gå till special vy om det är kurs eller program eller kurspaket
-        const courseTypes = ['Kurs', 'Course', 'Program', 'CoursePackage', 'Kursinstans', 'CourseInstance']
+        const courseTypes = [
+          'Kurs',
+          'Course',
+          'Program',
+          'CoursePackage',
+          'Kursinstans',
+          'CourseInstance',
+        ]
 
         if (courseTypes.includes(result.type)) {
           // Generella kurser (mallar) ska visa alla aktiva kursinstanser
@@ -755,10 +758,7 @@
             }
             params.append('type', 'Datum')
             params.append('date', formattedDate)
-          } else if (
-            selectedSearchType.value === 'Alla' &&
-            isDateOnly(searchQuery.value.trim())
-          ) {
+          } else if (selectedSearchType.value === 'Alla' && isDateOnly(searchQuery.value.trim())) {
             const formattedDate = toDateOnly(searchQuery.value)
             if (!formattedDate) {
               searchResults.value = []
@@ -778,14 +778,11 @@
             params.append('q', searchQuery.value)
           }
 
-          const res = await client.get(
-            `/search?${params.toString()}`
-          )
+          const res = await client.get(`/search?${params.toString()}`)
           searchResults.value = res.data
           showResults.value = true
         } catch (err) {
-          searchError.value =
-            err.response?.data?.message || err.message || 'Sökningen misslyckades'
+          searchError.value = err.response?.data?.message || err.message || 'Sökningen misslyckades'
           searchResults.value = []
           showResults.value = true
         } finally {
@@ -856,7 +853,7 @@
       // Remove these from main nav bar and add to secret menu
       const secretMenuNames = [
         'Utbildning',
-              'Student Inskrivningar',
+        'Student Inskrivningar',
         'Elev+',
         'PDF',
         'Prövningar',
@@ -864,7 +861,11 @@
         'Stats',
       ]
       const menuItems = [
-        { name: 'Översikt', link: '/dashboard', role: ['student', 'teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin'] },
+        {
+          name: 'Översikt',
+          link: '/dashboard',
+          role: ['student', 'teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin'],
+        },
         { name: 'Betygsrapporter', link: '/admin/betygsrapporter', role: ['admin', 'systemadmin'] },
         { name: 'Betygssignering', link: '/signering', role: ['teacher', 'admin', 'systemadmin'] },
         { name: 'Betygsskalor', link: '/admin/betygsskala', role: ['admin', 'systemadmin'] },
@@ -872,15 +873,28 @@
         { name: 'Rapporter & Analys', link: '/admin/analytics', role: ['admin', 'systemadmin'] },
         { name: 'APL', link: '/apl', role: ['admin', 'teacher', 'coordinator'] },
         {
+          name: 'Kurskortsbyggare',
+          link: '/admin/course-card-builder',
+          role: ['admin', 'systemadmin'],
+        },
+        {
           name: 'Kalender',
           link: '/kalender',
           role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'],
         },
         { name: 'SYV Samtal', link: '/syv/appointments', role: ['syv', 'admin', 'systemadmin'] },
-        { name: 'Specped Samtal', link: '/specped/appointments', role: ['specped', 'admin', 'systemadmin'] },
+        {
+          name: 'Specped Samtal',
+          link: '/specped/appointments',
+          role: ['specped', 'admin', 'systemadmin'],
+        },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
-        { name: 'Schemaparametrar', link: '/schedule-parameters', role: ['admin', 'systemadmin', 'teacher'] },
+        {
+          name: 'Schemaparametrar',
+          link: '/schedule-parameters',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
         { name: 'Kursmallar', link: '/course-templates', role: ['admin', 'teacher'] },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },
         { name: 'Kursmatchning', link: '/course-matching', role: 'admin' },
@@ -888,30 +902,58 @@
         { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
         { name: 'Elever', link: '/students', role: ['admin', 'teacher'] },
         { name: 'Inaktiva elever', link: '/inaktiva-elever', role: ['admin', 'systemadmin'] },
-        { name: 'Inaktivitetsrapport', link: '/admin/inactivity', role: ['admin', 'systemadmin', 'teacher'] },
+        {
+          name: 'Inaktivitetsrapport',
+          link: '/admin/inactivity',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
         { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: 'teacher' },
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Betygsuppföljning', link: '/grade-lookups', role: 'admin' },
         { name: 'Hantera Prövningar', link: '/provningar', role: 'admin' },
-        { name: 'Frågebank (Redigera)', link: '/larare/fragebank', role: ['admin', 'systemadmin', 'teacher'] },
-        { name: 'Generera exam', link: '/larare/generera-exam', role: ['admin', 'systemadmin', 'teacher'] },
+        {
+          name: 'Frågebank (Redigera)',
+          link: '/larare/fragebank',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
+        {
+          name: 'Generera exam',
+          link: '/larare/generera-exam',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
         { name: 'Frågebank', link: '/student/fragebank', role: 'student' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
-  { name: 'Mina kurser', link: '/course-cards', role: 'student' },
-  { name: 'Studieassistent', link: '/chatbot', role: 'student' },
-  { name: 'Inlämningar', link: '/submissions', role: ['teacher', 'admin', 'systemadmin'] },
-        { name: 'Vanliga frågor (Chatbot)', link: '/admin/chatbot-faq', role: ['admin', 'systemadmin'] },
+        { name: 'Mina kurser', link: '/course-cards', role: 'student' },
+        { name: 'Studieassistent', link: '/chatbot', role: 'student' },
+        { name: 'Inlämningar', link: '/submissions', role: ['teacher', 'admin', 'systemadmin'] },
+        {
+          name: 'Vanliga frågor (Chatbot)',
+          link: '/admin/chatbot-faq',
+          role: ['admin', 'systemadmin'],
+        },
         { name: 'Vanliga frågor (Lärare)', link: '/larare/chatbot-faq', role: ['teacher'] },
-        { name: 'Meddelanden', link: '/messages', role: ['student', 'teacher', 'syv', 'specped', 'admin', 'systemadmin', 'coordinator'] },
+        {
+          name: 'Meddelanden',
+          link: '/messages',
+          role: ['student', 'teacher', 'syv', 'specped', 'admin', 'systemadmin', 'coordinator'],
+        },
         { name: 'Aktivitetsflöde', link: '/admin/activity-feed', role: 'admin' },
-        { name: 'Kursinnehåll', link: '/admin/course-content', role: ['admin', 'systemadmin', 'teacher'] },
+        {
+          name: 'Kursinnehåll',
+          link: '/admin/course-content',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
         { name: 'Kursstatistik (detalj)', link: '/admin/course-statistics', role: 'admin' },
         { name: 'Elevens kurskort', link: '/admin/student-course-cards', role: 'admin' },
         { name: 'Handlingsplaner', link: '/admin/action-plans', role: 'admin' },
         { name: 'Inlämningar & Deltagare', link: '/admin/learning-management', role: 'admin' },
         { name: 'Notifikationer', link: '/admin/notifications', role: 'admin' },
-        { name: 'Kalender & Prövning Underhåll', link: '/admin/calendar-housekeeping', role: 'admin' },
+        {
+          name: 'Kalender & Prövning Underhåll',
+          link: '/admin/calendar-housekeeping',
+          role: 'admin',
+        },
       ]
 
       const filteredMenuItems = computed(() => {
@@ -921,10 +963,10 @@
         const filtered = menuItems.filter((item) => {
           if (secretMenuNames.includes(item.name)) return false
           if (!item.role) return true
-          
+
           // Admins and systemadmins can see all menus
           if (isAdmin) return true
-          
+
           // Special handling for SYV Samtal and Specped Samtal - only show to exact role
           if (item.name === 'SYV Samtal') {
             return userRole === 'syv'
@@ -932,7 +974,7 @@
           if (item.name === 'Specped Samtal') {
             return userRole === 'specped'
           }
-          
+
           // For all other items, use the standard permission check
           const hasPerm = hasPermission(item.role)
           return hasPerm
@@ -1118,7 +1160,12 @@
   }
   .navbar {
     background: white;
-    font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family:
+      'Inter',
+      'SF Pro Display',
+      -apple-system,
+      BlinkMacSystemFont,
+      sans-serif;
     position: fixed;
     top: 0;
     left: 0;
@@ -1678,15 +1725,15 @@
     padding: 4px 8px;
     border-radius: 4px;
     cursor: pointer;
-    transition: color 0.3s, background 0.3s;
+    transition:
+      color 0.3s,
+      background 0.3s;
   }
 
   .logout-btn:hover {
     background: blue;
     color: white;
   }
-
-
 
   /* Sök */
   .search-wrapper {
@@ -1767,7 +1814,9 @@
   .search-type-dropdown li {
     padding: 10px 18px;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s;
+    transition:
+      background 0.2s,
+      color 0.2s;
     border-radius: 8px;
     margin: 4px 8px;
     font-size: 15px;
