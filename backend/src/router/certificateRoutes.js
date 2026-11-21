@@ -310,7 +310,7 @@ const seedTemplates = async () => {
 };
 
 const ensureDefaults = async () => {
-    await CertificateSettings.findOneAndUpdate({}, { $setOnInsert: {} }, { upsert: true, new: true });
+    await CertificateSettings.findOneAndUpdate({}, { $setOnInsert: {} }, { upsert: true, returnDocument: 'after' });
     await seedTemplates();
 };
 
@@ -344,7 +344,7 @@ router.put(
         }
         const updates = { $set: { updatedBy: req.user.userId, ...filtered } };
         if (Object.keys(filtered).length > 0) updates.$inc = { configVersion: 1 };
-        const s = await CertificateSettings.findOneAndUpdate({}, updates, { new: true, upsert: true }).lean();
+        const s = await CertificateSettings.findOneAndUpdate({}, updates, { returnDocument: 'after', upsert: true }).lean();
         res.json({
             ...s,
             logoUrl: toMediaUrl(s.logoFileId),
@@ -381,7 +381,7 @@ router.post(
         const updated = await CertificateSettings.findOneAndUpdate(
             {},
             { $set: { signatureFileId: upload.id, updatedBy: req.user.userId }, $inc: { configVersion: 1 } },
-            { new: true, upsert: true }
+            { returnDocument: 'after', upsert: true }
         ).lean();
         res.json({ signatureUrl: toMediaUrl(updated.signatureFileId) });
     })
@@ -413,7 +413,7 @@ router.post(
         const updated = await CertificateSettings.findOneAndUpdate(
             {},
             { $set: { secondSignatureFileId: upload.id, updatedBy: req.user.userId }, $inc: { configVersion: 1 } },
-            { new: true, upsert: true }
+            { returnDocument: 'after', upsert: true }
         ).lean();
         res.json({ secondSignatureUrl: toMediaUrl(updated.secondSignatureFileId) });
     })
@@ -445,7 +445,7 @@ router.post(
         const updated = await CertificateSettings.findOneAndUpdate(
             {},
             { $set: { logoFileId: upload.id, updatedBy: req.user.userId }, $inc: { configVersion: 1 } },
-            { new: true, upsert: true }
+            { returnDocument: 'after', upsert: true }
         ).lean();
         res.json({ logoUrl: toMediaUrl(updated.logoFileId) });
     })
@@ -564,7 +564,7 @@ router.put(
             if (req.body[f] !== undefined) updates[f] = req.body[f];
         }
         updates.updatedBy = req.user.userId;
-        const t = await CertificateTemplate.findOneAndUpdate({ key }, { $set: updates }, { new: true }).lean();
+        const t = await CertificateTemplate.findOneAndUpdate({ key }, { $set: updates }, { returnDocument: 'after' }).lean();
         if (!t) return res.status(404).json({ message: "Mall hittades inte" });
         res.json(t);
     })

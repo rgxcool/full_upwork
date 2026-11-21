@@ -318,7 +318,7 @@ describe("teacherRoutes", () => {
             const [id, updateData, opts] = h.teacherModel.findByIdAndUpdate.mock.calls[0];
             expect(id).toBe("teacher-1");
             expect(updateData.phoneNumbers).toEqual(["070-2", "070-3"]);
-            expect(opts).toEqual({ new: true });
+            expect(opts).toEqual({ returnDocument: 'after' });
         });
 
         it("tolerates a request with no updateable fields", async () => {

@@ -104,7 +104,7 @@ export async function syncTaskReminderForUser(userId) {
         };
 
         let doc = await Notification.findOneAndUpdate(filter, update, {
-            new: true,
+            returnDocument: 'after',
             upsert: true,
         });
 
@@ -131,7 +131,7 @@ export async function syncTaskReminderForUser(userId) {
                         teacher: targetUser ? targetUser._id : null,
                     },
                 },
-                { new: true }
+                { returnDocument: 'after' }
             );
             doc = again || doc;
         }

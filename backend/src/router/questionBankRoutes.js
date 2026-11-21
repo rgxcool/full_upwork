@@ -271,7 +271,7 @@ router.put(
                     selectedQuestions: validIds,
                     selectedCount: validIds.length,
                 },
-                { new: true }
+                { returnDocument: 'after' }
             );
 
             if (!examAttempt) {
@@ -815,7 +815,7 @@ router.put(
             }
 
             const question = await Question.findByIdAndUpdate(req.params.id, updateData, {
-                new: true,
+                returnDocument: 'after',
                 runValidators: true,
             });
 
@@ -849,7 +849,7 @@ router.delete(
             const question = await Question.findByIdAndUpdate(
                 req.params.id,
                 { active: false },
-                { new: true }
+                { returnDocument: 'after' }
             );
 
             if (!question) {

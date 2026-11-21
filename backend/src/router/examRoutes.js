@@ -88,7 +88,7 @@ function scheduleExamNotification(exam) {
                 },
                 resolved: false,
             },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
     }
 }
@@ -180,7 +180,7 @@ router.put("/exams/:id", isAuthenticated, hasRole(['admin', 'systemadmin']), asy
         for (const field of allowedExamFields) {
             if (req.body[field] !== undefined) examUpdates[field] = req.body[field];
         }
-        const updatedExam = await Exam.findByIdAndUpdate(req.params.id, examUpdates, { new: true });
+        const updatedExam = await Exam.findByIdAndUpdate(req.params.id, examUpdates, { returnDocument: 'after' });
         if (!updatedExam) {
             return res.status(404).json({ error: "Prövning not found." });
         }
@@ -918,7 +918,7 @@ router.put("/calendar-events/:id", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES)
             updatedEvent = await CalendarEvent.findByIdAndUpdate(
                 id,
                 updateFields,
-                { new: true }
+                { returnDocument: 'after' }
             );
 
             if (!updatedEvent) {
@@ -2792,7 +2792,7 @@ router.put("/exams/:id/decision", isAuthenticated, hasRole(['admin', 'systemadmi
                         name: exam.name, // or whatever fields are relevant
                         finalExamDate,
                     },
-                    { upsert: true, new: true }
+                    { upsert: true, returnDocument: 'after' }
                 );
 
                 updateData.status = "scheduled";
@@ -2828,7 +2828,7 @@ router.put("/exams/:id/decision", isAuthenticated, hasRole(['admin', 'systemadmi
         }
 
         const updatedExam = await Exam.findByIdAndUpdate(examId, updateData, {
-            new: true,
+            returnDocument: 'after',
         });
 
         // Markera notisen för denna prövning som hanterad för beslutaren

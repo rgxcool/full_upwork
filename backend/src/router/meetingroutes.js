@@ -189,7 +189,7 @@ router.put('/meetings/:id', authenticateUser, async (req, res) => {
         const meeting = await Meeting.findByIdAndUpdate(
             req.params.id,
             updates,
-            { new: true }
+            { returnDocument: 'after' }
         );
         if (!meeting) {
             return res.status(404).json({ error: "Möte hittades inte" });
@@ -226,7 +226,7 @@ router.put('/students/:id/exam-accommodations', authenticateUser, async (req, re
                     notes: sanitizeNotes(notes),
                 },
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!student) {

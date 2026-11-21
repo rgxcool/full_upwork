@@ -281,7 +281,7 @@ async function warnStudent({ studentId, student, signal, teacherId, teacherUserI
                 },
             },
         },
-        { new: true }
+        { returnDocument: 'after' }
     );
 
     if (!updated) {

@@ -92,7 +92,7 @@ router.put("/task/:id", authenticateUser, async (req, res) => {
     const updatedTask = await Task.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId }, // ✅ Ensuring the task belongs to the user
       updates,
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!updatedTask) {

@@ -781,7 +781,7 @@ router.put("/update-student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES)
         for (const field of allowedStudentFields) {
             if (req.body[field] !== undefined) updates[field] = req.body[field];
         }
-        const updatedStudent = await Student.findByIdAndUpdate(req.params.id, updates, { new: true });
+        const updatedStudent = await Student.findByIdAndUpdate(req.params.id, updates, { returnDocument: 'after' });
         res.json(updatedStudent);
     } catch (error) {
         logger.error({ err: error }, "Error updating student")
@@ -814,7 +814,7 @@ router.put("/update-user/:id", authenticateUser, hasRole(["admin", "systemadmin"
         for (const field of allowedUserFields) {
             if (req.body[field] !== undefined) updates[field] = req.body[field];
         }
-        const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, { new: true });
+        const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, { returnDocument: 'after' });
         res.json(updatedUser);
     } catch (error) {
         logger.error({ err: error }, "Error updating user")

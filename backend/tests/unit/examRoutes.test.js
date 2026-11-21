@@ -915,7 +915,7 @@ describe("examRoutes", () => {
         requestedMonth: "September",
         originalRequestedMonth: "Augusti",
       }),
-      { new: true }
+      { returnDocument: 'after' }
     );
   });
 
@@ -943,7 +943,7 @@ describe("examRoutes", () => {
     expect(Exam.findByIdAndUpdate).toHaveBeenCalledWith(
       "decision-move-december",
       expect.objectContaining({ status: "moved", requestedMonth: "Januari" }),
-      { new: true }
+      { returnDocument: 'after' }
     );
   });
 
@@ -995,7 +995,7 @@ describe("examRoutes", () => {
         status: "moved",
         requestedMonth: "Oktober",
       }),
-      { new: true }
+      { returnDocument: 'after' }
     );
     const updateArg = Exam.findByIdAndUpdate.mock.calls[0][1];
     expect(updateArg.originalRequestedMonth).toBeUndefined();
