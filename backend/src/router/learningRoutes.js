@@ -13,14 +13,12 @@ import {
     getCourseInstanceReport,
     getCourseInstanceReports,
     getBatchActivityStatus,
+    getActivityStatus,
     getCourseInstanceParticipants,
     addCourseInstanceParticipant,
     removeCourseInstanceParticipant,
     getStudentLastAccess,
 } from "../controllers/learningController.js";
-import {
-    calculateActivityStatus,
-} from "../services/activityStatusService.js";
 
 const router = express.Router();
 
@@ -127,7 +125,7 @@ router.get(
     "/learning/instances/:instanceId/activity-status/:studentId",
     isAuthenticated,
     hasRole(STAFF_ROLES),
-    asyncHandler(calculateActivityStatus)
+    asyncHandler(getActivityStatus)
 );
 
 // Calculate activity status for multiple students in a course instance

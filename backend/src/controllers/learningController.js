@@ -10,7 +10,10 @@ import logger from "../utils/logger.js";
 import { buildVisibleModules } from "../utils/courseContentVisibility.js";
 import { recordStudentLearningActivity } from "../utils/learningActivity.js";
 import { recordResourceVisit } from "../services/resourceVisitService.js";
-import { calculateBatchActivityStatus } from "../services/activityStatusService.js";
+import {
+    calculateActivityStatus,
+    calculateBatchActivityStatus,
+} from "../services/activityStatusService.js";
 
 const STAFF_ROLES = ["systemadmin", "admin", "tester"];
 const SUBMITTABLE_STATUSES = ["enrolled", "active"];
@@ -937,6 +940,24 @@ export const getBatchActivityStatus = async (req, res) => {
     const result = await calculateBatchActivityStatus({
         courseInstanceId: req.params?.instanceId,
         studentIds: req.body?.studentIds,
+    });
+
+    if (result?.error) {
+        const status = result.error === "Internal server error" ? 500 : 400;
+        return res.status(status).json(result);
+    }
+    return res.json(result);
+};
+
+/**
+ * HTTP adapter for the single-student activity-status service. Mirrors
+ * getBatchActivityStatus: the service takes a plain params object and returns
+ * a result that must be serialised, rather than receiving the raw request.
+ */
+export const getActivityStatus = async (req, res) => {
+    const result = await calculateActivityStatus({
+        studentId: req.params?.studentId,
+        courseInstanceId: req.params?.instanceId,
     });
 
     if (result?.error) {
