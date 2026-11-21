@@ -198,6 +198,16 @@ const upload = multer({
   },
 });
 
+const rejectOversizedUpload = (req, res, next) => {
+  const contentLength = Number(req.headers["content-length"]);
+  if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_BYTES) {
+    return res.status(400).json({
+      message: "Filen är för stor. Max storlek är 3 GB.",
+    });
+  }
+  return next();
+};
+
 const STAFF_UPLOAD_ROLES = new Set([
   "systemadmin",
   "admin",
@@ -318,7 +328,7 @@ const handleMulterError = (err, req, res, next) => {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res
         .status(400)
-        .json({ message: "Filen är för stor. Max storlek är 100MB." });
+        .json({ message: "Filen är för stor. Max storlek är 3 GB." });
     }
     return res.status(400).json({ message: "Filuppladdningsfel" });
   }
@@ -332,6 +342,7 @@ const handleMulterError = (err, req, res, next) => {
 router.post(
   "/documents/course-material",
   authenticateUser,
+  rejectOversizedUpload,
   upload.single("file"),
   handleMulterError,
   async (req, res) => {
@@ -470,6 +481,7 @@ router.get(
 router.post(
   "/documents/upload",
   authenticateUser,
+  rejectOversizedUpload,
   upload.single("file"),
   handleMulterError,
   async (req, res) => {

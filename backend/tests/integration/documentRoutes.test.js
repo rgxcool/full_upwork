@@ -685,16 +685,31 @@ describe("Document Routes", () => {
   });
 
   it("rejects files larger than 3 GB", async () => {
-    const oversized = Buffer.alloc(3 * 1024 * 1024 * 1024 + 1, "a");
+    const boundary = "oversized-document-test";
+    const studentId = new mongoose.Types.ObjectId().toString();
+    const multipartBody = Buffer.from(
+      [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="studentId"',
+        "",
+        studentId,
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="file"; filename="too-big.pdf"',
+        "Content-Type: application/pdf",
+        "",
+        "small test body",
+        `--${boundary}--`,
+        "",
+      ].join("\r\n"),
+    );
+
     const response = await request(app)
       .post("/api/documents/upload")
       .set("Authorization", authHeader)
       .set("Cookie", authCookie)
-      .field("studentId", new mongoose.Types.ObjectId().toString())
-      .attach("file", oversized, {
-        filename: "too-big.pdf",
-        contentType: "application/pdf",
-      })
+      .set("Content-Length", String(3 * 1024 * 1024 * 1024 + 1))
+      .set("Content-Type", `multipart/form-data; boundary=${boundary}`)
+      .send(multipartBody)
       .expect(400);
 
     expect(response.body.message).toContain("för stor");
