@@ -47,6 +47,7 @@ describe('LearningManagement.vue', () => {
             if (url.endsWith('/reports')) return Promise.resolve({ data: reportData })
             return Promise.resolve({ data: {} })
         })
+        client.post.mockResolvedValue({ data: { success: true, activityResults: [] } })
     })
 
     it('disables the selector while instances are loading', async () => {
@@ -176,6 +177,139 @@ describe('LearningManagement.vue', () => {
         await flushPromises()
 
         expect(client.delete).toHaveBeenCalledWith('/learning/instances/inst-1/participants/stu-1')
+        wrapper.unmount()
+    })
+
+    const batchResults = [
+        {
+            studentId: 'stu-1',
+            overallStatus: 'on schedule',
+            totalModules: 2,
+            completedModules: 1,
+            moduleStatuses: [
+                { moduleNumber: 1, title: 'Läsning', completed: true },
+                { moduleNumber: 2, title: 'Delprov', completed: false },
+            ],
+        },
+        {
+            studentId: 'stu-2',
+            overallStatus: 'behind',
+            totalModules: 2,
+            completedModules: 0,
+            moduleStatuses: [
+                { moduleNumber: 1, title: 'Läsning', completed: false, behind: true },
+                { moduleNumber: 2, title: 'Delprov', completed: false },
+            ],
+        },
+        {
+            studentId: 'stu-3',
+            overallStatus: 'completed',
+            totalModules: 2,
+            completedModules: 2,
+            moduleStatuses: [
+                { moduleNumber: 1, title: 'Läsning', completed: true },
+                { moduleNumber: 2, title: 'Delprov', completed: true },
+            ],
+        },
+    ]
+
+    const mockParticipantsAndBatch = () => {
+        client.get.mockImplementation((url) => {
+            if (url === '/course-instances') return Promise.resolve({ data: [instance] })
+            if (url.endsWith('/participants')) return Promise.resolve({ data: { participants: participantRows } })
+            return Promise.resolve({ data: [] })
+        })
+        client.post.mockResolvedValue({ data: { success: true, activityResults: batchResults } })
+    }
+
+    it('does not request module status until a course instance is selected', async () => {
+        const wrapper = await mountView()
+        expect(client.post).not.toHaveBeenCalled()
+        expect(wrapper.text()).not.toContain('Modulstatus')
+        wrapper.unmount()
+    })
+
+    it('loads class-wide module status from the batch endpoint and renders the summary column', async () => {
+        mockParticipantsAndBatch()
+        const wrapper = await mountView()
+        wrapper.vm.selectedInstanceId = 'inst-1'
+        await wrapper.vm.loadAll()
+        await flushPromises()
+
+        expect(client.post).toHaveBeenCalledWith('/learning/instances/inst-1/activity-status/batch', {})
+        expect(wrapper.vm.activityResults).toEqual(batchResults)
+        expect(wrapper.text()).toContain('Modulstatus')
+        expect(wrapper.text()).toContain('Modul 2 · Delprov')
+        expect(wrapper.text()).toContain('Pågår')
+        expect(wrapper.text()).toContain('Bakom')
+        expect(wrapper.text()).toContain('Alla moduler klara')
+        expect(wrapper.text()).toContain('Klar')
+        wrapper.unmount()
+    })
+
+    it('shows an error state when the batch request fails', async () => {
+        mockParticipantsAndBatch()
+        client.post.mockRejectedValue(new Error('network'))
+        const wrapper = await mountView()
+        wrapper.vm.selectedInstanceId = 'inst-1'
+        await wrapper.vm.loadAll()
+        await flushPromises()
+
+        expect(wrapper.vm.activityError).toBe('Kunde inte hämta modulstatus.')
+        expect(wrapper.text()).toContain('Kunde inte hämta modulstatus.')
+        wrapper.unmount()
+    })
+
+    it('shows an empty state when the batch returns no students', async () => {
+        const wrapper = await mountView()
+        wrapper.vm.selectedInstanceId = 'inst-1'
+        await wrapper.vm.loadAll()
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('Ingen modulstatus tillgänglig för den här kursinstansen.')
+        wrapper.unmount()
+    })
+
+    it('clears module status when the selected instance changes', async () => {
+        mockParticipantsAndBatch()
+        const wrapper = await mountView()
+        wrapper.vm.selectedInstanceId = 'inst-1'
+        await wrapper.vm.loadAll()
+        await flushPromises()
+        expect(wrapper.vm.activityResults).toHaveLength(3)
+
+        wrapper.vm.selectedInstanceId = ''
+        await wrapper.vm.loadAll()
+        await flushPromises()
+        expect(wrapper.vm.activityResults).toEqual([])
+        expect(wrapper.vm.activityLoaded).toBe(false)
+        expect(wrapper.text()).not.toContain('Modul 2 · Delprov')
+        wrapper.unmount()
+    })
+
+    it('ignores a batch response that arrives after the instance changed', async () => {
+        const resolvers = []
+        client.get.mockImplementation((url) => {
+            if (url === '/course-instances') return Promise.resolve({ data: [instance] })
+            if (url.endsWith('/participants')) return Promise.resolve({ data: { participants: participantRows } })
+            return Promise.resolve({ data: [] })
+        })
+        client.post.mockImplementation(() => new Promise((resolve) => resolvers.push(resolve)))
+
+        const wrapper = await mountView()
+        wrapper.vm.selectedInstanceId = 'inst-1'
+        await wrapper.vm.loadAll()
+        wrapper.vm.selectedInstanceId = 'inst-2'
+        await wrapper.vm.loadAll()
+
+        resolvers[0]({ data: { success: true, activityResults: batchResults } })
+        await flushPromises()
+        expect(wrapper.vm.activityResults).toEqual([])
+
+        resolvers[1]({ data: { success: true, activityResults: [] } })
+        await flushPromises()
+        expect(wrapper.vm.activityLoading).toBe(false)
+        expect(wrapper.vm.activityLoaded).toBe(true)
         wrapper.unmount()
     })
 })
