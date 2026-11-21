@@ -117,7 +117,7 @@ const ALLOWED_DOCUMENT_TYPES = new Set([
   "CV",
 ]);
 
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024 * 1024; // 1 GB (supports course videos & documents)
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB (supports course videos & documents)
 
 const getFileType = (filename) =>
   path
@@ -337,12 +337,10 @@ router.post(
   async (req, res) => {
     try {
       if (req.rejectedFileType) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Ogiltigt filformat. Denna filtyp är inte tillåten av säkerhetsskäl.",
-          });
+        return res.status(400).json({
+          message:
+            "Ogiltigt filformat. Denna filtyp är inte tillåten av säkerhetsskäl.",
+        });
       }
 
       if (!req.file) {
@@ -370,11 +368,9 @@ router.post(
       );
       if (!canManageCourseCard) {
         removeUploadedFile(req.file);
-        return res
-          .status(403)
-          .json({
-            message: "Du har inte behörighet att ladda upp kurskortsmaterial",
-          });
+        return res.status(403).json({
+          message: "Du har inte behörighet att ladda upp kurskortsmaterial",
+        });
       }
 
       const ext = path.extname(req.file.originalname || "").toLowerCase();
@@ -480,12 +476,10 @@ router.post(
     let documentCreated = false;
     try {
       if (req.rejectedFileType) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Ogiltigt filformat. Denna filtyp är inte tillåten av säkerhetsskäl.",
-          });
+        return res.status(400).json({
+          message:
+            "Ogiltigt filformat. Denna filtyp är inte tillåten av säkerhetsskäl.",
+        });
       }
 
       if (!req.file) {
@@ -540,12 +534,10 @@ router.post(
         const allowed = await canUploadForStudent(user, studentId);
         if (!allowed) {
           removeUploadedFile(req.file);
-          return res
-            .status(403)
-            .json({
-              message:
-                "Du har inte behörighet att ladda upp dokument för denna elev",
-            });
+          return res.status(403).json({
+            message:
+              "Du har inte behörighet att ladda upp dokument för denna elev",
+          });
         }
 
         const doc = await Document.create({
@@ -571,12 +563,10 @@ router.post(
         const teacherAllowed = await canAccessTeacherDocuments(user, teacherId);
         if (!teacherAllowed) {
           removeUploadedFile(req.file);
-          return res
-            .status(403)
-            .json({
-              message:
-                "Du har inte behörighet att ladda upp dokument för denna lärare",
-            });
+          return res.status(403).json({
+            message:
+              "Du har inte behörighet att ladda upp dokument för denna lärare",
+          });
         }
 
         if (!teacherId || teacherId.trim() === "") {
