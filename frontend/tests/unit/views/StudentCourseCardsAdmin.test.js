@@ -130,4 +130,51 @@ describe('StudentCourseCardsAdmin.vue', () => {
         expect(wrapper.text()).not.toContain('Alla moduler klara')
         wrapper.unmount()
     })
+
+    describe('formatDateTime', () => {
+        const mountPlain = () => mount(StudentCourseCardsAdmin, { global: { plugins: [vuetify] } })
+
+        it('returns Aldrig for missing values', () => {
+            const wrapper = mountPlain()
+            expect(wrapper.vm.formatDateTime(null)).toBe('Aldrig')
+            expect(wrapper.vm.formatDateTime(undefined)).toBe('Aldrig')
+            expect(wrapper.vm.formatDateTime('')).toBe('Aldrig')
+            wrapper.unmount()
+        })
+
+        it('returns Aldrig for invalid date strings', () => {
+            const wrapper = mountPlain()
+            expect(wrapper.vm.formatDateTime('not-a-date')).toBe('Aldrig')
+            expect(wrapper.vm.formatDateTime('2026-13-45')).toBe('Aldrig')
+            wrapper.unmount()
+        })
+
+        it('formats valid dates as a Swedish locale string', () => {
+            const wrapper = mountPlain()
+            const formatted = wrapper.vm.formatDateTime('2026-02-10T10:00:00.000Z')
+
+            expect(formatted).toMatch(/^\d{4}-\d{2}-\d{2}/)
+            expect(formatted).not.toContain('NaN')
+            expect(formatted).not.toContain('Invalid')
+            wrapper.unmount()
+        })
+    })
+
+    it('shows Aldrig on a card without last access', async () => {
+        client.get.mockImplementation((url) => {
+            if (url === '/students') return Promise.resolve({ data: [student] })
+            if (url === '/students/stu-1/course-cards') {
+                return Promise.resolve({ data: { cards: [{ ...baseCard, lastAccess: null }] } })
+            }
+            return Promise.resolve({ data: [] })
+        })
+
+        const wrapper = await mountView()
+        wrapper.vm.selectedStudentId = 'stu-1'
+        await wrapper.vm.loadCards()
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('Senast aktiv: Aldrig')
+        wrapper.unmount()
+    })
 })
