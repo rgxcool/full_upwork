@@ -90,50 +90,72 @@
         <v-progress-linear v-if="partLoading" indeterminate color="primary" class="my-4" />
         <v-alert v-else-if="partError" type="error" class="my-3">{{ partError }}</v-alert>
 
-        <v-table v-else dense class="mt-3">
-          <thead>
-            <tr>
-              <th class="text-left">Namn</th>
-              <th class="text-left">Typ</th>
-              <th class="text-left">Senast aktivitet</th>
-              <th class="text-left">Åtgärd</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in participants" :key="participantIdOf(p)">
-              <td>{{ p.name || p.studentName || '–' }}</td>
-              <td>{{ p.role || p.type || 'student' }}</td>
-              <td>
-                <div class="d-flex align-center flex-wrap ga-2">
-                  <span>{{ formatDateTime(p.lastActivity?.at) }}</span>
-                  <v-chip
-                    v-if="activityTypeLabel(p.lastActivity?.type)"
+        <template v-else>
+          <v-progress-linear v-if="activityLoading" indeterminate color="primary" class="my-2" />
+          <v-alert v-else-if="activityError" type="error" class="my-3">{{ activityError }}</v-alert>
+          <v-alert v-else-if="activityLoaded && activityResults.length === 0" type="info" variant="tonal" class="my-3">
+            Ingen modulstatus tillgänglig för den här kursinstansen.
+          </v-alert>
+
+          <v-table v-else dense class="mt-3">
+            <thead>
+              <tr>
+                <th class="text-left">Namn</th>
+                <th class="text-left">Typ</th>
+                <th class="text-left">Senast aktivitet</th>
+                <th class="text-left">Modulstatus</th>
+                <th class="text-left">Åtgärd</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in participants" :key="participantIdOf(p)">
+                <td>{{ p.name || p.studentName || '–' }}</td>
+                <td>{{ p.role || p.type || 'student' }}</td>
+                <td>
+                  <div class="d-flex align-center flex-wrap ga-2">
+                    <span>{{ formatDateTime(p.lastActivity?.at) }}</span>
+                    <v-chip
+                      v-if="activityTypeLabel(p.lastActivity?.type)"
+                      size="x-small"
+                      variant="tonal"
+                    >
+                      {{ activityTypeLabel(p.lastActivity?.type) }}
+                    </v-chip>
+                  </div>
+                </td>
+                <td>
+                  <div v-if="activityFor(p)" class="d-flex align-center flex-wrap ga-2">
+                    <span class="text-body-2">{{ moduleStatusLabel(p) }}</span>
+                    <v-chip
+                      size="x-small"
+                      :color="activityStatusTone(activityFor(p).overallStatus)"
+                      variant="tonal"
+                    >
+                      {{ activityStatusLabel(activityFor(p).overallStatus) }}
+                    </v-chip>
+                  </div>
+                  <span v-else class="text-caption text-grey">–</span>
+                </td>
+                <td>
+                  <v-btn
+                    v-if="(p.role || p.type) !== 'staff'"
                     size="x-small"
                     variant="tonal"
+                    color="error"
+                    :loading="removingId === participantIdOf(p)"
+                    @click="removeParticipant(p)"
                   >
-                    {{ activityTypeLabel(p.lastActivity?.type) }}
-                  </v-chip>
-                </div>
-              </td>
-              <td>
-                <v-btn
-                  v-if="(p.role || p.type) !== 'staff'"
-                  size="x-small"
-                  variant="tonal"
-                  color="error"
-                  :loading="removingId === participantIdOf(p)"
-                  @click="removeParticipant(p)"
-                >
-                  Ta bort
-                </v-btn>
-                <span v-else class="text-caption text-grey">–</span>
-              </td>
-            </tr>
-            <tr v-if="participants.length === 0">
-              <td colspan="4" class="text-center text-grey">Inga deltagare.</td>
-            </tr>
-          </tbody>
-        </v-table>
+                    Ta bort
+                  </v-btn>
+                  <span v-else class="text-caption text-grey">–</span>
+                </td>
+              </tr>
+              <tr v-if="participants.length === 0">
+                <td colspan="5" class="text-center text-grey">Inga deltagare.</td>
+              </tr>
+            </tbody>
+          </v-table>
+        </template>
 
         <!-- Add participant dialog -->
         <v-dialog v-model="showAddParticipant" max-width="400">
@@ -193,6 +215,12 @@
 import { ref, computed, onMounted } from 'vue'
 import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
+import {
+  activityStatusLabel,
+  activityStatusTone,
+  activityToCard,
+  currentModuleLabel,
+} from '@/utils/currentModule.js'
 
 const toast = useToast()
 
@@ -208,6 +236,11 @@ const subError = ref(null)
 const participants = ref([])
 const partLoading = ref(false)
 const partError = ref(null)
+
+const activityResults = ref([])
+const activityLoading = ref(false)
+const activityError = ref(null)
+const activityLoaded = ref(false)
 
 const showAddParticipant = ref(false)
 const newParticipantId = ref('')
@@ -234,6 +267,31 @@ const formatDateTime = (d) => {
 
 // The participants endpoint sends the student/teacher id as `participantId`.
 const participantIdOf = (p) => p?.participantId || p?.studentId || p?._id
+
+// Batch activity results key rows by studentId (a string over HTTP, an
+// ObjectId in service tests). Normalise both so the tables can be joined
+// without an extra lookup.
+const studentIdKey = (value) => {
+  const id = value && typeof value === 'object' ? value._id || value.toString() : value
+  return id === null || id === undefined ? '' : String(id)
+}
+
+const activityByStudent = computed(() => {
+  const byStudent = new Map()
+  for (const result of activityResults.value) {
+    const key = studentIdKey(result?.studentId)
+    if (key) byStudent.set(key, result)
+  }
+  return byStudent
+})
+
+const activityFor = (participant) => activityByStudent.value.get(studentIdKey(participantIdOf(participant))) || null
+
+const moduleStatusLabel = (participant) => {
+  const activity = activityFor(participant)
+  if (!activity) return '–'
+  return currentModuleLabel(activityToCard(activity)) || '–'
+}
 
 const ACTIVITY_TYPE_LABELS = { login: 'Inloggning', submission: 'Inlämning' }
 const activityTypeLabel = (type) => ACTIVITY_TYPE_LABELS[type] || ''
@@ -271,14 +329,47 @@ const loadParticipants = async () => {
   }
 }
 
+const loadActivity = async () => {
+  const instanceId = selectedInstanceId.value
+  if (!instanceId) return
+  activityLoading.value = true
+  activityError.value = null
+  activityLoaded.value = false
+  activityResults.value = []
+  try {
+    const { data } = await client.post(`/learning/instances/${instanceId}/activity-status/batch`, {})
+    if (selectedInstanceId.value !== instanceId) return
+    if (data?.error) throw new Error(data.error)
+    activityResults.value = Array.isArray(data?.activityResults) ? data.activityResults : []
+    activityLoaded.value = true
+  } catch (err) {
+    if (selectedInstanceId.value === instanceId) {
+      activityError.value = 'Kunde inte hämta modulstatus.'
+      toast.error(activityError.value)
+    }
+  } finally {
+    if (selectedInstanceId.value === instanceId) activityLoading.value = false
+  }
+}
+
 const loadAll = () => {
   subError.value = null
   partError.value = null
   reportError.value = null
-  if (!selectedInstanceId.value) { submissions.value = []; participants.value = []; report.value = null; return }
+  activityError.value = null
+  if (!selectedInstanceId.value) {
+    submissions.value = []
+    participants.value = []
+    report.value = null
+    activityResults.value = []
+    activityLoading.value = false
+    activityLoaded.value = false
+    return
+  }
   loadSubmissions()
   loadParticipants()
   loadReport()
+  loadActivity()
 }
 
 const addParticipant = async () => {

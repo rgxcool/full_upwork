@@ -10,6 +10,7 @@ import logger from "../utils/logger.js";
 import { buildVisibleModules } from "../utils/courseContentVisibility.js";
 import { recordStudentLearningActivity } from "../utils/learningActivity.js";
 import { recordResourceVisit } from "../services/resourceVisitService.js";
+import { calculateBatchActivityStatus } from "../services/activityStatusService.js";
 
 const STAFF_ROLES = ["systemadmin", "admin", "tester"];
 const SUBMITTABLE_STATUSES = ["enrolled", "active"];
@@ -921,6 +922,28 @@ export const getCourseInstanceReports = async (req, res) => {
         logger.error({ err: error }, "Error fetching course instance reports");
         res.status(500).json({ error: "Internal server error" });
     }
+};
+
+/**
+ * HTTP adapter for the batch activity-status service.
+ *
+ * The service expects a plain { courseInstanceId, studentIds } object, while
+ * the router previously handed it the raw Express request. That produced an
+ * "Invalid course instance ID" result that was never sent back, leaving the
+ * request hanging. Keep the URL and payload shape unchanged; only bridge the
+ * request into the service and serialise its result.
+ */
+export const getBatchActivityStatus = async (req, res) => {
+    const result = await calculateBatchActivityStatus({
+        courseInstanceId: req.params?.instanceId,
+        studentIds: req.body?.studentIds,
+    });
+
+    if (result?.error) {
+        const status = result.error === "Internal server error" ? 500 : 400;
+        return res.status(status).json(result);
+    }
+    return res.json(result);
 };
 
 /**

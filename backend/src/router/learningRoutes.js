@@ -12,6 +12,7 @@ import {
     addSubmissionComment,
     getCourseInstanceReport,
     getCourseInstanceReports,
+    getBatchActivityStatus,
     getCourseInstanceParticipants,
     addCourseInstanceParticipant,
     removeCourseInstanceParticipant,
@@ -19,7 +20,6 @@ import {
 } from "../controllers/learningController.js";
 import {
     calculateActivityStatus,
-    calculateBatchActivityStatus,
 } from "../services/activityStatusService.js";
 
 const router = express.Router();
@@ -136,7 +136,7 @@ router.post(
     "/learning/instances/:instanceId/activity-status/batch",
     isAuthenticated,
     hasRole(STAFF_ROLES),
-    asyncHandler(calculateBatchActivityStatus)
+    asyncHandler(getBatchActivityStatus)
 );
 
 // Macro reports for a course instance (multiple students)
