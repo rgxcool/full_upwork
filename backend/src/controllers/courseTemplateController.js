@@ -52,7 +52,7 @@ export const getCourseTemplateById = async (req, res) => {
 // Create a template. Defaults to 5 modules × 2 sections when modules are not provided.
 export const createCourseTemplate = async (req, res) => {
     try {
-        const { templateName, courseId, modules } = req.body;
+        const { templateName, title, name, courseCode, description, courseId, modules, content, cardContent } = req.body;
 
         if (!templateName || !String(templateName).trim()) {
             return res.status(400).json({ error: "Template name is required" });
@@ -77,6 +77,7 @@ export const createCourseTemplate = async (req, res) => {
                                 title: s.title ?? "",
                                 description: s.description ?? "",
                                 instructions: s.instructions ?? "",
+                                blocks: Array.isArray(s.blocks) ? s.blocks : [],
                             }))
                           : [],
                       assignment:
@@ -91,6 +92,10 @@ export const createCourseTemplate = async (req, res) => {
 
         const template = await CourseTemplate.create({
             templateName: String(templateName).trim(),
+            title: String(title || name || templateName).trim(),
+            courseCode: String(courseCode || "").trim(),
+            description: String(description || "").trim(),
+            cardContent: cardContent || content || {},
             courseId: courseId || undefined,
             modules: templateModules,
             createdBy: mongoose.isValidObjectId(req.user?.userId) ? req.user.userId : undefined,
@@ -108,7 +113,7 @@ export const createCourseTemplate = async (req, res) => {
 export const updateCourseTemplate = async (req, res) => {
     try {
         const { templateId } = req.params;
-        const { templateName, courseId, modules, isActive } = req.body;
+        const { templateName, title, name, courseCode, description, courseId, modules, content, cardContent, isActive } = req.body;
 
         const template = await CourseTemplate.findById(templateId);
         if (!template) {
@@ -120,6 +125,14 @@ export const updateCourseTemplate = async (req, res) => {
                 return res.status(400).json({ error: "Template name is required" });
             }
             template.templateName = String(templateName).trim();
+        }
+        if (title !== undefined || name !== undefined) {
+            template.title = String(title || name || "").trim();
+        }
+        if (courseCode !== undefined) template.courseCode = String(courseCode).trim();
+        if (description !== undefined) template.description = String(description).trim();
+        if (cardContent !== undefined || content !== undefined) {
+            template.cardContent = cardContent || content || {};
         }
 
         if (courseId !== undefined) {
@@ -145,6 +158,7 @@ export const updateCourseTemplate = async (req, res) => {
                           title: s.title ?? "",
                           description: s.description ?? "",
                           instructions: s.instructions ?? "",
+                          blocks: Array.isArray(s.blocks) ? s.blocks : [],
                       }))
                     : [],
                 assignment:
@@ -201,6 +215,10 @@ export const duplicateCourseTemplate = async (req, res) => {
 
         const template = await CourseTemplate.create({
             templateName: `${source.templateName || "Mall"} (kopia)`,
+            title: `${source.title || source.templateName || "Mall"} (kopia)`,
+            courseCode: source.courseCode || "",
+            description: source.description || "",
+            cardContent: source.cardContent || {},
             courseId: source.courseId || undefined,
             modules:
                 Array.isArray(source.modules) && source.modules.length > 0

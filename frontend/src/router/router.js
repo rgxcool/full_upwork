@@ -40,6 +40,7 @@ const LearningManagement = () => import('@/views/Admin/LearningManagement.vue')
 const NotificationManager = () => import('@/views/Admin/NotificationManager.vue')
 const CalendarHousekeeping = () => import('@/views/Admin/CalendarHousekeeping.vue')
 const CourseCardBuilder = () => import('@/views/Admin/CourseCardBuilder.vue')
+const CourseCardsOverview = () => import('@/views/Admin/CourseCardsOverview.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
@@ -145,7 +146,7 @@ const routes = [
       }
     },
   },
-  // CourseCardBuilder route for admins and system admins
+  // CourseCardBuilder route for staff who can manage course content
   {
     path: '/admin/course-card-builder',
     name: 'CourseCardBuilder',
@@ -153,7 +154,7 @@ const routes = [
     meta: {
       title: 'Kurskortsbyggare',
       requiresAuth: true,
-      requiredRoles: ['admin', 'systemadmin'],
+      role: ['teacher', 'admin', 'systemadmin'],
     },
   },
   // Redirect /detaljer/Kursinstans/:id to /education/:id?type=instance
@@ -445,6 +446,15 @@ const routes = [
     meta: { title: 'Generera exam', role: ['admin', 'systemadmin', 'teacher'] },
   },
 
+  {
+    path: '/course-cards/overview/:courseInstanceId?',
+    name: 'CourseCardsOverview',
+    component: CourseCardsOverview,
+    meta: {
+      title: 'Kurskort',
+      role: ['teacher', 'admin', 'systemadmin'],
+    },
+  },
   {
     path: '/course-cards',
     name: 'CourseCards',

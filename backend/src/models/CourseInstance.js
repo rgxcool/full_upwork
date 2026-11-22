@@ -67,6 +67,11 @@ const courseInstanceSchema = new mongoose.Schema(
 
     // Kopierade moduler från kursmall / kurskort
     modules: { type: [courseModuleSchema], default: [] },
+    courseTemplateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CourseTemplate",
+    },
+    cardContent: { type: mongoose.Schema.Types.Mixed, default: {} },
 
     // Startdatum per modul/sektion
     sectionDates: [{ type: Date }],

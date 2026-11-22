@@ -23,6 +23,7 @@ export default defineConfig({
         setupFiles: ["./tests/setup.js"],
         exclude: ["node_modules/**", "dist/**"],
         include: ["tests/**/*.test.js"],
+        pool: 'threads',
         maxWorkers: 1,
         silent: true
     },

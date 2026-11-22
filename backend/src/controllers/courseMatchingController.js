@@ -1562,6 +1562,29 @@ export const getCourseInstances = async (req, res) => {
   }
 };
 
+export const getCourseInstanceById = async (req, res) => {
+  try {
+    const { instanceId } = req.params;
+    if (!mongoose.isValidObjectId(instanceId)) {
+      return res.status(400).json({ error: "Ogiltigt kursinstans-id" });
+    }
+
+    const instance = await CourseInstance.findById(instanceId)
+      .populate("mainCourseId")
+      .populate("responsibleTeacher")
+      .populate("assistantTeacher");
+
+    if (!instance) {
+      return res.status(404).json({ error: "Course instance not found" });
+    }
+
+    res.json({ success: true, instance });
+  } catch (error) {
+    logger.error({ err: error }, "Error fetching course instance");
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 export const getMyCourseInstances = async (req, res) => {
   try {
     const userId = req.user?.userId;
@@ -1698,6 +1721,35 @@ export const getStudentEnrollments = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "Error fetching student enrollments");
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+/**
+ * GET /course-cards/all
+ * Returns all course cards ordered by their course end date.
+ */
+export const getAllCourseCards = async (req, res) => {
+  try {
+    const cards = await CourseInstance.find({})
+      .select(
+        "courseName courseCode startDate endDate isActive coursePoints courseExtent courseTemplateId cardContent modules responsibleTeacher assistantTeacher",
+      )
+      .populate({
+        path: "responsibleTeacher",
+        select: "subject userId colorCode",
+        populate: { path: "userId", select: "username" },
+      })
+      .populate({
+        path: "assistantTeacher",
+        select: "subject userId",
+        populate: { path: "userId", select: "username" },
+      })
+      .sort({ endDate: 1, _id: 1 });
+
+    res.json({ success: true, cards });
+  } catch (error) {
+    logger.error({ err: error }, "Error fetching all course cards");
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -2079,9 +2131,11 @@ export const createCourseInstance = async (req, res) => {
     // auto-resolution (item #31 Part B) only applies when no templateId is given,
     // which is the admission-time scenario. Both paths copy via cloneModules.
     let duplicatedModules = [];
+    let selectedTemplate = null;
     if (templateId) {
       const template = await CourseTemplate.findById(templateId);
       if (template) {
+        selectedTemplate = template;
         duplicatedModules = cloneModules(template.modules);
       } else {
         logger.warn(
@@ -2093,6 +2147,7 @@ export const createCourseInstance = async (req, res) => {
       const template =
         await CourseMatchingService.resolveCourseTemplate(mainCourseId);
       if (template) {
+        selectedTemplate = template;
         duplicatedModules = cloneModules(template.modules);
         logger.info(
           {
@@ -2197,6 +2252,8 @@ export const createCourseInstance = async (req, res) => {
       notes: notes || "",
       isActive: true,
       modules: duplicatedModules,
+      courseTemplateId: selectedTemplate?._id || undefined,
+      cardContent: selectedTemplate?.cardContent || {},
       sectionDates,
     });
 
@@ -2763,9 +2820,23 @@ export const updateCourseInstanceContent = async (req, res) => {
       return res.status(403).json({ error: "Saknar behörighet" });
     }
 
-    const { content, syncModules = true } = req.body;
+    const {
+      content,
+      modules,
+      cardContent,
+      courseTemplateId,
+      syncModules = true,
+    } = req.body;
     if (!content || typeof content !== "object" || Array.isArray(content)) {
       return res.status(400).json({ error: "Ogiltig innehållsdata" });
+    }
+
+    if (courseTemplateId) {
+      instance.courseTemplateId =
+        mongoose.isValidObjectId(courseTemplateId) ? courseTemplateId : undefined;
+    }
+    if (cardContent && typeof cardContent === "object") {
+      instance.cardContent = cardContent;
     }
 
     if (!(instance.content instanceof Map)) {
@@ -2808,6 +2879,29 @@ export const updateCourseInstanceContent = async (req, res) => {
 
     // Synka instance.modules så tillagda/borttagna moduler även speglas på kurskortet
     if (syncModules) {
+      if (Array.isArray(modules) && modules.length > 0) {
+        instance.modules = modules.map((mod, index) => ({
+          moduleNumber: Number(mod.moduleNumber ?? index + 1),
+          title: String(mod.title || `Modul ${index + 1}`),
+          isPartialExam: Boolean(mod.isPartialExam),
+          isCaseStudy: Boolean(mod.isCaseStudy),
+          sections: Array.isArray(mod.sections)
+            ? mod.sections.map((section) => ({
+                title: String(section.title || ""),
+                description: String(section.description || ""),
+                instructions: String(section.instructions || ""),
+                blocks: Array.isArray(section.blocks) ? section.blocks : [],
+              }))
+            : [],
+          assignment: mod.assignment && typeof mod.assignment === "object"
+            ? {
+                title: String(mod.assignment.title || ""),
+                description: String(mod.assignment.description || ""),
+              }
+            : { title: "", description: "" },
+        }));
+        instance.markModified("modules");
+      } else {
       const existingByNumber = new Map(
         (instance.modules || []).map((m) => [Number(m.moduleNumber), m]),
       );
@@ -2854,6 +2948,7 @@ export const updateCourseInstanceContent = async (req, res) => {
         activeKeys.has(String(m.moduleNumber)),
       );
       instance.markModified("modules");
+      }
     }
 
     await instance.save();

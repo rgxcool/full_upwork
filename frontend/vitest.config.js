@@ -45,7 +45,8 @@ export default defineConfig({
         transformMode: {
             web: [/\.vue$/],
         },
-        maxWorkers: 4,
+        pool: 'threads',
+        maxWorkers: 1,
     },
     server: {
         sourcemapIgnoreList: (path) => path.includes('node_modules'),

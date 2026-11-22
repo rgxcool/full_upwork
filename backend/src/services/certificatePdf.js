@@ -180,6 +180,21 @@ export async function storePdfBuffer(buffer, { filename, recordId, contentType =
 }
 
 /**
+ * Read a GridFS-stored PDF into a buffer.
+ */
+export async function readPdfBuffer(fileId) {
+    const bucket = new GridFSBucket(mongoose.connection.db, { bucketName: "fs" });
+    const chunks = [];
+    const stream = bucket.openDownloadStream(fileId);
+    await new Promise((resolve, reject) => {
+        stream.on("data", (chunk) => chunks.push(chunk));
+        stream.on("end", resolve);
+        stream.on("error", reject);
+    });
+    return Buffer.concat(chunks);
+}
+
+/**
  * Convenience: generate and store a certificate PDF for a record snapshot,
  * returning the stored GridFS file id.
  */

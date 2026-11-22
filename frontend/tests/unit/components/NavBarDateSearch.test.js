@@ -124,4 +124,69 @@ describe("NavBar date search", () => {
 
         expect(wrapper.text()).toContain("Ogiltigt datum");
     });
+
+    it("searches text after at least three characters", async () => {
+        const wrapper = mountNavBar();
+
+        wrapper.vm.selectSearchType("Elev");
+        wrapper.vm.searchQuery = "Anna";
+        await wrapper.vm.handleSearch();
+        await flushPromises();
+
+        expect(searchCalls()).toContain("/search?type=Elev&q=Anna");
+    });
+
+    it("does not search text shorter than three characters", async () => {
+        const wrapper = mountNavBar();
+
+        wrapper.vm.selectSearchType("Elev");
+        wrapper.vm.searchQuery = "An";
+        await wrapper.vm.handleSearch();
+
+        expect(searchCalls()).toHaveLength(0);
+    });
+
+    it("clears the current search and closes search results", async () => {
+        const wrapper = mountNavBar();
+
+        wrapper.vm.searchQuery = "Anna";
+        wrapper.vm.searchResults = [{ id: "1" }];
+        wrapper.vm.showSearchResults = true;
+        wrapper.vm.clearSearch();
+        await flushPromises();
+
+        expect(wrapper.vm.searchQuery).toBe("");
+        expect(wrapper.vm.searchResults).toEqual([]);
+        expect(wrapper.vm.showResults).toBe(false);
+    });
+
+    it("toggles dropdowns and handles escape to close them", async () => {
+        const wrapper = mountNavBar();
+
+        wrapper.vm.toggleSearchTypeDropdown();
+        expect(wrapper.vm.showSearchTypeDropdown).toBe(true);
+        wrapper.vm.handleEscapeKey({ preventDefault: vi.fn() });
+        expect(wrapper.vm.showSearchTypeDropdown).toBe(false);
+        expect(wrapper.vm.showResults).toBe(false);
+    });
+
+    it("toggles notifications and profile menus", async () => {
+        const wrapper = mountNavBar();
+
+        wrapper.vm.toggleNotificationPanel({ stopPropagation: vi.fn() });
+        expect(wrapper.vm.showNotisPanel).toBe(true);
+        wrapper.vm.toggleProfileMenu({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+        });
+        expect(wrapper.vm.showProfileMenu).toBe(true);
+    });
+
+    it("handles focus and outside-click cleanup", async () => {
+        const wrapper = mountNavBar();
+
+        wrapper.vm.searchQuery = "Anna";
+        wrapper.vm.handleInputFocus();
+        expect(wrapper.vm.showResults).toBe(true);
+    });
 });

@@ -347,11 +347,11 @@
    
  | 63 | Deltagare: list/add/remove + "last active" column | ✅ DONE | List/add/remove and auto-removal work; the main participants table now enriches each participant via GET /learning/instances/:instanceId/access-last/:studentId and shows "last active" in the column. |  
    
- | 64 | APL Etapp 2: loggbok auto-issue at start, activity color-coding | ✅ DONE | Logbook CRUD + landing-page link work; persisted APL status auto-transition now runs via the scheduler's daily `autoTransitionStatuses` scan (item 24a). Kit auto-issue at APL start remains a manual step (product decision). |  
+ | 64 | APL Etapp 2: loggbok auto-issue at start, activity color-coding | ✅ DONE | Daily scheduler now issues each eligible student's personalized kit on the APL start date (idempotent); future-start kits are not exposed early. Persisted APL status auto-transition also runs daily (item 24a). |
    
  | 65 | Intyg: on-demand studieintyg button | ✅ DONE | Signature is a printed text block, not cryptographic — reported honestly, not a bug. |  
    
- | 66 | Diploma auto-trigger + signed email to student | ✅ DONE (fixed) | Same item as P8 above — now mounted, auto-emailed, delivery recorded. Signing remains non-cryptographic by design (report honestly, don't "fix" by fabricating a signature). |  
+ | 66 | Diploma auto-trigger + signed email to student | ✅ DONE | Daily scan verifies package completion, APL, course end dates, and configured PNG signature; generates and stores the signed-image PDF, emails it, and retries failed delivery without resending successful delivery. The uploaded image is visual, not cryptographic/e-signature. |
    
  | 67 | Frågebank → generate new exams | ✅ DONE | ExamGeneration.vue is routed (router.js:407) and calls real endpoints (POST /question-bank/generate-exam + PUT /question-bank/exam-attempts/:id/questions — both exist). Fixed this pass: course v-select item-title/item-value, `selectedQuestions.length` on a ref({}) (always false) → computed `selectedCount`, undefined `filterQuestionsByCourse` handler → `loadQuestions`, `generate-exam` now honours the requested title (backend), and QuestionBank.vue create/form now requires a real course (was posting `course:""` → 400) with a working edit-vs-create path. questionBankRoutes.test.js 52/52, ExamGeneration.test.js 7/7. |  
    
@@ -462,7 +462,6 @@ Use this as the actual to-do queue; everything above marked ✅ DONE needs no fu
 - Prövning payment gateway + public booking flow (item 38)  
 - Scrive automated catalog generation (item 35)  
 - Alvis API integration (item 11)  
-- APL kit auto-issue at start (item 64) vs manual step
 
 **CI/process:**  
 - `.github/workflows/ci.yml` exists (lint + test + docker jobs) — kept as-is this pass; coverage gate stays honest (not enforced/lowered).

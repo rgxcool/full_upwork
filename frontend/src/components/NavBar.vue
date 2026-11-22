@@ -933,7 +933,7 @@
         {
           name: 'Kurskortsbyggare',
           link: '/admin/course-card-builder',
-          role: ['admin', 'systemadmin'],
+          role: ['teacher', 'admin', 'systemadmin'],
         },
         {
           name: 'Kalender',
@@ -966,6 +966,11 @@
           role: ['admin', 'systemadmin', 'teacher'],
         },
         { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: 'teacher' },
+        {
+          name: 'Alla kurskort',
+          link: '/course-cards/overview',
+          role: ['teacher', 'admin', 'systemadmin'],
+        },
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
         { name: 'Betyg', link: '/betyg', role: 'teacher' },
         { name: 'Betygsuppföljning', link: '/grade-lookups', role: 'admin' },

@@ -415,7 +415,7 @@ export async function runInactivityScan({ today = new Date(), autoSend = AUTO_WA
                     student,
                     signal,
                     enrollmentMeta,
-                    lastActivityAt: student.lastLearningActivityAt || row.user?.lastLoginAt || null,
+                    lastActivityAt: signal.lastActivityAt,
                 });
                 if (result === "created") summary.reviewNotifications += 1;
             } catch (error) {

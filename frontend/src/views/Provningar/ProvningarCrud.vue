@@ -3,6 +3,15 @@
     <v-container class="my-5">
       <h2 class="mb-4">Hantera Prövningar</h2>
 
+      <!-- Actions -->
+      <v-row class="mb-2">
+        <v-col cols="12" class="d-flex flex-wrap align-center provning-actions">
+          <v-btn color="primary" @click="openForm()">Registrera Ny</v-btn>
+          <v-btn color="secondary" variant="outlined" @click="showImport = true">Importera</v-btn>
+          <v-btn color="secondary" variant="outlined" @click="exportExams">Exportera</v-btn>
+        </v-col>
+      </v-row>
+
       <!-- Search and Filter Bar -->
       <v-row class="mb-4" dense>
         <v-col cols="12" md="4">
@@ -35,11 +44,6 @@
             clearable
           />
         </v-col>
-        <v-col cols="12" md="2" class="d-flex align-center gap-2">
-          <v-btn color="primary" @click="openForm()">Registrera Ny</v-btn>
-          <v-btn color="secondary" variant="outlined" @click="showImport = true">Importera</v-btn>
-          <v-btn color="secondary" variant="outlined" @click="exportExams">Exportera</v-btn>
-        </v-col>
       </v-row>
 
       <!-- Exams Table -->
@@ -56,12 +60,40 @@
           </v-chip>
         </template>
         <template #item.accommodations="{ item }">
-          <span v-if="item.accommodations?.extraTime || item.accommodations?.computer || item.accommodations?.separateRoom">
-            <v-icon v-if="item.accommodations.extraTime" small title="Extra skrivtid" class="me-1">mdi-clock-plus-outline</v-icon>
-            <v-icon v-if="item.accommodations.computer" small title="Dator" class="me-1">mdi-laptop</v-icon>
-            <v-icon v-if="item.accommodations.separateRoom" small title="Sitter ensam">mdi-account-off</v-icon>
+          <span class="accommodation-icons">
+            <v-icon v-if="item.accommodations?.extraTime" small title="Extra skrivtid" class="me-1">mdi-clock-plus-outline</v-icon>
+            <v-icon v-if="item.accommodations?.computer" small title="Dator" class="me-1">mdi-laptop</v-icon>
+            <v-icon v-if="item.accommodations?.separateRoom" small title="Sitter ensam" class="me-1">mdi-account-off</v-icon>
+            <v-menu
+              v-if="item.accommodations?.notes?.trim()"
+              location="top"
+              :close-on-content-click="false"
+            >
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon
+                  variant="text"
+                  size="x-small"
+                  class="accommodation-note-trigger"
+                  :title="`Visa anteckning: ${item.accommodations.notes}`"
+                  :aria-label="`Visa anteckning om anpassning: ${item.accommodations.notes}`"
+                >
+                  <v-icon size="18">mdi-script-text-outline</v-icon>
+                </v-btn>
+              </template>
+              <v-card min-width="260" max-width="360" class="accommodation-note-popup">
+                <v-card-title class="text-subtitle-2">Anteckning om anpassning</v-card-title>
+                <v-card-text class="accommodation-note-text">{{ item.accommodations.notes }}</v-card-text>
+              </v-card>
+            </v-menu>
+            <span
+              v-if="!item.accommodations?.extraTime && !item.accommodations?.computer && !item.accommodations?.separateRoom && !item.accommodations?.notes?.trim()"
+              class="text-muted"
+            >
+              —
+            </span>
           </span>
-          <span v-else class="text-muted">—</span>
         </template>
         <template #item.decision="{ item }">
           <span>{{ decisionLabel(item.decision) }}</span>
@@ -211,7 +243,32 @@ const toast = useToast()
 
 const exams = ref([])
 const showForm = ref(false)
-const currentExam = ref({})
+const createEmptyExam = () => ({
+  status: 'intresse',
+  name: '',
+  personalNumber: '',
+  phone: '',
+  email: '',
+  address: '',
+  course: '',
+  requestedMonth: '',
+  municipality: '',
+  teacherId: null,
+  paymentDate: '',
+  examMode: 'onsite',
+  examRoom: '',
+  accommodations: {
+    extraTime: false,
+    computer: false,
+    separateRoom: false,
+    notes: '',
+  },
+  materialReceived: {
+    status: false,
+    receivedDate: '',
+  },
+})
+const currentExam = ref(createEmptyExam())
 const searchQuery = ref('')
 const filterStatus = ref('')
 const filterMonth = ref('')
@@ -415,7 +472,8 @@ const submitDecision = async (decision) => {
 
 const closeForm = () => {
   showForm.value = false
-  currentExam.value = {}
+  formError.value = null
+  currentExam.value = createEmptyExam()
 }
 
 const saveExam = async () => {
@@ -561,5 +619,25 @@ onMounted(() => {
 }
 .gap-2 {
   gap: 8px;
+}
+.provning-actions {
+  gap: 8px;
+}
+.accommodation-icons {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+.accommodation-note-trigger {
+  color: #1976d2;
+  margin: -4px 0;
+}
+.accommodation-note-popup {
+  border: 1px solid #d6d6d6;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.accommodation-note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 </style>
