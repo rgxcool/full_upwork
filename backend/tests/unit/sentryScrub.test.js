@@ -89,6 +89,13 @@ describe("sentryScrub", () => {
         expect(scrubBreadcrumb(c)).toEqual(c);
     });
 
+    it("scrubEvent does not invent a user id when the user has none", () => {
+        const out = scrubEvent({ user: { segment: "teacher", email: "test@example.invalid" } });
+        expect(out.user).toEqual({ segment: "teacher" });
+        expect(scrubEvent({ user: { id: null, segment: "student" } }).user).toEqual({ segment: "student" });
+        expect(scrubEvent({ user: { id: 0 } }).user).toEqual({ id: "0" });
+    });
+
     it("frontend copy is identical to the backend module", () => {
         const backend = readFileSync(path.join(here, "../../src/utils/sentryScrub.js"), "utf8");
         const frontend = readFileSync(
