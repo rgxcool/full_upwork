@@ -12,8 +12,16 @@ import User from "../src/models/User.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env from the correct path
-dotenv.config({ path: path.resolve(__dirname, "../.env.production") });
+// Interactive: asks for name, email, password and roles, then creates the user.
+// Usage (from backend/): node scripts/createUser.js
+// Loads .env.development unless NODE_ENV=production / test says otherwise.
+const envFile =
+    process.env.NODE_ENV === "production"
+        ? ".env.production"
+        : process.env.NODE_ENV === "test"
+          ? ".env.test"
+          : ".env.development";
+dotenv.config({ path: path.resolve(__dirname, "..", envFile) });
 
 const ALLOWED_ROLES = [
     "guest",

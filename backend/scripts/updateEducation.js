@@ -121,5 +121,7 @@ async function parseEducation(filePath) {
 
 export default parseEducation;
 
-// Usage example
-parseEducation(process.argv[2] || "./test.xlsx");
+// Usage (from backend/): node scripts/updateEducation.js [path/to/workbook.xlsx]
+// Default: data/Kurser och kurspaket GY25.xlsx (the workbook launch.sh imports on an empty database).
+const DEFAULT_WORKBOOK = new URL("../../data/Kurser och kurspaket GY25.xlsx", import.meta.url).pathname;
+parseEducation(process.argv[2] || decodeURIComponent(DEFAULT_WORKBOOK));
