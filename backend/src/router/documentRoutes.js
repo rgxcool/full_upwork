@@ -13,6 +13,7 @@ import {
   canAccessStudentDocuments,
   canAccessTeacherDocuments,
   isStaffOnlyDocumentType,
+  isStudentHiddenFromCaller,
   isStaffUser,
   STAFF_ONLY_DOCUMENT_TYPES,
 } from "../utils/documentAuthorization.js";
@@ -752,6 +753,10 @@ router.get("/documents/:id", authenticateUser, async (req, res) => {
       : await canAccessStudentDocuments(user, id);
 
     if (!allowed) {
+      // #40: an unknown or cross-tenant student is reported as not found.
+      if (!isTeacherEntity && (await isStudentHiddenFromCaller(user, id))) {
+        return res.status(404).json({ message: "Eleven hittades inte" });
+      }
       return res.status(403).json({
         message: "Du har inte behörighet att komma åt dokumenten",
       });

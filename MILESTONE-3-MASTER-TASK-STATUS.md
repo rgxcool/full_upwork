@@ -58,7 +58,7 @@
    
  | P18 | CI/CD pipeline + build/lint/test baseline | ✅ DONE | `.github/workflows/ci.yml` exists (lint + test + docker jobs). Backend/frontend tests, lint, build PASS locally (1859 backend / 251 frontend tests). Coverage gate is BACKEND DEPENDENCY (thresholds not met, not lowered — honest gap; Docker daemon was off this session so `make citest` could not be re-run). |  
    
- | — | GET /documents/:id metadata endpoint — staff tenant scope | 🟡 PARTIAL (verified 2026-11-22) | `canAccessStudentDocuments` applies municipalityInScope. **Gap:** cross-tenant requests return 403, but the spec asks for 404 (issue #40). |  
+ | — | GET /documents/:id metadata endpoint — staff tenant scope | ✅ DONE (2026-11-22, issue #40) | `canAccessStudentDocuments` applies municipalityInScope. Unknown or cross-tenant students now return **404** (`isStudentHiddenFromCaller`); same-tenant denials stay 403. Covered by an integration test in documentRoutes.test.js. |  
    
  | — | Disk-served /uploads static path IDOR | 🟡 MITIGATED (verified live 2026-11-22) | The static path is gone. `/uploads/:filename` requires a Document record plus `canAccessDocument` (`backend/index.js:159`). A student probing all 7 files on disk got 404/403. **Remaining:** migrate files off disk to GridFS (issue #39). |  
    
@@ -455,7 +455,6 @@ Use this as the actual to-do queue; everything above marked ✅ DONE needs no fu
 - Profile field minimization: teacher personnummer rule (P15 remainder, #37)  
 - Messaging: report existing cross-tenant threads (P17 remainder, #38)  
 - /uploads storage migration off disk (IDOR itself mitigated, #39)  
-- GET /documents/:id cross-tenant → 404 instead of 403 (#40)  
 - Search by first/middle/last name (needs a Student schema change)  
 - Fine-grained per-user permission grants (item 1b)  
 - Backend full-suite coverage gate below thresholds (lines 68.36% < 78.5 etc.) — thresholds NOT lowered; `make citest` needs the Docker daemon  

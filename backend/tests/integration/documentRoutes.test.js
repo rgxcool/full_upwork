@@ -831,4 +831,35 @@ describe("Document Routes", () => {
     expect(response.body.message).toContain("tom");
     expect(await Document.countDocuments({})).toBe(0);
   });
+  // #40: cross-tenant (and unknown) students are reported as 404, not 403,
+  // so scoped staff cannot enumerate students in other kommuner.
+  it("returns 404 for a student outside a scoped coordinator's kommun, 200 inside", async () => {
+    const { user: coord, token: coordToken } = await makeUser(["coordinator"]);
+    await User.updateOne({ _id: coord._id }, { $set: { municipalities: ["Huddinge"] } });
+
+    const inside = await makeStudent({ municipality: { type: "Huddinge" } });
+    const outside = await makeStudent({ municipality: { type: "Botkyrka" } });
+    await Document.create({
+      student: outside._id,
+      filename: "outside.txt",
+      originalName: "outside.txt",
+      type: "GENERAL",
+    });
+
+    await request(app)
+      .get(`/api/documents/${inside._id.toString()}`)
+      .set(authFor(coordToken))
+      .expect(200);
+
+    const res = await request(app)
+      .get(`/api/documents/${outside._id.toString()}`)
+      .set(authFor(coordToken))
+      .expect(404);
+    expect(JSON.stringify(res.body)).not.toContain("outside.txt");
+
+    await request(app)
+      .get(`/api/documents/${new mongoose.Types.ObjectId().toString()}`)
+      .set(authFor(coordToken))
+      .expect(404);
+  });
 });
