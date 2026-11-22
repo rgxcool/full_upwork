@@ -10,7 +10,8 @@
 #   DEPLOY_REPO      owner/repo used for the CI check (default Cyrus-Malekani/mindful-new)
 #   PORT             backend port for health checks (default 5010)
 #
-# Flow: lock → preflight → PREV_SHA → CI gate → ff-merge main → pnpm install → vite build into
+# Flow: lock → preflight → PREV_SHA → CI gate → fetch → (re-run with the target's deploy.sh if it
+# changed) → ff-merge main → pnpm install → vite build into
 # frontend/dist.new → swap dist.new→dist (old kept as dist.prev) → pm2 reload + scale → health checks.
 # A failure after the merge resets code + deps to PREV_SHA. A failed health check also restores
 # dist.prev and reloads pm2 (automatic rollback). Every run appends a line to logs/deploy.log.
@@ -19,7 +20,9 @@
 # still live), 2 rolled back after failed health checks, 3 rollback itself failed (needs a human).
 set -euo pipefail
 
-cd "$(dirname "$0")"
+SELF=$(realpath "$0")
+# DEPLOY_ROOT is set only when deploy.sh re-runs itself from logs/deploy.next.sh (see "Self-update").
+cd "${DEPLOY_ROOT:-$(dirname "$0")}"
 REPO_ROOT=$(pwd)
 
 DRY_RUN=${DRY_RUN:-0}
@@ -241,7 +244,9 @@ else
 fi
 
 PREV_SHA=$(git rev-parse HEAD)
-TARGET_SHA=$(git ls-remote "$DEPLOY_REMOTE" refs/heads/main | awk '{print $1}')
+# DEPLOY_TARGET_SHA is passed on a self-update re-run so the target is not resolved (and the SSH
+# passphrase not asked for) a second time.
+TARGET_SHA=${DEPLOY_TARGET_SHA:-$(git ls-remote "$DEPLOY_REMOTE" refs/heads/main | awk '{print $1}')}
 [ -n "$TARGET_SHA" ] || die "Could not resolve $DEPLOY_REMOTE/main"
 say "📌 Live commit:   $PREV_SHA"
 say "🎯 Target commit: $TARGET_SHA ($DEPLOY_REMOTE/main)"
@@ -274,7 +279,26 @@ fi
 # --- Pull, install, build ----------------------------------------------------------------------
 
 say "📥 Fast-forwarding to $TARGET_SHA..."
-run git fetch "$DEPLOY_REMOTE" main
+if [ "$DRY_RUN" = "1" ] || ! git cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null; then
+  run git fetch "$DEPLOY_REMOTE" main
+fi
+
+# --- Self-update -------------------------------------------------------------------------------
+# bash keeps executing the deploy.sh it started with, and a rollback resets deploy.sh as well, so a
+# fix to deploy.sh itself could never take effect through a deploy. When the target ships a
+# different deploy.sh, run that version instead (same target, same env) before changing anything.
+if [ "${DEPLOY_SELF_UPDATED:-0}" != "1" ] && ! git show "$TARGET_SHA:deploy.sh" | cmp -s - "$SELF"; then
+  if [ "$DRY_RUN" = "1" ]; then
+    say "🔁 [dry-run] deploy.sh differs in $TARGET_SHA; a real run would continue with that version"
+  else
+    say "🔁 deploy.sh changed in $TARGET_SHA — continuing with the new version"
+    git show "$TARGET_SHA:deploy.sh" > "$REPO_ROOT/logs/deploy.next.sh"
+    chmod +x "$REPO_ROOT/logs/deploy.next.sh"
+    exec env DEPLOY_SELF_UPDATED=1 DEPLOY_ROOT="$REPO_ROOT" DEPLOY_TARGET_SHA="$TARGET_SHA" \
+      "$REPO_ROOT/logs/deploy.next.sh"
+  fi
+fi
+
 run git merge --ff-only "$TARGET_SHA"
 STAGE="pulled"
 
