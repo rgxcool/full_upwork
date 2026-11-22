@@ -105,6 +105,21 @@ restore_frontend() {
 
 pm2_reload() {
   (cd "$REPO_ROOT/backend" && pm2 startOrReload ecosystem.config.cjs --env production --update-env)
+  pm2_scale
+}
+
+# `pm2 scale` to the count already running prints "[PM2][ERROR] Nothing to do" and exits 1, which
+# under `set -e` aborted the deploy and rolled it back. Only scale when the count differs.
+pm2_scale() {
+  local running
+  running=$(pm2 jlist 2>/dev/null | node -e '
+    let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+      try { console.log(JSON.parse(s).filter((p) => p.name === process.argv[1]).length); } catch { console.log(""); }
+    });' "$PM2_APP")
+  if [ "$running" = "$PM2_INSTANCES" ]; then
+    say "✓ pm2 already runs $PM2_INSTANCES instance(s) of $PM2_APP; no scaling needed"
+    return 0
+  fi
   pm2 scale "$PM2_APP" "$PM2_INSTANCES"
 }
 

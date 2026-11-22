@@ -35,16 +35,28 @@ case "$*" in
 esac
 EOF
 
+# pm2: like the real CLI, `scale` to the current worker count prints "Nothing to do" and exits 1.
+# `jlist` reports $STUB_PM2_RUNNING workers of ML-Backend (default 1).
 cat > "$STUBS/pm2" <<'EOF'
 #!/bin/bash
 echo "pm2 $*" >> "$STUB_LOG"
+running=${STUB_PM2_RUNNING:-1}
+case "$1" in
+  jlist)
+    printf '['; for i in $(seq 1 "$running"); do [ "$i" -gt 1 ] && printf ','; printf '{"name":"ML-Backend","pm_id":%s}' "$((i-1))"; done; printf ']\n' ;;
+  scale)
+    [ "$3" = "$running" ] && { echo "[PM2][ERROR] Nothing to do" >&2; exit 1; } ;;
+esac
+exit 0
 EOF
 
 # curl: GitHub API → canned JSON; health → fails while the checkout is at $TARGET (fail_on_target)
 # or always (fail_always).
 cat > "$STUBS/curl" <<'EOF'
 #!/bin/bash
-[ -t 0 ] || STDIN=$(cat)
+# Read stdin only when deploy.sh passes one (--config -); a blind `cat` hangs forever when the
+# harness runs from a non-tty shell whose stdin is never closed.
+case " $* " in *" --config - "*) STDIN=$(cat) ;; esac
 echo "curl $* | stdin: ${STDIN:-}" >> "$STUB_CURL_LOG"
 case "$*" in
   *api.github.com*)
@@ -95,7 +107,7 @@ setup() {
   : > "$STUB_LOG"; : > "$STUB_CURL_LOG"
   export DEPLOY_GH_TOKEN_FILE="$d/token" DEPLOY_REPO="test/repo"
   ci_json success
-  unset STUB_HEALTH STUB_BUILD_FAIL STUB_INSTALL_FAIL DRY_RUN FORCE PM2_INSTANCES
+  unset STUB_HEALTH STUB_BUILD_FAIL STUB_INSTALL_FAIL STUB_PM2_RUNNING DRY_RUN FORCE PM2_INSTANCES
 }
 
 ci_json() {  # ci_json success|failure|pending|none
@@ -234,6 +246,14 @@ case_concurrent_deploy_locked() {
 case_pm2_instances_override() {
   setup instances; export PM2_INSTANCES=4; deploy
   eq "exit" "$CODE" 0; has "$STUB_LOG" "pm2 scale ML-Backend 4"
+}
+
+# Production runs 1 worker (PM2_INSTANCES=1): scaling to the count already running must not fail
+# the deploy (pm2 exits 1 with "Nothing to do", which used to trigger a rollback).
+case_pm2_scale_already_at_count() {
+  setup samecount; export PM2_INSTANCES=1 STUB_PM2_RUNNING=1; deploy
+  eq "exit" "$CODE" 0; head_is "$TARGET"; dist_is "$TARGET"; last_log success
+  hasnt "$STUB_LOG" "pm2 scale"
 }
 
 case_ecosystem_reads_pm2_instances() {
