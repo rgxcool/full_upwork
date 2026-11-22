@@ -980,7 +980,7 @@
         },
         { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: ['teacher', 'admin', 'systemadmin'] },
         {
-          name: 'Alla kurskort',
+          name: 'Kurskort',
           link: '/course-cards/overview',
           role: ['teacher', 'admin', 'systemadmin'],
         },
@@ -1042,7 +1042,9 @@
 
       const filteredMenuItems = computed(() => {
         if (!isLoggedIn.value) return []
-        return menuItems.filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
+        return menuItems
+          .filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
+          .sort((a, b) => a.name.localeCompare(b.name, 'sv'))
       })
 
       const secretMenuItems = computed(() => {
