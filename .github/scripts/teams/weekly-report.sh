@@ -15,6 +15,8 @@
 #   4. Lists last week's activity (closed issues, PRs merged into main, commits on main). This is
 #      Monday's digest, covering the whole week including Saturday and Sunday.
 #   5. MODE=full: posts once per ISO week, saves the state, then archives the Klar column.
+#      The FIRST report (no saved state yet) is a "Lägesrapport: allt fram till nu" with all-time
+#      totals, and archives nothing. Archiving starts with the second report.
 #
 # Env: TEAMS_WEBHOOK_URL (client channel), PROJECT_TOKEN, GH_TOKEN, MODE, HOURS_PER_WEEK.
 set -euo pipefail
@@ -40,10 +42,20 @@ if [ "$MODE" = "full" ] && [ "$(jq -r '.lastWeekly // ""' "$TMP/state.json")" = 
   exit 0
 fi
 
+BASELINE=$(jq -r 'if (.snapshot // null) == null then 1 else 0 end' "$TMP/state.json")
+ALLTIME='{}'
+if [ "$BASELINE" = 1 ]; then
+  ALL_COMMITS=$(gh api --paginate "repos/$REPO/commits?sha=main&per_page=100" --jq '.[].commit.committer.date' | sort)
+  ALLTIME=$(jq -n --arg first "$(head -1 <<<"$ALL_COMMITS" | cut -c1-10)" --argjson commits "$(grep -c . <<<"$ALL_COMMITS" || true)" \
+    --argjson prs "$(gh api -X GET search/issues -f q="repo:$REPO is:pr is:merged base:main" --jq .total_count)" \
+    --argjson issues "$(gh api -X GET search/issues -f q="repo:$REPO is:issue is:closed reason:completed" --jq .total_count)" \
+    '{ first: $first, commits: $commits, prs: $prs, issues: $issues }')
+fi
+
 # ── Data ────────────────────────────────────────────────────────────────────────────────────
-gh_project project field-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json > "$TMP/fields.json" \
-  || die "Cannot read the project fields. Check PROJECT_TOKEN (classic PAT: project + repo)."
-gh_project project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$ITEM_LIMIT" --format json > "$TMP/items.json" \
+gh_project project field-list "$PROJECT_NUMBER" --owner "$PROJECT_GH_OWNER" --format json > "$TMP/fields.json" \
+  || die "Cannot read the project fields. Check PROJECT_TOKEN (classic PAT: project, repo, read:org, read:discussion)."
+gh_project project item-list "$PROJECT_NUMBER" --owner "$PROJECT_GH_OWNER" --limit "$ITEM_LIMIT" --format json > "$TMP/items.json" \
   || die "Cannot read the project items. Check PROJECT_TOKEN."
 gh issue list --repo "$REPO" --state all --limit 1000 --json number,state > "$TMP/issue_states.json"
 gh issue list --repo "$REPO" --state closed --search "closed:$FROM_ISO..$TO_ISO reason:completed" --limit 200 \
@@ -124,8 +136,8 @@ fi
 
 # ── Card ────────────────────────────────────────────────────────────────────────────────────
 jq -n --slurpfile r "$TMP/report.json" --slurpfile closed "$TMP/closed.json" --slurpfile merged "$TMP/merged.json" \
-  --argjson commits "$COMMITS" --argjson hpw "$HOURS_PER_WEEK" --arg weekNo "$WEEK_NO" \
-  --arg board "https://github.com/users/$PROJECT_OWNER/projects/$PROJECT_NUMBER" "$JQ_SWE_TITLE"'
+  --argjson commits "$COMMITS" --argjson hpw "$HOURS_PER_WEEK" --arg weekNo "$WEEK_NO" --argjson alltime "$ALLTIME" \
+  --arg board "https://github.com/users/$PROJECT_OWNER/projects/$PROJECT_NUMBER" "$JQ_SWE_TITLE$JQ_SWE_DATE"'
   $r[0] as $r
   | def pct(a; b): if b == 0 then 0 else (100 * a / b | round) end;
     def weeks(h): (h / $hpw * 2 | ceil) / 2;
@@ -142,10 +154,11 @@ jq -n --slurpfile r "$TMP/report.json" --slurpfile closed "$TMP/closed.json" --s
         { type: "TextBlock", text: list(xs; 8; f), wrap: true, spacing: "Small" } ] end;
   { body: ([
       { type: "Container", style: "emphasis", bleed: true, items: [
-        { type: "TextBlock", text: "📊 Veckorapport v.\($weekNo): Mindful Learning", size: "Large", weight: "Bolder", wrap: true },
+        { type: "TextBlock", size: "Large", weight: "Bolder", wrap: true,
+          text: (if $r.baseline then "📊 Lägesrapport: allt fram till nu · Mindful Learning" else "📊 Veckorapport v.\($weekNo): Mindful Learning" end) },
         { type: "TextBlock", text: "\($r.today) · Etapp 1 & 2 enligt avtal", isSubtle: true, spacing: "None" } ] } ]
     + (if $r.baseline then [ { type: "TextBlock", wrap: true, color: "Accent", spacing: "Small",
-        text: "ℹ️ Första rapporten: detta är baslinjen. Från nästa vecka visas vad som har ändrats sedan föregående rapport." } ] else [] end)
+        text: "ℹ️ Första rapporten: en sammanställning av allt som gjorts hittills. Den är också baslinjen. Från nästa måndag visas vad som har ändrats sedan föregående rapport." } ] else [] end)
     + [ { type: "ColumnSet", spacing: "Medium", columns: [
           tile("\(pct($r.accepted; $r.total)) %"; "godkänt av er"; "Good"),
           tile("\(pct($r.demo; $r.total)) %"; "klart, inväntar demo"; "Accent"),
@@ -162,6 +175,12 @@ jq -n --slurpfile r "$TMP/report.json" --slurpfile closed "$TMP/closed.json" --s
         section("✅ Godkänt sedan förra rapporten"; $r.changes.accepted; "- [#\(.n)](\(.url)) \(.title)")
       + section("🎬 Klart, inväntar demo"; $r.changes.demo; "- [#\(.n)](\(.url)) \(.title)")
       + section("↩️ Återöppnat"; $r.changes.reopened; "- [#\(.n)](\(.url)) \(.title)") end)
+    + (if $r.baseline and ($alltime.commits // null) != null then [
+        { type: "TextBlock", text: "🚀 Hittills i projektet (sedan \($alltime.first | swe_date))", weight: "Bolder", spacing: "Large", wrap: true },
+        { type: "FactSet", spacing: "Small", facts: [
+          { title: "Sparade ändringar (commits)", value: "\($alltime.commits)" },
+          { title: "Avslutade ärenden", value: "\($alltime.issues)" },
+          { title: "Sammanslagna ändringspaket (PR)", value: "\($alltime.prs)" } ] } ] else [] end)
     + [ { type: "TextBlock", text: "🗓️ Förra veckans arbete", weight: "Bolder", spacing: "Large" },
         { type: "FactSet", spacing: "Small", facts: [
           { title: "Avslutade ärenden", value: "\($closed[0] | length)" },
@@ -176,14 +195,19 @@ jq -n --slurpfile r "$TMP/report.json" --slurpfile closed "$TMP/closed.json" --s
 
 # ── Deliver ─────────────────────────────────────────────────────────────────────────────────
 log "Week $WEEK · activity window $(se_date '+%F %H:%M' "$FROM") → $(se_date '+%F %H:%M' "$TO") (Stockholm)"
+[ "$BASELINE" = 1 ] && log "First report (baseline): nothing will be archived this time."
 log "Klar items to archive after posting: $(jq -r '[.archive[] | "#\(.n)"] | join(" ") | if . == "" then "none" else . end' "$TMP/report.json")"
 post_card "$TMP/card.json" "${TEAMS_WEBHOOK_URL:-}"
 
 if [ "$MODE" = "full" ]; then
   jq '.newState' "$TMP/report.json" > "$TMP/newstate.json"
   state_save "$TMP/newstate.json" "Weekly report $WEEK"
+  if [ "$BASELINE" = 1 ]; then
+    log "First report (baseline): the Klar column is kept; archiving starts with the next report."
+    exit 0
+  fi
   jq -r '.archive[].item' "$TMP/report.json" | while read -r item; do
-    gh_project_write project item-archive "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --id "$item" >/dev/null \
+    gh_project_write project item-archive "$PROJECT_NUMBER" --owner "$PROJECT_GH_OWNER" --id "$item" >/dev/null \
       || log "⚠️ Could not archive $item (it stays on the board and is counted once)."
   done
 fi

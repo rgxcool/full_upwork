@@ -12,7 +12,7 @@
 2. **Repo → Settings → Secrets and variables → Actions → New repository secret:**
    - `TEAMS_WEBHOOK_URL`: the client channel.
    - `TEAMS_DEV_WEBHOOK_URL` (optional): the internal channel.
-   - `PROJECT_TOKEN`: a **classic** personal access token (Settings → Developer settings → Tokens (classic)) with the scopes **`project`** (read the board and archive the Klar column) and **`repo`** (the repository is private, so the board's issue data needs it). The workflow's built-in `GITHUB_TOKEN` cannot read a user-owned Project. Fine-grained tokens did not support user-owned Projects when this was written; check again before switching. Set an expiry date and a calendar reminder to renew it.
+   - `PROJECT_TOKEN`: a **classic** personal access token (Settings → Developer settings → Tokens (classic)) with the scopes **`project`** (read the board and archive the Klar column), **`repo`** (the repository is private, so the board's issue data needs it), and **`read:org`** + **`read:discussion`** (the GitHub CLI's project commands require them; without them it fails with "missing required scopes"). The workflow's built-in `GITHUB_TOKEN` cannot read a user-owned Project. Fine-grained tokens did not support user-owned Projects when this was written; check again before switching. Set an expiry date and a calendar reminder to renew it.
 3. **Test:** Actions → **Teams weekly report** → Run workflow:
    - **dry-run**: the card and the planned changes are only printed in the log
    - **test-post**: posts a card marked 🧪 TEST; saves no state, archives nothing
