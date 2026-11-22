@@ -41,9 +41,9 @@ if [ "$MODE" = "full" ] && [ "$(jq -r '.lastWeekly // ""' "$TMP/state.json")" = 
 fi
 
 # ── Data ────────────────────────────────────────────────────────────────────────────────────
-gh_project project field-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json > "$TMP/fields.json" \
+gh_project project field-list "$PROJECT_NUMBER" --owner "$PROJECT_GH_OWNER" --format json > "$TMP/fields.json" \
   || die "Cannot read the project fields. Check PROJECT_TOKEN (classic PAT: project + repo)."
-gh_project project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit "$ITEM_LIMIT" --format json > "$TMP/items.json" \
+gh_project project item-list "$PROJECT_NUMBER" --owner "$PROJECT_GH_OWNER" --limit "$ITEM_LIMIT" --format json > "$TMP/items.json" \
   || die "Cannot read the project items. Check PROJECT_TOKEN."
 gh issue list --repo "$REPO" --state all --limit 1000 --json number,state > "$TMP/issue_states.json"
 gh issue list --repo "$REPO" --state closed --search "closed:$FROM_ISO..$TO_ISO reason:completed" --limit 200 \
@@ -183,7 +183,7 @@ if [ "$MODE" = "full" ]; then
   jq '.newState' "$TMP/report.json" > "$TMP/newstate.json"
   state_save "$TMP/newstate.json" "Weekly report $WEEK"
   jq -r '.archive[].item' "$TMP/report.json" | while read -r item; do
-    gh_project_write project item-archive "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --id "$item" >/dev/null \
+    gh_project_write project item-archive "$PROJECT_NUMBER" --owner "$PROJECT_GH_OWNER" --id "$item" >/dev/null \
       || log "⚠️ Could not archive $item (it stays on the board and is counted once)."
   done
 fi
