@@ -1,6 +1,6 @@
 # 📊 Mindful Learning: status for Etapp 1 & 2
 
-**Uppdaterad:** 2026-11-22 · **I produktion:** `256fe2c` (driftsatt idag) · **Källa:** GitHub-projektet *@Mindfullearning* + `MILESTONE-3-MASTER-TASK-STATUS.md`
+**Författare:** Cyrus Malekani · **Uppdaterad:** 2026-11-22 · **I produktion:** `256fe2c` (driftsatt idag) · **Källa:** GitHub-projektet *@Mindfullearning* + `MILESTONE-3-MASTER-TASK-STATUS.md`
 
 > Alla timmar är **buffrade estimat** (bas × 2,2, inklusive dolt arbete: behörigheter, kommunavgränsning, felhantering på svenska, tester, staging och demo). Procenten är viktade efter estimerade timmar, inte efter antal ärenden.
 

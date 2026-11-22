@@ -1,22 +1,28 @@
-name: Teams weekly status
+name: Teams weekly report
 
-# Posts the weekly progress card (Etapp 1/2 progress from the project board + the week's
-# activity) to Microsoft Teams. Setup: .github/scripts/teams/README.md
+# Client channel: Mondays 08:00 Europe/Stockholm. Setup and rules: .github/scripts/teams/README.md
+# GitHub cron is UTC only, so the job is scheduled at 06:00 and 07:00 UTC; the script proceeds
+# only in the run that lands on 08:00 Stockholm (CET or CEST). Scheduled runs can start late.
 
 on:
   schedule:
-    - cron: "0 6 * * 1" # Mondays 06:00 UTC = 07:00 Stockholm (08:00 in summer time)
+    - cron: "0 6,7 * * 1"
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: "Only print the card in the log, don't post to Teams"
-        type: boolean
-        default: false
+      mode:
+        description: "dry-run = only print in the log · test-post = post a TEST card, change nothing · full = post (once per week), save state, archive Klar"
+        type: choice
+        options: [dry-run, test-post, full]
+        default: dry-run
 
 permissions:
-  contents: read
+  contents: write # the reports-state branch (state for dedup, accepted-items log, last snapshot)
   issues: read
   pull-requests: read
+
+concurrency:
+  group: teams-reports
+  cancel-in-progress: false
 
 jobs:
   weekly:
@@ -25,11 +31,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: .github/scripts
-      - name: Build and post the weekly card
+      - name: Weekly report
         env:
+          MODE: ${{ github.event_name == 'schedule' && 'full' || inputs.mode }}
           GH_TOKEN: ${{ github.token }}
-          PROJECT_TOKEN: ${{ secrets.PROJECT_READ_TOKEN }}
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           REPO: ${{ github.repository }}
-          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: bash .github/scripts/teams/weekly-report.sh
