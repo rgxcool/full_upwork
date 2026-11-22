@@ -1,5 +1,5 @@
 #!/bin/bash
-# Live Teams activity cards for Mindful Learning, run by .github/workflows/teams-activity.yml.
+# Live Teams activity cards for the INTERNAL channel, run by .github/workflows/teams-activity.yml.
 #
 #   push          → "🔨 N nya commits på <branch>". Lists only commits pushed for the first time
 #                   (GitHub's `distinct` flag), so merging a branch doesn't re-announce its commits.
@@ -9,7 +9,8 @@
 #
 #   GITHUB_EVENT_NAME=push GITHUB_EVENT_PATH=event.json DRY_RUN=1 .github/scripts/teams/activity.sh
 #
-# Env: TEAMS_WEBHOOK_URL, GITHUB_EVENT_NAME, GITHUB_EVENT_PATH, DRY_RUN (1 = print, don't post).
+# Env: TEAMS_DEV_WEBHOOK_URL (internal channel; the client channel gets the daily digest instead),
+#      GITHUB_EVENT_NAME, GITHUB_EVENT_PATH, DRY_RUN (1 = print, don't post).
 set -euo pipefail
 
 DRY_RUN=${DRY_RUN:-0}
@@ -17,8 +18,8 @@ EVENT=${GITHUB_EVENT_NAME:?GITHUB_EVENT_NAME is required}
 PAYLOAD=${GITHUB_EVENT_PATH:?GITHUB_EVENT_PATH is required}
 MAX_COMMITS=10
 
-if [ "$DRY_RUN" != "1" ] && [ -z "${TEAMS_WEBHOOK_URL:-}" ]; then
-  echo "TEAMS_WEBHOOK_URL is not set; nothing to post." >&2
+if [ "$DRY_RUN" != "1" ] && [ -z "${TEAMS_DEV_WEBHOOK_URL:-}" ]; then
+  echo "TEAMS_DEV_WEBHOOK_URL is not set; nothing to post." >&2
   exit 0
 fi
 
@@ -85,5 +86,5 @@ if [ "$DRY_RUN" = "1" ]; then
   cat "${RUNNER_TEMP:-/tmp}/teams-card.json"
   exit 0
 fi
-curl -fsS -H "Content-Type: application/json" --data @"${RUNNER_TEMP:-/tmp}/teams-card.json" "$TEAMS_WEBHOOK_URL" >/dev/null
+curl -fsS -H "Content-Type: application/json" --data @"${RUNNER_TEMP:-/tmp}/teams-card.json" "$TEAMS_DEV_WEBHOOK_URL" >/dev/null
 echo "Teams card posted for $EVENT."
