@@ -167,4 +167,12 @@ describe('CourseCardsOverview.vue — edit button', () => {
     expect(findButton(wrapper, 'Redigera innehåll')).toHaveLength(0)
     wrapper.unmount()
   })
+
+  it('titles the page "Kurskort", matching the menu entry', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Kurskort')
+    expect(wrapper.text()).not.toContain('Alla kurskort')
+    wrapper.unmount()
+  })
 })

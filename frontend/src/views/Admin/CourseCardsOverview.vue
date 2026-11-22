@@ -11,10 +11,10 @@
               class="mb-2"
               @click="backToList"
             >
-              Alla kurskort
+              Kurskort
             </v-btn>
             <v-card-title class="text-h4 font-weight-bold pa-0">
-              {{ selectedCard ? cardTitle(selectedCard) : 'Alla kurskort' }}
+              {{ selectedCard ? cardTitle(selectedCard) : 'Kurskort' }}
             </v-card-title>
             <p class="text-body-2 text-medium-emphasis mt-2 mb-0">
               <template v-if="selectedCard">
