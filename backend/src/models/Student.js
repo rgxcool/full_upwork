@@ -180,6 +180,9 @@ const StudentSchema = new mongoose.Schema(
             {
                 id: { type: mongoose.Schema.Types.ObjectId, required: true },
                 title: { type: String, required: true }, // e.g. "Introduktionskit"
+                // Stable machine marker (#35): idempotency must not depend on the
+                // human-readable title. "apl-learning-kit" for the APL-lärkit.
+                kind: { type: String },
                 description: String, // Internship description
                 startDate: Date, // When the kit was sent
                 endDate: Date, // When the kit expires/placement ends

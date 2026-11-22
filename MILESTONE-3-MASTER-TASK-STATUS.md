@@ -400,6 +400,8 @@
    
  | "Introduktionskit" learning kit never created on enrollment (mongoose not imported in courseMatchingService.js) | Import added | ✅ DONE |  
    
+ | APL-lärkit scan always logged 0 created; idempotency depended on the kit title (#35, 2026-11-22) | The scan counts the issuance result instead of the stale .lean() list. Kits carry `kind: "apl-learning-kit"`; legacy title-only kits are still recognised and lazily tagged. Covered by 3 integration tests (real models). | ✅ DONE |  
+   
     
  **Current baseline:** 75/75 Playwright tests passing across Public/Security, Student Portal, Teacher Portal, Admin Portal (30 screens), verification pass, and both milestone-3 flow specs.  
  ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANElEQVR4nO3OQQmAUBBAwSd8jOHRnNvAkgaxgjcRZhLMNjNHdQUAwF/cq9qr8+sJAACvrQcthQNH2ZiTNQAAAABJRU5ErkJggg==)  
