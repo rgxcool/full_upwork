@@ -42,7 +42,7 @@ fi
 
 # ── Data ────────────────────────────────────────────────────────────────────────────────────
 gh_project project field-list "$PROJECT_NUMBER" --owner "$PROJECT_GH_OWNER" --format json > "$TMP/fields.json" \
-  || die "Cannot read the project fields. Check PROJECT_TOKEN (classic PAT: project + repo)."
+  || die "Cannot read the project fields. Check PROJECT_TOKEN (classic PAT: project, repo, read:org, read:discussion)."
 gh_project project item-list "$PROJECT_NUMBER" --owner "$PROJECT_GH_OWNER" --limit "$ITEM_LIMIT" --format json > "$TMP/items.json" \
   || die "Cannot read the project items. Check PROJECT_TOKEN."
 gh issue list --repo "$REPO" --state all --limit 1000 --json number,state > "$TMP/issue_states.json"
