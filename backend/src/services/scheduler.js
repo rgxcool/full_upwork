@@ -26,6 +26,20 @@ const SCAN_HOUR_UTC = (() => {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * pm2 runs the API in cluster mode (`instances: "max"` in ecosystem.config.cjs):
+ * every worker imports this module. Without a guard each worker runs every
+ * nightly job at the same second, and check-then-write idempotency races —
+ * duplicate warning e-mails, diplomas and reminders. pm2 numbers workers via
+ * NODE_APP_INSTANCE; only worker 0 (or a plain non-pm2 process) runs jobs.
+ * SCHEDULER_ENABLED=false turns jobs off on a node entirely.
+ */
+export const isSchedulerLeader = () => {
+    if (process.env.SCHEDULER_ENABLED === "false") return false;
+    const instance = process.env.NODE_APP_INSTANCE;
+    return instance === undefined || instance === "" || instance === "0";
+};
+
 let timer = null;
 let running = false;
 let started = false;
@@ -146,6 +160,10 @@ export const startTaskReminderScheduler = () => {
         logger.info("Task reminder scheduler skipped (test mode)");
         return;
     }
+    if (!isSchedulerLeader()) {
+        logger.info({ instance: process.env.NODE_APP_INSTANCE }, "Task reminder scheduler skipped (not the pm2 leader)");
+        return;
+    }
     taskStarted = true;
     executeTaskScan();
     scheduleNextTaskScan();
@@ -174,6 +192,10 @@ export const startInactivityScheduler = () => {
     }
     if (process.env.INACTIVITY_AUTO_WARNING_ENABLED === "false") {
         logger.info("Inactivity scheduler skipped (INACTIVITY_AUTO_WARNING_ENABLED=false)");
+        return;
+    }
+    if (!isSchedulerLeader()) {
+        logger.info({ instance: process.env.NODE_APP_INSTANCE }, "Nightly scheduler skipped (not the pm2 leader)");
         return;
     }
     started = true;
