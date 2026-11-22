@@ -1,3 +1,5 @@
+// Asks for a password and prints its bcrypt hash (no database access).
+// Usage: node scripts/generateBcryptPassword.js
 import bcrypt from "bcrypt";
 import readline from "readline";
 
