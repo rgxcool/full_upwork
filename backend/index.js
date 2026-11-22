@@ -52,6 +52,7 @@ if (process.env.NODE_ENV !== "test") {
 logger.info({ loaded: !!process.env.JWT_SECRET }, "JWT secret status");
 
 import express from "express";
+import { flushMonitoring } from "./src/utils/monitoring.js";
 const app = express();
 
 // Import security and performance utilities
@@ -365,14 +366,16 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("uncaughtException", (err) => {
     logger.fatal({ err }, "Uncaught exception");
     errorMonitor.recordError(err);
-    mongoose.connection.close(() => process.exit(1));
+    // Dev only: let the crash report reach Sentry before exiting (no-op otherwise).
+    flushMonitoring(2000).finally(() => mongoose.connection.close(() => process.exit(1)));
 });
 
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (err) => {
     logger.fatal({ err }, "Unhandled rejection");
     errorMonitor.recordError(err);
-    mongoose.connection.close(() => process.exit(1));
+    // Dev only: let the crash report reach Sentry before exiting (no-op otherwise).
+    flushMonitoring(2000).finally(() => mongoose.connection.close(() => process.exit(1)));
 });
 
 // Start the server unless running tests
