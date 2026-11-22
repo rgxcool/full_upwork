@@ -101,6 +101,21 @@ export async function canAccessStudentDocuments(user, studentId) {
     return false;
 }
 
+/**
+ * #40: true when the caller must not even learn that this student exists:
+ * the id is unknown, or the student is outside a scoped caller's kommun.
+ * Routes answer 404 (not 403) in that case to avoid cross-tenant enumeration.
+ * Global accounts and students (who are unscoped) always get false here.
+ */
+export async function isStudentHiddenFromCaller(user, studentId) {
+    if (!user || !studentId) return true;
+    const Student = getModel("Student");
+    const student = await Student.findById(studentId);
+    if (!student) return true;
+    if (hasGlobalScope(user)) return false;
+    return !municipalityInScope(user, getMunicipality(student));
+}
+
 export async function canAccessTeacherDocuments(user, teacherId) {
     if (!user || !teacherId) {
         return false;
