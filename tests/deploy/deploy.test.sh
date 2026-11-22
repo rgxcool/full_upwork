@@ -87,7 +87,7 @@ setup() {
     cd "$d/seed"
     git config user.email t@example.invalid; git config user.name Test
     mkdir -p backend frontend
-    cp "$DEPLOY_SH" deploy.sh
+    cp "${PREV_DEPLOY_SH:-$DEPLOY_SH}" deploy.sh   # the deploy.sh that is live on the server
     echo "module.exports = { apps: [] };" > backend/ecosystem.config.cjs
     printf 'logs\nfrontend/dist\nfrontend/dist.new\nfrontend/dist.prev\nfrontend/dist.failed\n' > .gitignore
     echo v1 > frontend/version.txt
@@ -98,7 +98,8 @@ setup() {
   SERVER="$d/server"
   mkdir -p "$SERVER/frontend/dist" && echo "$PREV" > "$SERVER/frontend/dist/index.html"
   (
-    cd "$d/seed" && echo v2 > frontend/version.txt && git commit -qam v2 && git push -q origin main
+    cd "$d/seed" && echo v2 > frontend/version.txt && cp "$DEPLOY_SH" deploy.sh &&
+      git commit -qam v2 && git push -q origin main
   )
   TARGET=$(git -C "$d/seed" rev-parse HEAD)
 
@@ -254,6 +255,34 @@ case_pm2_scale_already_at_count() {
   setup samecount; export PM2_INSTANCES=1 STUB_PM2_RUNNING=1; deploy
   eq "exit" "$CODE" 0; head_is "$TARGET"; dist_is "$TARGET"; last_log success
   hasnt "$STUB_LOG" "pm2 scale"
+}
+
+# The live deploy.sh still has a bug the target's deploy.sh fixes (here: the unconditional
+# `pm2 scale` that failed on production's single worker). bash keeps running the old file and the
+# rollback resets it, so the fix could never ship. deploy.sh must continue with the target's copy.
+old_deploy_sh() {
+  local f="$WORK/old-deploy.sh"
+  sed 's/^  if \[ "\$running" = "\$PM2_INSTANCES" \]; then$/  if false; then/' "$DEPLOY_SH" > "$f"
+  chmod +x "$f"
+  cmp -s "$f" "$DEPLOY_SH" && { echo "old_deploy_sh: pattern not found in deploy.sh" >&2; exit 1; }
+  echo "$f"
+}
+
+case_self_update_runs_target_deploy_sh() {
+  PREV_DEPLOY_SH=$(old_deploy_sh) setup selfupdate; export PM2_INSTANCES=1 STUB_PM2_RUNNING=1; deploy
+  eq "exit" "$CODE" 0; head_is "$TARGET"; dist_is "$TARGET"; last_log success
+  out_has "deploy.sh changed in $TARGET — continuing with the new version"
+  eq "self-update happens once" "$(printf '%s' "$OUT" | grep -cF 'deploy.sh changed')" 1
+  hasnt "$STUB_LOG" "pm2 scale"
+  eq "logs/deploy.next.sh is the target's deploy.sh" \
+    "$(cmp -s "$SERVER/logs/deploy.next.sh" "$DEPLOY_SH" && echo same)" same
+}
+
+case_self_update_dry_run_changes_nothing() {
+  PREV_DEPLOY_SH=$(old_deploy_sh) setup selfupdate-dry; export DRY_RUN=1; deploy
+  eq "exit" "$CODE" 0; head_is "$PREV"; dist_is "$PREV"
+  out_has "[dry-run] deploy.sh differs in $TARGET"
+  [ ! -e "$SERVER/logs" ] && ok || bad "logs/ was created"
 }
 
 case_ecosystem_reads_pm2_instances() {
