@@ -7,6 +7,7 @@ import CalendarEvent from "../models/Event.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
 import { requireFeature } from "../middleware/featureGate.js";
+import { PERMISSION_FEATURES, userHasFeature } from "../config/permissions.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
 import Notification from "../models/Notification.js";
@@ -29,6 +30,16 @@ router.use(
 );
 
 const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"];
+
+// Slutprov calendar / exam access follows PERMISSION_MATRIX
+// "calendar_final_exam" (coordinator = Nej) with per-user overrides, instead
+// of a bare staff role list (audit E1-01/E1-02). hasRole() refreshes req.user
+// from the DB first, so an override set by an admin applies immediately.
+const requireCalendarFeature = (req, res, next) => {
+    if (userHasFeature(req.user, PERMISSION_FEATURES.CALENDAR_FINAL_EXAM)) return next();
+    return res.status(403).json({ error: "Forbidden: Kalender (slutprov) är inte tillåtet för din roll." });
+};
+const CALENDAR_STAFF = [hasRole(ALLOWED_STAFF_ROLES), requireCalendarFeature];
 
 function calculateExamDate(requestedMonth) {
     const months = {
@@ -219,7 +230,7 @@ router.put("/exams/:id", isAuthenticated, hasRole(['admin', 'systemadmin']), asy
 });
 
 // GET exam room configuration
-router.get("/exam-rooms", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/exam-rooms", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         const { default: examRooms } = await import("../config/examRooms.js");
         res.json(examRooms);
@@ -246,7 +257,7 @@ router.get("/admin/exams", isAuthenticated, hasRole(['admin', 'systemadmin']), a
     }
 });
 
-router.get("/exams", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/exams", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         let query = {};
 
@@ -317,7 +328,7 @@ router.get("/exams", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, 
     }
 });
 
-router.post("/calendar-events", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.post("/calendar-events", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         const event = new CalendarEvent(req.body);
         await event.save();
@@ -328,7 +339,7 @@ router.post("/calendar-events", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), a
     }
 });
 
-router.get("/calendar-events", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/calendar-events", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         let query = {
             // Exclude "slutprov" type events - these should come from /calendar-events/syncable instead
@@ -811,7 +822,7 @@ router.put(
     }
 );
 
-router.put("/calendar-events/:id", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.put("/calendar-events/:id", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         const { id } = req.params;
         const updateFields = req.body;
@@ -960,7 +971,7 @@ router.put("/calendar-events/:id", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES)
     }
 });
 
-router.get("/calendar-events/syncable", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     function pickFirstNonEmpty(arr, field) {
         return (
             (arr.find((e) => e[field] && e[field] !== "") || {})[field] || ""
@@ -2193,7 +2204,7 @@ router.delete("/calendar-events/cleanup-slutprov", isAuthenticated, hasRole(["sy
 });
 
 // GET specific calendar event by ID
-router.get("/calendar-events/:id", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/calendar-events/:id", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         const { id } = req.params;
         const event = await CalendarEvent.findById(id);
@@ -2210,7 +2221,7 @@ router.get("/calendar-events/:id", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES)
 });
 
 // GET attendance data for a specific event (date + teacher)
-router.get("/calendar-events/attendance/:date/:teacherId", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/calendar-events/attendance/:date/:teacherId", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         const { date, teacherId } = req.params;
 
@@ -2250,7 +2261,7 @@ router.get("/calendar-events/attendance/:date/:teacherId", isAuthenticated, hasR
     }
 });
 
-router.put("/update-exam/:id", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.put("/update-exam/:id", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     const { id } = req.params;
     const { examTime, examMunicipality, examLocation } = req.body;
 
@@ -2278,7 +2289,7 @@ router.put("/update-exam/:id", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), as
     }
 });
 
-router.put("/mark-attendance/:personalNumber", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.put("/mark-attendance/:personalNumber", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     logger.debug({ bodyKeys: req.body ? Object.keys(req.body) : [] }, "API /mark-attendance called");
     try {
         const { personalNumber } = req.params;
@@ -2305,7 +2316,7 @@ router.put("/mark-attendance/:personalNumber", isAuthenticated, hasRole(ALLOWED_
     }
 });
 
-router.post("/examtime-location", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.post("/examtime-location", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     const { studentIds, examTime, examMunicipality, examLocation, examRoom } = req.body;
 
     if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
@@ -2337,7 +2348,7 @@ router.post("/examtime-location", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES),
 });
 
 // Get attendance statistics for a student
-router.get("/attendance-stats/:studentId", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/attendance-stats/:studentId", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         const { studentId } = req.params;
         const { default: ExamAttendance } = await import(
@@ -2407,7 +2418,7 @@ router.delete("/exams/:id", isAuthenticated, hasRole(['admin', 'systemadmin']), 
 });
 
 // PATCH: Batch update attendance for a specific event (date + teacher)
-router.post("/calendar-events/mark-attendance", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.post("/calendar-events/mark-attendance", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     logger.info("mark-attendance endpoint called");
     logger.debug({ bodyKeys: req.body ? Object.keys(req.body) : [] }, "mark-attendance request body");
     logger.debug({ method: req.method }, "mark-attendance request method");
@@ -3027,7 +3038,7 @@ export default router;
 
 // --- Student exam instances listing ---
 // List all exam instances (manual + course-linked) recorded for a student
-router.get("/exams/student/:studentId", isAuthenticated, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.get("/exams/student/:studentId", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
     try {
         const { studentId } = req.params;
         const { default: ExamAttendance } = await import(

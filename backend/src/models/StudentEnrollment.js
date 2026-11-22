@@ -222,38 +222,60 @@ studentEnrollmentSchema.pre("save", function () {
     }
 });
 
-let originalDoc = null;
+// Capture what is about to change BEFORE saving, per document. The old code
+// kept the original in a module-level variable (shared between concurrent
+// saves) and called isModified() in post-save, where Mongoose has already
+// reset the modified paths, so notifications were skipped or showed
+// "Fält ändrade: ." (audit E1-11).
+const IGNORED_CHANGE_PATHS = new Set(["_id", "__v", "updatedAt", "createdAt", "statusHistory"]);
+
 studentEnrollmentSchema.pre('save', async function () {
-    if (!this.isNew) {
-        originalDoc = await this.constructor.findById(this._id).lean();
-    }
+    this.$locals.wasNew = this.isNew;
+    this.$locals.modifiedPaths = this.isNew ? [] : this.modifiedPaths().filter((p) => !p.includes("."));
+    this.$locals.originalDoc = this.isNew ? null : await this.constructor.findById(this._id).lean();
 });
 
 
 // Post-save hook for creation and updates
 studentEnrollmentSchema.post("save", async function (doc) {
     const { sendStudyplanChangedNotification } = await import("../controllers/notificationController.js");
-    const changeType = this.isNew ? 'created' : 'updated';
+    const wasNew = Boolean(doc.$locals?.wasNew);
+    const originalDoc = doc.$locals?.originalDoc || null;
+    const changeType = 'updated';
     let changes = null;
 
-    if (changeType === 'updated' && originalDoc) {
+    // New enrollments: Mongoose clears isNew before post-save, so these were
+    // always reported as an "updated" note with an empty field list. Creation
+    // flows (placement, import, re-enrolment) report on their own, and the
+    // 'created' branch would start sending e-mails that never went out
+    // before, so a new enrollment only syncs the calendar here.
+    if (wasNew) {
+        if (doc.slutprovDate) {
+            try {
+                const { syncCalendarEventFromEnrollment } = await import("../utils/calendarEventSync.js");
+                await syncCalendarEventFromEnrollment(doc._id);
+            } catch (calendarError) {
+                logger.error({ err: calendarError, enrollmentId: doc._id }, "Error syncing calendar event for enrollment");
+            }
+        }
+        return;
+    }
+
+    if (originalDoc) {
         const changedFields = [];
         const previousValues = {};
         const newValues = {};
 
-        doc.schema.eachPath((path) => {
-            if (!doc.isModified(path) || ['_id', '__v', 'updatedAt', 'createdAt'].includes(path)) return;
-            
+        for (const path of doc.$locals.modifiedPaths || []) {
+            if (IGNORED_CHANGE_PATHS.has(path)) continue;
             const originalValue = originalDoc[path];
-            const newValue = doc[path];
-
-            // Simple comparison for now. Mongoose's isModified can be complex.
+            const newValue = doc.get(path);
             if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
                 changedFields.push(path);
-                previousValues[path] = originalValue;
-                newValues[path] = newValue;
+                previousValues[path] = originalValue ?? null;
+                newValues[path] = newValue ?? null;
             }
-        });
+        }
 
         if (changedFields.length > 0) {
             changes = { changedFields, previousValues, newValues };
@@ -263,7 +285,9 @@ studentEnrollmentSchema.post("save", async function (doc) {
         }
     }
     
-    await sendStudyplanChangedNotification({ doc, changeType, changes });
+    if (changes) {
+        await sendStudyplanChangedNotification({ doc, changeType, changes });
+    }
 
     // Sync calendar event if enrollment has a slutprovDate (and it was newly set or modified)
     if (doc.slutprovDate && (!originalDoc || originalDoc.slutprovDate?.toString() !== doc.slutprovDate?.toString())) {

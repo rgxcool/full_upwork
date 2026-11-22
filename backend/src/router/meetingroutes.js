@@ -248,6 +248,15 @@ router.put('/students/:id/exam-accommodations', authenticateUser, async (req, re
         }
 
         logger.info({ studentId: student._id, role, extraTime, computer, separateRoom, notes }, "Exam accommodations updated");
+
+        // Push the new accommodations onto the student's future slutprov
+        // events so the calendar shows them (audit E1-19/E1-20).
+        try {
+            const { syncStudentAccommodationsToEvents } = await import("../utils/calendarEventSync.js");
+            await syncStudentAccommodationsToEvents(student._id, student.examAccommodations);
+        } catch (syncErr) {
+            logger.warn({ err: syncErr, studentId: student._id }, "Failed to sync accommodations to slutprov events");
+        }
         res.json(student);
     } catch (err) {
         logger.error({ err }, "Failed to update exam accommodations");

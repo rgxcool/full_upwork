@@ -671,7 +671,11 @@ export const reactivateStudentWithCourses = async (req, res) => {
             const CourseMatchingService = (await import("../utils/courseMatchingService.js")).default;
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const tempoWeeks = student.tempoWeeks || 10;
+            // Same duration rule as placement / pace changes: course extent
+            // (default 5 weeks) x 100 / pace. The old code used a fixed
+            // `tempoWeeks || 10`, so dates broke the 5-week rule (E1-12).
+            const pace = [25, 50, 100].includes(Number(student.pace)) ? Number(student.pace) : 100;
+            const paceFactor = 100 / pace;
 
             // Find the last enrollment end date to continue from
             const lastEnrollment = previousEnrollments[0];
@@ -680,10 +684,16 @@ export const reactivateStudentWithCourses = async (req, res) => {
                 : today;
             if (nextStartDate < today) nextStartDate = today;
 
+            const { calculateSlutprovDate } = await import("../utils/slutprovDateCalculator.js");
+
             for (const courseId of reEnrollCourseIds) {
+                const courseDoc = await Course.findById(courseId).lean();
+                const extent = parseFloat(courseDoc?.courseExtent);
+                const extentWeeks = Number.isFinite(extent) && extent > 0 ? extent : 5;
+
                 const startDate = new Date(nextStartDate);
                 const endDate = new Date(startDate);
-                endDate.setDate(endDate.getDate() + tempoWeeks * 7);
+                endDate.setDate(endDate.getDate() + Math.round(extentWeeks * paceFactor * 7));
 
                 const { instance } = await CourseMatchingService.findOrCreateCourseInstance(
                     courseId,
@@ -693,7 +703,18 @@ export const reactivateStudentWithCourses = async (req, res) => {
                     student.teacherId || null
                 );
 
-                const courseDoc = await Course.findById(courseId).lean();
+                // slutprovDate: the shared instance's date, else the teacher
+                // rule, else the Wednesday before the course ends (as import).
+                let slutprovDate = instance?.slutprovDate ? new Date(instance.slutprovDate) : null;
+                if (!slutprovDate && student.teacherId) {
+                    slutprovDate = await calculateSlutprovDate(student.teacherId, endDate);
+                }
+                if (!slutprovDate) {
+                    slutprovDate = CourseMatchingService.getWednesdayBefore(endDate);
+                }
+                slutprovDate = new Date(slutprovDate);
+                // Noon UTC, like the import, so all-day events don't shift a day.
+                slutprovDate.setUTCHours(12, 0, 0, 0);
 
                 const enrollment = new StudentEnrollment({
                     studentId: id,
@@ -702,6 +723,8 @@ export const reactivateStudentWithCourses = async (req, res) => {
                     enrollmentPrice: courseDoc?.price ?? null,
                     startDate,
                     endDate,
+                    slutprovDate,
+                    pace,
                     status: "enrolled",
                     teacherId: student.teacherId || null,
                 });
@@ -709,6 +732,12 @@ export const reactivateStudentWithCourses = async (req, res) => {
                 await enrollment.save();
                 newEnrollments.push(enrollment);
                 nextStartDate = new Date(endDate);
+            }
+
+            const last = newEnrollments[newEnrollments.length - 1];
+            if (last) {
+                student.endDate = last.endDate;
+                student.finalExamDate = last.slutprovDate;
             }
         }
 
@@ -724,12 +753,24 @@ export const reactivateStudentWithCourses = async (req, res) => {
         });
         await student.save();
 
+        // Put the returning student back on the slutprov list (E1-12).
+        let calendar = null;
+        if (newEnrollments.length > 0) {
+            try {
+                const { syncStudentSlutprovCalendar } = await import("../utils/calendarEventSync.js");
+                calendar = await syncStudentSlutprovCalendar(id);
+            } catch (syncErr) {
+                logger.warn({ err: syncErr, studentId: id }, "Failed to sync slutprov calendar after reactivation");
+            }
+        }
+
         res.json({
             success: true,
             message: "Student reactivated successfully",
             student: updatedStudent,
             previousEnrollments,
             newEnrollments,
+            calendar,
         });
     } catch (error) {
         logger.error({ err: error }, "Error reactivating student");
@@ -957,15 +998,17 @@ export const getRevisionReasons = async (req, res) => {
 };
 
 /**
- * Perform a study-plan revision (admin+ only)
+ * Perform a study-plan revision (admin/systemadmin or SYV)
  */
 export const reviseStudyPlan = async (req, res) => {
     try {
         const { id } = req.params;
         const { role, userId } = req.user;
         const { revisionReason, description, changes } = req.body;
+        const callerRoles = new Set([...(Array.isArray(req.user.roles) ? req.user.roles : []), role].filter(Boolean));
 
-        if (!["admin", "systemadmin"].includes(role)) {
+        // SYV may revise study plans (spec E1-20), as may admins.
+        if (!["admin", "systemadmin", "syv"].some((r) => callerRoles.has(r))) {
             return res.status(403).json({ error: "Insufficient permissions to revise study plan" });
         }
 
@@ -998,8 +1041,9 @@ export const getStudyplanRevisionHistory = async (req, res) => {
     try {
         const { id } = req.params;
         const { role } = req.user;
+        const callerRoles = new Set([...(Array.isArray(req.user.roles) ? req.user.roles : []), role].filter(Boolean));
 
-        if (!["admin", "systemadmin", "teacher"].includes(role)) {
+        if (!["admin", "systemadmin", "teacher", "syv"].some((r) => callerRoles.has(r))) {
             return res.status(403).json({ error: "Insufficient permissions" });
         }
 

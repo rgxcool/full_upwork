@@ -373,6 +373,7 @@ describe("authController", () => {
                 email: user.email,
                 role: user.role,
                 roles: user.roles,
+                permissions: {},
             },
         });
     });

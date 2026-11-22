@@ -648,6 +648,89 @@ const addWeeks = (date, weeks) => {
     return result;
 };
 
+const STUDYPLAN_FIELD_LABELS = {
+    pace: "Studietakt",
+    startDate: "Startdatum",
+    endDate: "Slutdatum",
+    slutprovDate: "Slutprovsdatum",
+    finalExamDate: "Slutprovsdatum",
+};
+
+const formatDay = (value) => {
+    if (!value) return "–";
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? "–" : d.toISOString().slice(0, 10);
+};
+
+const sameValue = (a, b) =>
+    (a instanceof Date || b instanceof Date || typeof a === "string" || typeof b === "string")
+        ? formatDay(a) === formatDay(b)
+        : a === b;
+
+/**
+ * Create one `studyplan_changed` notification for a pace change, listing the
+ * fields that actually changed (the old hook produced "Fält ändrade: .").
+ * Exported for tests.
+ */
+export async function notifyStudyplanTempoChanged({ student, userId, previous, next, enrollments = [] }) {
+    const { default: Notification } = await import("../models/Notification.js");
+
+    const changedFields = [];
+    const previousValues = {};
+    const newValues = {};
+    const record = (key, from, to) => {
+        if (from === undefined && to === undefined) return;
+        const equal = key === "pace" ? Number(from) === Number(to) : sameValue(from, to);
+        if (equal) return;
+        changedFields.push(key);
+        previousValues[key] = from ?? null;
+        newValues[key] = to ?? null;
+    };
+    record("pace", previous.pace, next.pace);
+    record("endDate", previous.endDate, next.endDate);
+    record("finalExamDate", previous.finalExamDate, next.finalExamDate);
+    // Course-level changes also count (e.g. same end date but a moved start).
+    for (const e of enrollments) {
+        for (const key of ["startDate", "endDate", "slutprovDate"]) {
+            if (sameValue(e.previous[key], e.next[key]) || changedFields.includes(key)) continue;
+            // Student-level finalExamDate already covers the slutprov label.
+            if (key === "slutprovDate" && changedFields.includes("finalExamDate")) continue;
+            changedFields.push(key);
+        }
+    }
+    if (changedFields.length === 0) return null;
+
+    const labels = [...new Set(changedFields.map((k) => STUDYPLAN_FIELD_LABELS[k] || k))];
+    const details = [
+        `studietakt ${previous.pace ?? "–"}% → ${next.pace}%`,
+        `slutdatum ${formatDay(previous.endDate)} → ${formatDay(next.endDate)}`,
+        `slutprov ${formatDay(previous.finalExamDate)} → ${formatDay(next.finalExamDate)}`,
+    ].join(", ");
+    const message = `Studieplan uppdaterad för ${student.name}: ${details}. Fält ändrade: ${labels.join(", ")}.`;
+
+    let studentUserId = null;
+    if (student.email) {
+        const studentUser = await User.findOne({ email: student.email }).select("_id");
+        studentUserId = studentUser?._id || null;
+    }
+
+    return Notification.create({
+        type: "studyplan_changed",
+        message,
+        teacher: student.teacherId || null,
+        studentId: student._id,
+        meta: {
+            studentId: student._id,
+            studentName: student.name,
+            studentUserId,
+            changeType: "pace_changed",
+            changedBy: userId || null,
+            details: { changedFields, previousValues, newValues, enrollments },
+        },
+        resolved: false,
+    });
+}
+
 /**
  * Change a student's study pace and reschedule the study plan.
  *
@@ -676,7 +759,7 @@ export const updateStudyplanTempo = async ({
     }
 
     const student = await Student.findById(studentId).select(
-        "teacherId name pace"
+        "teacherId name pace email endDate finalExamDate"
     );
     if (!student) {
         throw new AppError("Student not found", 404);
@@ -705,6 +788,11 @@ export const updateStudyplanTempo = async ({
         }
         return { updatedCount: 0, pace: requestedPace };
     }
+
+    const previousPace = student.pace ?? null;
+    const previousEndDate = student.endDate || null;
+    const previousFinalExamDate = student.finalExamDate || null;
+    const changedEnrollments = [];
 
     const paceFactor = 100 / requestedPace;
     let nextStartDate = new Date(targetEnrollments[0].startDate);
@@ -743,6 +831,11 @@ export const updateStudyplanTempo = async ({
             );
 
         const previousInstanceId = enrollment.courseInstanceId;
+        const before = {
+            startDate: enrollment.startDate,
+            endDate: enrollment.endDate,
+            slutprovDate: enrollment.slutprovDate,
+        };
 
         // Update in place so grades, assessment results, certificates and
         // history are preserved. Recreating the enrollment used to wipe them.
@@ -762,9 +855,18 @@ export const updateStudyplanTempo = async ({
             },
         ];
 
+        // One summary notification is sent for the whole pace change below,
+        // instead of one per enrollment from the post-save hook.
+        enrollment.skipNotification = true;
         if (typeof enrollment.save === "function") {
             await enrollment.save();
         }
+        changedEnrollments.push({
+            enrollmentId: enrollment._id,
+            courseId: enrollment.mainCourseId,
+            previous: before,
+            next: { startDate, endDate, slutprovDate: enrollment.slutprovDate },
+        });
 
         if (instance.slutprovDate) {
             lastSlutprovDate = instance.slutprovDate;
@@ -801,21 +903,43 @@ export const updateStudyplanTempo = async ({
         if (typeof studentToUpdate.save === "function") {
             await studentToUpdate.save();
 
-            try {
-                const { syncCalendarEventsForStudent } = await import(
-                    "../utils/calendarEventSync.js"
-                );
-                await syncCalendarEventsForStudent(studentToUpdate._id);
-            } catch (syncErr) {
-                logger.warn(
-                    { err: syncErr },
-                    "Failed to sync student calendar event"
-                );
-            }
         }
     }
 
+    // Move the student on the slutprov calendar: drop them from the old
+    // (now stale) slutprov dates and add them to the new ones (audit E1-11).
+    let calendar = null;
+    try {
+        const { syncStudentSlutprovCalendar } = await import(
+            "../utils/calendarEventSync.js"
+        );
+        calendar = await syncStudentSlutprovCalendar(studentId);
+    } catch (syncErr) {
+        logger.warn({ err: syncErr }, "Failed to sync student slutprov calendar");
+    }
+
+    try {
+        await notifyStudyplanTempoChanged({
+            student,
+            userId,
+            previous: {
+                pace: previousPace,
+                endDate: previousEndDate,
+                finalExamDate: previousFinalExamDate,
+            },
+            next: {
+                pace: requestedPace,
+                endDate: studentToUpdate?.endDate || lastEndDate,
+                finalExamDate: studentToUpdate?.finalExamDate || lastSlutprovDate,
+            },
+            enrollments: changedEnrollments,
+        });
+    } catch (notifyErr) {
+        logger.warn({ err: notifyErr }, "Failed to create studyplan_changed notification");
+    }
+
     const result = { updatedCount, pace: requestedPace };
+    if (calendar) result.calendar = calendar;
     if (studentToUpdate?.finalExamDate) {
         result.finalExamDate = studentToUpdate.finalExamDate;
     }

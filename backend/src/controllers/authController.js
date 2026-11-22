@@ -317,9 +317,7 @@ export const getSession = async (req, res) => {
                 // Per-user feature overrides, so the UI route guard can honour
                 // them the same way canFeature() does (same shape as login).
                 permissions:
-                    user.permissions && typeof user.permissions === "object"
-                        ? (typeof user.permissions.toObject === "function" ? user.permissions.toObject() : user.permissions)
-                        : {},
+                    user.permissions && typeof user.permissions === "object" ? user.permissions : {},
             },
         });
     } catch (error) {
