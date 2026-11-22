@@ -9,17 +9,16 @@ Mongoose backend (ESM), Vitest, Playwright. Users are students and staff in seve
 ## 1. Scope protection (read before writing any feature code)
 
 Billing buckets — every issue/PR belongs to exactly one:
-
 - **Etapp 1 (Avtal)** — the agreed core system (Etapperna_lista.odt, Etapp 1).
 - **Etapp 2 (Betald)** — the agreed Etapp 2 list: Sollentuna email, Mejl/Chatt, Lärplattformen
   (kurssidor, moduler/avsnitt, feedback), Datumplanering 5/10/20, Rapporter & aktivitet, inactivity automation.
 - **Bugg / Garanti** — broken behaviour in something already delivered.
-  **Not quoted — never build these as part of other work:** AI chatbot expansion, one-way SMS / push,
-  personalised APL kits, automatic-diploma changes, question-bank v2, template→kurskort content-sync
-  expansion, prövning web payment, Scrive catalog automation, Alvis integration.
+
+**Not quoted — never build these as part of other work:** AI chatbot expansion, one-way SMS / push,
+personalised APL kits, automatic-diploma changes, question-bank v2, template→kurskort content-sync
+expansion, prövning web payment, Scrive catalog automation, Alvis integration.
 
 If a request touches one of these (or anything not in the two lists above):
-
 1. Say so in one line ("this is unquoted Phase 2 scope").
 2. Do not write the code. Draft a `parking-lot` issue instead (template `parking_lot.yml`) and give the
    `gh issue create` command.
@@ -32,7 +31,7 @@ If a request touches one of these (or anything not in the two lists above):
 - The hidden-work checklist is part of the estimate, never extra: role/permission checks, tenant
   (kommun) scoping, empty/loading/error states (Swedish copy), validation & edge cases, data
   migration/backfill, responsive check, unit + integration tests, Playwright happy path,
-  staging deploy in the production Docker image, client demo + 1 revision round.
+  staging deploy on the production runtime (pm2 host), client demo + 1 revision round.
 
 ## 3. GitHub Project board
 
@@ -73,11 +72,19 @@ Columns (Status field), in order:
 - `CourseInstance.content` is a Map with **string** keys (`"1"`, `"2"`). Hydrated docs → MongooseMap,
   `.lean()` → plain object. Handle both.
 - Saving content must merge by `moduleNumber`, never drop `startDate`/`endDate` or progress.
-- Nightly jobs live in `backend/src/services/scheduler.js`; every job must be idempotent.
+- Nightly jobs live in `backend/src/services/scheduler.js`; every job must be idempotent. Production runs
+  pm2 in cluster mode, so jobs only start on worker 0 (`isSchedulerLeader()`) — never start timers elsewhere.
+- **Sentry is development-only.** Report errors through `src/utils/monitoring.js` (no-op in production);
+  never import `@sentry/*` in app code (a unit test enforces this) and never add Sentry to pm2,
+  `ecosystem.config.cjs`, the Docker production stage or the production build.
+- Log errors as `logger.error({ err }, "…")` and never put student data in log messages.
 - No new scratch scripts in the repo root. Put one-off scripts in `backend/scripts/` with a comment
   saying what they do, or delete them.
 
 ## 6. Commands
+
+Local setup (WSL2): user `cyrus`, repo at `/home/cyrus/mindful-new`, Windows downloads at
+`/mnt/c/Users/cyrus/Downloads`. Use these exact paths in commands and scripts.
 
 ```bash
 pnpm install                 # make init
