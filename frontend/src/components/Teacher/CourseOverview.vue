@@ -3,11 +3,11 @@
     <v-card>
       <v-card-title>Min kursöversikt</v-card-title>
       <v-card-text>
-        <div class="d-flex flex-wrap gap-2 mb-3">
-          <v-text-field v-model="searchQuery" label="Sök kurs" density="compact" hide-details style="max-width:220px"></v-text-field>
-          <v-text-field v-model="finalExamDateFilter" label="Slutprovsdatum" type="date" density="compact" hide-details style="max-width:180px"></v-text-field>
-          <v-text-field v-model="startDateFilter" label="Startdatum" type="date" density="compact" hide-details style="max-width:180px"></v-text-field>
-          <v-text-field v-model="endDateFilter" label="Slutdatum" type="date" density="compact" hide-details style="max-width:180px"></v-text-field>
+        <div class="d-flex flex-wrap align-center ga-2 mb-3">
+          <v-text-field v-model="searchQuery" label="Sök kurs" density="compact" variant="outlined" hide-details style="max-width:220px"></v-text-field>
+          <v-text-field v-model="finalExamDateFilter" label="Slutprovsdatum" type="date" density="compact" variant="outlined" hide-details style="max-width:180px"></v-text-field>
+          <v-text-field v-model="startDateFilter" label="Startdatum" type="date" density="compact" variant="outlined" hide-details style="max-width:180px"></v-text-field>
+          <v-text-field v-model="endDateFilter" label="Slutdatum" type="date" density="compact" variant="outlined" hide-details style="max-width:180px"></v-text-field>
           <v-btn variant="outlined" size="small" @click="clearFilters">Rensa</v-btn>
         </div>
         <v-data-table

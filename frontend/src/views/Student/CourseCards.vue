@@ -622,6 +622,23 @@ onMounted(loadCourseCards)
 .teacher-block {
   margin-left: auto;
   text-align: right;
+  display: flex;
+  flex-direction: column;
+}
+
+.current-module {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.module-status {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
 }
 
 .scheduled-dates {
