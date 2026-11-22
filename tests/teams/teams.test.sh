@@ -24,7 +24,10 @@ case "$a" in
   "issue list"*) cat "$F/closed.json" ;;
   "pr list"*) cat "$F/merged.json" ;;
   "api --paginate repos/"*"/branches"*) printf 'main\nfeat/x\nreports-state\n' ;;
+  "api --paginate repos/"*"/commits"*"committer.date"*) printf '2025-02-11T10:00:00Z\n2026-11-20T10:00:00Z\n2026-11-21T10:00:00Z\n' ;;
   "api --paginate repos/"*"/commits"*) cat "$F/commits.txt" ;;
+  "api -X GET search/issues"*"is:pr"*) echo 91 ;;
+  "api -X GET search/issues"*) echo 40 ;;
   "api repos/"*"/contents/"*)
     [ -f "$F/state.json" ] || exit 1
     jq -n --arg c "$(base64 -w0 < "$F/state.json")" '{ sha: "s1", content: $c }' ;;
@@ -88,10 +91,14 @@ eq "exit" "$CODE" 0; eq "posts" "$(posts)" 1
 T=$(card_text "$(last_post)")
 # scope: Etapp items 1–4 = 100 h; accepted 10 (10 %), demo 20 (20 %), left 30, pending 40; internal #5 and parking-lot #6 excluded
 has "$T" "10 %"; has "$T" "20 %"; has "$T" "30 h"; has "$T" "40 h"
-has "$T" "Första rapporten: detta är baslinjen"
+has "$T" "Lägesrapport: allt fram till nu"
+has "$T" "Första rapporten: en sammanställning av allt som gjorts hittills"
+has "$T" "Hittills i projektet (sedan tisdag 11 februari 2025)"
+has "$T" "Sparade ändringar (commits): 3"; has "$T" "Avslutade ärenden: 40"; has "$T" "Sammanslagna ändringspaket (PR): 91"
 has "$T" "Rättning: Behåll dolda moduler"
 has "$T" "Drift & kvalitet"
-eq "archived" "$(wc -l < "$FIX/archived.log")" 2
+[ -f "$FIX/archived.log" ] && bad "baseline archived items" || ok
+has "$ERR" "the Klar column is kept"
 eq "state week" "$(jq -r .lastWeekly "$FIX/state.json")" "2026-W48"
 eq "ledger" "$(jq -c '[.accepted[].n]' "$FIX/state.json")" "[1,5]"
 [ -f "$FIX/branch" ] && ok || bad "state branch not created"
@@ -109,7 +116,8 @@ run weekly-report.sh MODE=full NOW=$NEXT_MON TEAMS_WEBHOOK_URL=https://hook
 eq "exit (week 2)" "$CODE" 0; eq "posts (week 2)" "$(posts)" 2
 T=$(card_text "$(last_post)")
 has "$T" "30 %"            # accepted = #1 (ledger, 10 h) + #2 (20 h) of 100 h
-hasnt "$T" "baslinjen"
+hasnt "$T" "Lägesrapport"; hasnt "$T" "Hittills i projektet"; has "$T" "Veckorapport v.49"
+eq "archived (week 2)" "$(wc -l < "$FIX/archived.log")" 1   # #2, now Klar
 has "$T" "Godkänt sedan förra rapporten"; has "$T" "Ärende 2"
 has "$T" "Återöppnat"; has "$T" "Ärende 3"
 
