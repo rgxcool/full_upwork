@@ -12,6 +12,7 @@
  *   - INACTIVITY_AUTO_WARNING_ENABLED === "false"
  */
 import logger from "../utils/logger.js";
+import { withJobMonitor } from "../utils/monitoring.js";
 import { runInactivityScan } from "./inactivityScanner.js";
 import { runDiplomaNotificationScan } from "./diplomaNotificationScan.js";
 import { runGradingReminderScan } from "./gradingReminderScan.js";
@@ -34,6 +35,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * NODE_APP_INSTANCE; only worker 0 (or a plain non-pm2 process) runs jobs.
  * SCHEDULER_ENABLED=false turns jobs off on a node entirely.
  */
+// Sentry cron monitor config (dev only, opt-in with SENTRY_CRONS=true).
+const NIGHTLY_MONITOR = () => ({
+    schedule: { type: "crontab", value: `0 ${SCAN_HOUR_UTC} * * *` },
+    timezone: "UTC",
+    checkinMargin: 30,
+    maxRuntime: 60,
+});
+
 export const isSchedulerLeader = () => {
     if (process.env.SCHEDULER_ENABLED === "false") return false;
     const instance = process.env.NODE_APP_INSTANCE;
@@ -62,31 +71,31 @@ const executeScan = async () => {
     }
     running = true;
     try {
-        const summary = await runInactivityScan();
+        const summary = await withJobMonitor("nightly-inactivity-scan", runInactivityScan, NIGHTLY_MONITOR());
         logger.info(
             { summary },
             "Scheduled inactivity scan completed"
         );
         try {
-            const diplomaSummary = await runDiplomaNotificationScan();
+            const diplomaSummary = await withJobMonitor("nightly-diploma-notification-scan", runDiplomaNotificationScan, NIGHTLY_MONITOR());
             logger.info({ summary: diplomaSummary }, "Diploma notification scan completed");
         } catch (err) {
             logger.error({ err }, "Diploma notification scan failed");
         }
         try {
-            const automaticDiplomaSummary = await runAutomaticDiplomaScan();
+            const automaticDiplomaSummary = await withJobMonitor("nightly-automatic-diploma-scan", runAutomaticDiplomaScan, NIGHTLY_MONITOR());
             logger.info({ summary: automaticDiplomaSummary }, "Automatic diploma scan completed");
         } catch (err) {
             logger.error({ err }, "Automatic diploma scan failed");
         }
         try {
-            const gradingSummary = await runGradingReminderScan();
+            const gradingSummary = await withJobMonitor("nightly-grading-reminder-scan", runGradingReminderScan, NIGHTLY_MONITOR());
             logger.info({ summary: gradingSummary }, "Grading reminder scan completed");
         } catch (err) {
             logger.error({ err }, "Grading reminder scan failed");
         }
         try {
-            const aplKitsCreated = await ensureStartedAplLearningKits();
+            const aplKitsCreated = await withJobMonitor("nightly-apl-learning-kits", ensureStartedAplLearningKits, NIGHTLY_MONITOR());
             logger.info({ count: aplKitsCreated }, "Started APL learning kits issued");
         } catch (err) {
             logger.error({ err }, "APL learning-kit issuance scan failed");
@@ -94,7 +103,7 @@ const executeScan = async () => {
         try {
             // Persisted APL status auto-transitions (RED near end / GREEN after
             // end). Idempotent — only transitions students that still need it.
-            const aplTransitions = await autoTransitionStatuses();
+            const aplTransitions = await withJobMonitor("nightly-apl-status-transitions", autoTransitionStatuses, NIGHTLY_MONITOR());
             logger.info(
                 { count: Array.isArray(aplTransitions) ? aplTransitions.length : 0 },
                 "APL status auto-transition scan completed"
@@ -138,7 +147,11 @@ const executeTaskScan = async () => {
     if (taskRunning) return;
     taskRunning = true;
     try {
-        await runTaskReminderScan();
+        await withJobMonitor("task-reminder-scan", runTaskReminderScan, {
+            schedule: { type: "interval", value: 5, unit: "minute" },
+            checkinMargin: 5,
+            maxRuntime: 5,
+        });
     } catch (err) {
         logger.error({ err }, "Task reminder scan failed");
     } finally {
