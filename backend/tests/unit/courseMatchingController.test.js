@@ -119,6 +119,7 @@ import {
     deleteAllCourseInstances,
     deleteCourseInstance,
     findCourseMatch,
+    getCourseInstanceContent,
     getCourseInstanceEnrollments,
     getCourseInstances,
     getCourseStatistics,
@@ -127,6 +128,7 @@ import {
     getStudentEnrollments,
     processStudentEducation,
     updateCourseInstance,
+    updateCourseInstanceContent,
     updateEnrollmentDates,
     updateEnrollmentStatus,
     uploadStudentsForMatching,
@@ -2786,5 +2788,96 @@ describe("getStudentCourseCards", () => {
 
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith({ error: "Invalid student id" });
+    });
+});
+
+// Mimics the Mongoose Map constraint (string keys only) so a numeric-key
+// regression fails here the same way it fails against a real CourseInstance.
+const createContentMap = (entries = {}) => {
+    const store = new Map(Object.entries(entries));
+    return {
+        has: (key) => store.has(key),
+        set: (key, value) => {
+            if (typeof key !== "string") {
+                throw new TypeError(`Mongoose maps only support string keys, got ${typeof key}`);
+            }
+            store.set(key, value);
+        },
+        clear: () => store.clear(),
+        entries: () => store.entries(),
+    };
+};
+
+describe("course instance content endpoints", () => {
+    const adminReq = (overrides = {}) => ({
+        params: { instanceId: "inst1" },
+        user: { userId: "admin1", roles: ["admin"] },
+        body: {},
+        ...overrides,
+    });
+
+    it("returns a plain object keyed by module number, including the hide flag", async () => {
+        CourseInstance.findById.mockResolvedValue({
+            responsibleTeacher: null,
+            content: createContentMap({
+                "1": { title: "Startmodul", instructions: "Läs.", isHiddenFromStudent: true },
+                "2": { title: "Modul 2", instructions: "", isHiddenFromStudent: false },
+            }),
+        });
+        const res = createRes();
+
+        await getCourseInstanceContent(adminReq(), res);
+
+        expect(res.json).toHaveBeenCalledWith({
+            success: true,
+            canEdit: true,
+            content: {
+                "1": { title: "Startmodul", instructions: "Läs.", isHiddenFromStudent: true },
+                "2": { title: "Modul 2", instructions: "", isHiddenFromStudent: false },
+            },
+        });
+    });
+
+    it("writes content and hide state with string map keys", async () => {
+        const content = createContentMap();
+        const instance = {
+            content,
+            responsibleTeacher: null,
+            save: vi.fn().mockResolvedValue(undefined),
+        };
+        CourseInstance.findById.mockResolvedValue(instance);
+        const res = createRes();
+
+        await updateCourseInstanceContent(
+            adminReq({
+                body: {
+                    content: {
+                        "1": { title: "Startmodul", instructions: "Läs.", isHiddenFromStudent: true },
+                    },
+                },
+            }),
+            res
+        );
+
+        expect(instance.save).toHaveBeenCalled();
+        expect([...content.entries()]).toEqual([
+            ["1", { title: "Startmodul", instructions: "Läs.", isHiddenFromStudent: true }],
+        ]);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ success: true, canEdit: true })
+        );
+    });
+
+    it("rejects a missing content payload", async () => {
+        CourseInstance.findById.mockResolvedValue({
+            responsibleTeacher: null,
+            content: createContentMap(),
+            save: vi.fn(),
+        });
+        const res = createRes();
+
+        await updateCourseInstanceContent(adminReq(), res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
     });
 });
