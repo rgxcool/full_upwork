@@ -18,6 +18,7 @@ const createQueryChain = (result) => {
   const chain = {
     populate: vi.fn(() => chain),
     sort: vi.fn(() => chain),
+    select: vi.fn(() => chain),
     lean: vi.fn(() => chain),
     then: (onFulfilled, onRejected) =>
       Promise.resolve(result).then(onFulfilled, onRejected),
