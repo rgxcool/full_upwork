@@ -1,7 +1,8 @@
 import { ensureAvsnitt } from "../models/courseModuleSchema.js";
 
 /**
- * Backfill the synthetic Avsnitt on every module of a collection.
+ * Backfill the synthetic Avsnitt — and, from Slice 4, its plannedDate — on
+ * every module of a collection.
  *
  * Reads via the raw collection (not the Mongoose model) so that schema
  * defaults such as `avsnitt: []` are not injected into legacy documents —

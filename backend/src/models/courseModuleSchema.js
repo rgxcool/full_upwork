@@ -42,6 +42,9 @@ export const avsnittSchema = new mongoose.Schema(
         avsnittId: String,
         title: { type: String, default: "" },
         order: Number,
+        // Slice 4: planned submission date for this Avsnitt. Module dates stay
+        // authoritative for scheduling; this is the Avsnitt-level planning value.
+        plannedDate: { type: Date, default: null },
         contentItems: { type: [contentItemSchema], default: [] },
     },
     { _id: false }
@@ -109,6 +112,9 @@ const cloneAvsnitt = (rawAvsnitt) => {
         avsnittId: avsnitt.avsnittId,
         title: avsnitt.title ?? "",
         order: avsnitt.order,
+        // Dates are instance-specific (D7): never carry a template's planned
+        // date into a newly cloned course instance.
+        plannedDate: null,
         contentItems: (avsnitt.contentItems || []).map((rawItem) => {
             const item = toPlainObject(rawItem);
             const cloned = {
@@ -168,6 +174,41 @@ export const cloneModules = (modules) =>
 
 export const SYNTHETIC_AVSNITT_TITLE = "Avsnitt 1";
 
+// Slice 4 / D8: a synthetic Avsnitt inherits the module's start date when one
+// exists. Invalid or missing values stay null rather than producing Invalid Date.
+const toPlannedDate = (value) => {
+    if (!value) return null;
+    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const isSyntheticAvsnitt = (moduleNumber, avsnitt) =>
+    avsnitt?.avsnittId === `m${moduleNumber}-a1`;
+
+// Backfill plannedDate on already-migrated synthetic Avsnitt. Custom Avsnitt
+// are left alone, and the original module reference is kept when nothing changes.
+const ensureSyntheticPlannedDates = (module) => {
+    if (!Array.isArray(module.avsnitt) || module.avsnitt.length === 0) return module;
+
+    let changed = false;
+    const avsnitt = module.avsnitt.map((rawAvsnitt) => {
+        if (!isSyntheticAvsnitt(module.moduleNumber, rawAvsnitt)) return rawAvsnitt;
+
+        const current = toPlainObject(rawAvsnitt);
+        if (current.plannedDate !== undefined && current.plannedDate !== null) {
+            return rawAvsnitt;
+        }
+        const plannedDate = toPlannedDate(module.startDate);
+        if (current.plannedDate === plannedDate) return rawAvsnitt;
+
+        changed = true;
+        return { ...current, plannedDate };
+    });
+
+    if (!changed) return module;
+    return { ...toPlainObject(module), avsnitt };
+};
+
 // A module "has an assignment" only when the legacy field carries actual
 // content. This matches courseCompletionService (title or description set),
 // so the default empty `{ title: "", description: "" }` placeholder does not
@@ -181,6 +222,7 @@ export const buildSyntheticAvsnitt = (module) => {
         avsnittId: `m${moduleNumber}-a1`,
         title: SYNTHETIC_AVSNITT_TITLE,
         order: 1,
+        plannedDate: toPlannedDate(module?.startDate),
         contentItems: [],
     };
 
@@ -203,16 +245,20 @@ export const buildSyntheticAvsnitt = (module) => {
 /**
  * Return a module with exactly one synthetic Avsnitt when it is missing.
  *
- * An existing non-empty `avsnitt` array is treated as already migrated and is
- * returned untouched. An absent OR empty array is backfilled: Mongoose applies
- * the schema default `[]` when hydrating legacy documents, so an empty array
- * cannot be distinguished from a missing field at the model layer. The
- * migration script reads raw collections to sidestep that ambiguity, but this
- * helper stays safe for both callers.
+ * An existing non-empty `avsnitt` array is treated as already migrated: its
+ * structure is preserved, but a synthetic Avsnitt that still lacks `plannedDate`
+ * is backfilled from the module's start date (Slice 4 / D8). An absent OR empty
+ * array is backfilled with a fresh synthetic Avsnitt. Mongoose applies the
+ * schema default `[]` when hydrating legacy documents, so an empty array cannot
+ * be distinguished from a missing field at the model layer. The migration
+ * script reads raw collections to sidestep that ambiguity, but this helper
+ * stays safe for both callers.
  */
 export const ensureModuleAvsnitt = (module) => {
     if (!module) return module;
-    if (Array.isArray(module.avsnitt) && module.avsnitt.length > 0) return module;
+    if (Array.isArray(module.avsnitt) && module.avsnitt.length > 0) {
+        return ensureSyntheticPlannedDates(module);
+    }
 
     const plain = toPlainObject(module);
     return { ...plain, avsnitt: [buildSyntheticAvsnitt(plain)] };

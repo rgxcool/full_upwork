@@ -86,6 +86,36 @@ describe("migrateAvsnittForModel", () => {
         );
     });
 
+    it("backfills plannedDate on existing synthetic Avsnitt from module startDate", async () => {
+        const startDate = new Date("2026-11-16T00:00:00.000Z");
+        const doc = {
+            _id: "doc-3",
+            modules: [
+                {
+                    moduleNumber: 1,
+                    startDate,
+                    avsnitt: [
+                        {
+                            avsnittId: "m1-a1",
+                            title: "Avsnitt 1",
+                            order: 1,
+                            contentItems: [],
+                        },
+                    ],
+                },
+            ],
+        };
+        const Model = fakeModel([doc]);
+
+        const result = await migrateAvsnittForModel(Model);
+
+        expect(result).toEqual({ scanned: 1, migrated: 1 });
+        expect(
+            Model.collection.updateOne.mock.calls[0][1].$set.modules[0].avsnitt[0]
+                .plannedDate
+        ).toEqual(startDate);
+    });
+
     it("is idempotent on a second run", async () => {
         const doc = {
             _id: "doc-1",

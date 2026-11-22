@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+    avsnittSchema,
     buildDefaultModules,
     buildSyntheticAvsnitt,
     cloneModules,
@@ -9,6 +10,11 @@ import {
 } from "../../src/models/courseModuleSchema.js";
 
 describe("courseModuleSchema helpers", () => {
+    it("defaults Avsnitt plannedDate to a nullable Date", () => {
+        expect(avsnittSchema.path("plannedDate").instance).toBe("Date");
+        expect(avsnittSchema.path("plannedDate").defaultValue).toBeNull();
+    });
+
     it("builds 5 modules with 2 sections each", () => {
         const modules = buildDefaultModules();
 
@@ -113,7 +119,8 @@ describe("courseModuleSchema helpers", () => {
         expect(cloned[0].assignment).toBeUndefined();
     });
 
-    it("deep-clones the Avsnitt hierarchy when cloning a migrated module", () => {
+    it("deep-clones the Avsnitt hierarchy but clears its planned date", () => {
+        const plannedDate = new Date("2026-11-16T00:00:00.000Z");
         const original = [
             {
                 moduleNumber: 1,
@@ -122,6 +129,7 @@ describe("courseModuleSchema helpers", () => {
                         avsnittId: "m1-a1",
                         title: "Avsnitt 1",
                         order: 1,
+                        plannedDate,
                         contentItems: [
                             {
                                 contentId: "c1",
@@ -152,7 +160,11 @@ describe("courseModuleSchema helpers", () => {
 
         const cloned = cloneModules(original);
 
-        expect(cloned[0].avsnitt).toEqual(original[0].avsnitt);
+        // D7: a template's absolute date must never leak into a new instance.
+        expect(cloned[0].avsnitt[0].plannedDate).toBeNull();
+        expect(cloned[0].avsnitt[0].contentItems).toEqual(
+            original[0].avsnitt[0].contentItems
+        );
         expect(cloned[0].avsnitt[0]).not.toBe(original[0].avsnitt[0]);
         expect(cloned[0].avsnitt[0].contentItems[0]).not.toBe(
             original[0].avsnitt[0].contentItems[0]
@@ -212,9 +224,74 @@ describe("Avsnitt backfill helpers", () => {
             avsnittId: "m3-a1",
             title: SYNTHETIC_AVSNITT_TITLE,
             order: 1,
+            plannedDate: null,
             contentItems: [],
         });
         expect(SYNTHETIC_AVSNITT_TITLE).toBe("Avsnitt 1");
+    });
+
+    it("inherits the module start date as the synthetic Avsnitt planned date", () => {
+        const startDate = new Date("2026-11-16T00:00:00.000Z");
+
+        expect(buildSyntheticAvsnitt({ moduleNumber: 1, startDate }).plannedDate).toEqual(
+            startDate
+        );
+        expect(
+            buildSyntheticAvsnitt({
+                moduleNumber: 2,
+                startDate: "2026-11-23T00:00:00.000Z",
+            }).plannedDate
+        ).toEqual(new Date("2026-11-23T00:00:00.000Z"));
+        expect(
+            buildSyntheticAvsnitt({ moduleNumber: 3, startDate: "not-a-date" }).plannedDate
+        ).toBeNull();
+    });
+
+    it("backfills plannedDate on an already-migrated synthetic Avsnitt", () => {
+        const startDate = new Date("2026-11-16T00:00:00.000Z");
+        const module = {
+            moduleNumber: 1,
+            startDate,
+            avsnitt: [
+                {
+                    avsnittId: "m1-a1",
+                    title: SYNTHETIC_AVSNITT_TITLE,
+                    order: 1,
+                    contentItems: [],
+                },
+            ],
+        };
+
+        const migrated = ensureModuleAvsnitt(module);
+
+        expect(migrated).not.toBe(module);
+        expect(migrated.avsnitt[0].plannedDate).toEqual(startDate);
+        expect(module.avsnitt[0].plannedDate).toBeUndefined();
+        expect(ensureModuleAvsnitt(migrated)).toBe(migrated);
+    });
+
+    it("leaves custom Avsnitt untouched and stays idempotent without a start date", () => {
+        const custom = {
+            avsnittId: "custom",
+            title: "Egna avsnittet",
+            order: 1,
+            contentItems: [],
+        };
+        const module = { moduleNumber: 2, avsnitt: [custom] };
+
+        expect(ensureModuleAvsnitt(module)).toBe(module);
+
+        const synthetic = {
+            avsnittId: "m2-a1",
+            title: SYNTHETIC_AVSNITT_TITLE,
+            order: 1,
+            contentItems: [],
+        };
+        const withoutStart = { moduleNumber: 2, avsnitt: [synthetic] };
+        const migrated = ensureModuleAvsnitt(withoutStart);
+
+        expect(migrated.avsnitt[0].plannedDate).toBeNull();
+        expect(ensureModuleAvsnitt(migrated)).toBe(migrated);
     });
 
     it("keeps the legacy assignment field and copies it into an uppgift item", () => {
@@ -235,6 +312,7 @@ describe("Avsnitt backfill helpers", () => {
                 avsnittId: "m2-a1",
                 title: "Avsnitt 1",
                 order: 1,
+                plannedDate: null,
                 contentItems: [
                     {
                         contentId: "m2-a1-c1",
