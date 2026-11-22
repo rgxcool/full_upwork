@@ -213,6 +213,42 @@
                   </li>
                 </ul>
 
+                <!-- Avsnitt (read-only, Slice 2) -->
+                <template v-if="shouldShowAvsnitt(module)">
+                  <div
+                    v-for="av in sortedAvsnitt(module)"
+                    :key="av.avsnittId || av.order"
+                    class="avsnitt-block"
+                  >
+                    <h4 class="avsnitt-title">{{ av.title || `Avsnitt ${av.order || ''}` }}</h4>
+                    <ul class="content-item-list">
+                      <li
+                        v-for="item in visibleContentItems(av)"
+                        :key="item.contentId || item.order"
+                        class="content-item"
+                      >
+                        <span class="content-type-chip">{{ contentItemLabel(item.type) }}</span>
+                        <span class="content-title">{{ contentMeta(item).title }}</span>
+                        <a
+                          v-if="contentMeta(item).url"
+                          :href="contentMeta(item).url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="content-link"
+                        >
+                          {{ contentMeta(item).linkText }}
+                        </a>
+                        <span
+                          v-if="contentMeta(item).durationText"
+                          class="content-duration"
+                        >
+                          {{ contentMeta(item).durationText }}
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </template>
+
                 <div
                   v-if="module.assignment && (module.assignment.title || module.assignment.description)"
                   class="assignment-block"
@@ -287,6 +323,13 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import client from '@/api/client.js'
 import { currentModuleLabel, isCourseComplete, isCurrentModule } from '@/utils/currentModule.js'
+import {
+  contentItemLabel,
+  contentMeta,
+  shouldShowAvsnitt,
+  sortedAvsnitt,
+  visibleContentItems,
+} from '@/utils/courseContent.js'
 
 const route = useRoute()
 
@@ -807,6 +850,45 @@ onMounted(loadCourseCards)
   color: #374151;
   white-space: pre-wrap;
   flex: 1;
+}
+
+.avsnitt-block {
+  margin: 0.75rem 0 0.5rem;
+}
+.avsnitt-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+}
+.content-item-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.content-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.6rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+}
+.content-type-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  background: var(--v-theme-surface-variant, #e8e8e8);
+  color: inherit;
+}
+.content-link {
+  font-size: 0.85rem;
+}
+.content-duration {
+  font-size: 0.8rem;
+  opacity: 0.7;
 }
 
 .progress-block {
