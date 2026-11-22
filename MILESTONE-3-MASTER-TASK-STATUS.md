@@ -48,17 +48,19 @@
    
  | P14 | Student self-service APL CV upload + "seeking" toggle | ✅ DONE | PATCH /apl/my { cvDocId, isSeeking }; upload authority via canUploadForStudent (audit #24b/#24c, addendum). |  
    
- | P15 | Profile sensitive-field minimization by role (personnummer, support notes, exam accommodations hidden from non-privileged staff) | 🔴 NOT DONE — BACKEND DEPENDENCY | GET /student/:id / GET /students / /basic return the **full document to all staff roles**; tenancy is enforced but there is no per-role field projection. Documented as requiring serialization work, not faked (final report §J). |  
+ | P15 | Profile sensitive-field minimization by role (personnummer, support notes, exam accommodations hidden from non-privileged staff) | 🟡 PARTIAL (verified 2026-11-22) | `utils/studentSerializer.js` projectStudentForViewer is applied on /student/:id, /students, /basic and student-details. Coordinator gets no personnummer/support fields. **Gap:** the teacher branch still returns personnummer (issue #37). |  
    
  | P16 | Study pace (kurspaket) persists and scales durations | ✅ DONE | StudentEnrollment.pace field added; paceFactor = 100/paceValue applied in placementRoutes.js + courseMatchingService.js; wizard now shows a pace selector and sends pace (audit addendum "Pace persistence"/"Pace UI"). Fixed since the original checklist was written. |  
    
- | P17 | Messaging tenant isolation | 🔴 NOT DONE — BACKEND DEPENDENCY | Messaging gated only by isAuthenticated; no school/tenant scoping (audit #53, final report §H). |  
+ | P17 | Messaging tenant isolation | 🟡 PARTIAL (verified 2026-11-22) | Implemented in `c4b1a34`: `messagingService.canMessage` enforces sharesTenant/municipalityInScope; recipient search is filtered by userScopeFilter; unit tests pass. **Gap:** no report of existing cross-tenant threads (issue #38). |  
+   
+ | P19 | Kurskort (CourseInstance) access control: content + activity feed + noticeboard posting | ✅ DONE (2026-11-22, issues #29 + #28) | `utils/courseInstanceAccess.js` holds one rule. Students need a non-dropped enrollment; teachers must be responsible/assistant (Teacher id resolved via userId); admin/systemadmin/tester have full access. Applied to GET/PUT content and GET/PUT activity-feed. `tests/integration/courseInstanceAccess.test.js` has 26 cases; 10 fail on the old code. |  
    
  | P18 | CI/CD pipeline + build/lint/test baseline | ✅ DONE | `.github/workflows/ci.yml` exists (lint + test + docker jobs). Backend/frontend tests, lint, build PASS locally (1859 backend / 251 frontend tests). Coverage gate is BACKEND DEPENDENCY (thresholds not met, not lowered — honest gap; Docker daemon was off this session so `make citest` could not be re-run). |  
    
- | — | GET /documents/:id metadata endpoint — staff have no tenant scope (unlike GET /student/:id) | 🟡 PARTIAL | File bytes remain GridFS-guarded (checkFileAccess, verified ✅), but metadata disclosure across kommun for staff is an open hardening note (final report §H). |  
+ | — | GET /documents/:id metadata endpoint — staff tenant scope | 🟡 PARTIAL (verified 2026-11-22) | `canAccessStudentDocuments` applies municipalityInScope. **Gap:** cross-tenant requests return 403, but the spec asks for 404 (issue #40). |  
    
- | — | Disk-served /uploads static path IDOR | 🔴 NOT DONE — BACKEND DEPENDENCY | Any authenticated JWT can read public/uploads/* by filename; fix requires a migration off disk storage (final report §H). |  
+ | — | Disk-served /uploads static path IDOR | 🟡 MITIGATED (verified live 2026-11-22) | The static path is gone. `/uploads/:filename` requires a Document record plus `canAccessDocument` (`backend/index.js:159`). A student probing all 7 files on disk got 404/403. **Remaining:** migrate files off disk to GridFS (issue #39). |  
    
     
  ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANklEQVR4nO3OMQ2AABAAsSPBCj7fE0YwwIgHRiywEZJWQZeZ2ao9AAD+4lyruzq+ngAA8Nr1AOHwBeiQJO3XAAAAAElFTkSuQmCC)  
@@ -152,7 +154,7 @@
    
  | 19 | Auto per-course start/end dates | ✅ DONE | — |  
    
- | 20 | Auto APL registration + "completed elsewhere" cert upload | 🟡 PARTIAL | Works in ManualAddStudent.vue; the wizard has no APL checkbox/cert upload path. Decide if the wizard needs parity. |  
+ | 20 | Auto APL registration + "completed elsewhere" cert upload | ✅ DONE (`82b7c8f`, issue #44) | The wizard now uploads the intyg to /documents (Dokument tab) and sets priorAplCompleted + priorAplIntygDocId after the placement, same as ManualAddStudent.vue. Covered by 6 unit tests. |  
    
     
  **Change-of-studies**  
@@ -448,10 +450,10 @@ All remaining actionable items from the 🟡/🔴 backlog were implemented; only
 
 Use this as the actual to-do queue; everything above marked ✅ DONE needs no further work.  
 **Architecturally larger / explicitly BACKEND DEPENDENCY (do not fake):**  
-- Profile sensitive-field minimization by role (P15)  
-- Messaging tenant isolation (P17 / item 53)  
-- Disk-served /uploads IDOR (needs storage migration)  
-- GET /documents/:id staff tenant scope  
+- Profile field minimization: teacher personnummer rule (P15 remainder, #37)  
+- Messaging: report existing cross-tenant threads (P17 remainder, #38)  
+- /uploads storage migration off disk (IDOR itself mitigated, #39)  
+- GET /documents/:id cross-tenant → 404 instead of 403 (#40)  
 - Search by first/middle/last name (needs a Student schema change)  
 - Fine-grained per-user permission grants (item 1b)  
 - Backend full-suite coverage gate below thresholds (lines 68.36% < 78.5 etc.) — thresholds NOT lowered; `make citest` needs the Docker daemon  
