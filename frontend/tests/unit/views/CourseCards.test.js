@@ -315,4 +315,111 @@ describe('CourseCards.vue', () => {
         expect(wrapper.text()).not.toContain('Alla moduler klara')
         wrapper.unmount()
     })
+
+    const moduleWithAvSnitt = {
+        moduleNumber: 1,
+        title: 'Modul 1',
+        sections: [],
+        assignment: { title: 'Inlämning 1', description: 'Skriv en reflektion.' },
+        avsnitt: [
+            {
+                avsnittId: 'm1-a1',
+                title: 'Avsnitt 1',
+                order: 1,
+                contentItems: [
+                    { contentId: 'c0', type: 'uppgift', title: 'Inlämning 1' },
+                    {
+                        contentId: 'c1',
+                        type: 'lektion',
+                        title: 'Introduktion',
+                        order: 1,
+                        lektion: { videoUrl: 'https://example.se/video', durationMinutes: 12 },
+                    },
+                    {
+                        contentId: 'c2',
+                        type: 'lasning',
+                        title: 'Kapitel 1',
+                        order: 2,
+                        lasning: { resourceUrl: 'https://example.se/text', estimatedMinutes: 8 },
+                    },
+                ],
+            },
+        ],
+    }
+
+    it('renders nothing new for a legacy module with an empty avsnitt array', async () => {
+        const card = {
+            ...sampleCard,
+            modules: [{ ...moduleWithAvSnitt, avsnitt: [] }],
+        }
+        const wrapper = await mountCard(card)
+
+        expect(wrapper.find('.avsnitt-block').exists()).toBe(false)
+        expect(wrapper.find('.content-item-list').exists()).toBe(false)
+        expect(wrapper.text()).toContain('Inlämning 1')
+        wrapper.unmount()
+    })
+
+    it('renders lektion and lasning items inside the module details without duplicating uppgift', async () => {
+        const card = { ...sampleCard, modules: [moduleWithAvSnitt] }
+        const wrapper = await mountCard(card)
+
+        expect(wrapper.find('.avsnitt-title').text()).toBe('Avsnitt 1')
+        expect(wrapper.findAll('.content-item')).toHaveLength(2)
+        expect(wrapper.text()).toContain('Lektion')
+        expect(wrapper.text()).toContain('Läsning')
+        expect(wrapper.text()).toContain('Introduktion')
+        expect(wrapper.text()).toContain('Kapitel 1')
+        expect(wrapper.text()).toContain('12 min')
+        expect(wrapper.text()).toContain('ca 8 min')
+
+        const list = wrapper.find('.content-item-list')
+        expect(list.text()).not.toContain('Inlämning 1')
+        // The interactive assignment block remains the single uppgift representation.
+        expect(wrapper.find('.assignment-block').text()).toContain('Inlämning 1')
+        expect(wrapper.find('textarea.submission-textarea').exists()).toBe(true)
+
+        const links = wrapper.findAll('a.content-link')
+        expect(links).toHaveLength(2)
+        expect(links[0].attributes('href')).toBe('https://example.se/video')
+        expect(links[0].attributes('target')).toBe('_blank')
+        expect(links[0].attributes('rel')).toBe('noopener noreferrer')
+        expect(links[0].text()).toBe('Visa video')
+        expect(links[1].attributes('href')).toBe('https://example.se/text')
+        expect(links[1].text()).toBe('Öppna text')
+        wrapper.unmount()
+    })
+
+    it('suppresses the avsnitt block for hidden modules', async () => {
+        const card = {
+            ...sampleCard,
+            modules: [{ ...moduleWithAvSnitt, isHiddenFromStudent: true }],
+        }
+        const wrapper = await mountCard(card)
+
+        expect(wrapper.find('.avsnitt-block').exists()).toBe(false)
+        expect(wrapper.find('.content-item-list').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('shows no avsnitt list when the only content item is an uppgift', async () => {
+        const card = {
+            ...sampleCard,
+            modules: [{
+                ...moduleWithAvSnitt,
+                avsnitt: [{
+                    avsnittId: 'm1-a1',
+                    title: 'Avsnitt 1',
+                    order: 1,
+                    contentItems: [{ contentId: 'c0', type: 'uppgift', title: 'Inlämning 1' }],
+                }],
+            }],
+        }
+        const wrapper = await mountCard(card)
+
+        expect(wrapper.find('.avsnitt-block').exists()).toBe(false)
+        expect(wrapper.find('.content-item-list').exists()).toBe(false)
+        expect(wrapper.find('.assignment-block').text()).toContain('Inlämning 1')
+        wrapper.unmount()
+    })
 })
