@@ -82,14 +82,14 @@ fi
 log "Dependencies ready"
 
 # ── 3. Load education data ───────────────────────────
-log "Loading education data (dropData + updateEducation)..."
+log "Loading education data (dropEducation + updateEducation)..."
 (
   set -a
   # shellcheck disable=SC1091
   source "$ENV_FILE"
   set +a
   cd "$ROOT/backend"
-  node scripts/dropData.js
+  node scripts/dropEducation.js
   node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
   node scripts/seedE2EData.js
   node scripts/seedMindfulFaq.js

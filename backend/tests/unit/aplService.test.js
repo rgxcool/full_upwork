@@ -550,7 +550,15 @@ describe("APL Status Transitions", () => {
             const kit = await ensureAplLearningKit("s1");
             expect(kit.title).toBe("APL-lärkit");
             expect(kit.id).toBe("existing-kit");
-            expect(student.save).not.toHaveBeenCalled();
+            expect(student.logbook).toHaveLength(1);
+            // Legacy title-only kit is backfilled with the stable marker (#35).
+            expect(kit.kind).toBe("apl-learning-kit");
+            expect(student.save).toHaveBeenCalledTimes(1);
+
+            // Already tagged: nothing more to write.
+            await ensureAplLearningKit("s1");
+            expect(student.logbook).toHaveLength(1);
+            expect(student.save).toHaveBeenCalledTimes(1);
         });
 
         it("is triggered from autoCreateRecords for a newly eligible student", async () => {

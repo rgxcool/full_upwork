@@ -48,17 +48,31 @@
    
  | P14 | Student self-service APL CV upload + "seeking" toggle | ✅ DONE | PATCH /apl/my { cvDocId, isSeeking }; upload authority via canUploadForStudent (audit #24b/#24c, addendum). |  
    
- | P15 | Profile sensitive-field minimization by role (personnummer, support notes, exam accommodations hidden from non-privileged staff) | 🔴 NOT DONE — BACKEND DEPENDENCY | GET /student/:id / GET /students / /basic return the **full document to all staff roles**; tenancy is enforced but there is no per-role field projection. Documented as requiring serialization work, not faked (final report §J). |  
+ | P15 | Profile sensitive-field minimization by role (personnummer, support notes, exam accommodations hidden from non-privileged staff) | 🟡 PARTIAL (verified 2026-11-22) | `utils/studentSerializer.js` projectStudentForViewer is applied on /student/:id, /students, /basic and student-details. Coordinator gets no personnummer/support fields. **Decision 2026-11-22:** teachers may see personnummer (intended). Remaining: per-role snapshot tests (issue #37). |  
    
  | P16 | Study pace (kurspaket) persists and scales durations | ✅ DONE | StudentEnrollment.pace field added; paceFactor = 100/paceValue applied in placementRoutes.js + courseMatchingService.js; wizard now shows a pace selector and sends pace (audit addendum "Pace persistence"/"Pace UI"). Fixed since the original checklist was written. |  
    
- | P17 | Messaging tenant isolation | 🔴 NOT DONE — BACKEND DEPENDENCY | Messaging gated only by isAuthenticated; no school/tenant scoping (audit #53, final report §H). |  
+ | P17 | Messaging tenant isolation | 🟡 PARTIAL (verified 2026-11-22) | Implemented in `c4b1a34`: `messagingService.canMessage` enforces sharesTenant/municipalityInScope; recipient search is filtered by userScopeFilter; unit tests pass. **Gap:** no report of existing cross-tenant threads (issue #38). |  
+   
+ | P19 | Kurskort (CourseInstance) access control: content + activity feed + noticeboard posting | ✅ DONE (2026-11-22, issues #29 + #28) | `utils/courseInstanceAccess.js` holds one rule. Students need a non-dropped enrollment; teachers must be responsible/assistant (Teacher id resolved via userId); admin/systemadmin/tester have full access. Applied to GET/PUT content and GET/PUT activity-feed. `tests/integration/courseInstanceAccess.test.js` has 26 cases; 10 fail on the old code. |  
+   
+ | P20 | Kurskort delete (admin) without data loss | ✅ DONE (2026-11-22) | DELETE /course-instances/:id refuses (409, Swedish reason) while any enrollment is linked; the old handler silently deleted enrollments. Empty cards are deleted with their discussions and audit-logged. Admin "Ta bort" + confirmation on the Kurskort overview; Kursinstanser shows the reason. |  
+   
+ | P21 | Kursmallar from the builder: update in place + auto-apply (issue #31) | ✅ DONE (2026-11-22) | The builder offers "Uppdatera mall" (PUT) for a loaded template and an explicit "Spara som ny mall" (POST); previously every save created a duplicate. The backend links a template to the course matching its Kurskod (exact, unique) so admission auto-applies it. The Kursmallar page asks for confirmation before deleting and shows the button to admins only. |  
+   
+ | P22 | Dead deploy workflow (issue #34) | ✅ REMOVED (2026-11-22) | `github/workflows/deploy.yml` (never ran) deleted by decision; a reviewed deploy workflow will be scoped separately. `.github/workflows/ci.yml` unchanged. |  
+   
+ | OPS-02 | Harden production `deploy.sh` (CI gate, atomic frontend, automatic rollback) | 🟡 IN REVIEW (2026-11-22, branch `chore/ops-02-harden-deploy`) | `deploy.sh`: `DRY_RUN=1`, deploy lock, `PREV_SHA`, refuses unless CI for the target `main` commit is green (`FORCE=1` override, logged), builds into `frontend/dist.new` and swaps with `dist.prev` kept, automatic rollback on failed `/health/live`/`/health/ready` (exit 2), `logs/deploy.log`. `ecosystem.config.cjs` uses `PM2_INSTANCES` (default 2) instead of `"max"`. `make deploy` now calls `deploy.sh`. Tests: `tests/deploy/deploy.test.sh` (15 cases, run in CI). Not yet run on the production host; needs a read-only GitHub token there. |  
+   
+ | P1-07 | Coverage gates (issue #43) | ✅ GATE MET (2026-11-22) | Backend 2240/2240, lines 82.58 % ≥ 78.5 %. Frontend 526/526, functions **50.55 % ≥ 50 %** (was 47.97 %); thresholds unchanged. New tests: CourseCardBuilder save path, Student PermissionsTab, certificates API contract. Margin is thin (~14 functions); keep adding tests with new code. |  
+   
+ | — | CourseCardBuilder save unhid hidden modules (BUG-01 follow-up) | ✅ FIXED (2026-11-22) | Loading a kurskort into the builder copied only the module title from `content`, so "Spara kurskort" sent `isHiddenFromStudent: false` and wiped teacher instructions. The load now keeps both and `cardContent` stores the flag. Test: `CourseCardBuilder.saveCard.test.js`. Also fixed: `sentryScrub.js` sent `id: "undefined"` for users without an id (lint autofix regression in `04b424c`). |  
    
  | P18 | CI/CD pipeline + build/lint/test baseline | ✅ DONE | `.github/workflows/ci.yml` exists (lint + test + docker jobs). Backend/frontend tests, lint, build PASS locally (1859 backend / 251 frontend tests). Coverage gate is BACKEND DEPENDENCY (thresholds not met, not lowered — honest gap; Docker daemon was off this session so `make citest` could not be re-run). |  
    
- | — | GET /documents/:id metadata endpoint — staff have no tenant scope (unlike GET /student/:id) | 🟡 PARTIAL | File bytes remain GridFS-guarded (checkFileAccess, verified ✅), but metadata disclosure across kommun for staff is an open hardening note (final report §H). |  
+ | — | GET /documents/:id metadata endpoint — staff tenant scope | ✅ DONE (2026-11-22, issue #40) | `canAccessStudentDocuments` applies municipalityInScope. Unknown or cross-tenant students now return **404** (`isStudentHiddenFromCaller`); same-tenant denials stay 403. Covered by an integration test in documentRoutes.test.js. |  
    
- | — | Disk-served /uploads static path IDOR | 🔴 NOT DONE — BACKEND DEPENDENCY | Any authenticated JWT can read public/uploads/* by filename; fix requires a migration off disk storage (final report §H). |  
+ | — | Disk-served /uploads static path IDOR | 🟡 MITIGATED (verified live 2026-11-22) | The static path is gone. `/uploads/:filename` requires a Document record plus `canAccessDocument` (`backend/index.js:159`). A student probing all 7 files on disk got 404/403. GridFS listing/upload/file-counts are now tenant-scoped for coordinator/syv/specped (`uploadRoutes.checkStudentAccess`, 2026-11-22). **Remaining:** migrate files off disk to GridFS (issue #39). |  
    
     
  ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANklEQVR4nO3OMQ2AABAAsSPBCj7fE0YwwIgHRiywEZJWQZeZ2ao9AAD+4lyruzq+ngAA8Nr1AOHwBeiQJO3XAAAAAElFTkSuQmCC)  
@@ -152,7 +166,7 @@
    
  | 19 | Auto per-course start/end dates | ✅ DONE | — |  
    
- | 20 | Auto APL registration + "completed elsewhere" cert upload | 🟡 PARTIAL | Works in ManualAddStudent.vue; the wizard has no APL checkbox/cert upload path. Decide if the wizard needs parity. |  
+ | 20 | Auto APL registration + "completed elsewhere" cert upload | ✅ DONE (`82b7c8f`, issue #44) | The wizard now uploads the intyg to /documents (Dokument tab) and sets priorAplCompleted + priorAplIntygDocId after the placement, same as ManualAddStudent.vue. Covered by 6 unit tests. |  
    
     
  **Change-of-studies**  
@@ -339,7 +353,7 @@
    
  | 59 | Övningsuppgifter: revision return + threaded discussion | ✅ DONE | Return/`komplettera` works; threaded discussion UI added: Submissions.vue renders a recursive thread (SubmissionsCommentThread.vue) and every comment has a "Svara" (reply) button that posts `parentCommentId` to the existing backend endpoint (learningController.js addSubmissionComment). |  
    
- | 60 | Datumplanering auto-applied from teacher params | ✅ DONE | — |  
+ | 60 | Datumplanering auto-applied from teacher params | ✅ DONE | Bug #30 fixed 2026-11-22: saving content from CourseCardBuilder (modules[] + syncModules) wiped module startDate/endDate. Dates are now merged by moduleNumber, new modules stay unscheduled, and an explicit payload date wins. Covered by 3 integration tests in courseInstanceAccess.test.js. |  
    
  | 61 | Innehåll: hide modules from students | ✅ DONE (fixed since original audit) | Hidden-module filter is now applied on both course-card and student learning endpoints. |  
    
@@ -398,6 +412,8 @@
    
  | "Introduktionskit" learning kit never created on enrollment (mongoose not imported in courseMatchingService.js) | Import added | ✅ DONE |  
    
+ | APL-lärkit scan always logged 0 created; idempotency depended on the kit title (#35, 2026-11-22) | The scan counts the issuance result instead of the stale .lean() list. Kits carry `kind: "apl-learning-kit"`; legacy title-only kits are still recognised and lazily tagged. Covered by 3 integration tests (real models). | ✅ DONE |  
+   
     
  **Current baseline:** 75/75 Playwright tests passing across Public/Security, Student Portal, Teacher Portal, Admin Portal (30 screens), verification pass, and both milestone-3 flow specs.  
  ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANElEQVR4nO3OQQmAUBBAwSd8jOHRnNvAkgaxgjcRZhLMNjNHdQUAwF/cq9qr8+sJAACvrQcthQNH2ZiTNQAAAABJRU5ErkJggg==)  
@@ -448,10 +464,9 @@ All remaining actionable items from the 🟡/🔴 backlog were implemented; only
 
 Use this as the actual to-do queue; everything above marked ✅ DONE needs no further work.  
 **Architecturally larger / explicitly BACKEND DEPENDENCY (do not fake):**  
-- Profile sensitive-field minimization by role (P15)  
-- Messaging tenant isolation (P17 / item 53)  
-- Disk-served /uploads IDOR (needs storage migration)  
-- GET /documents/:id staff tenant scope  
+- Profile field minimization: per-role snapshot tests (P15 remainder, #37)  
+- Messaging: report existing cross-tenant threads (P17 remainder, #38)  
+- /uploads storage migration off disk (IDOR itself mitigated, #39)  
 - Search by first/middle/last name (needs a Student schema change)  
 - Fine-grained per-user permission grants (item 1b)  
 - Backend full-suite coverage gate below thresholds (lines 68.36% < 78.5 etc.) — thresholds NOT lowered; `make citest` needs the Docker daemon  

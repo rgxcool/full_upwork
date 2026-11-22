@@ -81,9 +81,29 @@ describe('Vuex Store', () => {
                 expect(store.getters.hasPermission('teacher')).toBe(true)
             })
 
-            it('returns true for higher role', () => {
+            it('does not grant lower roles\' routes via a hierarchy (E1-01)', () => {
+                store.replaceState({ user: { role: 'teacher' }, tasks: [] })
+                expect(store.getters.hasPermission('syv')).toBe(false)
+                expect(store.getters.hasPermission('specped')).toBe(false)
+                expect(store.getters.hasPermission('student')).toBe(false)
+
+                store.replaceState({ user: { role: 'syv' }, tasks: [] })
+                expect(store.getters.hasPermission('specped')).toBe(false)
+
                 store.replaceState({ user: { role: 'admin' }, tasks: [] })
-                expect(store.getters.hasPermission('teacher')).toBe(true)
+                expect(store.getters.hasPermission('teacher')).toBe(false)
+                expect(store.getters.hasPermission('student')).toBe(false)
+            })
+
+            it('treats systemadmin as admin, and checks every held role', () => {
+                store.replaceState({ user: { role: 'systemadmin' }, tasks: [] })
+                expect(store.getters.hasPermission('admin')).toBe(true)
+
+                store.replaceState({ user: { role: 'admin' }, tasks: [] })
+                expect(store.getters.hasPermission('systemadmin')).toBe(false)
+
+                store.replaceState({ user: { role: 'teacher', roles: ['teacher', 'syv'] }, tasks: [] })
+                expect(store.getters.hasPermission('syv')).toBe(true)
             })
 
             it('returns false for lower role', () => {
@@ -105,6 +125,33 @@ describe('Vuex Store', () => {
             it('returns false for unknown role', () => {
                 store.replaceState({ user: { role: 'unknown' }, tasks: [] })
                 expect(store.getters.hasPermission('teacher')).toBe(false)
+            })
+        })
+
+        describe('canAccess (per-user overrides, E1-02)', () => {
+            const analytics = { role: ['admin', 'systemadmin', 'teacher', 'syv', 'specped'], feature: 'statistics' }
+
+            it('uses the role list when there is no override', () => {
+                store.replaceState({ user: { role: 'teacher' }, tasks: [] })
+                expect(store.getters.canAccess(analytics)).toBe(true)
+                store.replaceState({ user: { role: 'coordinator' }, tasks: [] })
+                expect(store.getters.canAccess(analytics)).toBe(false)
+            })
+
+            it('lets an explicit override grant or revoke the feature', () => {
+                store.replaceState({ user: { role: 'coordinator', permissions: { statistics: true } }, tasks: [] })
+                expect(store.getters.canAccess(analytics)).toBe(true)
+
+                store.replaceState({ user: { role: 'teacher', permissions: { statistics: false } }, tasks: [] })
+                expect(store.getters.canAccess(analytics)).toBe(false)
+                expect(store.getters.featureOverride('statistics')).toBe(false)
+            })
+
+            it('ignores overrides for other features and denies anonymous users', () => {
+                store.replaceState({ user: { role: 'coordinator', permissions: { messaging: true } }, tasks: [] })
+                expect(store.getters.canAccess(analytics)).toBe(false)
+                store.replaceState({ user: null, tasks: [] })
+                expect(store.getters.canAccess(analytics)).toBe(false)
             })
         })
     })

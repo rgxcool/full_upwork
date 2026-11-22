@@ -94,6 +94,8 @@ The project uses a pnpm workspace. For production builds:
 VITE_API_URL="" NODE_OPTIONS="--max-old-space-size=4096" pnpm --filter frontend run build
 ```
 
+In production `deploy.sh` builds into `frontend/dist.new` and swaps it in (see below), so a failed build never replaces the live site.
+
 The frontend expects `/api` to be proxied to the backend. Configure this in your reverse proxy (nginx, Caddy, etc.). The default API port is `5010` (see `backend/index.js`), but must align with your Nginx upstream configuration.
 
 ## Troubleshooting
@@ -147,21 +149,99 @@ Optional:
 - PM2 reads environment variables at runtime. Do not embed secrets in `ecosystem.config.cjs` or tracked files.
 - `/health*` and `/metrics` endpoints are unauthenticated by design - restrict access via Nginx allowlist/firewall (do not expose publicly).
 
-## Rollback Procedure (Manual)
+## Deploying with `deploy.sh` (OPS-02)
 
-**IMPORTANT:** The deployment script does not perform automatic rollback. If deployment fails or health checks fail, follow this manual procedure:
+Production runs on the host: SSH in, `cd` to the repo, and run `./deploy.sh` (or `make deploy`).
+nginx serves `frontend/dist` directly; pm2 runs the backend in cluster mode.
 
-### If deployment failed during build/install
+Always look first:
+
+```sh
+DRY_RUN=1 ./deploy.sh      # or: make deploy-dry-run — prints every step, changes nothing
+./deploy.sh
+```
+
+What it does, in order:
+
+1. Takes `logs/deploy.lock` (a second concurrent deploy is refused), runs the preflight checks
+   (clean working tree, node/pnpm/pm2/curl/flock, disk space, env file present).
+2. Records the live commit (`PREV_SHA`) and resolves the target `main` commit. Same commit → nothing to do.
+3. **CI gate:** the newest `CI` workflow run for the target commit must be `completed / success`.
+   Red, pending, missing or unreadable CI → refused. `FORCE=1 ./deploy.sh` overrides it with a loud
+   banner, and the log line says `forced-success`.
+4. `git merge --ff-only <target>`, `pnpm install --frozen-lockfile`.
+5. **Atomic frontend:** `vite build --outDir dist.new`. Only if the build produced `index.html` does it
+   swap: `dist` → `dist.prev`, `dist.new` → `dist`. nginx serves the old `dist` the whole time
+   (the two renames are milliseconds apart).
+6. `pm2 startOrReload ecosystem.config.cjs --env production --update-env`, then
+   `pm2 scale ML-Backend $PM2_INSTANCES`.
+7. `/health/live` and `/health/ready` (5 attempts each).
+
+### Settings
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DRY_RUN` | `0` | `1` = print every changing command instead of running it; no log line is written |
+| `FORCE` | `0` | `1` = deploy even if CI is not green (logged) |
+| `PM2_INSTANCES` | `2` | Cluster worker count. Also read by `backend/ecosystem.config.cjs`; set it in the shell profile on the host if you want a different value. Nightly jobs run on worker 0 only, whatever the count. |
+| `DEPLOY_GH_TOKEN_FILE` | `~/.config/mindful-deploy/gh_token` | Read-only GitHub token for the CI gate (see below) |
+| `DEPLOY_REPO` | `Cyrus-Malekani/mindful-new` | Repo whose CI runs are checked |
+| `PORT` | `5010` | Backend port for the health checks |
+
+**CI gate credentials.** The repository is private, so the host needs read access to Actions:
+
+- Preferred: a fine-grained personal access token limited to this repository with **Actions: Read-only**
+  (nothing else). Store it in `~/.config/mindful-deploy/gh_token` with `chmod 600`. It is passed to
+  curl on stdin, so it never appears in the process list or logs.
+- Fallback: if no token file exists and `gh auth status` succeeds on the host, `gh api` is used.
+- Neither → the CI status is `unknown` and the deploy is refused (use `FORCE=1` only if you have
+  checked CI yourself).
+
+### Deploy log
+
+Every run appends one line to `logs/deploy.log` (not tracked by git):
+
+```
+2026-11-22T10:15:03Z <target-sha> <user> <result>
+```
+
+Results: `success`, `forced-success`, `noop`, `refused-ci-<status>`, `build-failed`, `rolled-back`,
+`rollback-failed`, `rollback-failed-unexpected-error`.
+
+### Exit codes
+
+| Code | Meaning | Production state |
+|---|---|---|
+| 0 | Deployed, nothing to do, or dry run | New (or unchanged) version live |
+| 1 | Refused (CI, lock, dirty tree, preflight) or install/build failed | Old version still live; code and deps reset to `PREV_SHA` |
+| 2 | Health checks failed → **automatic rollback succeeded** | Old version live and healthy |
+| 3 | Rollback itself failed or stayed unhealthy | **Needs a human now** — see the manual procedure |
+
+## Rollback Procedure
+
+### Automatic
+
+If `/health/live` or `/health/ready` fails after the reload, `deploy.sh` rolls back on its own:
+`git reset --hard $PREV_SHA`, `pnpm install --frozen-lockfile`, the bad frontend goes to
+`frontend/dist.failed` and `frontend/dist.prev` becomes `frontend/dist` again, pm2 reloads, and the
+health checks run once more. If install or build fails before going live, only the code and
+dependencies are reset (the live `dist` and pm2 were never touched).
+
+### Manual (exit code 3, or rolling back a deploy that passed health checks but is broken)
+
 1. Do not modify production `.env.production` or backup files.
-2. Revert to the previous commit on the production server: `git log --oneline -5` and `git checkout <previous-commit>` (or restore from backup).
-3. Restart PM2 with the previous build: `pm2 restart ML-Backend` or reload previous version.
-4. Verify health checks.
+2. Find the previous good commit: `tail logs/deploy.log` or `git reflog -5`.
+3. `git reset --hard <previous-sha> && pnpm install --frozen-lockfile`
+4. Frontend: if `frontend/dist.prev` is from that commit, `mv frontend/dist frontend/dist.failed && mv frontend/dist.prev frontend/dist`;
+   otherwise rebuild: `pnpm --filter frontend exec vite build --outDir dist.new --emptyOutDir` and swap it in.
+5. `cd backend && pm2 startOrReload ecosystem.config.cjs --env production --update-env`
+6. Verify the health checks below and `pm2 logs ML-Backend` (do not share log contents containing secrets).
 
-### If backend starts but is unhealthy
-1. Check logs: `pm2 logs ML-Backend` (do not share log contents containing secrets).
-2. Verify environment variables are correctly set (without printing values).
-3. Check MongoDB connectivity: `mongo` or `mongosh` if available.
-4. Rollback to previous commit and restart services.
+### Testing `deploy.sh`
+
+`make test-deploy` (also run in CI) runs `tests/deploy/deploy.test.sh`: real git against a temporary
+bare repo, with `pnpm`, `pm2`, `curl`, `gh` and `sleep` stubbed. It covers the CI gate, `FORCE`,
+`DRY_RUN`, the lock, build/install failure and both rollback outcomes.
 
 ### Pre-deployment backups (must be preserved)
 - `deploy.sh.20261016.bak` (preserve as-is)

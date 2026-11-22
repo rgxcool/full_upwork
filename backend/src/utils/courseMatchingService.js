@@ -22,6 +22,32 @@ class CourseMatchingService {
     /**
      * Helper: add weeks
      */
+    /**
+     * Returns `end` as a Date when it is a valid date after `start`, otherwise
+     * null so callers fall back to the extent-based calculation.
+     */
+    /**
+     * Course end = start + base length × paceFactor, where the base length is
+     * the source's own START→SLUT span when known, else `extentWeeks`.
+     */
+    static resolveCourseEnd(start, sheetEnd, extentWeeks, paceFactor = 1) {
+        const factor = Number(paceFactor) > 0 ? Number(paceFactor) : 1;
+        if (sheetEnd) {
+            const spanMs = sheetEnd.getTime() - new Date(start).getTime();
+            return factor === 1 ? new Date(sheetEnd) : new Date(new Date(start).getTime() + spanMs * factor);
+        }
+        return this.addWeeks(start, extentWeeks * factor);
+    }
+
+    static validEndDate(start, end) {
+        if (!end) return null;
+        const endDate = new Date(end);
+        if (isNaN(endDate.getTime())) return null;
+        const startDate = start ? new Date(start) : null;
+        if (startDate && !isNaN(startDate.getTime()) && endDate <= startDate) return null;
+        return endDate;
+    }
+
     static addWeeks(date, weeks) {
         const d = new Date(date);
         d.setDate(d.getDate() + weeks * 7);
@@ -485,15 +511,19 @@ class CourseMatchingService {
                     const courseStart = new Date(entry.startDate);
                     const extentWeeks =
                         parseFloat(course.courseExtent) || 5;
-                    const courseEnd = applyPace
-                        ? this.addWeeks(courseStart, extentWeeks * paceFactor)
-                        : new Date(entry.endDate);
+                    // The spreadsheet's START→SLUT span is the course length at
+                    // 100% pace; course extent is only a fallback when the sheet
+                    // has no valid end date. A STUDIETAKT scales that span
+                    // (previously it was replaced by courseExtent, so a 10-week
+                    // row with the default extent became 5 weeks).
+                    const sheetEnd = this.validEndDate(courseStart, entry.endDate);
+                    const courseEnd = this.resolveCourseEnd(courseStart, sheetEnd, extentWeeks, applyPace ? paceFactor : 1);
 
                     // Determine slutprovDate (will be calculated later after enrollment is created)
                     // For now, pass entry.slutprovDate if available, otherwise null.
                     // A pace change recalculates the exam date from the new end date.
                     const initialSlutprovDate =
-                        !applyPace && entry.slutprovDate
+                        !applyPace && sheetEnd && entry.slutprovDate
                             ? new Date(entry.slutprovDate)
                             : null;
 
@@ -1220,9 +1250,13 @@ class CourseMatchingService {
                         ? new Date(entry.startDate)
                         : this.getNextMonday(new Date());
                     const extentWeeks = parseFloat(course.courseExtent) || 5; // Default to 5 weeks if not set
-                    const courseEnd = this.addWeeks(
+                    // Respect an explicit end date from the source (e.g. Alvis
+                    // SLUT); otherwise derive it from extent × pace.
+                    const courseEnd = this.resolveCourseEnd(
                         courseStart,
-                        extentWeeks * paceFactor
+                        this.validEndDate(courseStart, entry.endDate),
+                        extentWeeks,
+                        paceFactor
                     );
 
                     // Get student to find teacherId for course instance

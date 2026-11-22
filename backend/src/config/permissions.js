@@ -178,6 +178,27 @@ export function hasPermission(role, feature) {
   return permission !== 'Nej' && permission !== null && permission !== undefined;
 }
 
+// Roles that implicitly have every feature unless explicitly overridden.
+export const FEATURE_SUPERUSER_ROLES = ['systemadmin', 'admin', 'tester'];
+
+/**
+ * Effective feature access for a (request) user, without any DB access:
+ * an explicit per-user override (`user.permissions[feature]` true/false)
+ * wins, otherwise superusers pass and other roles use PERMISSION_MATRIX.
+ * Callers must refresh `req.user` first (hasRole()/canFeature() do).
+ */
+export function userHasFeature(user, feature) {
+  if (!user) return false;
+  const overrides = user.permissions && typeof user.permissions === 'object' && !Array.isArray(user.permissions)
+    ? user.permissions
+    : {};
+  const override = overrides[feature];
+  if (override === true || override === false) return override;
+  const roles = Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : user.role ? [user.role] : [];
+  if (roles.some((r) => FEATURE_SUPERUSER_ROLES.includes(r))) return true;
+  return roles.some((r) => hasPermission(r, feature));
+}
+
 /**
  * Get all features for a role
  */

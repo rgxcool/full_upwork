@@ -1,8 +1,10 @@
 import { createStore } from 'vuex'
 import client from '@/api/client.js'
 
-// Role hierarchy list (higher index = higher authority)
-const ROLE_HIERARCHY = [
+// Order used ONLY to pick a single "primary" role for display and for the
+// isAdmin/isSystemAdmin getters. It is NOT an access hierarchy: route and
+// menu access is decided by explicit role lists (see hasPermission).
+const PRIMARY_ROLE_ORDER = [
   'guest',
   'user',
   'student',
@@ -13,6 +15,64 @@ const ROLE_HIERARCHY = [
   'admin',
   'systemadmin',
 ]
+
+// Explicit role implications. A systemadmin can do everything an admin can
+// (PERMISSION_MATRIX); no other role implies another one.
+const ROLE_IMPLIES = {
+  systemadmin: ['admin'],
+}
+
+const collectUserRoles = (user) => {
+  const collected = []
+  if (Array.isArray(user?.roles)) collected.push(...user.roles)
+  if (user?.role) collected.push(user.role)
+  return [...new Set(collected.filter((role) => typeof role === 'string'))]
+}
+
+const effectiveRoles = (user) => {
+  const roles = new Set(collectUserRoles(user))
+  for (const role of [...roles]) {
+    for (const implied of ROLE_IMPLIES[role] || []) roles.add(implied)
+  }
+  return roles
+}
+
+/**
+ * Explicit role check: true when the user holds one of the required roles
+ * (systemadmin also satisfies 'admin'). Higher roles do NOT inherit lower
+ * roles' routes, so e.g. a teacher can't open SYV pages and staff can't open
+ * student-only pages.
+ */
+export function userHasRole(user, requiredRole) {
+  const required = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
+  const roles = effectiveRoles(user)
+  return required.some((role) => roles.has(role))
+}
+
+/**
+ * Explicit per-user override for a PERMISSION_MATRIX feature
+ * (User.permissions, set in /admin/edit-user). Returns true/false when the
+ * admin set one, otherwise null (= use the role default).
+ */
+export function userFeatureOverride(user, feature) {
+  const value = user?.permissions?.[feature]
+  return value === true || value === false ? value : null
+}
+
+/**
+ * Route/menu access. `role` is the default role list (it mirrors the
+ * PERMISSION_MATRIX defaults); `feature`, when given, lets a per-user override
+ * grant or revoke access regardless of role, like canFeature() in the backend.
+ */
+export function userCanAccess(user, { role, feature } = {}) {
+  if (!user) return false
+  if (feature) {
+    const override = userFeatureOverride(user, feature)
+    if (override !== null) return override
+  }
+  if (!role) return true
+  return userHasRole(user, role)
+}
 
 // Use the centralized API client (timeout, error normalization, 401 handling)
 const api = client
@@ -28,66 +88,38 @@ const store = createStore({
     isLoggedIn: (state) => !!state.user,
     requiresPasswordChange: (state) => !!state.requiresPasswordChange,
     userRole: (state) => {
-      const collected = [];
-      if (Array.isArray(state.user?.roles)) collected.push(...state.user.roles);
-      if (state.user?.role) collected.push(state.user.role);
-      let best = null;
-      let bestIndex = -1;
-      for (const role of collected) {
-        const index = ROLE_HIERARCHY.indexOf(role);
+      let best = null
+      let bestIndex = -1
+      for (const role of collectUserRoles(state.user)) {
+        const index = PRIMARY_ROLE_ORDER.indexOf(role)
         if (index > bestIndex) {
-          bestIndex = index;
-          best = role;
+          bestIndex = index
+          best = role
         }
       }
-      return best || 'guest';
+      return best || 'guest'
     },
+    // Every role the user holds (roles[] plus the legacy singular role),
+    // de-duplicated. Used by StaffProfile, its tabs and the NavBar.
+    userRoles: (state) => collectUserRoles(state.user),
     isAdmin: (state, getters) => ['admin', 'systemadmin'].includes(getters.userRole),
     isSystemAdmin: (state, getters) => getters.userRole === 'systemadmin',
     tasks: (state) => state.tasks,
 
     /**
-     * Check if the user has the required role (or higher)
+     * Explicit role check (no hierarchy): does the user hold one of the
+     * required roles? systemadmin also counts as admin.
      */
-    hasPermission: (state, getters) => (requiredRole) => {
-      const userRole = getters.userRole;
-      const userIndex = ROLE_HIERARCHY.indexOf(userRole)
-      
-      // If user role not found in hierarchy, deny access
-      if (userIndex === -1) {
-        console.warn(`⚠️ User role "${userRole}" not found in hierarchy`)
-        return false
-      }
+    hasPermission: (state) => (requiredRole) => userHasRole(state.user, requiredRole),
 
-      // Om requiredRole är en array: returnera true om användaren har en av rollerna ELLER har högre roll
-      if (Array.isArray(requiredRole)) {
-        return requiredRole.some((role) => {
-          // Check if user has the exact role
-          if (userRole === role) return true
-          // Check if user has a higher role in hierarchy (higher index = higher authority)
-          const requiredIndex = ROLE_HIERARCHY.indexOf(role)
-          if (requiredIndex === -1) {
-            console.warn(`⚠️ Required role "${role}" not found in hierarchy`)
-            return false
-          }
-          // User with higher index can access items requiring lower index roles
-          return userIndex >= requiredIndex
-        })
-      }
+    /**
+     * Route/menu access with per-user feature overrides, e.g.
+     * canAccess({ role: ['admin'], feature: 'statistics' }).
+     */
+    canAccess: (state) => (meta) => userCanAccess(state.user, meta),
 
-      // Annars, anta att det är en sträng
-      // Check if user has the exact role
-      if (userRole === requiredRole) return true
-      // Check if user has a higher role in hierarchy (higher index = higher authority)
-      const requiredIndex = ROLE_HIERARCHY.indexOf(requiredRole)
-      if (requiredIndex === -1) {
-        console.warn(`⚠️ Required role "${requiredRole}" not found in hierarchy`)
-        return false
-      }
-      // User with higher index can access items requiring lower index roles
-      return userIndex >= requiredIndex
-    }
-
+    /** Effective value of a PERMISSION_MATRIX feature override, or null. */
+    featureOverride: (state) => (feature) => userFeatureOverride(state.user, feature),
   },
 
   mutations: {

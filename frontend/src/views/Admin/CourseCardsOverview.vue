@@ -257,9 +257,48 @@
             >
               Redigera innehåll
             </v-btn>
+            <v-btn
+              v-if="canDeleteCards"
+              class="ml-2 delete-card-btn"
+              variant="text"
+              color="error"
+              prepend-icon="mdi-delete-outline"
+              :aria-label="`Ta bort kurskortet ${cardTitle(card)}`"
+              @click.stop="askDeleteCard(card)"
+            >
+              Ta bort
+            </v-btn>
           </div>
         </v-card>
       </div>
+
+      <v-dialog v-model="deleteDialog" max-width="480">
+        <v-card>
+          <v-card-title class="text-h6">Ta bort kurskort?</v-card-title>
+          <v-card-text>
+            <p>
+              <strong>{{ cardToDelete ? cardTitle(cardToDelete) : '' }}</strong>
+              <span v-if="cardToDelete">
+                ({{ formatDate(cardToDelete.startDate) }} – {{ formatDate(cardToDelete.endDate) }})
+              </span>
+            </p>
+            <p class="mt-2">
+              Kurskortet och dess diskussioner tas bort permanent. Kurskort med kopplade elever
+              kan inte tas bort.
+            </p>
+            <v-alert v-if="deleteError" type="error" variant="tonal" class="mt-3">
+              {{ deleteError }}
+            </v-alert>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">Avbryt</v-btn>
+            <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDeleteCard">
+              Ta bort
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
     </v-container>
   </div>
 </template>
@@ -538,6 +577,39 @@ const loadCards = async () => {
     error.value = requestError?.response?.data?.error || 'Kunde inte hämta kurskorten.'
   } finally {
     loading.value = false
+  }
+}
+
+// Admin-only delete. The server refuses (409) while students are linked and
+// returns a Swedish reason, which is shown in the dialog.
+const canDeleteCards = computed(() =>
+  ['admin', 'systemadmin'].includes(store.getters.userRole)
+)
+const deleteDialog = ref(false)
+const cardToDelete = ref(null)
+const deleting = ref(false)
+const deleteError = ref('')
+
+const askDeleteCard = (card) => {
+  cardToDelete.value = card
+  deleteError.value = ''
+  deleteDialog.value = true
+}
+
+const confirmDeleteCard = async () => {
+  if (!cardToDelete.value) return
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await client.delete(`/course-instances/${encodeURIComponent(cardToDelete.value._id)}`)
+    cards.value = cards.value.filter((card) => card._id !== cardToDelete.value._id)
+    deleteDialog.value = false
+    cardToDelete.value = null
+  } catch (requestError) {
+    deleteError.value =
+      requestError?.response?.data?.error || 'Kunde inte ta bort kurskortet. Försök igen.'
+  } finally {
+    deleting.value = false
   }
 }
 

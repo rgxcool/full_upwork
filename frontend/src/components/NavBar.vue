@@ -469,7 +469,15 @@
                     Avsluta
                   </button>
                 </template>
-                <button class="resolve-btn" @click="resolveNote(notification._id)">
+                <!-- F-grade reminders stay until the action plan is saved; only admins may override. -->
+                <a
+                  v-if="notification.type === 'action_plan_required' && !isAdmin"
+                  class="resolve-btn"
+                  :href="notification.meta?.url || '#'"
+                >
+                  Fyll i handlingsplan
+                </a>
+                <button v-else class="resolve-btn" @click="resolveNote(notification._id)">
                   Markera som löst
                 </button>
               </div>
@@ -629,8 +637,8 @@
             userId: store.getters.userId,
           })
           await fetchNotifications()
-        } catch {
-          toast.error('Kunde inte avsluta notisen.')
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Kunde inte avsluta notisen.')
         }
       }
 
@@ -743,7 +751,6 @@
         }
       }
 
-      const hasPermission = (role) => store.getters.hasPermission(role)
       const isLoggedIn = computed(() => store.getters.isLoggedIn)
 
       const canSeeSearch = computed(() => {
@@ -928,7 +935,12 @@
         { name: 'Betygssignering', link: '/signering', role: ['teacher', 'admin', 'systemadmin'] },
         { name: 'Betygsskalor', link: '/admin/betygsskala', role: ['admin', 'systemadmin'] },
         { name: 'Intyg & Diplom', link: '/admin/certificates', role: ['admin', 'systemadmin'] },
-        { name: 'Rapporter & Analys', link: '/admin/analytics', role: ['admin', 'systemadmin'] },
+        {
+          name: 'Rapporter & Analys',
+          link: '/admin/analytics',
+          role: ['admin', 'systemadmin', 'teacher', 'syv', 'specped'],
+          feature: 'statistics',
+        },
         { name: 'APL', link: '/apl', role: ['admin', 'teacher', 'coordinator'] },
         {
           name: 'Kurskortsbyggare',
@@ -939,6 +951,7 @@
           name: 'Kalender',
           link: '/kalender',
           role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'],
+          feature: 'calendar_final_exam',
         },
         { name: 'SYV Samtal', link: '/syv/appointments', role: ['syv', 'admin', 'systemadmin'] },
         {
@@ -965,14 +978,14 @@
           link: '/admin/inactivity',
           role: ['admin', 'systemadmin', 'teacher'],
         },
-        { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: 'teacher' },
+        { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: ['teacher', 'admin', 'systemadmin'] },
         {
           name: 'Alla kurskort',
           link: '/course-cards/overview',
           role: ['teacher', 'admin', 'systemadmin'],
         },
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
-        { name: 'Betyg', link: '/betyg', role: 'teacher' },
+        { name: 'Betyg', link: '/betyg', role: ['teacher', 'admin', 'systemadmin'] },
         { name: 'Betygsuppföljning', link: '/grade-lookups', role: 'admin' },
         { name: 'Hantera Prövningar', link: '/provningar', role: 'admin' },
         {
@@ -1019,33 +1032,21 @@
         },
       ]
 
+      // Same rule as the router guard: explicit role lists plus per-user
+      // feature overrides. Admins no longer see every item (e.g. the
+      // student-only pages), and SYV/Specped pages follow their role lists.
+      const canSeeItem = (item) =>
+        !item.role && !item.feature
+          ? true
+          : store.getters.canAccess({ role: item.role, feature: item.feature })
+
       const filteredMenuItems = computed(() => {
         if (!isLoggedIn.value) return []
-        const currentRole = store.getters.userRole
-        const adminFlag = store.getters.isAdmin
-        return menuItems.filter((item) => {
-          if (secretMenuNames.includes(item.name)) return false
-          if (!item.role) return true
-
-          if (adminFlag) return true
-
-          if (item.name === 'SYV Samtal') {
-            return currentRole === 'syv'
-          }
-          if (item.name === 'Specped Samtal') {
-            return currentRole === 'specped'
-          }
-
-          return hasPermission(item.role)
-        })
+        return menuItems.filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
       })
 
       const secretMenuItems = computed(() => {
-        return menuItems.filter((item) => {
-          if (!secretMenuNames.includes(item.name)) return false
-          if (!item.role) return true
-          return hasPermission(item.role)
-        })
+        return menuItems.filter((item) => secretMenuNames.includes(item.name) && canSeeItem(item))
       })
 
       const toggleProfileMenu = (event) => {

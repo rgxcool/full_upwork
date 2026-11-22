@@ -99,15 +99,16 @@ router.post(
 router.get(
     "/student-details/:id/revision-reasons",
     isAuthenticated,
-    hasRole(["admin", "systemadmin", "teacher"]),
+    hasRole(["admin", "systemadmin", "teacher", "syv"]),
     asyncHandler(getRevisionReasons)
 );
 
-// Perform a study-plan revision - admin+ only
+// Perform a study-plan revision - admin/systemadmin and SYV (spec E1-20:
+// "SYV kan revidera studieplaner").
 router.post(
     "/student-details/:id/revise-studyplan",
     isAuthenticated,
-    hasRole(["admin", "systemadmin"]),
+    hasRole(["admin", "systemadmin", "syv"]),
     asyncHandler(reviseStudyPlan)
 );
 
@@ -115,7 +116,7 @@ router.post(
 router.get(
     "/student-details/:id/revision-history",
     isAuthenticated,
-    hasRole(["admin", "systemadmin", "teacher"]),
+    hasRole(["admin", "systemadmin", "teacher", "syv"]),
     asyncHandler(getStudyplanRevisionHistory)
 );
 

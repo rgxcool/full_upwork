@@ -323,15 +323,15 @@ async function main() {
     const scale = new GradingScale({
         subject: "Matematik",
         term: "HT26",
-        scales: [
-            { grade: "A", minPoints: 90 },
-            { grade: "B", minPoints: 80 },
-            { grade: "C", minPoints: 70 },
-            { grade: "D", minPoints: 60 },
-            { grade: "E", minPoints: 50 },
-            { grade: "F", minPoints: 0 }
+        // Must match models/GradingScale.js (`scale[].min`); F = below E's
+        // threshold, as in the admin UI (GradingScaleAdmin.vue).
+        scale: [
+            { grade: "A", min: 90 },
+            { grade: "B", min: 80 },
+            { grade: "C", min: 70 },
+            { grade: "D", min: 60 },
+            { grade: "E", min: 50 },
         ],
-        createdBy: systemAdminUser._id
     });
     await scale.save();
 
@@ -339,15 +339,15 @@ async function main() {
     const scaleVT26 = new GradingScale({
         subject: "Matematik",
         term: "VT26",
-        scales: [
-            { grade: "A", minPoints: 90 },
-            { grade: "B", minPoints: 80 },
-            { grade: "C", minPoints: 70 },
-            { grade: "D", minPoints: 60 },
-            { grade: "E", minPoints: 50 },
-            { grade: "F", minPoints: 0 }
+        // Must match models/GradingScale.js (`scale[].min`); F = below E's
+        // threshold, as in the admin UI (GradingScaleAdmin.vue).
+        scale: [
+            { grade: "A", min: 90 },
+            { grade: "B", min: 80 },
+            { grade: "C", min: 70 },
+            { grade: "D", min: 60 },
+            { grade: "E", min: 50 },
         ],
-        createdBy: systemAdminUser._id
     });
     await scaleVT26.save();
 

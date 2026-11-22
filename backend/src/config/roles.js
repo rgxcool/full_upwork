@@ -1,5 +1,11 @@
+// Role-based permission strings used by can(). They MUST agree with the
+// feature defaults in PERMISSION_MATRIX (config/permissions.js); see
+// PERMISSION_TO_FEATURE in middleware/authorization.js and the consistency
+// test in tests/unit/rolesMatrixConsistency.test.js. E.g. "analytics:read" ==
+// matrix "statistics": Ja for teacher/syv/specped, Nej for coordinator.
 const roles = {
     teacher: [
+        "analytics:read",
         "inactivity:read",
         "assignments:create",
         "assignments:read:own",
@@ -61,7 +67,6 @@ const roles = {
     coordinator: [
         "students:view_list:assigned",
         "students:view_grades:assigned",
-        "analytics:read",
         "inactivity:read",
     ],
     syv: [

@@ -19,6 +19,7 @@ import logger from "../utils/logger.js";
 import * as enrollmentService from "../services/enrollmentService.js";
 import { recordStudentLearningActivity } from "../utils/learningActivity.js";
 import { recordAudit } from "../utils/auditLog.js";
+import { getCourseInstanceAccess } from "../utils/courseInstanceAccess.js";
 
 /**
  * Course Matching Controller
@@ -1897,6 +1898,7 @@ export const updateEnrollmentStatus = async (req, res) => {
       notes,
       userId,
       role: req.user?.role,
+      roles: req.user?.roles,
     });
 
     res.json({
@@ -2691,62 +2693,29 @@ export const addStudentsToInstance = async (req, res) => {
 };
 
 // Delete a course instance and its enrollments
-export const deleteCourseInstance = async (req, res) => {
-  try {
-    const { instanceId } = req.params;
-    const instance = await CourseInstance.findByIdAndDelete(instanceId);
-    if (!instance) {
-      return res.status(404).json({ error: "Course instance not found" });
-    }
-    // Delete related enrollments
-    await StudentEnrollment.deleteMany({ courseInstanceId: instanceId });
-    res.json({
-      success: true,
-      message: "Course instance and related enrollments deleted",
-    });
-  } catch (error) {
-    logger.error({ err: error }, "Error deleting course instance");
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
 // GET /api/course-instances/:instanceId/content - get content for a course instance
 // Admins/systemadmin and responsible teacher can see all content;
 // students see content that is not hidden.
 export const getCourseInstanceContent = async (req, res) => {
   try {
     const { instanceId } = req.params;
-    const { userId: callerId, roles = [] } = req.user || {};
-    const roleList = Array.isArray(roles)
-      ? roles
-      : req.user?.role
-        ? [req.user.role]
-        : [];
-    const isAdmin =
-      roleList.includes("systemadmin") || roleList.includes("admin");
+    if (!mongoose.isValidObjectId(instanceId)) {
+      return res.status(400).json({ error: "Ogiltigt kursinstans-id" });
+    }
 
     const instance = await CourseInstance.findById(instanceId);
     if (!instance) {
       return res.status(404).json({ error: "Course instance not found" });
     }
 
-    let isResponsibleTeacher = false;
-    if (instance.responsibleTeacher && callerId) {
-      const Teacher = (await import("../models/Teacher.js")).default;
-      const teacher = await Teacher.findById(instance.responsibleTeacher)
-        .select("userId")
-        .lean();
-      isResponsibleTeacher = Boolean(
-        teacher && String(teacher.userId) === String(callerId),
-      );
-    }
-
-    const isStudent = roleList.includes("student");
-    if (!isAdmin && !isResponsibleTeacher && !isStudent) {
+    // #29: one access rule for all kurskort endpoints (enrollment for
+    // students, responsible/assistant link for teachers).
+    const access = await getCourseInstanceAccess(req.user, instance);
+    if (!access.canRead) {
       return res.status(403).json({ error: "Saknar behörighet" });
     }
 
-    const canEdit = isAdmin || isResponsibleTeacher;
+    const canEdit = access.canEdit;
     const rawContent = instance.content;
     const entries =
       rawContent instanceof Map
@@ -2791,32 +2760,19 @@ export const getCourseInstanceContent = async (req, res) => {
 export const updateCourseInstanceContent = async (req, res) => {
   try {
     const { instanceId } = req.params;
-    const { userId: callerId, roles = [] } = req.user || {};
-    const roleList = Array.isArray(roles)
-      ? roles
-      : req.user?.role
-        ? [req.user.role]
-        : [];
-    const isAdmin =
-      roleList.includes("systemadmin") || roleList.includes("admin");
+    if (!mongoose.isValidObjectId(instanceId)) {
+      return res.status(400).json({ error: "Ogiltigt kursinstans-id" });
+    }
 
     const instance = await CourseInstance.findById(instanceId);
     if (!instance) {
       return res.status(404).json({ error: "Course instance not found" });
     }
 
-    let isResponsibleTeacher = false;
-    if (instance.responsibleTeacher && callerId) {
-      const Teacher = (await import("../models/Teacher.js")).default;
-      const teacher = await Teacher.findById(instance.responsibleTeacher)
-        .select("userId")
-        .lean();
-      isResponsibleTeacher = Boolean(
-        teacher && String(teacher.userId) === String(callerId),
-      );
-    }
-
-    if (!isAdmin && !isResponsibleTeacher) {
+    // #29: one access rule for all kurskort endpoints (enrollment for
+    // students, responsible/assistant link for teachers).
+    const access = await getCourseInstanceAccess(req.user, instance);
+    if (!access.canEdit) {
       return res.status(403).json({ error: "Saknar behörighet" });
     }
 
@@ -2880,26 +2836,45 @@ export const updateCourseInstanceContent = async (req, res) => {
     // Synka instance.modules så tillagda/borttagna moduler även speglas på kurskortet
     if (syncModules) {
       if (Array.isArray(modules) && modules.length > 0) {
-        instance.modules = modules.map((mod, index) => ({
-          moduleNumber: Number(mod.moduleNumber ?? index + 1),
-          title: String(mod.title || `Modul ${index + 1}`),
-          isPartialExam: Boolean(mod.isPartialExam),
-          isCaseStudy: Boolean(mod.isCaseStudy),
-          sections: Array.isArray(mod.sections)
-            ? mod.sections.map((section) => ({
-                title: String(section.title || ""),
-                description: String(section.description || ""),
-                instructions: String(section.instructions || ""),
-                blocks: Array.isArray(section.blocks) ? section.blocks : [],
-              }))
-            : [],
-          assignment: mod.assignment && typeof mod.assignment === "object"
-            ? {
-                title: String(mod.assignment.title || ""),
-                description: String(mod.assignment.description || ""),
-              }
-            : { title: "", description: "" },
-        }));
+        // #30: merge by moduleNumber so the Datumplanering dates applied at
+        // creation survive a content save. A valid date in the payload wins;
+        // otherwise the saved date is kept. New modules stay unscheduled.
+        const savedByNumber = new Map(
+          (instance.modules || []).map((m) => [Number(m.moduleNumber), m]),
+        );
+        const pickDate = (incoming, saved) => {
+          if (incoming !== undefined && incoming !== null && incoming !== "") {
+            const d = new Date(incoming);
+            if (!Number.isNaN(d.getTime())) return d;
+          }
+          return saved || undefined;
+        };
+        instance.modules = modules.map((mod, index) => {
+          const moduleNumber = Number(mod.moduleNumber ?? index + 1);
+          const saved = savedByNumber.get(moduleNumber);
+          return {
+            moduleNumber,
+            startDate: pickDate(mod.startDate, saved?.startDate),
+            endDate: pickDate(mod.endDate, saved?.endDate),
+            title: String(mod.title || `Modul ${index + 1}`),
+            isPartialExam: Boolean(mod.isPartialExam),
+            isCaseStudy: Boolean(mod.isCaseStudy),
+            sections: Array.isArray(mod.sections)
+              ? mod.sections.map((section) => ({
+                  title: String(section.title || ""),
+                  description: String(section.description || ""),
+                  instructions: String(section.instructions || ""),
+                  blocks: Array.isArray(section.blocks) ? section.blocks : [],
+                }))
+              : [],
+            assignment: mod.assignment && typeof mod.assignment === "object"
+              ? {
+                  title: String(mod.assignment.title || ""),
+                  description: String(mod.assignment.description || ""),
+                }
+              : { title: "", description: "" },
+          };
+        });
         instance.markModified("modules");
       } else {
       const existingByNumber = new Map(
@@ -2955,7 +2930,7 @@ export const updateCourseInstanceContent = async (req, res) => {
     res.json({
       success: true,
       message: "Innehåll uppdaterat",
-      canEdit: isAdmin || isResponsibleTeacher,
+      canEdit: access.canEdit,
       modulesCount: instance.modules?.length || 0,
     });
   } catch (error) {
@@ -2981,6 +2956,12 @@ export const getCourseInstanceActivityFeed = async (req, res) => {
       return res.status(404).json({ error: "Kursinstans hittades inte" });
     }
 
+    // #29: only users linked to the kurskort may read its feed.
+    const access = await getCourseInstanceAccess(req.user, instance);
+    if (!access.canRead) {
+      return res.status(403).json({ error: "Saknar behörighet" });
+    }
+
     res.json({
       success: true,
       activityFeed: instance.activityFeed || [],
@@ -2995,7 +2976,7 @@ export const getCourseInstanceActivityFeed = async (req, res) => {
 /**
  * PUT /course-instances/:instanceId/activity-feed
  * Post a new item to the activity feed / notice board.
- * Only staff (admin/systemadmin/responsible teacher) can post.
+ * Responsible/assistant teacher, admin and systemadmin can post (#28).
  * Students receive 403 Forbidden.
  * Item structure: { text: String, by: UserId }
  */
@@ -3022,23 +3003,14 @@ export const postCourseInstanceActivityFeed = async (req, res) => {
       return res.status(404).json({ error: "Kursinstans hittades inte" });
     }
 
-    // Verify staff access: admin, systemadmin, or responsible teacher
-    const isAdmin = user.roles && user.roles.includes("systemadmin");
-    const isStaff = user.roles && user.roles.includes("admin");
-    const isTeacher = user.role === "teacher";
-
-    let isResponsibleTeacher = false;
-    if (isTeacher && instance.responsibleTeacher) {
-      isResponsibleTeacher =
-        String(instance.responsibleTeacher) === String(user.userId);
-    } else if (isStaff || isAdmin) {
-      isResponsibleTeacher = true;
-    }
-
-    if (!isAdmin && !isStaff && !isResponsibleTeacher) {
+    // #28: responsibleTeacher/assistantTeacher are Teacher ids; the shared
+    // helper resolves the caller's Teacher profile instead of comparing the
+    // Teacher id with the User id (which never matched).
+    const access = await getCourseInstanceAccess(user, instance);
+    if (!access.canPost) {
       return res.status(403).json({
         error:
-          "Endast ansvarig lärare, admin eller systemadmin kan posta meddelanden.",
+          "Endast ansvarig lärare, assisterande lärare, admin eller systemadmin kan posta meddelanden.",
       });
     }
 
@@ -3062,6 +3034,60 @@ export const postCourseInstanceActivityFeed = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "Error posting to activity feed");
+    res.status(500).json({ error: "Intern servererror" });
+  }
+};
+
+/**
+ * DELETE /course-instances/:instanceId — delete ONE kurskort (admin/systemadmin).
+ *
+ * Refused with 409 while any student enrollment (any status) points at the
+ * card: enrollments carry grades, certificates and exam history, so a card
+ * with students is never deleted implicitly. An empty card is deleted together
+ * with its own discussion threads, and the action is audit-logged.
+ */
+export const deleteCourseInstance = async (req, res) => {
+  try {
+    const { instanceId } = req.params;
+    if (!mongoose.isValidObjectId(instanceId)) {
+      return res.status(400).json({ error: "Ogiltigt kursinstans-id" });
+    }
+
+    const instance = await CourseInstance.findById(instanceId)
+      .select("courseName courseCode startDate endDate")
+      .lean();
+    if (!instance) {
+      return res.status(404).json({ error: "Kurskortet hittades inte" });
+    }
+
+    const enrollmentCount = await StudentEnrollment.countDocuments({
+      courseInstanceId: instance._id,
+    });
+    if (enrollmentCount > 0) {
+      return res.status(409).json({
+        error:
+          `Kurskortet har ${enrollmentCount} kopplade ${enrollmentCount === 1 ? "elev" : "elever"} ` +
+          "och kan inte tas bort. Ta bort eller flytta elevernas kursregistrering först.",
+        enrollmentCount,
+      });
+    }
+
+    const CourseCardDiscussion = mongoose.model("CourseCardDiscussion");
+    const discussionResult = await CourseCardDiscussion.deleteMany({
+      courseInstanceId: instance._id,
+    });
+    await CourseInstance.deleteOne({ _id: instance._id });
+
+    await recordAudit(req, {
+      entityType: "CourseInstance",
+      entityId: instance._id,
+      action: "delete",
+      description: `Deleted kurskort ${instance.courseCode || ""} ${instance.courseName || ""} (${discussionResult.deletedCount} discussions)`.trim(),
+    });
+
+    res.json({ success: true, deletedId: String(instance._id) });
+  } catch (error) {
+    logger.error({ err: error }, "Error deleting course instance");
     res.status(500).json({ error: "Intern servererror" });
   }
 };

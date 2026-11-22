@@ -24,6 +24,8 @@ import {
     canAccessDocument,
     canAccessStudentDocuments,
     canAccessTeacherDocuments,
+    isStaffOnlyDocumentType,
+    isStaffUser,
 } from "../../src/utils/documentAuthorization.js";
 
 describe("documentAuthorization", () => {
@@ -147,6 +149,38 @@ describe("documentAuthorization", () => {
                 filename: "orphan.pdf",
                 sharedWith: [{ _id: "user-4" }],
             })
+        ).resolves.toBe(true);
+    });
+
+    it("classifies delprov/slutprov as staff-only and identifies staff users", () => {
+        expect(isStaffOnlyDocumentType("SLUTPROV")).toBe(true);
+        expect(isStaffOnlyDocumentType("delprov")).toBe(true);
+        expect(isStaffOnlyDocumentType("COURSE_ARCHIVE")).toBe(false);
+        expect(isStaffUser({ role: "teacher" })).toBe(true);
+        expect(isStaffUser({ roles: ["syv"] })).toBe(true);
+        expect(isStaffUser({ role: "student", roles: ["student"] })).toBe(false);
+    });
+
+    it("denies a student their own slutprov/delprov files, even when shared", async () => {
+        models.Student.findById.mockResolvedValue({ _id: "student-1", municipality: "Malmö" });
+        models.Student.findOne.mockResolvedValue({ _id: "student-1" });
+        const student = { role: "student", userId: "stu-user", email: "student@example.com", municipalities: [] };
+
+        await expect(
+            canAccessDocument(student, { student: "student-1", type: "SLUTPROV" })
+        ).resolves.toBe(false);
+        await expect(
+            canAccessDocument(student, { student: "student-1", type: "DELPROV", sharedWith: ["stu-user"] })
+        ).resolves.toBe(false);
+        // The same student still reaches ordinary Kursarkiv documents.
+        await expect(
+            canAccessDocument(student, { student: "student-1", type: "COURSE_ARCHIVE" })
+        ).resolves.toBe(true);
+    });
+
+    it("still lets staff open slutprov files", async () => {
+        await expect(
+            canAccessDocument({ role: "admin", municipalities: [] }, { student: "student-1", type: "SLUTPROV" })
         ).resolves.toBe(true);
     });
 });

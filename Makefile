@@ -21,18 +21,13 @@ endif
 .PHONY: %
 
 deploy:
-	@echo "Pulling latest code..."
-	git fetch origin main
-	git merge --ff-only origin/main
-	@echo "Installing backend dependencies..."
-	cd backend && pnpm install --frozen-lockfile
-	@echo "Starting or reloading backend with PM2..."
-	cd backend && pm2 startOrReload ecosystem.config.cjs --env production
-	@echo "Installing frontend dependencies..."
-	cd frontend && pnpm install --frozen-lockfile
-	@echo "Building frontend for production..."
-	cd frontend && VITE_API_URL="" NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
-	@echo "Deployment complete."
+	./deploy.sh
+
+deploy-dry-run:
+	DRY_RUN=1 ./deploy.sh
+
+test-deploy:
+	bash tests/deploy/deploy.test.sh
 
 deploy-old:
 	@echo "Pulling images..."

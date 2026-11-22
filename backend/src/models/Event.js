@@ -6,6 +6,21 @@ const studentAttendedSchema = new mongoose.Schema(
       name: String,
       personalNumber: String,
       attended: { type: Boolean, default: false },
+      // Per-student "Information" note from the slutprov modal. Without this
+      // path Mongoose silently dropped the note on save (audit E1-19).
+      additionalInfo: { type: String, default: "" },
+      courseName: String,
+      courseInstanceCode: String,
+      courseInstanceId: String,
+      enrollmentId: String,
+      // Copy of Student.examAccommodations, kept in sync when a specialpedagog
+      // updates them (PUT /students/:id/exam-accommodations).
+      examAccommodations: {
+        extraTime: { type: Number, default: 0 },
+        computer: { type: Boolean, default: false },
+        separateRoom: { type: Boolean, default: false },
+        notes: String,
+      },
     },
     { _id: false }
   );
@@ -20,6 +35,7 @@ const studentAttendedSchema = new mongoose.Schema(
       examTime: String,
       examRoom: { type: String, default: "" },  // Configurable room
       students: [studentAttendedSchema],
+      courseInstanceIds: [String],
       accommodations: {
         extraTime: { type: Number, default: 0 },   // Extra writing time in minutes
         computer: { type: Boolean, default: false },

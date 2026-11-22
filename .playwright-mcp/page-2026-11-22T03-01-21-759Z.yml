@@ -1,0 +1,115 @@
+- generic [ref=f15e3]:
+  - navigation [ref=f15e4]:
+    - generic [ref=f15e5]:
+      - link [ref=f15e7] [cursor=pointer]:
+        - /url: /
+        - img "Mindful logo" [ref=f15e8]
+      - generic [ref=f15e10]:
+        - generic [ref=f15e11] [cursor=pointer]: Alla
+        - textbox "Sök efter alla..." [ref=f15e14]
+      - generic [ref=f15e15]:
+        - button "Min profil" [ref=f15e17] [cursor=pointer]
+        - generic [ref=f15e23]: "8"
+        - link "Meddelanden" [ref=f15e29] [cursor=pointer]:
+          - /url: /messages
+        - button "Öppna meny" [ref=f15e32] [cursor=pointer]
+  - generic [ref=f15e38]:
+    - heading "Berta Berg" [level=1] [ref=f15e40]
+    - generic [ref=f15e41]:
+      - list [ref=f15e42]:
+        - listitem [ref=f15e43]:
+          - link "Allmänt" [ref=f15e44] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e45]:
+          - link "Studieplan" [active] [ref=f15e46] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e47]:
+          - link "Kursarkiv" [ref=f15e48] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e49]:
+          - link "Dokument" [ref=f15e50] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e51]:
+          - link "APL" [ref=f15e52] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e53]:
+          - link "Loggbok" [ref=f15e54] [cursor=pointer]:
+            - /url: "#"
+      - generic [ref=f15e115]:
+        - generic [ref=f15e116]:
+          - heading "Studieplan" [level=3] [ref=f15e118]
+          - combobox [ref=f15e120]:
+            - option "100 % (normal studietakt)" [selected]
+            - option "50 % (dubbel tid)"
+            - option "25 % (fyrdubbel tid)"
+          - generic [ref=f15e121]:
+            - generic [ref=f15e122]:
+              - strong [ref=f15e123]: "2"
+              - text: totalt
+            - generic [ref=f15e124]:
+              - strong [ref=f15e125]: "2"
+              - text: aktiva
+            - button "+ Placera kurs" [ref=f15e126] [cursor=pointer]
+            - button "Revidera plan" [ref=f15e127] [cursor=pointer]
+        - generic [ref=f15e131]:
+          - generic [ref=f15e132]:
+            - generic [ref=f15e133]:
+              - generic "Dra för att ändra ordning" [ref=f15e134]: ☰
+              - generic [ref=f15e135]: Kurs
+              - generic [ref=f15e136]: Aktiv
+              - link "Matematik 1a - MATMAT01a" [ref=f15e138] [cursor=pointer]:
+                - /url: /education/6b0257e81f7384e36f6f240a?type=instance
+              - generic [ref=f15e139]:
+                - generic [ref=f15e140]: "Period: 2026-02-23 - 2026-04-24"
+                - button "TA BORT KURS" [ref=f15e141] [cursor=pointer]
+            - generic [ref=f15e142]:
+              - generic [ref=f15e143]:
+                - generic [ref=f15e144]:
+                  - strong [ref=f15e145]: "Start:"
+                  - text: 2026-02-23
+                - generic [ref=f15e146]:
+                  - strong [ref=f15e147]: "Slut:"
+                  - text: 2026-04-24
+              - generic [ref=f15e148]:
+                - strong [ref=f15e150]: "Status:"
+                - combobox [ref=f15e151]:
+                  - option "Antagen"
+                  - option "Betygsatt" [disabled]
+                  - option "Avbrott"
+                  - option "Ej påbörjad"
+                  - option "Reviderad"
+              - generic [ref=f15e152]:
+                - strong [ref=f15e153]: "Kursinstans:"
+                - text: Matematik 1a (2026-02-23 - 2026-04-24)
+          - generic [ref=f15e154]:
+            - generic [ref=f15e155]:
+              - generic "Dra för att ändra ordning" [ref=f15e156]: ☰
+              - generic [ref=f15e157]: Kurs
+              - generic [ref=f15e158]: Aktiv
+              - link "Svenska som andraspråk 1 - SVASVE01" [ref=f15e160] [cursor=pointer]:
+                - /url: /education/6b0257e81f7384e36f6f23e4?type=instance
+              - generic [ref=f15e161]:
+                - generic [ref=f15e162]: "Period: 2026-07-06 - 2026-09-28"
+                - button "TA BORT KURS" [ref=f15e163] [cursor=pointer]
+            - generic [ref=f15e164]:
+              - generic [ref=f15e165]:
+                - generic [ref=f15e166]:
+                  - strong [ref=f15e167]: "Start:"
+                  - text: 2026-07-06
+                - generic [ref=f15e168]:
+                  - strong [ref=f15e169]: "Slut:"
+                  - text: 2026-09-28
+              - generic [ref=f15e170]:
+                - strong [ref=f15e172]: "Status:"
+                - combobox [ref=f15e173]:
+                  - option "Antagen"
+                  - option "Betygsatt" [disabled]
+                  - option "Avbrott"
+                  - option "Ej påbörjad"
+                  - option "Reviderad"
+              - generic [ref=f15e174]:
+                - strong [ref=f15e175]: "Betyg:"
+                - text: B
+              - generic [ref=f15e176]:
+                - strong [ref=f15e177]: "Kursinstans:"
+                - text: Svenska som andraspråk 1 (2026-07-06 - 2026-09-28)

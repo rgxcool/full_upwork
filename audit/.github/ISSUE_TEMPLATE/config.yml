@@ -1,0 +1,6 @@
+# Force every issue through a form so labels, etapp and estimates are always set.
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability (do not file publicly)
+    url: https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
+    about: Use "Report a vulnerability" under the repo's Security tab for anything exposing student data (personnummer, support needs, grades).

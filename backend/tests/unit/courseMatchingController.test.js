@@ -117,7 +117,6 @@ vi.mock("../../src/utils/slutprovDateCalculator.js", () => ({
 import {
     createCourseInstance,
     deleteAllCourseInstances,
-    deleteCourseInstance,
     findCourseMatch,
     getAllCourseCards,
     getCourseInstanceEnrollments,
@@ -1885,7 +1884,7 @@ describe("updateEnrollmentStatus", () => {
         const req = {
             params: { enrollmentId: "enroll-1" },
             body: { status: "completed", reason: "done", notes: "ok" },
-            user: { userId: "user1" },
+            user: { userId: "user1", role: "admin", roles: ["admin"] },
         };
         const res = createRes();
 
@@ -2399,44 +2398,9 @@ describe("updateCourseInstance", () => {
     });
 });
 
-describe("deleteCourseInstance", () => {
-    it("returns 404 when instance not found", async () => {
-        CourseInstance.findByIdAndDelete.mockResolvedValue(null);
-        const req = { params: { instanceId: "missing" } };
-        const res = createRes();
+// deleteCourseInstance: covered against real models in
+// tests/integration/courseInstanceAccess.test.js ("DELETE /course-instances/:id").
 
-        await deleteCourseInstance(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(404);
-        expect(res.json).toHaveBeenCalledWith({ error: "Course instance not found" });
-    });
-
-    it("deletes instance and enrollments", async () => {
-        CourseInstance.findByIdAndDelete.mockResolvedValue({ _id: "inst-3" });
-        StudentEnrollment.deleteMany.mockResolvedValue({ deletedCount: 1 });
-        const req = { params: { instanceId: "inst-3" } };
-        const res = createRes();
-
-        await deleteCourseInstance(req, res);
-
-        expect(StudentEnrollment.deleteMany).toHaveBeenCalledWith({ courseInstanceId: "inst-3" });
-        expect(res.json).toHaveBeenCalledWith({
-            success: true,
-            message: "Course instance and related enrollments deleted",
-        });
-    });
-
-    it("returns 500 when deleting instance fails", async () => {
-        const req = { params: { instanceId: "inst-err" } };
-        const res = createRes();
-        CourseInstance.findByIdAndDelete.mockRejectedValue(new Error("boom"));
-
-        await deleteCourseInstance(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
-    });
-});
 
 describe("deleteAllCourseInstances", () => {
     it("clears all instances and enrollments", async () => {

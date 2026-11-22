@@ -1,0 +1,99 @@
+name: 🐞 Bug report
+description: Something that was delivered does not work as specified.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do **not** paste real personnummer, student names or grades. Use test accounts or redact.
+        Security/privacy holes go through the private vulnerability report (see the link on the previous page).
+  - type: input
+    id: page
+    attributes:
+      label: Page / URL
+      placeholder: "/profile, /course-card-builder, /apl …"
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Logged in as
+      multiple: true
+      options:
+        - Elev
+        - Lärare
+        - Administratör
+        - Systemadministratör
+        - SYV
+        - Specialpedagog
+        - Praktiksamordnare
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Production
+        - Staging
+        - Local / Docker
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Log in as lärare\n2. Open kurskort X\n3. Click …"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: Quote the spec line if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Error message / toast text, HTTP status from the browser Network tab.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console / network / server logs
+      render: shell
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "S1 – data leak, data loss, or blocks a daily workflow for everyone"
+        - "S2 – a role cannot complete a task, no workaround"
+        - "S3 – workaround exists"
+        - "S4 – cosmetic"
+    validations:
+      required: true
+  - type: dropdown
+    id: etapp
+    attributes:
+      label: Etapp
+      options:
+        - Etapp 1
+        - Etapp 2
+        - Unsure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: It worked before (regression)
+        - label: Reproduced more than once
+        - label: Screenshot/recording attached (no real personal data)

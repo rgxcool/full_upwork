@@ -25,6 +25,8 @@ jobs:
       - name: Lint frontend
         working-directory: frontend
         run: npx eslint src/ --max-warnings 780
+      - name: Test deploy.sh (stubbed git remote, pnpm, pm2, curl)
+        run: bash tests/deploy/deploy.test.sh
 
   test:
     runs-on: ubuntu-latest

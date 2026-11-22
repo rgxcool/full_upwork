@@ -96,7 +96,7 @@
 
       <div class="card">
         <h4>Individuella behörighetsöverridningar</h4>
-        <p class="hint">Överstyr standardbehörigheter för denna användare. Ett启用 betyder att featuren är på, ett inaktiverat betyder att den är av. Om ingen ändring görs används rollens standard.</p>
+        <p class="hint">Överstyr standardbehörigheter för denna användare. En aktiverad behörighet betyder att funktionen är på, en inaktiverad att den är av. Om ingen ändring görs används rollens standard.</p>
         <div class="permission-grid">
           <div
             v-for="feature in features"
