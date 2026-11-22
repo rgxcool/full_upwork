@@ -1,17 +1,99 @@
-name: Felrapport (Bugg)
-description: Rapportera trasigt beteende i en redan levererad funktion
+name: 🐞 Felrapport (Bugg)
+description: Något som har levererats fungerar inte enligt specifikation.
+title: "[Bugg] "
 labels: ["bug"]
 body:
-  - type: textarea
-    id: steps
-    attributes:
-      label: Steg för att återskapa felet
-      placeholder: "1. Gå till...\n2. Klicka på...\n3. Se felmeddelande..."
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Förväntat vs. faktiskt beteende
-    validations:
-      required: true
+    - type: markdown
+      attributes:
+          value: |
+              Klistra **inte** in riktiga personnummer, elevnamn eller betyg. Använd testkonton eller maskera uppgifter.
+              Säkerhets- och integritetsbrister rapporteras via privat sårbarhetsrapport (se länken på föregående sida).
+    - type: input
+      id: page
+      attributes:
+          label: Sida / URL
+          placeholder: "/profile, /course-card-builder, /apl …"
+      validations:
+          required: true
+    - type: dropdown
+      id: role
+      attributes:
+          label: Inloggad som
+          multiple: true
+          options:
+              - Elev
+              - Lärare
+              - Administratör
+              - Systemadministratör
+              - SYV
+              - Specialpedagog
+              - Praktiksamordnare
+      validations:
+          required: true
+    - type: dropdown
+      id: environment
+      attributes:
+          label: Miljö
+          options:
+              - Produktion
+              - Staging
+              - Lokalt / Docker
+      validations:
+          required: true
+    - type: textarea
+      id: steps
+      attributes:
+          label: Steg för att återskapa felet
+          placeholder: "1. Logga in som lärare\n2. Öppna kurskort X\n3. Klicka på …"
+      validations:
+          required: true
+    - type: textarea
+      id: expected
+      attributes:
+          label: Förväntat beteende
+          description: Citera gärna relevant del ur specifikationen om möjligt.
+      validations:
+          required: true
+    - type: textarea
+      id: actual
+      attributes:
+          label: Faktiskt beteende
+          description: Felmeddelande / toast-text, HTTP-status från webbläsarens Network-flik.
+      validations:
+          required: true
+    - type: textarea
+      id: logs
+      attributes:
+          label: Konsol-, nätverks- eller serverloggar
+          render: shell
+      validations:
+          required: false
+    - type: dropdown
+      id: severity
+      attributes:
+          label: Allvarlighetsgrad
+          options:
+              - "S1 – Dataläcka, dataförlust eller blockerar ett dagligt arbetsflöde för alla"
+              - "S2 – En roll kan inte slutföra en uppgift, ingen workaround"
+              - "S3 – Workaround finns"
+              - "S4 – Kosmetiskt"
+      validations:
+          required: true
+    - type: dropdown
+      id: etapp
+      attributes:
+          label: Etapp
+          options:
+              - Etapp 1
+              - Etapp 2
+              - Osäker
+      validations:
+          required: true
+    - type: checkboxes
+      id: checks
+      attributes:
+          label: Kontroller
+          options:
+              - label: Det fungerade tidigare (regression)
+              - label: Återskapat mer än en gång
+              - label: Skärmdump/inspelning bifogad (utan riktiga personuppgifter)
