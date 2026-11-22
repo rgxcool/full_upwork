@@ -658,6 +658,12 @@ async function onCourseInstanceSelectionChange() {
       cardData.modules.forEach((mod) => {
         const entry = content[String(mod.moduleNumber)]
         if (entry?.title) mod.title = toSafeText(entry.title)
+        // Keep what teachers set in the content editor; saving from here must not unhide a
+        // module or wipe its instructions (BUG-01 regression).
+        if (entry?.instructions) mod.instructions = toSafeText(entry.instructions)
+        if (entry && entry.isHiddenFromStudent !== undefined) {
+          mod.isHiddenFromStudent = Boolean(entry.isHiddenFromStudent)
+        }
       })
     }
     const hasCourseCard =
@@ -1081,6 +1087,7 @@ function serializeContent() {
     title: toSafeText(mod.title) || `Modul ${idx + 1}`,
     isPartialExam: !!mod.isPartialExam,
     isCaseStudy: !!mod.isCaseStudy,
+    isHiddenFromStudent: !!mod.isHiddenFromStudent,
     sections:
       Array.isArray(mod.sections) && mod.sections.length > 0
         ? mod.sections.map((sec, sIdx) => ({
