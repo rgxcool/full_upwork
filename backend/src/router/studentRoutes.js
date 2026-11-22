@@ -20,6 +20,7 @@ import { hasRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validation.js";
 import logger from "../utils/logger.js";
 import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
+import { applyEnrollmentDateSummary } from "../utils/studentDateSummary.js";
 import { maybeSendLarteametEmail, getStudentMunicipality, SOLLENTUNA_MUNICIPALITY } from "../services/emailService.js";
 import {
     performStudentDropout,
@@ -423,6 +424,10 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
             }
 
             student.education = mergedEducation;
+
+            // Elever list Startdatum / Slutdatum / Slutprov come from the
+            // enrollments; the stored student fields are only set by the import.
+            applyEnrollmentDateSummary(student, enrollments);
 
             // APL auto-status: derive the APL period from the merged education
             // entries and compute the effective (date-driven) status. When the
