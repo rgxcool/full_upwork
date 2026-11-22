@@ -220,7 +220,12 @@
                     :key="av.avsnittId || av.order"
                     class="avsnitt-block"
                   >
-                    <h4 class="avsnitt-title">{{ av.title || `Avsnitt ${av.order || ''}` }}</h4>
+                    <div class="avsnitt-heading-row">
+                      <h4 class="avsnitt-title">{{ av.title || `Avsnitt ${av.order || ''}` }}</h4>
+                      <span v-if="formatPlannedDate(av.plannedDate)" class="avsnitt-planned-date">
+                        {{ PLANNED_DATE_LABEL }}: {{ formatPlannedDate(av.plannedDate) }}
+                      </span>
+                    </div>
                     <ul class="content-item-list">
                       <li
                         v-for="item in visibleContentItems(av)"
@@ -326,6 +331,8 @@ import { currentModuleLabel, isCourseComplete, isCurrentModule } from '@/utils/c
 import {
   contentItemLabel,
   contentMeta,
+  formatPlannedDate,
+  PLANNED_DATE_LABEL,
   shouldShowAvsnitt,
   sortedAvsnitt,
   visibleContentItems,
@@ -855,10 +862,22 @@ onMounted(loadCourseCards)
 .avsnitt-block {
   margin: 0.75rem 0 0.5rem;
 }
+.avsnitt-heading-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+  margin-bottom: 0.35rem;
+}
 .avsnitt-title {
   font-size: 0.95rem;
   font-weight: 600;
-  margin: 0 0 0.35rem;
+  margin: 0;
+}
+.avsnitt-planned-date {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1d4f43;
 }
 .content-item-list {
   list-style: none;

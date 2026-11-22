@@ -326,6 +326,7 @@ describe('CourseCards.vue', () => {
                 avsnittId: 'm1-a1',
                 title: 'Avsnitt 1',
                 order: 1,
+                plannedDate: '2026-11-23T00:00:00.000Z',
                 contentItems: [
                     { contentId: 'c0', type: 'uppgift', title: 'Inlämning 1' },
                     {
@@ -365,6 +366,7 @@ describe('CourseCards.vue', () => {
         const wrapper = await mountCard(card)
 
         expect(wrapper.find('.avsnitt-title').text()).toBe('Avsnitt 1')
+        expect(wrapper.text()).toContain('Planerat inlämningsdatum: 2026-11-23')
         expect(wrapper.findAll('.content-item')).toHaveLength(2)
         expect(wrapper.text()).toContain('Lektion')
         expect(wrapper.text()).toContain('Läsning')
@@ -399,6 +401,7 @@ describe('CourseCards.vue', () => {
 
         expect(wrapper.find('.avsnitt-block').exists()).toBe(false)
         expect(wrapper.find('.content-item-list').exists()).toBe(false)
+        expect(wrapper.text()).not.toContain('Planerat inlämningsdatum')
         wrapper.unmount()
     })
 

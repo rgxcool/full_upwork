@@ -31,6 +31,13 @@ const plan = {
     { startDate: '2026-12-28', endDate: '2027-01-11' },
     { startDate: '2027-01-11', endDate: '2027-01-25' },
   ],
+  avsnittDates: [
+    ['2026-11-16', '2026-11-23'],
+    ['2026-11-30'],
+    [],
+    [],
+    [],
+  ],
   source: 'default',
 }
 
@@ -82,7 +89,72 @@ describe('DatePlanning', () => {
       lengthWeeks: 10,
     })
     expect(wrapper.text()).toContain('2026-11-30')
-    expect(wrapper.findAll('tbody tr')).toHaveLength(5)
+    expect(wrapper.findAll('.module-table tbody tr')).toHaveLength(5)
+  })
+
+  it('renders generated Avsnitt planned submission dates', async () => {
+    const wrapper = await mountView()
+    await wrapper.findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Planerat inlämningsdatum per Avsnitt')
+    const rows = wrapper.findAll('.avsnitt-table tbody tr')
+    expect(rows).toHaveLength(3)
+    expect(rows[0].text()).toContain('Modul 1')
+    expect(rows[0].text()).toContain('Avsnitt 1')
+    expect(rows[0].text()).toContain('2026-11-16')
+    expect(rows[1].text()).toContain('2026-11-23')
+    expect(rows[2].text()).toContain('2026-11-30')
+  })
+
+  it('warns about planning lead time without changing the generated dates', async () => {
+    const soon = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    client.get.mockResolvedValue({
+      data: {
+        instances: [
+          {
+            _id: 'instance-1',
+            courseName: 'Snart',
+            startDate: soon,
+            endDate: soon,
+          },
+        ],
+      },
+    })
+
+    const wrapper = await mountView()
+    await wrapper.findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('minst två veckor före kursstart')
+    expect(wrapper.find('.alert-warning').exists()).toBe(true)
+    // D5: guidance only – preview/apply still uses the untouched plan payload.
+    expect(wrapper.vm.planningWarning).toContain('Planeringen bör vara klar')
+    expect(wrapper.vm.previewPlan.avsnittDates[0]).toEqual([
+      '2026-11-16',
+      '2026-11-23',
+    ])
+  })
+
+  it('does not warn when the course starts well ahead', async () => {
+    const later = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
+    client.get.mockResolvedValue({
+      data: {
+        instances: [
+          {
+            _id: 'instance-1',
+            courseName: 'Framtid',
+            startDate: later,
+            endDate: later,
+          },
+        ],
+      },
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.vm.planningWarning).toBe('')
+    expect(wrapper.find('.alert-warning').exists()).toBe(false)
   })
 
   it('applies the plan and shows the success message', async () => {
