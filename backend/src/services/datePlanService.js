@@ -19,6 +19,7 @@ export const serializeDatePlan = (plan) => ({
         startDate: formatDateOnly(moduleDate.startDate),
         endDate: formatDateOnly(moduleDate.endDate),
     })),
+    avsnittDates: (plan.avsnittDates || []).map((dates) => dates.map(formatDateOnly)),
     source: plan.source,
 });
 
@@ -52,6 +53,7 @@ const buildPlan = async (instance, options = {}) => {
         lengthWeeks: resolvedLength,
         sectionOffsets: savedOffsets,
         moduleCount: instance.modules?.length || 5,
+        avsnittCounts: (instance.modules || []).map((m) => m.avsnitt?.length || 0),
     });
 
     if (!plan) throw new AppError("Invalid course dates", 400);
@@ -84,8 +86,8 @@ export const previewDatePlan = async (instanceId, options = {}) => {
 };
 
 /**
- * Persists the plan as the instance's authoritative section/module dates and
- * keeps a snapshot in `datePlan` for later inspection.
+ * Persists the plan as the instance's authoritative section/module/Avsnitt
+ * dates and keeps a snapshot in `datePlan` for later inspection.
  */
 export const applyDatePlan = async (instanceId, options = {}) => {
     const instance = await loadInstance(instanceId);
@@ -98,6 +100,13 @@ export const applyDatePlan = async (instanceId, options = {}) => {
         if (!dates) return;
         module.startDate = dates.startDate;
         module.endDate = dates.endDate;
+
+        // Slice 4 / D2: persist the generated date on each Avsnitt. Clear any
+        // stale value when the plan has no date for that position.
+        const avsnittDates = plan.avsnittDates[index] || [];
+        (module.avsnitt || []).forEach((avsnitt, avsnittIndex) => {
+            avsnitt.plannedDate = avsnittDates[avsnittIndex] ?? null;
+        });
     });
     instance.datePlan = { ...plan, appliedAt: new Date() };
 

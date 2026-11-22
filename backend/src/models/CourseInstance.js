@@ -20,6 +20,8 @@ const datePlanSchema = new mongoose.Schema(
                 _id: false,
             },
         ],
+        // Generated per-module Avsnitt planned dates (Slice 4).
+        avsnittDates: [[Date]],
         source: String,
         appliedAt: { type: Date, default: Date.now },
     },

@@ -95,6 +95,18 @@ describe("datePlanRoutes", () => {
         vi.restoreAllMocks();
     });
 
+    const addAvsnittToFirstModules = async () => {
+        const instance = await CourseInstance.findById(instanceId);
+        instance.modules[0].avsnitt = [
+            { avsnittId: "m1-a1", title: "Avsnitt 1", order: 1, contentItems: [] },
+            { avsnittId: "m1-a2", title: "Avsnitt 2", order: 2, contentItems: [] },
+        ];
+        instance.modules[1].avsnitt = [
+            { avsnittId: "m2-a1", title: "Avsnitt 1", order: 1, contentItems: [] },
+        ];
+        await instance.save();
+    };
+
     describe("permissions", () => {
         it("rejects unauthenticated previews and teacher applies", async () => {
             const anonymous = await request(app)
@@ -176,6 +188,23 @@ describe("datePlanRoutes", () => {
             ]);
         });
 
+        it("includes generated Avsnitt dates in the preview payload", async () => {
+            await addAvsnittToFirstModules();
+
+            const response = await request(app)
+                .post("/api/date-plan/preview")
+                .set("Cookie", adminCookie)
+                .send({ instanceId, lengthWeeks: 10 });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datePlan.avsnittDates).toHaveLength(5);
+            expect(response.body.datePlan.avsnittDates.slice(0, 2)).toEqual([
+                ["2026-11-16", "2026-11-23"],
+                ["2026-11-30"],
+            ]);
+            expect(response.body.datePlan.avsnittDates.slice(2)).toEqual([[], [], []]);
+        });
+
         it("rejects invalid input and unknown instances", async () => {
             const badLength = await request(app)
                 .post("/api/date-plan/preview")
@@ -224,6 +253,35 @@ describe("datePlanRoutes", () => {
                 "2026-11-16"
             );
             expect(stored.endDate.toISOString().slice(0, 10)).toBe("2027-04-05");
+        });
+
+        it("persists generated plannedDate on each Avsnitt", async () => {
+            await addAvsnittToFirstModules();
+
+            const response = await request(app)
+                .put("/api/date-plan/apply")
+                .set("Cookie", adminCookie)
+                .send({ instanceId, lengthWeeks: 10 });
+
+            expect(response.status).toBe(200);
+            expect(response.body.datePlan.avsnittDates.slice(0, 2)).toEqual([
+                ["2026-11-16", "2026-11-23"],
+                ["2026-11-30"],
+            ]);
+
+            const stored = await CourseInstance.findById(instanceId);
+            expect(stored.modules[0].avsnitt.map((av) =>
+                av.plannedDate.toISOString().slice(0, 10)
+            )).toEqual(["2026-11-16", "2026-11-23"]);
+            expect(stored.modules[1].avsnitt[0].plannedDate.toISOString().slice(0, 10)).toBe(
+                "2026-11-30"
+            );
+            expect(stored.datePlan.avsnittDates.map((dates) =>
+                dates.map((d) => d.toISOString().slice(0, 10))
+            ).slice(0, 2)).toEqual([
+                ["2026-11-16", "2026-11-23"],
+                ["2026-11-30"],
+            ]);
         });
 
         it("rejects invalid offsets", async () => {

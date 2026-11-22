@@ -100,10 +100,13 @@ export const nearestPlanLength = (startDate, endDate) => {
  * @param {number} options.lengthWeeks - 5, 10 or 20
  * @param {unknown} [options.sectionOffsets] - Teacher's saved offsets
  * @param {number} [options.moduleCount] - Number of modules to date (max 5)
+ * @param {number[]} [options.avsnittCounts] - Avsnitt count per module; each
+ *   module slot is divided evenly by its count, starting at the module start
+ *   date (so one Avsnitt inherits the module start date, matching D8).
  * @returns {{lengthWeeks: number, startDate: Date, endDate: Date,
  *   sectionOffsets: number[], sectionDates: Date[],
  *   moduleDates: Array<{startDate: Date, endDate: Date}>,
- *   source: "saved"|"default"}|null}
+ *   avsnittDates: Date[][], source: "saved"|"default"}|null}
  */
 export const generateDatePlan = ({
     startDate,
@@ -111,6 +114,7 @@ export const generateDatePlan = ({
     lengthWeeks,
     sectionOffsets,
     moduleCount = SECTION_COUNT,
+    avsnittCounts = [],
 }) => {
     const start = toUtcCalendarDate(startDate);
     if (!start) return null;
@@ -136,6 +140,19 @@ export const generateDatePlan = ({
             endDate: sectionDates[index + 1] || end,
         }));
 
+    // Slice 4 / D3: split each module slot evenly by its Avsnitt count.
+    // The first Avsnitt gets the module start date, keeping generated plans
+    // consistent with the migration backfill in D8.
+    const avsnittDates = moduleDates.map((moduleDate, moduleIndex) => {
+        const count = Math.max(0, Number(avsnittCounts[moduleIndex]) || 0);
+        if (count === 0) return [];
+        const span = moduleDate.endDate.getTime() - moduleDate.startDate.getTime();
+        const step = span > 0 ? span / count : 0;
+        return Array.from({ length: count }, (_, index) =>
+            new Date(moduleDate.startDate.getTime() + index * step)
+        );
+    });
+
     return {
         lengthWeeks: length,
         startDate: start,
@@ -143,6 +160,7 @@ export const generateDatePlan = ({
         sectionOffsets: offsets,
         sectionDates,
         moduleDates,
+        avsnittDates,
         source,
     };
 };
