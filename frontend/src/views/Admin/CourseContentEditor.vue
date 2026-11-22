@@ -42,6 +42,7 @@
                 Modul {{ mod.moduleNumber }} — {{ mod.title || 'Utan titel' }}
                 <v-chip v-if="mod.isPartialExam" size="x-small" color="warning" class="ml-2">Deltenta</v-chip>
                 <v-chip v-if="mod.isCaseStudy" size="x-small" color="info" class="ml-2">Fallstudie</v-chip>
+                <v-chip v-if="mod.isHiddenFromStudent" size="x-small" color="grey" class="ml-2">Dold för elever</v-chip>
               </v-expansion-panel-title>
               <v-expansion-panel-text>
                 <v-text-field v-model="mod.title" label="Modultitel" variant="outlined" density="compact" class="mb-2" />
@@ -49,6 +50,57 @@
                   <v-checkbox v-model="mod.isPartialExam" label="Deltenta" density="compact" hide-details />
                   <v-checkbox v-model="mod.isCaseStudy" label="Fallstudie" density="compact" hide-details />
                 </div>
+                <v-switch
+                  v-model="mod.isHiddenFromStudent"
+                  label="Dölj för elever"
+                  color="warning"
+                  density="compact"
+                  hide-details
+                  class="mb-3"
+                />
+
+                <v-divider class="my-2" />
+                <div v-for="(sec, si) in mod.sections" :key="si" class="section-block mb-3">
+                  <v-text-field v-model="sec.title" label="Sektionstitel" variant="outlined" density="compact" class="mb-2" />
+                  <v-textarea v-model="sec.description" label="Beskrivning" variant="outlined" density="compact" rows="2" class="mb-2" />
+                  <v-textarea v-model="sec.instructions" label="Instruktioner" variant="outlined" density="compact" rows="3" />
+                </div>
+
+                <!-- Avsnitt (read-only, Slice 3). Staff see hidden modules too. -->
+                <div v-if="avsnittFor(mod).length" class="avsnitt-block mt-3">
+                  <div class="avsnitt-heading">Avsnitt</div>
+                  <div
+                    v-for="av in avsnittFor(mod)"
+                    :key="av.avsnittId || av.order"
+                    class="avsnitt-block"
+                  >
+                    <div class="avsnitt-title">{{ av.title || `Avsnitt ${av.order || ''}` }}</div>
+                    <ul class="content-item-list">
+                      <li
+                        v-for="item in visibleContentItems(av)"
+                        :key="item.contentId || item.order"
+                        class="content-item"
+                      >
+                        <span class="content-type-chip">{{ contentItemLabel(item.type) }}</span>
+                        <span class="content-title">{{ contentMeta(item).title }}</span>
+                        <a
+                          v-if="contentMeta(item).url"
+                          :href="contentMeta(item).url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="content-link"
+                        >
+                          {{ contentMeta(item).linkText }}
+                        </a>
+                        <span v-if="contentMeta(item).durationText" class="content-duration">
+                          {{ contentMeta(item).durationText }}
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <v-divider class="my-2" />
                 <v-text-field
                   v-model="mod.assignment.title"
                   label="Uppgiftstitel"
@@ -64,12 +116,6 @@
                   rows="2"
                   class="mb-3"
                 />
-                <v-divider class="my-2" />
-                <div v-for="(sec, si) in mod.sections" :key="si" class="section-block mb-3">
-                  <v-text-field v-model="sec.title" label="Sektionstitel" variant="outlined" density="compact" class="mb-2" />
-                  <v-textarea v-model="sec.description" label="Beskrivning" variant="outlined" density="compact" rows="2" class="mb-2" />
-                  <v-textarea v-model="sec.instructions" label="Instruktioner" variant="outlined" density="compact" rows="3" />
-                </div>
               </v-expansion-panel-text>
             </v-expansion-panel>
           </v-expansion-panels>
@@ -88,6 +134,12 @@
 import { ref, computed, onMounted } from 'vue'
 import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
+import {
+  contentItemLabel,
+  contentMeta,
+  sortedAvsnitt,
+  visibleContentItems,
+} from '@/utils/courseContent.js'
 
 const toast = useToast()
 
@@ -106,23 +158,38 @@ const instanceOptions = computed(() =>
   }))
 )
 
-const normalizeModules = (raw) => {
-  if (!Array.isArray(raw)) return []
-  return raw.map((m) => ({
-    moduleNumber: m.moduleNumber ?? 0,
-    title: m.title ?? '',
-    isPartialExam: !!m.isPartialExam,
-    isCaseStudy: !!m.isCaseStudy,
-    sections: (m.sections || []).map((s) => ({
-      title: s.title ?? '',
-      description: s.description ?? '',
-      instructions: s.instructions ?? '',
-    })),
-    assignment: {
-      title: m.assignment?.title ?? '',
-      description: m.assignment?.description ?? '',
-    },
-  }))
+// Unlike the student view, staff must also see Avsnitt in hidden modules.
+const avsnittFor = (mod) =>
+  sortedAvsnitt(mod).filter((av) => visibleContentItems(av).length > 0)
+
+const normalizeModules = (rawModules, content) => {
+  if (!Array.isArray(rawModules)) return []
+  const contentByModule =
+    content instanceof Map ? Object.fromEntries(content) : content || {}
+  return rawModules.map((m) => {
+    const moduleNumber = m.moduleNumber ?? 0
+    const overlay = contentByModule[String(moduleNumber)] || {}
+    return {
+      moduleNumber,
+      title: m.title ?? '',
+      isPartialExam: !!m.isPartialExam,
+      isCaseStudy: !!m.isCaseStudy,
+      sections: (m.sections || []).map((s) => ({
+        title: s.title ?? '',
+        description: s.description ?? '',
+        instructions: s.instructions ?? '',
+      })),
+      avsnitt: Array.isArray(m.avsnitt) ? m.avsnitt : [],
+      assignment: {
+        title: m.assignment?.title ?? '',
+        description: m.assignment?.description ?? '',
+      },
+      // Kept separately so saving never overwrites a custom student-facing title.
+      contentTitle: overlay.title ?? null,
+      instructions: overlay.instructions ?? '',
+      isHiddenFromStudent: !!overlay.isHiddenFromStudent,
+    }
+  })
 }
 
 const loadContent = async () => {
@@ -130,8 +197,13 @@ const loadContent = async () => {
   contentLoading.value = true
   contentError.value = null
   try {
-    const { data } = await client.get(`/course-instances/${selectedInstanceId.value}/content`)
-    modules.value = normalizeModules(data?.modules || data?.content?.modules || data?.content || [])
+    const selectedInstance = instances.value.find(
+      (i) => i._id === selectedInstanceId.value
+    )
+    const { data } = await client.get(
+      `/course-instances/${selectedInstanceId.value}/content`
+    )
+    modules.value = normalizeModules(selectedInstance?.modules || [], data?.content)
   } catch (err) {
     contentError.value = 'Kunde inte hämta innehåll.'
     toast.error(contentError.value)
@@ -144,7 +216,15 @@ const saveContent = async () => {
   if (!selectedInstanceId.value) return
   saving.value = true
   try {
-    await client.put(`/course-instances/${selectedInstanceId.value}/content`, { modules: modules.value })
+    const content = {}
+    for (const mod of modules.value) {
+      content[String(mod.moduleNumber)] = {
+        title: mod.contentTitle ?? mod.title ?? '',
+        instructions: mod.instructions ?? '',
+        isHiddenFromStudent: !!mod.isHiddenFromStudent,
+      }
+    }
+    await client.put(`/course-instances/${selectedInstanceId.value}/content`, { content })
     toast.success('Innehåll sparat.')
   } catch (err) {
     toast.error('Kunde inte spara innehåll.')
@@ -156,9 +236,55 @@ const saveContent = async () => {
 onMounted(async () => {
   try {
     const { data } = await client.get('/course-instances')
-    instances.value = Array.isArray(data) ? data : []
+    instances.value = Array.isArray(data) ? data : data?.instances || []
   } catch {
     toast.error('Kunde inte hämta kursinstanser.')
   }
 })
 </script>
+
+<style scoped>
+.avsnitt-heading {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+.avsnitt-block {
+  margin: 0.5rem 0;
+}
+.avsnitt-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.content-item-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.content-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.6rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+}
+.content-type-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  background: var(--v-theme-surface-variant, #e8e8e8);
+  color: inherit;
+}
+.content-link {
+  font-size: 0.85rem;
+}
+.content-duration {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+</style>

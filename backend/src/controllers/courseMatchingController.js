@@ -2307,12 +2307,14 @@ export const getCourseInstanceContent = async (req, res) => {
             return res.status(403).json({ error: "Saknar behörighet" });
         }
 
-        // Build visible content for the caller
+        // Build visible content for the caller. Map keys are strings so the
+        // response serializes as a plain object keyed by module number.
         const visibleContent = new Map();
         for (const [moduleNumber, moduleContent] of instance.content.entries()) {
             const entry = {
                 title: moduleContent.title || `Modul ${moduleNumber}`,
                 instructions: moduleContent.instructions || '',
+                isHiddenFromStudent: !!moduleContent.isHiddenFromStudent,
             };
             // If the caller is a student and the content is hidden,
             // replace with placeholder
@@ -2320,12 +2322,12 @@ export const getCourseInstanceContent = async (req, res) => {
                 entry.title = 'Innehåll dolt';
                 entry.instructions = 'Detta innehåll döljs för studenter.';
             }
-            visibleContent.set(Number(moduleNumber), entry);
+            visibleContent.set(String(moduleNumber), entry);
         }
 
         res.json({
             success: true,
-            content: visibleContent,
+            content: Object.fromEntries(visibleContent),
             canEdit: isAdmin || isResponsibleTeacher,
         });
     } catch (error) {
@@ -2372,7 +2374,8 @@ export const updateCourseInstanceContent = async (req, res) => {
         }
 
         for (const [moduleNumber, moduleContent] of Object.entries(content)) {
-            const mn = Number(moduleNumber);
+            // Mongoose Maps only accept string keys.
+            const mn = String(moduleNumber);
             if (!instance.content.has(mn)) {
                 instance.content.set(mn, {
                     title: '',
