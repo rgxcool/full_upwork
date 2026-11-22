@@ -149,3 +149,22 @@ describe('CourseCardsOverview.vue — delete kurskort', () => {
     expect(client.delete).not.toHaveBeenCalled()
   })
 })
+
+describe('CourseCardsOverview.vue — edit button', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    storeState.role = 'admin'
+    client.get.mockResolvedValue({ data: { cards } })
+  })
+
+  it('uses the short label "Redigera" so it fits inside the card', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const buttons = findButton(wrapper, 'Redigera')
+    // card-2 has no modules yet, so it gets the edit button (card-1 gets "Öppna kurskortet").
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].attributes('title')).toBe('Redigera kursinnehållet')
+    expect(findButton(wrapper, 'Redigera innehåll')).toHaveLength(0)
+    wrapper.unmount()
+  })
+})

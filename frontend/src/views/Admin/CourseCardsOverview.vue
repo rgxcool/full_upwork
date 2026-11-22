@@ -255,7 +255,7 @@
               "
               @click.stop="editCourseCard(card)"
             >
-              Redigera innehåll
+              Redigera
             </v-btn>
             <v-btn
               v-if="canDeleteCards"
