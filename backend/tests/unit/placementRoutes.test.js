@@ -150,6 +150,23 @@ describe("placementRoutes", () => {
             expect(res.body.totalWeeks).toBe(5);
         });
 
+        // 2026-09-20 is a Sunday → the course starts Monday 2026-09-21.
+        it("falls back to Wednesday of week 4 at normal pace (UTC, timezone-proof)", async () => {
+            const res = await request(app).post("/placement/preview").send(payload);
+            expect(res.body.courses[0].startDate).toBe("2026-09-21T00:00:00.000Z");
+            expect(res.body.courses[0].slutprovDate).toBe("2026-10-14T00:00:00.000Z");
+        });
+
+        it("puts the fallback slutprov before the end when the course is stretched (10 v = 50 %)", async () => {
+            const res = await request(app)
+                .post("/placement/preview")
+                .send({ ...payload, durationWeeks: 10 });
+            const [course] = res.body.courses;
+            expect(course.endDate).toBe("2026-11-30T00:00:00.000Z");
+            // Wednesday before Monday 30 Nov, not week 4 (14 Oct).
+            expect(course.slutprovDate).toBe("2026-11-25T00:00:00.000Z");
+        });
+
         it("uses the teacher-based slutprov date when available", async () => {
             h.studentModel.findById.mockResolvedValue({
                 _id: "s1",

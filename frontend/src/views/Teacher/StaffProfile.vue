@@ -102,6 +102,10 @@ export default {
       return baseTabs;
     });
 
+    // Deep link: /teacher/:id?tab=Filarkiv opens that tab (used by "Mitt filarkiv").
+    const requestedTab = tabs.value.find((t) => t.name === route.query.tab);
+    if (requestedTab) activeTab.value = requestedTab.component;
+
     const fetchProfile = async () => {
       loading.value = true;
       error.value = null;

@@ -114,7 +114,8 @@ router.get(
     isAuthenticated,
     async (req, res) => {
         try {
-            if (req.user.role !== "teacher") {
+            const roles = Array.isArray(req.user.roles) && req.user.roles.length ? req.user.roles : [req.user.role];
+            if (!roles.includes("teacher")) {
                 return res.status(403).json({ error: "Only teachers can access this endpoint" });
             }
             const teacher = await Teacher.findOne({ userId: req.user.userId })
@@ -485,11 +486,30 @@ router.put(
 
 // ─── Staff Profile Endpoints ────────────────────────────────────────────────
 
+/**
+ * Staff profile read access: staff with "teachers:read" (admin/systemadmin) see any
+ * profile; a teacher may open their OWN profile (Filarkiv, courses, students), which
+ * the frontend route already offers. `:id` is a Teacher id, so it is resolved to its
+ * User before comparing (CLAUDE.md §5).
+ */
+const canReadStaffProfile = async (req, res, next) => {
+    const roles = Array.isArray(req.user?.roles) && req.user.roles.length ? req.user.roles : [req.user?.role];
+    if (roles.includes("teacher")) {
+        try {
+            const teacher = await Teacher.findById(req.params.id).select("userId").lean();
+            if (teacher && String(teacher.userId) === String(req.user.userId)) return next();
+        } catch {
+            // Invalid id: fall through to the normal permission check (403).
+        }
+    }
+    return can("teachers:read")(req, res, next);
+};
+
 // GET /teachers/:id/profile — full teacher profile with active/completed courses and student counts
 router.get(
     "/teachers/:id/profile",
     isAuthenticated,
-    can("teachers:read"),
+    canReadStaffProfile,
     async (req, res) => {
         try {
             const { id } = req.params;

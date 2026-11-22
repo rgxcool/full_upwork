@@ -229,20 +229,24 @@ class CourseMatchingService {
         if (existingInstance) {
             let needsSave = false;
 
-            // Update responsibleTeacher if provided AND instance doesn't have one, or if explicitly provided
-            if (responsibleTeacherId) {
-                // If instance doesn't have a responsibleTeacher, set it
-                if (!existingInstance.responsibleTeacher) {
-                    existingInstance.responsibleTeacher = responsibleTeacherId;
-                    needsSave = true;
-                    logger.debug({ courseName: existingInstance.courseName, responsibleTeacherId }, "Setting responsibleTeacher for existing course instance");
-                }
-                // If instance has a different responsibleTeacher and we're explicitly providing one, update it
-                else if (existingInstance.responsibleTeacher?.toString() !== responsibleTeacherId.toString()) {
-                    existingInstance.responsibleTeacher = responsibleTeacherId;
-                    needsSave = true;
-                    logger.debug({ courseName: existingInstance.courseName, responsibleTeacherId }, "Updating responsibleTeacher for existing course instance");
-                }
+            // A shared kurskort keeps its responsible teacher. Placing one more
+            // student (whose own teacher may differ) used to overwrite it for
+            // every student on the card; the student's own teacher is kept on
+            // their enrollment instead. Only an instance WITHOUT a responsible
+            // teacher takes the provided one.
+            const assignTeacher = Boolean(responsibleTeacherId) && !existingInstance.responsibleTeacher;
+            if (assignTeacher) {
+                existingInstance.responsibleTeacher = responsibleTeacherId;
+                needsSave = true;
+                logger.debug({ courseName: existingInstance.courseName, responsibleTeacherId }, "Setting responsibleTeacher for existing course instance");
+            } else if (
+                responsibleTeacherId &&
+                existingInstance.responsibleTeacher?.toString() !== responsibleTeacherId.toString()
+            ) {
+                logger.info(
+                    { courseName: existingInstance.courseName },
+                    "Existing course instance keeps its responsible teacher (placement teacher differs)"
+                );
             }
 
             // Only set slutprovDate if explicitly provided AND there's no teacher
@@ -251,13 +255,11 @@ class CourseMatchingService {
                 existingInstance.slutprovDate = slutprovDate;
                 needsSave = true;
                 logger.info({ courseName: existingInstance.courseName, slutprovDate }, "Force patched slutprovDate for course instance");
-            } else if (responsibleTeacherId && !slutprovDate) {
-                // Teacher is set but no explicit date - clear existing date to let pre-save hook recalculate
-                if (existingInstance.slutprovDate) {
-                    existingInstance.slutprovDate = undefined;
-                    needsSave = true;
-                    logger.info({ courseName: existingInstance.courseName }, "Cleared slutprovDate for course instance to let pre-save hook recalculate");
-                }
+            } else if (assignTeacher && !slutprovDate && existingInstance.slutprovDate) {
+                // The instance just got its teacher: let the pre-save hook
+                // recalculate the date from that teacher's rule.
+                existingInstance.slutprovDate = undefined;
+                logger.info({ courseName: existingInstance.courseName }, "Cleared slutprovDate for course instance to let pre-save hook recalculate");
             }
 
             // Save if any changes were made (this will trigger pre-save hook for auto-calculation)
