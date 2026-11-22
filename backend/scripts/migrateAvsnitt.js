@@ -6,6 +6,8 @@ import CourseInstance from "../src/models/CourseInstance.js";
 import CourseTemplate from "../src/models/CourseTemplate.js";
 import { migrateAvsnittForModel } from "../src/utils/avsnittMigration.js";
 
+// One-time backfill of Avsnitt structure (Slice 1) and Avsnitt plannedDate
+// from module start dates (Slice 4). Safe to re-run: only changed docs are written.
 // Match the env-file selection used by the other migration scripts.
 let envFile = "../.env.development";
 if (process.env.NODE_ENV === "production") {
