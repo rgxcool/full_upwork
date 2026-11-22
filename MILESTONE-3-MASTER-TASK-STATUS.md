@@ -60,7 +60,7 @@
    
  | — | GET /documents/:id metadata endpoint — staff tenant scope | ✅ DONE (2026-11-22, issue #40) | `canAccessStudentDocuments` applies municipalityInScope. Unknown or cross-tenant students now return **404** (`isStudentHiddenFromCaller`); same-tenant denials stay 403. Covered by an integration test in documentRoutes.test.js. |  
    
- | — | Disk-served /uploads static path IDOR | 🟡 MITIGATED (verified live 2026-11-22) | The static path is gone. `/uploads/:filename` requires a Document record plus `canAccessDocument` (`backend/index.js:159`). A student probing all 7 files on disk got 404/403. **Remaining:** migrate files off disk to GridFS (issue #39). |  
+ | — | Disk-served /uploads static path IDOR | 🟡 MITIGATED (verified live 2026-11-22) | The static path is gone. `/uploads/:filename` requires a Document record plus `canAccessDocument` (`backend/index.js:159`). A student probing all 7 files on disk got 404/403. GridFS listing/upload/file-counts are now tenant-scoped for coordinator/syv/specped (`uploadRoutes.checkStudentAccess`, 2026-11-22). **Remaining:** migrate files off disk to GridFS (issue #39). |  
    
     
  ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANklEQVR4nO3OMQ2AABAAsSPBCj7fE0YwwIgHRiywEZJWQZeZ2ao9AAD+4lyruzq+ngAA8Nr1AOHwBeiQJO3XAAAAAElFTkSuQmCC)  
