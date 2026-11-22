@@ -664,6 +664,49 @@ router.post(
   },
 );
 
+// Cross-student archive listing used by the APL contract archive
+// (APLFileArchive.vue). Restricted to APL document types and filtered per
+// document with the same rule as download, so teachers/scoped staff only see
+// files they may open.
+const ARCHIVE_LISTABLE_TYPES = new Set(["APL_CONTRACT", "APL_CV"]);
+router.get("/documents", authenticateUser, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!isStaffUser(user)) {
+      return res.status(403).json({ message: "Endast personal kan lista arkivet" });
+    }
+    const types = String(req.query.type || "APL_CONTRACT")
+      .split(",")
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    if (!types.length || types.some((t) => !ARCHIVE_LISTABLE_TYPES.has(t))) {
+      return res.status(400).json({ message: "Ogiltig dokumenttyp för arkivet." });
+    }
+
+    const docs = await Document.find({ type: { $in: types }, student: { $ne: null } })
+      .sort({ createdAt: -1 })
+      .populate({ path: "student", select: "name" })
+      .populate({ path: "uploadedBy", select: "name email" });
+
+    const visible = [];
+    for (const doc of docs) {
+      // Orphaned files (student deleted) are hidden, not leaked.
+      if (!doc.student) continue;
+      const studentId = doc.student._id || doc.student;
+      if (await canAccessDocument(user, { ...doc.toObject(), student: studentId })) {
+        const serialized = serializeDocument(doc);
+        serialized.student = studentId;
+        serialized.studentName = doc.student.name || "";
+        visible.push(serialized);
+      }
+    }
+    return res.json(visible);
+  } catch (error) {
+    logger.error({ err: error }, "Error listing archive documents");
+    return res.status(500).json({ message: "Kunde inte hämta arkivet" });
+  }
+});
+
 router.get("/documents/shared", authenticateUser, async (req, res) => {
   try {
     const userId = req.user?.userId || req.user?._id;

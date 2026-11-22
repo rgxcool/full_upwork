@@ -469,7 +469,15 @@
                     Avsluta
                   </button>
                 </template>
-                <button class="resolve-btn" @click="resolveNote(notification._id)">
+                <!-- F-grade reminders stay until the action plan is saved; only admins may override. -->
+                <a
+                  v-if="notification.type === 'action_plan_required' && !isAdmin"
+                  class="resolve-btn"
+                  :href="notification.meta?.url || '#'"
+                >
+                  Fyll i handlingsplan
+                </a>
+                <button v-else class="resolve-btn" @click="resolveNote(notification._id)">
                   Markera som löst
                 </button>
               </div>
@@ -629,8 +637,8 @@
             userId: store.getters.userId,
           })
           await fetchNotifications()
-        } catch {
-          toast.error('Kunde inte avsluta notisen.')
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Kunde inte avsluta notisen.')
         }
       }
 

@@ -15,6 +15,7 @@ import {
     normalizeCodeForMatching,
 } from "../utils/parseStudentExcel.js";
 import { distance } from "fastest-levenshtein";
+import { ALL_MUNICIPALITIES } from "../config/municipalities.js";
 import { createOrFindTeacher } from "../utils/teacherService.js";
 import logger from "../utils/logger.js";
 import { maybeSendLarteametEmail, SOLLENTUNA_MUNICIPALITY } from "../services/emailService.js";
@@ -41,37 +42,16 @@ function normalize(value) {
 /**
  * Returns the closest valid municipality name to the input using Levenshtein distance.
  */
-const VALID_MUNICIPALITIES = [
-    "Botkyrka",
-    "Danderyd",
-    "Huddinge",
-    "Järfälla",
-    "KCNO",
-    "Lidingö",
-    "Norrtälje",
-    "Nykvarn",
-    "Privat kunder",
-    "Salem",
-    "Sigtuna",
-    "Sollentuna",
-    "Solna",
-    "Sundbyberg",
-    "Södertälje",
-    "Täby",
-    "Upplands Bro",
-    "Upplands Väsby",
-    "Vallentuna",
-    "Vaxholm",
-    "Växjö",
-    "Österåker",
-];
+// Single source of truth shared with the Student model enum, so every valid
+// kommun (incl. Stockholm and Göteborg) is accepted by the Alvis import.
+const VALID_MUNICIPALITIES = ALL_MUNICIPALITIES;
 
 /**
  * Returns the closest valid municipality name to the input using Levenshtein distance.
  * @param {string} input - The input municipality name
  * @returns {string|null} The closest valid municipality or null
  */
-function getClosestMunicipality(input) {
+export function getClosestMunicipality(input) {
     if (!input) return null;
     let bestMatch = null;
     let minDistance = Infinity;

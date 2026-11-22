@@ -310,6 +310,24 @@ describe("questionBankRoutes", () => {
         });
     });
 
+    describe("GET /exam-attempts as a student", () => {
+        it("never embeds question documents (so no answer keys can leak)", async () => {
+            currentUser = { role: "student", userId: "student-1", roles: ["student"] };
+            const chain = makeChain([
+                { _id: "attempt-1", title: "Exam", selectedQuestions: ["507f1f77bcf86cd799439011"] },
+            ]);
+            ExamAttempt.find.mockReturnValue(chain);
+
+            const res = await request(app).get("/api/question-bank/exam-attempts").expect(200);
+
+            expect(chain.populate).not.toHaveBeenCalled();
+            const body = JSON.stringify(res.body);
+            expect(body).not.toContain("correctAnswer");
+            expect(body).not.toContain("answerGuidelines");
+            expect(res.body.examAttempts[0].selectedQuestions).toEqual(["507f1f77bcf86cd799439011"]);
+        });
+    });
+
     describe("PUT /exam-attempts/:id/questions", () => {
         it("returns 400 for an invalid id", async () => {
             const res = await request(app)

@@ -417,7 +417,7 @@ export default {
       this.savingAccommodations = true;
 
       try {
-        await client.put(`/meetings/students/${this.selectedStudent._id}/exam-accommodations`, this.examAccommodations);
+        await client.put(`/students/${this.selectedStudent._id}/exam-accommodations`, this.examAccommodations);
 
         toast.success('Examensackommodationer sparade.');
       } catch (error) {

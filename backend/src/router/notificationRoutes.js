@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import Notification from "../models/Notification.js";
+import ActionPlan from "../models/ActionPlan.js";
 import Teacher from "../models/Teacher.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
@@ -238,6 +239,21 @@ router.get("/notifications", authenticateUser, async (req, res) => {
   }
 });
 
+// F-grade reminders are "locked": they may only be cleared by saving an action
+// plan (POST /save-actionplan resolves them). Admins may still override.
+const ACTION_PLAN_LOCKED_MESSAGE =
+  "Handlingsplanen måste fyllas i och sparas innan notisen kan markeras som löst.";
+const isAdminUser = (user) => {
+  const roles = [...(Array.isArray(user?.roles) ? user.roles : []), user?.role];
+  return roles.includes("admin") || roles.includes("systemadmin");
+};
+async function actionPlanSavedSince(studentId, since) {
+  if (!studentId || !mongoose.Types.ObjectId.isValid(String(studentId))) return false;
+  const filter = { studentId: new mongoose.Types.ObjectId(String(studentId)) };
+  if (since) filter.createdAt = { $gte: since };
+  return Boolean(await ActionPlan.exists(filter));
+}
+
 router.put('/notifications/resolve/:studentId', authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
   try {
     const rawId = req.params.studentId;
@@ -251,6 +267,12 @@ router.put('/notifications/resolve/:studentId', authenticateUser, hasRole(ALLOWE
     if (mongoose.Types.ObjectId.isValid(rawId)) {
       filter.$or.push({ studentId: new mongoose.Types.ObjectId(rawId) });
       filter.$or.push({ "meta.studentId": new mongoose.Types.ObjectId(rawId) });
+    }
+    if (!isAdminUser(req.user)) {
+      const oldestOpen = await Notification.findOne(filter).sort({ createdAt: 1 }).select("createdAt").lean();
+      if (oldestOpen && !(await actionPlanSavedSince(rawId, oldestOpen.createdAt))) {
+        return res.status(409).json({ message: ACTION_PLAN_LOCKED_MESSAGE });
+      }
     }
     await Notification.updateMany(filter, { $set: { resolved: true } });
     // Also resolve on raw collection in case documents were inserted bypass Mongoose
@@ -279,6 +301,13 @@ router.put("/notifications/:id/resolve", authenticateUser, async (req, res) => {
 
     if (!(await isUserAuthorizedForNotification(req, note))) {
       return res.status(403).send("Du har inte behörighet att hantera denna notis");
+    }
+
+    if (note.type === "action_plan_required" && !isAdminUser(req.user)) {
+      const studentId = note.studentId || note.meta?.studentId;
+      if (!(await actionPlanSavedSince(studentId, note.createdAt))) {
+        return res.status(409).json({ message: ACTION_PLAN_LOCKED_MESSAGE, locked: true });
+      }
     }
 
     // Add current user to resolvedByUsers array (per-user resolution)

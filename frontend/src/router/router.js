@@ -339,7 +339,8 @@ const routes = [
     path: '/provningar',
     name: 'ProvningarCrud',
     component: () => import('@/views/Provningar/ProvningarCrud.vue'),
-    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin'], requiresAuth: true },
+    // Teachers see only their assigned prövningar and may make decisions.
+    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin', 'teacher'], requiresAuth: true },
   },
 
   // Chatbot FAQ / Knowledge Base management (same view for admin & teacher;

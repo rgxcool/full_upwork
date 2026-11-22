@@ -17,6 +17,8 @@ const EducationEntrySchema = new mongoose.Schema(
         startDate: { type: Date },
         endDate: { type: Date },
         grade: { type: String },
+        // Set by POST /teacher/lock-grade on legacy rows; honoured by save-grade.
+        locked: { type: Boolean, default: false },
         addedAt: { type: Date },
         addedBy: { type: mongoose.Schema.Types.ObjectId },
         removedAt: { type: Date },

@@ -2,6 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ProvningarCrud from '@/views/Provningar/ProvningarCrud.vue'
 import client from '@/api/client.js'
+import { createStore } from 'vuex'
+
+// The view reads the role from Vuex: admins manage everything, teachers only
+// see their own prövningar and may decide on them.
+const storeFor = (role = 'admin') =>
+  createStore({
+    state: { user: { role, roles: [role] } },
+    getters: { isAdmin: (state) => ['admin', 'systemadmin'].includes(state.user.role) },
+  })
+const mountCrud = (options = {}, role = 'admin') =>
+  mountCrud({
+    ...options,
+    global: { ...(options.global || {}), plugins: [storeFor(role), ...(options.global?.plugins || [])] },
+  })
 
 vi.mock('@/api/client.js', () => ({
   default: {
@@ -39,7 +53,7 @@ describe('ProvningarCrud', () => {
   })
 
   it('renders actions above the search and filter fields', () => {
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
 
     const actionRow = wrapper.find('.provning-actions')
     expect(actionRow.exists()).toBe(true)
@@ -54,7 +68,7 @@ describe('ProvningarCrud', () => {
   })
 
   it('closes edit mode with safe empty nested form state', async () => {
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.openForm({
@@ -87,7 +101,7 @@ describe('ProvningarCrud', () => {
   })
 
   it('opens a new exam with safe nested defaults', async () => {
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.openForm()
@@ -118,7 +132,7 @@ describe('ProvningarCrud', () => {
       return Promise.resolve({ data: [] })
     })
 
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.searchQuery = 'Anna'
@@ -157,7 +171,7 @@ describe('ProvningarCrud', () => {
       return Promise.resolve({ data: [] })
     })
 
-    const wrapper = mount(ProvningarCrud, {
+    const wrapper = mountCrud({
       attachTo: document.body,
     })
     await flushPromises()
@@ -177,7 +191,7 @@ describe('ProvningarCrud', () => {
   })
 
   it('handles decision dialog open and close', async () => {
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.openDecision({
@@ -197,7 +211,7 @@ describe('ProvningarCrud', () => {
 
   it('submits an exam decision and refreshes the list', async () => {
     client.put.mockResolvedValue({ data: { success: true } })
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.openDecision({ _id: 'exam-1', name: 'Anna', course: 'Svenska' })
@@ -211,9 +225,52 @@ describe('ProvningarCrud', () => {
     expect(wrapper.vm.showDecision).toBe(false)
   })
 
+  it('requires a motivation before denying and sends it when given', async () => {
+    client.put.mockResolvedValue({ data: { success: true } })
+    const wrapper = mountCrud()
+    await flushPromises()
+
+    wrapper.vm.openDecision({ _id: 'exam-1', name: 'Anna', course: 'Svenska' })
+    wrapper.vm.decisionComment = '   '
+    await wrapper.vm.submitDecision('deny')
+    expect(client.put).not.toHaveBeenCalled()
+    expect(wrapper.vm.decisionError).toContain('Motivering krävs')
+
+    wrapper.vm.decisionComment = 'AUDIT: ej behörig'
+    await wrapper.vm.submitDecision('deny')
+    await flushPromises()
+    expect(client.put).toHaveBeenCalledWith('/exams/exam-1/decision', {
+      decision: 'deny',
+      comment: 'AUDIT: ej behörig',
+    })
+  })
+
+  it('shows teachers only their own prövningar and hides admin actions', async () => {
+    client.get.mockResolvedValue({ data: [] })
+    const wrapper = mountCrud({}, 'teacher')
+    await flushPromises()
+
+    expect(client.get).toHaveBeenCalledWith('/exams')
+    expect(client.get).not.toHaveBeenCalledWith('/admin/exams')
+    expect(client.get).not.toHaveBeenCalledWith('/teachers')
+    expect(wrapper.text()).not.toContain('Registrera Ny')
+    expect(wrapper.text()).not.toContain('Importera')
+  })
+
+  it('edits material pickup separately for SVE/SVA 1 and 3', async () => {
+    const wrapper = mountCrud()
+    await flushPromises()
+    wrapper.vm.openForm({
+      _id: 'exam-2',
+      materialReceived: { status: true, level3: { status: true, receivedDate: '2026-11-03T00:00:00.000Z' } },
+    })
+    expect(wrapper.vm.currentExam.materialReceived.level1).toEqual({ status: false, receivedDate: '' })
+    expect(wrapper.vm.currentExam.materialReceived.level3).toEqual({ status: true, receivedDate: '2026-11-03' })
+  })
+
   it('opens and confirms exam deletion', async () => {
     client.delete.mockResolvedValue({ data: { success: true } })
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.deleteExam('exam-1')
@@ -228,7 +285,7 @@ describe('ProvningarCrud', () => {
   })
 
   it('validates imports and closes import state', async () => {
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.showImport = true
@@ -246,7 +303,7 @@ describe('ProvningarCrud', () => {
   })
 
   it('exports the filtered exam list as CSV', async () => {
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.exams = [{
@@ -265,7 +322,7 @@ describe('ProvningarCrud', () => {
     client.post.mockResolvedValue({
       data: { success: true, message: 'Klart', saved: [{ _id: 'exam-1' }] },
     })
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.handleFileSelect({
@@ -295,7 +352,7 @@ describe('ProvningarCrud', () => {
 
   it('saves a valid exam and closes the form', async () => {
     client.post.mockResolvedValue({ data: { success: true } })
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.openForm()
@@ -311,7 +368,7 @@ describe('ProvningarCrud', () => {
   })
 
   it('shows validation errors without saving an incomplete exam', async () => {
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.openForm()
@@ -325,7 +382,7 @@ describe('ProvningarCrud', () => {
     client.post.mockRejectedValueOnce({
       response: { data: { error: 'Ogiltig fil' } },
     })
-    const wrapper = mount(ProvningarCrud)
+    const wrapper = mountCrud()
     await flushPromises()
 
     wrapper.vm.deleteExam('exam-1')

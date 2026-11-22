@@ -204,6 +204,41 @@ describe("processStudentEducation — course package studietakt (pace)", () => {
         );
     });
 
+    it("keeps a 10-week spreadsheet span at 100% pace instead of the 5-week default extent", async () => {
+        const student = await Student.create({
+            name: "AUDIT Tioveckorsson",
+            personalNumber: "20030101-5555",
+            email: "audit-tio@elev.se",
+        });
+        // Course extent left at the default (unset → 5 weeks).
+        const course = await Course.create({
+            courseName: "Matematik 1a",
+            courseCode: "MATAUDIT1a",
+            coursePoints: 100,
+            isActive: true,
+        });
+
+        await CourseMatchingService.processStudentEducation(
+            student._id.toString(),
+            [{
+                type: "Course",
+                refId: course._id.toString(),
+                name: "MATAUDIT1a",
+                startDate: "2027-01-11",
+                endDate: "2027-03-22", // 10 weeks in the Alvis sheet
+            }],
+            null,
+            { pace: 100, applyPace: true } // STUDIETAKT column present
+        );
+
+        const enrollment = await StudentEnrollment.findOne({ studentId: student._id });
+        const weeks = Math.round(
+            (new Date(enrollment.endDate) - new Date(enrollment.startDate)) / (7 * 24 * 60 * 60 * 1000)
+        );
+        expect(weeks).toBe(10);
+        expect(new Date(enrollment.endDate).toISOString().slice(0, 10)).toBe("2027-03-22");
+    });
+
     it("keeps explicit spreadsheet dates when no pace is applied", async () => {
         const student = await Student.create({
             name: "Explicit Elev",

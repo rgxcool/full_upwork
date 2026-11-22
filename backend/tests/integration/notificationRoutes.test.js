@@ -14,6 +14,7 @@ import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import Notification from "../../src/models/Notification.js";
 import Teacher from "../../src/models/Teacher.js";
+import ActionPlan from "../../src/models/ActionPlan.js";
 import {
     connectTestDatabase,
     disconnectTestDatabase,
@@ -294,6 +295,59 @@ describe("Notification Routes", () => {
                 "message",
                 "Error resolving notification"
             );
+        });
+    });
+
+    describe("F-grade action plan reminders are locked", () => {
+        const makeTeacherNote = async () => {
+            const userId = new mongoose.Types.ObjectId();
+            const teacher = await Teacher.create({ userId, subject: "Svenska" });
+            const studentId = new mongoose.Types.ObjectId();
+            const note = await Notification.create({
+                type: "action_plan_required",
+                message: "Handlingsplan krävs: AUDIT",
+                resolved: false,
+                studentId,
+                teacher: teacher._id,
+            });
+            const token = signToken({ userId: userId.toString(), role: "teacher", roles: ["teacher"] });
+            return { note, studentId, token };
+        };
+
+        it("blocks a teacher from resolving it before an action plan is saved", async () => {
+            const { note, token } = await makeTeacherNote();
+            const response = await request(app)
+                .put(`/api/notifications/${note._id}/resolve`)
+                .set("Authorization", `Bearer ${token}`)
+                .expect(409);
+            expect(response.body.locked).toBe(true);
+            const reloaded = await Notification.findById(note._id);
+            expect(reloaded.resolvedByUsers).toHaveLength(0);
+        });
+
+        it("lets the teacher resolve it once an action plan has been saved", async () => {
+            const { note, studentId, token } = await makeTeacherNote();
+            await ActionPlan.create({ studentId, educationId: "edu-1", reason: "AUDIT" });
+            await request(app)
+                .put(`/api/notifications/${note._id}/resolve`)
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200);
+        });
+
+        it("blocks the bulk per-student resolve for non-admins without a plan", async () => {
+            const { studentId, token } = await makeTeacherNote();
+            await request(app)
+                .put(`/api/notifications/resolve/${studentId}`)
+                .set("Authorization", `Bearer ${token}`)
+                .expect(409);
+        });
+
+        it("still lets an admin override", async () => {
+            const { note } = await makeTeacherNote();
+            await request(app)
+                .put(`/api/notifications/${note._id}/resolve`)
+                .set("Authorization", `Bearer ${signToken({ role: "admin", roles: ["admin"] })}`)
+                .expect(200);
         });
     });
 

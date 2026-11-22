@@ -6,9 +6,10 @@
       <!-- Actions -->
       <v-row class="mb-2">
         <v-col cols="12" class="d-flex flex-wrap align-center provning-actions">
-          <v-btn color="primary" @click="openForm()">Registrera Ny</v-btn>
-          <v-btn color="secondary" variant="outlined" @click="showImport = true">Importera</v-btn>
+          <v-btn v-if="isAdmin" color="primary" @click="openForm()">Registrera Ny</v-btn>
+          <v-btn v-if="isAdmin" color="secondary" variant="outlined" @click="showImport = true">Importera</v-btn>
           <v-btn color="secondary" variant="outlined" @click="exportExams">Exportera</v-btn>
+          <span v-if="!isAdmin" class="text-caption ms-2">Visar prövningar där du är ansvarig lärare.</span>
         </v-col>
       </v-row>
 
@@ -100,8 +101,10 @@
         </template>
         <template #item.actions="{ item }">
           <v-icon small class="me-2" title="Beslut" @click="openDecision(item)">mdi-gavel</v-icon>
-          <v-icon small class="me-2" title="Redigera" @click="openForm(item)">mdi-pencil</v-icon>
-          <v-icon small color="red" title="Ta bort" @click="deleteExam(item._id)">mdi-delete</v-icon>
+          <template v-if="isAdmin">
+            <v-icon small class="me-2" title="Redigera" @click="openForm(item)">mdi-pencil</v-icon>
+            <v-icon small color="red" title="Ta bort" @click="deleteExam(item._id)">mdi-delete</v-icon>
+          </template>
         </template>
       </v-data-table>
 
@@ -143,13 +146,23 @@
             <v-checkbox v-model="currentExam.accommodations.computer" label="Dator" density="compact" hide-details />
             <v-checkbox v-model="currentExam.accommodations.separateRoom" label="Sitter ensam" density="compact" hide-details />
             <v-text-field v-model="currentExam.accommodations.notes" label="Anteckning om anpassning" density="compact" />
-            <v-checkbox v-model="currentExam.materialReceived.status" label="Material hämtat" />
-            <v-text-field
-              v-if="currentExam.materialReceived.status"
-              v-model="currentExam.materialReceived.receivedDate"
-              type="date"
-              label="Material hämtat datum"
-            />
+            <div class="text-subtitle-2 mt-2 mb-1">Material hämtat</div>
+            <div v-for="level in MATERIAL_LEVELS" :key="level.key" class="d-flex align-center ga-2">
+              <v-checkbox
+                v-model="currentExam.materialReceived[level.key].status"
+                :label="level.label"
+                density="compact"
+                hide-details
+              />
+              <v-text-field
+                v-if="currentExam.materialReceived[level.key].status"
+                v-model="currentExam.materialReceived[level.key].receivedDate"
+                type="date"
+                :label="`${level.label} – datum`"
+                density="compact"
+                hide-details
+              />
+            </div>
             <v-alert v-if="formError" type="error" density="compact" class="mt-2">{{ formError }}</v-alert>
           </v-card-text>
           <v-card-actions>
@@ -169,7 +182,12 @@
               <strong>{{ decisionTarget.name }}</strong> — {{ decisionTarget.course }}
               ({{ decisionTarget.requestedMonth }})
             </p>
-            <v-text-field v-model="decisionComment" label="Kommentar (valfritt)" />
+            <v-textarea
+              v-model="decisionComment"
+              label="Motivering (krävs vid Neka)"
+              rows="2"
+              auto-grow
+            />
             <v-alert v-if="decisionError" type="error" density="compact" class="mt-2">{{ decisionError }}</v-alert>
           </v-card-text>
           <v-card-actions class="flex-wrap">
@@ -238,6 +256,7 @@ import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
 import ConfirmDialog from '@/components/base/ConfirmDialog.vue'
 import { exportToCSV } from '@/utils/exportUtils.js'
+import { useStore } from 'vuex'
 
 const toast = useToast()
 
@@ -266,8 +285,17 @@ const createEmptyExam = () => ({
   materialReceived: {
     status: false,
     receivedDate: '',
+    level1: { status: false, receivedDate: '' },
+    level3: { status: false, receivedDate: '' },
   },
 })
+
+const MATERIAL_LEVELS = [
+  { key: 'level1', label: 'SVE/SVA 1' },
+  { key: 'level3', label: 'SVE/SVA 3' },
+]
+const store = useStore()
+const isAdmin = computed(() => store.getters.isAdmin)
 const currentExam = ref(createEmptyExam())
 const searchQuery = ref('')
 const filterStatus = ref('')
@@ -361,7 +389,9 @@ const filteredExams = computed(() => {
 
 const fetchExams = async () => {
   try {
-    const { data } = await client.get('/admin/exams')
+    // Admins see every prövning; teachers get only their own (GET /exams is
+    // teacher-scoped on the server).
+    const { data } = await client.get(isAdmin.value ? '/admin/exams' : '/exams')
     exams.value = data
   } catch (error) {
     toast.error('Kunde inte hämta provningar')
@@ -383,7 +413,8 @@ const fetchTeachers = async () => {
 const exportExams = () => {
   const headers = [
     'Namn', 'Personnummer', 'Telefon', 'E-post', 'Adress', 'Kurs',
-    'Önskad månad', 'Kommun', 'Lärare', 'Betalningsdatum', 'Material hämtat', 'Status',
+    'Önskad månad', 'Kommun', 'Lärare', 'Betalningsdatum',
+    'Material SVE/SVA 1', 'Material SVE/SVA 3', 'Status',
   ]
   const rows = filteredExams.value.map((exam) => [
     exam.name || '',
@@ -396,7 +427,8 @@ const exportExams = () => {
     exam.municipality || '',
     exam.teacherId?.userId?.username || exam.teacherName || '',
     exam.paymentDate ? new Date(exam.paymentDate).toLocaleDateString('sv-SE') : '',
-    exam.materialReceived?.status ? 'Ja' : 'Nej',
+    exam.materialReceived?.level1?.status ? 'Ja' : 'Nej',
+    exam.materialReceived?.level3?.status ? 'Ja' : 'Nej',
     exam.status || '',
   ])
   exportToCSV('provningar-export.csv', headers, rows)
@@ -409,12 +441,15 @@ const openForm = (exam = {}) => {
   if (examData.teacherId && typeof examData.teacherId === 'object') {
     examData.teacherId = examData.teacherId._id
   }
+  const levelFrom = (lvl) => ({
+    status: Boolean(lvl?.status),
+    receivedDate: toDateInput(lvl?.receivedDate),
+  })
   const materialReceived = {
-    status: false,
-    ...(exam.materialReceived || {}),
-  }
-  if (materialReceived.receivedDate) {
-    materialReceived.receivedDate = toDateInput(materialReceived.receivedDate)
+    status: Boolean(exam.materialReceived?.status),
+    receivedDate: toDateInput(exam.materialReceived?.receivedDate),
+    level1: levelFrom(exam.materialReceived?.level1),
+    level3: levelFrom(exam.materialReceived?.level3),
   }
   const accommodations =
     exam.accommodations && !Array.isArray(exam.accommodations)
@@ -452,6 +487,10 @@ const closeDecision = () => {
 
 const submitDecision = async (decision) => {
   if (!decisionTarget.value?._id) return
+  if (decision === 'deny' && !decisionComment.value?.trim()) {
+    decisionError.value = 'Motivering krävs för att neka en prövning.'
+    return
+  }
   savingDecision.value = true
   decisionError.value = null
   try {
@@ -599,7 +638,8 @@ const submitImport = async () => {
 
 onMounted(() => {
   fetchExams()
-  fetchTeachers()
+  // The teacher picker is only used by the admin edit form.
+  if (isAdmin.value) fetchTeachers()
 })
 </script>
 
