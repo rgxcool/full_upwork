@@ -62,6 +62,8 @@
    
  | P22 | Dead deploy workflow (issue #34) | ✅ REMOVED (2026-11-22) | `github/workflows/deploy.yml` (never ran) deleted by decision; a reviewed deploy workflow will be scoped separately. `.github/workflows/ci.yml` unchanged. |  
    
+ | OPS-02 | Harden production `deploy.sh` (CI gate, atomic frontend, automatic rollback) | 🟡 IN REVIEW (2026-11-22, branch `chore/ops-02-harden-deploy`) | `deploy.sh`: `DRY_RUN=1`, deploy lock, `PREV_SHA`, refuses unless CI for the target `main` commit is green (`FORCE=1` override, logged), builds into `frontend/dist.new` and swaps with `dist.prev` kept, automatic rollback on failed `/health/live`/`/health/ready` (exit 2), `logs/deploy.log`. `ecosystem.config.cjs` uses `PM2_INSTANCES` (default 2) instead of `"max"`. `make deploy` now calls `deploy.sh`. Tests: `tests/deploy/deploy.test.sh` (15 cases, run in CI). Not yet run on the production host; needs a read-only GitHub token there. |  
+   
  | P18 | CI/CD pipeline + build/lint/test baseline | ✅ DONE | `.github/workflows/ci.yml` exists (lint + test + docker jobs). Backend/frontend tests, lint, build PASS locally (1859 backend / 251 frontend tests). Coverage gate is BACKEND DEPENDENCY (thresholds not met, not lowered — honest gap; Docker daemon was off this session so `make citest` could not be re-run). |  
    
  | — | GET /documents/:id metadata endpoint — staff tenant scope | ✅ DONE (2026-11-22, issue #40) | `canAccessStudentDocuments` applies municipalityInScope. Unknown or cross-tenant students now return **404** (`isStudentHiddenFromCaller`); same-tenant denials stay 403. Covered by an integration test in documentRoutes.test.js. |  

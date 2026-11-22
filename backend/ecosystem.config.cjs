@@ -3,7 +3,9 @@ module.exports = {
         {
             name: "ML-Backend",
             script: "./index.js",
-            instances: "max",
+            // Worker count: set PM2_INSTANCES on the host (deploy.sh exports it, default 2).
+            // Nightly jobs only run on worker 0 regardless of the count (isSchedulerLeader()).
+            instances: Number(process.env.PM2_INSTANCES) || 2,
             exec_mode: "cluster",
             env: {
                 NODE_ENV: "development",
