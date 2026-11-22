@@ -33,7 +33,7 @@
           + Placera kurs
         </button>
         <button
-          v-if="canEditStatus"
+          v-if="canRevise"
           class="btn btn-sm btn-warning revision-button"
           @click="showRevisionModal = true"
         >
@@ -303,6 +303,10 @@ export default {
       return ['admin', 'systemadmin', 'teacher'].includes(role);
     });
     const canSetCompleted = computed(() => store.getters.isAdmin);
+    // Matches POST /student-details/:id/revise-studyplan: admins and SYV.
+    const canRevise = computed(() =>
+      store.getters.userRoles.some((r) => ['admin', 'systemadmin', 'syv'].includes(r))
+    );
 
     // Sort education: CoursePackages first, then courses chronologically
     const sortEducation = (education) => {
@@ -878,6 +882,7 @@ export default {
       showPlacementWizard,
       handlePlacementComplete,
       showRevisionModal,
+      canRevise,
       activeEnrollments,
       handleRevisionComplete,
       revisionHistory,

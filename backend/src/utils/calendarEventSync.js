@@ -9,6 +9,106 @@ import "../models/CourseInstance.js";
 import "../models/User.js";
 import logger from "./logger.js";
 
+const ACTIVE_ENROLLMENT_STATUSES_EXCLUDED = ["completed", "dropped"];
+
+/** UTC calendar day of a stored date, matching how slutprov events are keyed. */
+export function utcDateKey(value) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** Normalise Student.examAccommodations into the shape stored on events. */
+export function toEventAccommodations(acc) {
+    const src = acc && typeof acc.toObject === "function" ? acc.toObject() : acc || {};
+    return {
+        extraTime: Number(src.extraTime) > 0 ? Number(src.extraTime) : 0,
+        computer: Boolean(src.computer),
+        separateRoom: Boolean(src.separateRoom),
+        notes: typeof src.notes === "string" ? src.notes : "",
+    };
+}
+
+const startOfTodayUTC = () => {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+};
+
+/**
+ * Remove a student from every future slutprov event whose date is not in
+ * `keepDateKeys` (UTC YYYY-MM-DD). Events left with no students are deleted.
+ * Past events are never touched so attendance history is kept.
+ * Returns { removedFrom, deleted }.
+ */
+export async function removeStudentFromStaleSlutprovEvents(studentId, keepDateKeys = []) {
+    const keep = new Set(keepDateKeys.filter(Boolean));
+    const sid = String(studentId);
+    const events = await CalendarEvent.find({
+        "extendedProps.type": "slutprov",
+        "extendedProps.students._id": studentId,
+        start: { $gte: startOfTodayUTC() },
+    });
+
+    let removedFrom = 0;
+    let deleted = 0;
+    for (const event of events) {
+        if (keep.has(utcDateKey(event.start))) continue;
+        const remaining = (event.extendedProps?.students || []).filter((s) => String(s._id) !== sid);
+        if (remaining.length === 0) {
+            await CalendarEvent.findByIdAndDelete(event._id);
+            deleted += 1;
+        } else {
+            event.extendedProps.students = remaining;
+            await event.save();
+        }
+        removedFrom += 1;
+    }
+    if (removedFrom > 0) {
+        logger.info({ studentId: sid, removedFrom, deleted }, "Removed student from stale slutprov events");
+    }
+    return { removedFrom, deleted };
+}
+
+/**
+ * Bring a student's slutprov calendar entries in line with their current
+ * enrollments: drop them from future events on dates they no longer have a
+ * slutprov (e.g. after a pace change) and add them to the event of every
+ * current slutprov date. Used by pace changes and reactivation (E1-11/E1-12).
+ */
+export async function syncStudentSlutprovCalendar(studentId) {
+    const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
+    const enrollments = await StudentEnrollment.find({
+        studentId,
+        slutprovDate: { $ne: null },
+        status: { $nin: ACTIVE_ENROLLMENT_STATUSES_EXCLUDED },
+    }).select("_id slutprovDate");
+
+    const keepDateKeys = enrollments.map((e) => utcDateKey(e.slutprovDate));
+    const pruned = await removeStudentFromStaleSlutprovEvents(studentId, keepDateKeys);
+    for (const enrollment of enrollments) {
+        await syncCalendarEventFromEnrollment(enrollment._id);
+    }
+    return { ...pruned, synced: enrollments.length, dates: keepDateKeys };
+}
+
+/**
+ * Copy a student's current exam accommodations onto their entries in all
+ * future slutprov events (E1-19/E1-20). Returns the number of events updated.
+ */
+export async function syncStudentAccommodationsToEvents(studentId, accommodations) {
+    const value = toEventAccommodations(accommodations);
+    const result = await CalendarEvent.updateMany(
+        {
+            "extendedProps.type": "slutprov",
+            "extendedProps.students._id": studentId,
+            start: { $gte: startOfTodayUTC() },
+        },
+        { $set: { "extendedProps.students.$[s].examAccommodations": value } },
+        { arrayFilters: [{ "s._id": studentId }] }
+    );
+    return result?.modifiedCount ?? 0;
+}
+
 /**
  * Syncs calendar events for students with finalExamDate
  * Groups students by date and teacherId (if available)
@@ -92,6 +192,7 @@ export async function syncCalendarEventsForStudent(studentId) {
             additionalInfo: student.additionalInfo || "",
             attended: student.attendedExam || false,
             courseName: courseName || "Okänd kurs",
+            examAccommodations: toEventAccommodations(student.examAccommodations),
         };
 
         if (existingEvent) {
@@ -272,6 +373,7 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
             additionalInfo: student.additionalInfo || "",
             attended: student.attendedExam || false,
             courseName: courseName || "Okänd kurs",
+            examAccommodations: toEventAccommodations(student.examAccommodations),
         };
 
         if (existingEvent) {
