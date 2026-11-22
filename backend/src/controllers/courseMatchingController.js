@@ -2855,26 +2855,45 @@ export const updateCourseInstanceContent = async (req, res) => {
     // Synka instance.modules så tillagda/borttagna moduler även speglas på kurskortet
     if (syncModules) {
       if (Array.isArray(modules) && modules.length > 0) {
-        instance.modules = modules.map((mod, index) => ({
-          moduleNumber: Number(mod.moduleNumber ?? index + 1),
-          title: String(mod.title || `Modul ${index + 1}`),
-          isPartialExam: Boolean(mod.isPartialExam),
-          isCaseStudy: Boolean(mod.isCaseStudy),
-          sections: Array.isArray(mod.sections)
-            ? mod.sections.map((section) => ({
-                title: String(section.title || ""),
-                description: String(section.description || ""),
-                instructions: String(section.instructions || ""),
-                blocks: Array.isArray(section.blocks) ? section.blocks : [],
-              }))
-            : [],
-          assignment: mod.assignment && typeof mod.assignment === "object"
-            ? {
-                title: String(mod.assignment.title || ""),
-                description: String(mod.assignment.description || ""),
-              }
-            : { title: "", description: "" },
-        }));
+        // #30: merge by moduleNumber so the Datumplanering dates applied at
+        // creation survive a content save. A valid date in the payload wins;
+        // otherwise the saved date is kept. New modules stay unscheduled.
+        const savedByNumber = new Map(
+          (instance.modules || []).map((m) => [Number(m.moduleNumber), m]),
+        );
+        const pickDate = (incoming, saved) => {
+          if (incoming !== undefined && incoming !== null && incoming !== "") {
+            const d = new Date(incoming);
+            if (!Number.isNaN(d.getTime())) return d;
+          }
+          return saved || undefined;
+        };
+        instance.modules = modules.map((mod, index) => {
+          const moduleNumber = Number(mod.moduleNumber ?? index + 1);
+          const saved = savedByNumber.get(moduleNumber);
+          return {
+            moduleNumber,
+            startDate: pickDate(mod.startDate, saved?.startDate),
+            endDate: pickDate(mod.endDate, saved?.endDate),
+            title: String(mod.title || `Modul ${index + 1}`),
+            isPartialExam: Boolean(mod.isPartialExam),
+            isCaseStudy: Boolean(mod.isCaseStudy),
+            sections: Array.isArray(mod.sections)
+              ? mod.sections.map((section) => ({
+                  title: String(section.title || ""),
+                  description: String(section.description || ""),
+                  instructions: String(section.instructions || ""),
+                  blocks: Array.isArray(section.blocks) ? section.blocks : [],
+                }))
+              : [],
+            assignment: mod.assignment && typeof mod.assignment === "object"
+              ? {
+                  title: String(mod.assignment.title || ""),
+                  description: String(mod.assignment.description || ""),
+                }
+              : { title: "", description: "" },
+          };
+        });
         instance.markModified("modules");
       } else {
       const existingByNumber = new Map(

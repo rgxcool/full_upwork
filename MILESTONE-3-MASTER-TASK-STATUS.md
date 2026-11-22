@@ -341,7 +341,7 @@
    
  | 59 | Övningsuppgifter: revision return + threaded discussion | ✅ DONE | Return/`komplettera` works; threaded discussion UI added: Submissions.vue renders a recursive thread (SubmissionsCommentThread.vue) and every comment has a "Svara" (reply) button that posts `parentCommentId` to the existing backend endpoint (learningController.js addSubmissionComment). |  
    
- | 60 | Datumplanering auto-applied from teacher params | ✅ DONE | — |  
+ | 60 | Datumplanering auto-applied from teacher params | ✅ DONE | Bug #30 fixed 2026-11-22: saving content from CourseCardBuilder (modules[] + syncModules) wiped module startDate/endDate. Dates are now merged by moduleNumber, new modules stay unscheduled, and an explicit payload date wins. Covered by 3 integration tests in courseInstanceAccess.test.js. |  
    
  | 61 | Innehåll: hide modules from students | ✅ DONE (fixed since original audit) | Hidden-module filter is now applied on both course-card and student learning endpoints. |  
    

@@ -235,4 +235,89 @@ describe("Kurskort access control (content + activity feed)", () => {
             expect(saved.activityFeed).toHaveLength(1);
         });
     });
+
+    // #30: saving from CourseCardBuilder (modules[] + syncModules) must not
+    // wipe the Datumplanering dates applied at creation.
+    describe("PUT content keeps per-module dates (#30)", () => {
+        const start1 = new Date("2026-01-05T00:00:00.000Z");
+        const end1 = new Date("2026-01-12T00:00:00.000Z");
+        const start2 = new Date("2026-01-12T00:00:00.000Z");
+        const end2 = new Date("2026-01-19T00:00:00.000Z");
+
+        beforeEach(async () => {
+            await CourseInstance.updateOne(
+                { _id: instance._id },
+                {
+                    $set: {
+                        modules: [
+                            { moduleNumber: 1, title: "Modul 1", startDate: start1, endDate: end1 },
+                            { moduleNumber: 2, title: "Modul 2", startDate: start2, endDate: end2 },
+                        ],
+                    },
+                }
+            );
+        });
+
+        // Same shape the builder sends: no dates on the modules.
+        const builderPayload = (modules) => ({
+            content: { 1: { title: "Modul 1" } },
+            modules,
+            syncModules: true,
+        });
+
+        it("keeps saved dates when the builder saves without dates", async () => {
+            const res = await request(app)
+                .put(contentUrl())
+                .set(auth(users.resp))
+                .send(
+                    builderPayload([
+                        { moduleNumber: 1, title: "Modul 1 (ny titel)", sections: [] },
+                        { moduleNumber: 2, title: "Modul 2", sections: [] },
+                    ])
+                );
+            expect(res.status).toBe(200);
+
+            const saved = await CourseInstance.findById(instance._id).lean();
+            const byNum = Object.fromEntries(saved.modules.map((m) => [m.moduleNumber, m]));
+            expect(byNum[1].title).toBe("Modul 1 (ny titel)");
+            expect(byNum[1].startDate.toISOString()).toBe(start1.toISOString());
+            expect(byNum[1].endDate.toISOString()).toBe(end1.toISOString());
+            expect(byNum[2].startDate.toISOString()).toBe(start2.toISOString());
+            expect(byNum[2].endDate.toISOString()).toBe(end2.toISOString());
+        });
+
+        it("matches dates by moduleNumber when modules are reordered, and leaves new modules unscheduled", async () => {
+            const res = await request(app)
+                .put(contentUrl())
+                .set(auth(users.admin))
+                .send(
+                    builderPayload([
+                        { moduleNumber: 2, title: "Modul 2" },
+                        { moduleNumber: 1, title: "Modul 1" },
+                        { moduleNumber: 3, title: "Ny modul" },
+                    ])
+                );
+            expect(res.status).toBe(200);
+
+            const saved = await CourseInstance.findById(instance._id).lean();
+            const byNum = Object.fromEntries(saved.modules.map((m) => [m.moduleNumber, m]));
+            expect(byNum[1].startDate.toISOString()).toBe(start1.toISOString());
+            expect(byNum[2].startDate.toISOString()).toBe(start2.toISOString());
+            expect(byNum[3].startDate).toBeUndefined();
+            expect(byNum[3].endDate).toBeUndefined();
+        });
+
+        it("uses an explicit valid date from the payload", async () => {
+            const moved = "2026-02-02T00:00:00.000Z";
+            await request(app)
+                .put(contentUrl())
+                .set(auth(users.resp))
+                .send(builderPayload([{ moduleNumber: 1, title: "Modul 1", startDate: moved }]))
+                .expect(200);
+
+            const saved = await CourseInstance.findById(instance._id).lean();
+            expect(saved.modules[0].startDate.toISOString()).toBe(moved);
+            expect(saved.modules[0].endDate.toISOString()).toBe(end1.toISOString());
+        });
+    });
 });
