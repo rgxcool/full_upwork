@@ -8,7 +8,8 @@ import { isAuthenticated, hasRole } from "../middleware/auth.js";
 import { validate, validateId } from "../middleware/validation.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import { recordAudit } from "../utils/auditLog.js";
-import { PERMISSION_FEATURES } from "../config/permissions.js";
+import { PERMISSION_FEATURES, PERMISSION_MATRIX, hasPermission as roleHasFeature } from "../config/permissions.js";
+import rolesConfig from "../config/roles.js";
 import { ALL_MUNICIPALITIES } from "../config/municipalities.js";
 import logger from "../utils/logger.js";
 
@@ -282,32 +283,19 @@ router.get(
     hasRole(["admin", "systemadmin"]),
     async (req, res) => {
         try {
-            const matrix = {
-                calendar_final_exam: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: false },
-                search_content: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: false },
-                search_users: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: false },
-                statistics: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: false },
-                manage_users_permissions: { systemadmin: true, admin: true, teacher: false, syv: false, specped: false, coordinator: false, student: false },
-                hierarchy_management: { systemadmin: true, admin: false, teacher: false, syv: false, specped: false, coordinator: false, student: false },
-                own_settings: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: true },
-                add_municipalities_courses: { systemadmin: true, admin: false, teacher: false, syv: false, specped: false, coordinator: false, student: false },
-                course_templates: { systemadmin: true, admin: true, teacher: true, syv: false, specped: false, coordinator: false, student: false },
-                messaging: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: true },
-                mass_messaging: { systemadmin: true, admin: true, teacher: false, syv: false, specped: false, coordinator: false, student: false },
-                evaluations: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: false },
-                course_management: { systemadmin: true, admin: true, teacher: true, syv: false, specped: false, coordinator: false, student: false },
-                student_documents: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: true },
-            };
+            // Derived from the single sources of truth (config/permissions.js
+            // PERMISSION_MATRIX and config/roles.js) instead of hand-kept
+            // copies that drifted apart (audit E1-01).
+            const matrix = Object.fromEntries(
+                Object.entries(PERMISSION_MATRIX).map(([feature, byRole]) => [
+                    feature,
+                    Object.fromEntries(Object.keys(byRole).map((role) => [role, roleHasFeature(role, feature)])),
+                ])
+            );
 
-            const rbacPermissions = {
-                systemadmin: ['users:create', 'users:read', 'users:update', 'users:delete', 'teachers:read', 'teachers:create', 'teachers:update', 'teachers:delete', 'teachers:unassign', 'assignments:create', 'assignments:read:own', 'assignments:update:own', 'assignments:grade', 'students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update', 'courseTemplates:delete'],
-                admin: ['users:create', 'users:read', 'users:update', 'users:delete', 'teachers:read', 'teachers:create', 'teachers:update', 'teachers:delete', 'teachers:unassign', 'analytics:read', 'inactivity:read', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update', 'courseTemplates:delete'],
-                teacher: ['inactivity:read', 'assignments:create', 'assignments:read:own', 'assignments:update:own', 'assignments:grade', 'students:view_list:assigned', 'students:view_grades:assigned', 'courseTemplates:create', 'courseTemplates:read', 'courseTemplates:update'],
-                coordinator: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
-                syv: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
-                specped: ['students:view_list:assigned', 'students:view_grades:assigned', 'analytics:read', 'inactivity:read'],
-                student: ['viewOwnGrades', 'viewOwnSchedule', 'viewOwnProfile', 'viewCourseInfo', 'viewNotifications'],
-            };
+            const rbacPermissions = Object.fromEntries(
+                Object.entries(rolesConfig).map(([role, perms]) => [role, [...perms]])
+            );
 
             const ALL_RBAC_KEYS = [...new Set(Object.values(rbacPermissions).flat())].sort();
 

@@ -1,0 +1,45 @@
+- generic [ref=f11e3]:
+  - navigation [ref=f11e25]:
+    - generic [ref=f11e26]:
+      - link [ref=f11e28] [cursor=pointer]:
+        - /url: /
+        - img "Mindful logo" [ref=f11e29]
+      - generic [ref=f11e31]:
+        - generic [ref=f11e32] [cursor=pointer]: Alla
+        - textbox "Sök efter alla..." [ref=f11e35]
+      - generic [ref=f11e36]:
+        - button "Min profil" [ref=f11e38] [cursor=pointer]
+        - generic [ref=f11e44]: "8"
+        - link "Meddelanden" [ref=f11e50] [cursor=pointer]:
+          - /url: /messages
+        - button "Öppna meny" [ref=f11e53] [cursor=pointer]
+  - generic [ref=f11e56]:
+    - heading "Min profil" [level=1] [ref=f11e57]
+    - generic [ref=f11e58]:
+      - complementary [ref=f11e59]:
+        - list [ref=f11e60]:
+          - listitem [ref=f11e61] [cursor=pointer]:
+            - generic [ref=f11e62]: 👤
+            - text: Min profil
+          - listitem [ref=f11e63] [cursor=pointer]:
+            - generic [ref=f11e64]: 🔒
+            - text: Byt lösenord
+          - listitem [ref=f11e65] [cursor=pointer]:
+            - generic [ref=f11e66]: 📁
+            - text: Delade dokument
+          - listitem [ref=f11e67] [cursor=pointer]:
+            - generic [ref=f11e68]: 📋
+            - text: Att göra
+      - main [ref=f11e69]:
+        - generic [ref=f11e70]:
+          - heading "Kontouppgifter" [level=3] [ref=f11e72]
+          - generic [ref=f11e74]:
+            - generic [ref=f11e75]:
+              - generic [ref=f11e76]: Namn
+              - text: Eva Nahi
+            - generic [ref=f11e77]:
+              - generic [ref=f11e78]: E-post
+              - text: teacher@mindful.se
+            - generic [ref=f11e79]:
+              - generic [ref=f11e80]: Roll
+              - text: Lärare

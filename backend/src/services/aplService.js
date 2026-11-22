@@ -104,24 +104,46 @@ export async function autoCreateRecords(userId) {
  * No external dependency (mail stays optional — see notifyAplKit).
  */
 export const APL_LEARNING_KIT_TITLE = "APL-lärkit";
+export const APL_LEARNING_KIT_KIND = "apl-learning-kit";
+
+// #35: recognise a kit by its stable `kind`; kits issued before the marker
+// existed are still recognised by their title so nobody gets a second kit.
+const isAplLearningKit = (kit) =>
+    Boolean(kit) &&
+    (kit.kind === APL_LEARNING_KIT_KIND || (!kit.kind && kit.title === APL_LEARNING_KIT_TITLE));
 
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-export async function ensureAplLearningKit(studentId, { now = new Date() } = {}) {
-    const student = await Student.findById(studentId);
-    if (!student) return null;
+export async function ensureAplLearningKit(studentId, options = {}) {
+    const { kit } = await issueAplLearningKit(studentId, options);
+    return kit;
+}
 
-    const existing = (student.logbook || []).find(
-        (kit) => kit.title && kit.title === APL_LEARNING_KIT_TITLE
-    );
-    if (existing) return existing;
+/**
+ * Same as ensureAplLearningKit, but also reports whether a kit was created by
+ * this call, so callers can count issuance without re-reading stale data.
+ * @returns {Promise<{kit: Object|null, created: boolean}>}
+ */
+async function issueAplLearningKit(studentId, { now = new Date() } = {}) {
+    const student = await Student.findById(studentId);
+    if (!student) return { kit: null, created: false };
+
+    const existing = (student.logbook || []).find(isAplLearningKit);
+    if (existing) {
+        // Lazy backfill: tag a legacy (title-only) kit with the stable marker.
+        if (!existing.kind) {
+            existing.kind = APL_LEARNING_KIT_KIND;
+            await student.save();
+        }
+        return { kit: existing, created: false };
+    }
 
     const period = computeAplPeriod(student.education || []);
     if (
         !period.aplStartDate ||
         startOfDay(period.aplStartDate).getTime() > startOfDay(now).getTime()
     ) {
-        return null;
+        return { kit: null, created: false };
     }
 
     const record = await AplRecord.findOne({ studentId });
@@ -130,6 +152,7 @@ export async function ensureAplLearningKit(studentId, { now = new Date() } = {})
     const kit = {
         id: new mongoose.Types.ObjectId(),
         title: APL_LEARNING_KIT_TITLE,
+        kind: APL_LEARNING_KIT_KIND,
         description: `Personligt APL-lärkit för ${student.name}. APL-period: ${fmt(
             period.aplStartDate
         )} – ${fmt(period.aplEndDate)}.`,
@@ -144,7 +167,7 @@ export async function ensureAplLearningKit(studentId, { now = new Date() } = {})
     await student.save();
 
     await notifyAplKit(student, kit);
-    return kit;
+    return { kit, created: true };
 }
 
 /**
@@ -163,15 +186,12 @@ export async function ensureStartedAplLearningKits(now = new Date()) {
     let created = 0;
 
     for (const student of started) {
-        const alreadyHasKit = (student.logbook || []).some(
-            (kit) => kit.title === APL_LEARNING_KIT_TITLE
-        );
-        if (alreadyHasKit) continue;
+        // `student` comes from a .lean() list, so it is never updated by the
+        // issuance below; count from the result instead of re-reading it (#35).
+        if ((student.logbook || []).some(isAplLearningKit)) continue;
 
-        await ensureAplLearningKit(student._id, { now });
-        if ((student.logbook || []).some((kit) => kit.title === APL_LEARNING_KIT_TITLE)) {
-            created += 1;
-        }
+        const result = await issueAplLearningKit(student._id, { now });
+        if (result.created) created += 1;
     }
 
     return created;

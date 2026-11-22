@@ -1,4 +1,5 @@
 import logger from "./logger.js";
+import { captureRequestError } from "./monitoring.js";
 
 // Custom error classes
 export class AppError extends Error {
@@ -234,6 +235,9 @@ export const globalErrorHandler = (err, req, res, _next) => {
     // Default error
     const statusCode = error.statusCode || 500;
     const message = error.message || "Server Error";
+
+    // Development only (no-op in production): report server errors to Sentry.
+    if (statusCode >= 500) captureRequestError(err, req);
 
     // Send error response
     res.status(statusCode).json({

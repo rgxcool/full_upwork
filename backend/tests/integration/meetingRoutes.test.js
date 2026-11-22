@@ -237,6 +237,48 @@ describe("Meeting Routes", () => {
             expect(response.body).toHaveProperty("bookedBy", "admin");
         });
 
+        const meetingPayload = (bookedBy) => ({
+            title: "AUDIT meeting",
+            start: "2024-02-01T12:00:00.000Z",
+            studentId: new mongoose.Types.ObjectId().toString(),
+            studentName: "Student D",
+            bookedBy,
+        });
+
+        it("forbids students from creating meetings, even posing as syv", async () => {
+            const token = signToken({ role: "student", roles: ["student"] });
+            await request(app)
+                .post("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .send(meetingPayload("syv"))
+                .expect(403);
+            expect(await Meeting.countDocuments()).toBe(0);
+        });
+
+        it("lets syv book as syv but not as specped", async () => {
+            const token = signToken({ role: "syv", roles: ["syv"] });
+            await request(app)
+                .post("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .send(meetingPayload("syv"))
+                .expect(201);
+            await request(app)
+                .post("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .send(meetingPayload("specped"))
+                .expect(403);
+        });
+
+        it("lets admins book on behalf of syv", async () => {
+            const token = signToken({ role: "admin", roles: ["admin"] });
+            const response = await request(app)
+                .post("/api/meetings")
+                .set("Authorization", `Bearer ${token}`)
+                .send(meetingPayload("syv"))
+                .expect(201);
+            expect(response.body).toHaveProperty("bookedBy", "syv");
+        });
+
         it("returns 400 when required fields are missing", async () => {
             const token = signToken();
             const response = await request(app)

@@ -103,7 +103,7 @@ const routes = [
     meta: { title: 'Kursstatistik', role: 'admin' },
   },
 
-  // Admin Routes (Requires "admin" or higher)
+  // Admin Routes (role "admin"; systemadmin implies admin)
   { path: '/lagg-till-anvandare', component: AddUser, meta: { title: 'Add User', role: 'admin' } },
   {
     path: '/lagg-till-larare',
@@ -171,7 +171,7 @@ const routes = [
     path: '/detaljer/:type/:id',
     component: SearchResultDetails,
     props: true,
-    meta: { title: 'Search Result Details', role: ['teacher', 'syv', 'specped'] },
+    meta: { title: 'Search Result Details', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
     beforeEnter: (to, from, next) => {
       // Redirect Elev type to student view
       if (to.params.type === 'Elev' || to.params.type === 'Student') {
@@ -201,7 +201,7 @@ const routes = [
     name: 'EducationDetials',
     component: EducationDetails,
     props: true,
-    meta: { title: 'Education Details', role: ['admin', 'syv', 'specped'] },
+    meta: { title: 'Education Details', role: ['admin', 'systemadmin', 'teacher', 'syv', 'specped'] },
   },
   {
     path: '/students',
@@ -302,7 +302,12 @@ const routes = [
     path: '/admin/analytics',
     name: 'AnalyticsDashboard',
     component: () => import('@/views/Admin/AnalyticsDashboard.vue'),
-    meta: { title: 'Rapporter & Analys', role: ['admin', 'systemadmin'] },
+    // Matrix 'Statistik': Ja for staff except coordinator; per-user overrides win.
+    meta: {
+      title: 'Rapporter & Analys',
+      role: ['admin', 'systemadmin', 'teacher', 'syv', 'specped'],
+      feature: 'statistics',
+    },
   },
   {
     path: '/admin/inactivity',
@@ -339,7 +344,8 @@ const routes = [
     path: '/provningar',
     name: 'ProvningarCrud',
     component: () => import('@/views/Provningar/ProvningarCrud.vue'),
-    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin'], requiresAuth: true },
+    // Teachers see only their assigned prövningar and may make decisions.
+    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin', 'teacher'], requiresAuth: true },
   },
 
   // Chatbot FAQ / Knowledge Base management (same view for admin & teacher;
@@ -357,23 +363,28 @@ const routes = [
     meta: { title: 'Vanliga frågor (Chatbot)', role: ['teacher', 'admin', 'systemadmin'] },
   },
 
-  // Teacher Routes (Requires "teacher" or higher)
+  // Teacher Routes (explicit role lists; no role inherits another's routes)
   {
     path: '/larare/kurser',
     name: 'TeacherKurser',
     component: () => import('@/views/Teacher/TeacherKurserPage.vue'),
-    meta: { title: 'Kurser', role: 'teacher' },
+    meta: { title: 'Kurser', role: ['teacher', 'admin', 'systemadmin'] },
   },
   {
     path: '/kalender',
     component: FullCalendar,
-    meta: { title: 'Kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
+    // Matrix 'Kalender (slutprov)': coordinator Nej unless overridden per user.
+    meta: {
+      title: 'Kalender',
+      role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'],
+      feature: 'calendar_final_exam',
+    },
   },
   {
     path: '/syv/appointments',
     name: 'SyvAppointments',
     component: RoleBasedAppointments,
-    meta: { title: 'SYV Samtal', role: 'syv', requiredRoles: ['syv', 'admin', 'systemadmin'] },
+    meta: { title: 'SYV Samtal', role: ['syv', 'admin', 'systemadmin'], requiredRoles: ['syv', 'admin', 'systemadmin'] },
   },
   {
     path: '/specped/appointments',
@@ -381,11 +392,15 @@ const routes = [
     component: RoleBasedAppointments,
     meta: {
       title: 'Specped Samtal',
-      role: 'specped',
+      role: ['specped', 'admin', 'systemadmin'],
       requiredRoles: ['specped', 'admin', 'systemadmin'],
     },
   },
-  { path: '/betyg', component: BetygSattning, meta: { title: 'Grade Setting', role: 'teacher' } },
+  {
+    path: '/betyg',
+    component: BetygSattning,
+    meta: { title: 'Grade Setting', role: ['teacher', 'admin', 'systemadmin'] },
+  },
   {
     path: '/profile',
     name: 'profile',
@@ -586,17 +601,19 @@ router.beforeEach((to, from, next) => {
   document.title = to.meta.title || 'Mindful Learning' // Dynamically set page titles
 
   const isAuthenticated = store.getters.isLoggedIn
-  const hasPermission = store.getters.hasPermission
+  // Explicit role lists + per-user feature overrides (no role hierarchy).
+  const canAccess = store.getters.canAccess
+  const restricted = !!to.meta.role || !!to.meta.feature
 
   // Any route that restricts by role implicitly requires being logged in —
   // an anonymous "guest" role should never satisfy a role check, but we
   // enforce it explicitly here too so a route can't be reached just because
   // someone forgot to also set meta.requiresAuth.
-  const needsAuth = to.meta.requiresAuth || !!to.meta.role
+  const needsAuth = to.meta.requiresAuth || restricted
 
   if (needsAuth && !isAuthenticated) {
     next('/login') // Redirect unauthenticated users
-  } else if (to.meta.role && !hasPermission(to.meta.role)) {
+  } else if (restricted && !canAccess({ role: to.meta.role, feature: to.meta.feature })) {
     next('/unauthorized') // Redirect if role is insufficient
   } else if (
     isAuthenticated &&

@@ -82,7 +82,7 @@ USER appuser
 EXPOSE 5010
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD wget -qO- http://localhost:5010/health/live || exit 1
-CMD ["node", "backend/index.js"]
+CMD ["node", "--import", "./backend/instrument.js", "backend/index.js"]
 
 
 # ----------------------------

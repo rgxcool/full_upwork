@@ -426,6 +426,48 @@ describe("POST /grades/teacher/save-grade", () => {
     expect(res.status).toBe(500);
   });
 
+  const validStudentId = "6b0257e81f7384e36f6f23d8";
+  const validCourseId = "6b0257e81f7384e36f6f23e1";
+
+  it("refuses to change a grade on a locked enrollment (no lock bypass)", async () => {
+    const save = vi.fn();
+    StudentEnrollment.findOne.mockResolvedValueOnce({ _id: "en1", isGradeLocked: true, save });
+    const res = await request(app)
+      .post("/grades/teacher/save-grade")
+      .set("x-user-role", "admin")
+      .send({ studentId: validStudentId, courseId: validCourseId, grade: "B", reason: "ändrat" });
+    expect(res.status).toBe(403);
+    expect(save).not.toHaveBeenCalled();
+    expect(Student.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("persists the grade on the student's enrollment when one exists", async () => {
+    const enrollment = { _id: "en1", isGradeLocked: false, courseInstanceId: "ci1", save: vi.fn().mockResolvedValue(true) };
+    StudentEnrollment.findOne.mockResolvedValueOnce(enrollment);
+    const res = await request(app)
+      .post("/grades/teacher/save-grade")
+      .set("x-user-role", "admin")
+      .send({ studentId: validStudentId, courseId: validCourseId, grade: "C", reason: "motivering", npScore: 42 });
+    expect(res.status).toBe(200);
+    expect(enrollment.save).toHaveBeenCalled();
+    expect(enrollment.grade).toBe("C");
+    expect(enrollment.motivation).toBe("motivering");
+    expect(enrollment.nationalTestPoints).toBe(42);
+    expect(Student.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 instead of a false 200 when nothing matched", async () => {
+    StudentEnrollment.findOne.mockResolvedValueOnce(null);
+    Student.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+    const res = await request(app)
+      .post("/grades/teacher/save-grade")
+      .set("x-user-role", "admin")
+      .send({ studentId: validStudentId, courseId: validCourseId, grade: "A", reason: "bra" });
+    expect(res.status).toBe(404);
+    expect(NotificationController.createNotification).not.toHaveBeenCalled();
+    expect(NotificationController.resolveNotification).not.toHaveBeenCalled();
+  });
+
   it("requires a justification for every grade, not just F", async () => {
     const res = await request(app)
       .post("/grades/teacher/save-grade")

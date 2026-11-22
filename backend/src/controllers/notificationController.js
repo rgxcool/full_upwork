@@ -292,7 +292,14 @@ export async function sendStudyplanChangedNotification({ doc, changeType, change
             message = `Ny studieplan skapad för ${student.name} i kursen ${courseName}.`;
         } else if (changeType === 'updated') {
             const newValues = changes?.newValues || {};
-            const changedFields = Object.keys(newValues).join(', ');
+            const FIELD_LABELS = {
+                startDate: 'Startdatum', endDate: 'Slutdatum', slutprovDate: 'Slutprovsdatum',
+                pace: 'Studietakt', status: 'Status', courseInstanceId: 'Kursinstans',
+                teacherId: 'Lärare', grade: 'Betyg',
+            };
+            const changedFields = (changes?.changedFields?.length ? changes.changedFields : Object.keys(newValues))
+                .map((field) => FIELD_LABELS[field] || field)
+                .join(', ') || 'okänt fält';
             const isRevised = newValues.status === "reviderad";
             const newStart = newValues.startDate;
             const newEnd = newValues.endDate;

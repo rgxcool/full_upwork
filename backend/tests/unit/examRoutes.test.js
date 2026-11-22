@@ -203,7 +203,7 @@ vi.mock("mongoose", () => ({
   },
 }));
 
-import examRoutes from "../../src/router/examRoutes.js";
+import examRoutes, { normalizeMaterialReceived } from "../../src/router/examRoutes.js";
 import ExamAttendance, {
   find as mockExamAttendanceFind,
   findOne as mockExamAttendanceFindOne,
@@ -822,6 +822,41 @@ describe("examRoutes", () => {
       .send({ decision: "accept", comment: "Go" });
     expect(res.status).toBe(200);
     expect(Student.findOneAndUpdate).toHaveBeenCalled();
+  });
+
+  it("rejects a deny decision without a motivation (and touches nothing)", async () => {
+    for (const comment of [undefined, "", "   "]) {
+      const res = await request(app)
+        .put("/api/exams/decision-deny-empty/decision")
+        .set("x-user-role", "teacher")
+        .send({ decision: "deny", comment });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("Motivering krävs");
+    }
+    expect(Exam.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a deny set through the edit form without a motivation", async () => {
+    const res = await request(app)
+      .put("/api/exams/edit-deny")
+      .set("x-user-role", "admin")
+      .send({ decision: "deny", comment: "" });
+    expect(res.status).toBe(400);
+    expect(Exam.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("tracks material for SVE/SVA 1 and 3 separately and keeps the summary in sync", () => {
+    const out = normalizeMaterialReceived({
+      level1: { status: true, receivedDate: "2026-11-01" },
+      level3: { status: false, receivedDate: "2026-11-05" },
+    });
+    expect(out.level1.status).toBe(true);
+    expect(out.level3.status).toBe(false);
+    expect(out.status).toBe(true);
+    expect(out.receivedDate.toISOString().slice(0, 10)).toBe("2026-11-01");
+    expect(normalizeMaterialReceived({ level1: { status: false }, level3: { status: false } }).status).toBe(false);
+    // Legacy payloads without levels pass through unchanged.
+    expect(normalizeMaterialReceived({ status: true })).toEqual({ status: true });
   });
 
   it("allows a teacher to decide on their own exam", async () => {

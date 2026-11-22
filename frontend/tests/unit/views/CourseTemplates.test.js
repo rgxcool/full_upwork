@@ -20,6 +20,15 @@ vi.mock('@/api/client', () => ({
   },
 }))
 
+const storeState = vi.hoisted(() => ({ role: 'admin' }))
+vi.mock('@/store/store.js', () => ({
+  default: {
+    get getters() {
+      return { userRole: storeState.role }
+    },
+  },
+}))
+
 vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({
     success: toastSuccessMock,
@@ -108,7 +117,8 @@ describe('CourseTemplates.vue', () => {
     wrapper.unmount()
   })
 
-  it('deletes a template and removes it from the list', async () => {
+  it('deletes a template after confirmation and removes it from the list', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const wrapper = mountView()
     await flushPromises()
     const deleteBtn = wrapper
@@ -117,8 +127,34 @@ describe('CourseTemplates.vue', () => {
     expect(deleteBtn).toBeDefined()
     await deleteBtn.trigger('click')
     await flushPromises()
+    expect(confirmSpy).toHaveBeenCalled()
     expect(api.delete).toHaveBeenCalledWith('/course-templates/tpl-1')
     expect(wrapper.text()).not.toContain('Engelska 5')
+    confirmSpy.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('does not delete when the confirmation is cancelled', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('Ta bort'))
+      .trigger('click')
+    await flushPromises()
+    expect(api.delete).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Engelska 5')
+    confirmSpy.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('hides the delete button for teachers (no courseTemplates:delete)', async () => {
+    storeState.role = 'teacher'
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.findAll('button').some((b) => b.text().includes('Ta bort'))).toBe(false)
+    storeState.role = 'admin'
     wrapper.unmount()
   })
 })

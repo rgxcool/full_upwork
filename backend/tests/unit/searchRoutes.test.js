@@ -167,9 +167,10 @@ describe("searchRoutes handlers", () => {
         it("returns teacher profile with active students and courses", async () => {
             const userId = new mongoose.Types.ObjectId();
 
-            vi.spyOn(User, "findById").mockReturnValue({
+            const userSelect = vi.fn().mockReturnValue({
                 lean: vi.fn().mockResolvedValue({ _id: userId, name: "Teacher User", email: "t@test.com", role: "teacher" }),
             });
+            vi.spyOn(User, "findById").mockReturnValue({ select: userSelect });
             vi.spyOn(Teacher, "findOne").mockReturnValue({
                 lean: vi.fn().mockResolvedValue({ _id: new mongoose.Types.ObjectId(), userId: userId, subject: "Math" }),
             });
@@ -204,6 +205,9 @@ describe("searchRoutes handlers", () => {
             expect(res.statusCode).toBe(200);
             expect(res.body).toHaveProperty("students");
             expect(res.body).toHaveProperty("courses");
+            // Credentials must never be selected for the details response.
+            expect(userSelect).toHaveBeenCalledWith("-password -mustChangePassword");
+            expect(res.body).not.toHaveProperty("password");
             expect(res.body).toHaveProperty("courseInstances");
         });
     });

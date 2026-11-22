@@ -5,6 +5,25 @@ import mongoose from "mongoose";
 import { buildDefaultModules, cloneModules } from "../models/courseModuleSchema.js";
 
 // List templates. Teachers see their own + all templates; admins/systemadmins see all.
+/**
+ * #31: admission picks a template by `courseId` only, but the builder sends a
+ * course code, not an id. When no courseId is given, link the template to the
+ * course whose courseCode matches exactly (case-insensitive). Ambiguous or
+ * unknown codes leave the template unlinked.
+ */
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+async function resolveCourseIdFromCode(courseCode) {
+    const code = String(courseCode || "").trim();
+    if (!code) return undefined;
+    const matches = await Course.find({
+        courseCode: { $regex: `^${escapeRegExp(code)}$`, $options: "i" },
+    })
+        .select("_id")
+        .limit(2)
+        .lean();
+    return matches.length === 1 ? matches[0]._id : undefined;
+}
+
 export const getCourseTemplates = async (req, res) => {
     try {
         const { courseId, includeInactive } = req.query;
@@ -90,13 +109,15 @@ export const createCourseTemplate = async (req, res) => {
                   }))
                 : buildDefaultModules();
 
+        const linkedCourseId = courseId || (await resolveCourseIdFromCode(courseCode));
+
         const template = await CourseTemplate.create({
             templateName: String(templateName).trim(),
             title: String(title || name || templateName).trim(),
             courseCode: String(courseCode || "").trim(),
             description: String(description || "").trim(),
             cardContent: cardContent || content || {},
-            courseId: courseId || undefined,
+            courseId: linkedCourseId || undefined,
             modules: templateModules,
             createdBy: mongoose.isValidObjectId(req.user?.userId) ? req.user.userId : undefined,
             isActive: true,
@@ -145,6 +166,11 @@ export const updateCourseTemplate = async (req, res) => {
                 }
                 template.courseId = courseId;
             }
+        } else if (!template.courseId) {
+            // #31: link an unlinked template via its course code (never
+            // overrides an existing link).
+            const resolved = await resolveCourseIdFromCode(template.courseCode);
+            if (resolved) template.courseId = resolved;
         }
 
         if (Array.isArray(modules) && modules.length > 0) {

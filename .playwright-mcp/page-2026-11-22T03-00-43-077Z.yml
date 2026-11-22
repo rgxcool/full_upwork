@@ -1,0 +1,20 @@
+- generic [ref=f7e8]:
+  - generic [ref=f7e9]:
+    - link [ref=f7e10] [cursor=pointer]:
+      - /url: /
+      - img "Mindful Logo" [ref=f7e11]
+    - heading "Välkommen tillbaka" [level=1] [ref=f7e12]
+    - paragraph [ref=f7e13]: Logga in för att fortsätta till Mindful Learning
+  - generic [ref=f7e14]:
+    - generic [ref=f7e15]:
+      - generic [ref=f7e16]:
+        - generic [ref=f7e17] [cursor=pointer]: E-postadress
+        - textbox "E-postadress" [ref=f7e18]:
+          - /placeholder: din@email.com
+      - generic [ref=f7e19]:
+        - generic [ref=f7e20] [cursor=pointer]: Lösenord
+        - textbox "Lösenord" [ref=f7e21]:
+          - /placeholder: Ange ditt lösenord
+      - button "Logga in" [ref=f7e22] [cursor=pointer]
+    - link "← Tillbaka till startsidan" [ref=f7e24] [cursor=pointer]:
+      - /url: /

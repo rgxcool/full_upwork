@@ -12,6 +12,10 @@ import {
   canAccessDocument,
   canAccessStudentDocuments,
   canAccessTeacherDocuments,
+  isStaffOnlyDocumentType,
+  isStudentHiddenFromCaller,
+  isStaffUser,
+  STAFF_ONLY_DOCUMENT_TYPES,
 } from "../utils/documentAuthorization.js";
 import logger from "../utils/logger.js";
 
@@ -111,6 +115,8 @@ const ALLOWED_DOCUMENT_TYPES = new Set([
   "ACTION_PLAN",
   "REPORT",
   "COURSE_ARCHIVE",
+  "DELPROV",
+  "SLUTPROV",
   "TEACHER_DOCUMENT",
   "APL_CONTRACT",
   "APL_CV",
@@ -535,6 +541,13 @@ router.post(
         return res.status(400).json({ message: "Ogiltig dokumenttyp." });
       }
 
+      if (isStaffOnlyDocumentType(normalizedType) && !isStaffUser(user)) {
+        removeUploadedFile(req.file);
+        return res.status(403).json({
+          message: "Endast personal kan ladda upp provfiler (delprov/slutprov).",
+        });
+      }
+
       const userRoles = getUserRoles(user);
       const isAdmin = userRoles.has("admin") || userRoles.has("systemadmin");
 
@@ -652,6 +665,49 @@ router.post(
   },
 );
 
+// Cross-student archive listing used by the APL contract archive
+// (APLFileArchive.vue). Restricted to APL document types and filtered per
+// document with the same rule as download, so teachers/scoped staff only see
+// files they may open.
+const ARCHIVE_LISTABLE_TYPES = new Set(["APL_CONTRACT", "APL_CV"]);
+router.get("/documents", authenticateUser, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!isStaffUser(user)) {
+      return res.status(403).json({ message: "Endast personal kan lista arkivet" });
+    }
+    const types = String(req.query.type || "APL_CONTRACT")
+      .split(",")
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    if (!types.length || types.some((t) => !ARCHIVE_LISTABLE_TYPES.has(t))) {
+      return res.status(400).json({ message: "Ogiltig dokumenttyp för arkivet." });
+    }
+
+    const docs = await Document.find({ type: { $in: types }, student: { $ne: null } })
+      .sort({ createdAt: -1 })
+      .populate({ path: "student", select: "name" })
+      .populate({ path: "uploadedBy", select: "name email" });
+
+    const visible = [];
+    for (const doc of docs) {
+      // Orphaned files (student deleted) are hidden, not leaked.
+      if (!doc.student) continue;
+      const studentId = doc.student._id || doc.student;
+      if (await canAccessDocument(user, { ...doc.toObject(), student: studentId })) {
+        const serialized = serializeDocument(doc);
+        serialized.student = studentId;
+        serialized.studentName = doc.student.name || "";
+        visible.push(serialized);
+      }
+    }
+    return res.json(visible);
+  } catch (error) {
+    logger.error({ err: error }, "Error listing archive documents");
+    return res.status(500).json({ message: "Kunde inte hämta arkivet" });
+  }
+});
+
 router.get("/documents/shared", authenticateUser, async (req, res) => {
   try {
     const userId = req.user?.userId || req.user?._id;
@@ -659,7 +715,11 @@ router.get("/documents/shared", authenticateUser, async (req, res) => {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const docs = await Document.find({ sharedWith: userId })
+    const sharedFilter = { sharedWith: userId };
+    if (!isStaffUser(req.user)) {
+      sharedFilter.type = { $nin: STAFF_ONLY_DOCUMENT_TYPES };
+    }
+    const docs = await Document.find(sharedFilter)
       .sort({ createdAt: -1 })
       .populate({ path: "uploadedBy", select: "name email" })
       .populate({ path: "teacher", select: "name email" });
@@ -693,12 +753,31 @@ router.get("/documents/:id", authenticateUser, async (req, res) => {
       : await canAccessStudentDocuments(user, id);
 
     if (!allowed) {
+      // #40: an unknown or cross-tenant student is reported as not found.
+      if (!isTeacherEntity && (await isStudentHiddenFromCaller(user, id))) {
+        return res.status(404).json({ message: "Eleven hittades inte" });
+      }
       return res.status(403).json({
         message: "Du har inte behörighet att komma åt dokumenten",
       });
     }
 
-    if (type) filter.type = type;
+    // `type` may be a single type or a comma-separated list (e.g. the
+    // Kursarkiv shows COURSE_ARCHIVE,DELPROV,SLUTPROV together).
+    const requestedTypes =
+      typeof type === "string" && type.trim()
+        ? type.split(",").map((t) => t.trim()).filter(Boolean)
+        : [];
+    const visibleTypes = isStaffUser(user)
+      ? requestedTypes
+      : requestedTypes.filter((t) => !isStaffOnlyDocumentType(t));
+
+    if (requestedTypes.length > 0) {
+      if (visibleTypes.length === 0) return res.json([]);
+      filter.type = { $in: visibleTypes };
+    } else if (!isStaffUser(user)) {
+      filter.type = { $nin: STAFF_ONLY_DOCUMENT_TYPES };
+    }
     if (enrollmentId) filter.enrollmentId = enrollmentId;
 
     const docs = await Document.find(filter)

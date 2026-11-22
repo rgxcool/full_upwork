@@ -697,33 +697,81 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
     return res.status(400).json({ error: "Motivering krävs för betyg" });
   }
 
-  if (req.user?.role === "teacher") {
-    const isAuthorized = await verifyTeacherAuthorizedForStudentCourse(req.user.userId, studentId, courseId);
-    if (!isAuthorized) {
-      return res.status(403).json({ error: "Du är inte behörig att betygsätta denna kurs/elev." });
-    }
+  if (!studentId || !courseId) {
+    return res.status(400).json({ error: "studentId och courseId krävs" });
   }
 
   try {
-    await Student.updateOne(
-      {
-        _id: studentId,
-        "education.refId": courseId,
-      },
-      {
-        $set: {
-          "education.$.grade": grade,
-          "education.$.reason": reason,
-          "education.$.comments": comments,
-          "education.$.npScore": npScore,
-          "education.$.type": type,
-        },
+    // The grade's source of truth is the StudentEnrollment. Resolve it by the
+    // course (main course or course instance) so this legacy endpoint can
+    // neither silently write nowhere nor bypass a grade lock.
+    let enrollment = null;
+    if (mongoose.isValidObjectId(studentId) && mongoose.isValidObjectId(courseId) && StudentEnrollment.findOne) {
+      const query = StudentEnrollment.findOne({
+        studentId,
+        $or: [{ mainCourseId: courseId }, { courseInstanceId: courseId }],
+        status: { $ne: "dropped" },
+      });
+      enrollment = query && typeof query.sort === "function"
+        ? await query.sort({ startDate: -1 })
+        : await query;
+    }
+
+    if (enrollment) {
+      if (enrollment.isGradeLocked) {
+        return res.status(403).json({ error: "Grade is locked and cannot be modified" });
       }
-    );
+      if (req.user?.role === "teacher") {
+        const authorized = await verifyTeacherAuthorizedForEnrollment(req.user.userId, enrollment);
+        if (!authorized) {
+          return res.status(403).json({ error: "Du är inte behörig att betygsätta denna kurs/elev." });
+        }
+      }
+      if (grade !== undefined) enrollment.grade = grade;
+      if (reason !== undefined) enrollment.motivation = reason;
+      if (comments !== undefined) enrollment.comments = comments;
+      if (npScore !== undefined) {
+        enrollment.nationalTestPoints = npScore === null || npScore === "" ? null : Number(npScore);
+      }
+      enrollment.gradeDate = new Date();
+      enrollment.gradeBy = req.user?.userId;
+      await enrollment.save();
+    } else {
+      if (req.user?.role === "teacher") {
+        const isAuthorized = await verifyTeacherAuthorizedForStudentCourse(req.user.userId, studentId, courseId);
+        if (!isAuthorized) {
+          return res.status(403).json({ error: "Du är inte behörig att betygsätta denna kurs/elev." });
+        }
+      }
+      // Legacy Student.education row (no enrollment exists).
+      const result = await Student.updateOne(
+        {
+          _id: studentId,
+          education: { $elemMatch: { refId: courseId, locked: { $ne: true } } },
+        },
+        {
+          $set: {
+            "education.$.grade": grade,
+            "education.$.type": type || "Course",
+          },
+        }
+      );
+      const matched = result?.matchedCount ?? result?.n ?? 0;
+      if (!matched) {
+        // Either no such course row, or it is locked: never report success.
+        const lockedRow = Student.exists
+          ? await Student.exists({ _id: studentId, education: { $elemMatch: { refId: courseId, locked: true } } })
+          : null;
+        if (lockedRow) {
+          return res.status(403).json({ error: "Grade is locked and cannot be modified" });
+        }
+        return res.status(404).json({ error: "Ingen kurs att betygsätta hittades för eleven" });
+      }
+    }
 
     await recordAudit(req, {
       entityType: "StudentEnrollment",
-      entityId: studentId || courseId,
+      entityId: enrollment?._id || studentId || courseId,
       action: "grade_upsert",
       description: `Betyg ${grade || "N/A"} sparat för student ${studentId} i kurs ${courseId}`,
     });
@@ -745,17 +793,20 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
       teacherRecord = await Teacher.findOne({ userId: req.user.userId }).catch(() => null);
     }
 
+    // Match update-grade: notifications are keyed on the course instance.
+    const notificationCourseId = enrollment?.courseInstanceId?.toString?.() || enrollment?.courseInstanceId || courseId;
     if (grade === "F") {
       const studentName = studentRecord?.name || "Elev";
       await createNotification({
         studentId,
-        courseId,
+        courseId: notificationCourseId,
         type: "action_plan_required",
         message: `Handlingsplan krävs: ${studentName} har fått F i betyg`,
         teacher: teacherRecord?._id || undefined,
         meta: {
           studentId,
-          courseId,
+          courseId: notificationCourseId,
+          enrollmentId: enrollment?._id,
           url: `/student/${studentId}?showActionPlan=true`,
           teacherId: req.user?.userId,
         },
@@ -763,7 +814,7 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
     } else {
       await resolveNotification({
         studentId,
-        courseId,
+        courseId: notificationCourseId,
         type: "action_plan_required",
       });
     }

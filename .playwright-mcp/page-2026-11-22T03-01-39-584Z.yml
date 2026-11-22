@@ -1,0 +1,81 @@
+- generic [ref=f6e3]:
+  - navigation [ref=f6e4]:
+    - generic [ref=f6e5]:
+      - link [ref=f6e7] [cursor=pointer]:
+        - /url: /
+        - img "Mindful logo" [ref=f6e8]
+      - generic [ref=f6e10]:
+        - generic [ref=f6e11] [cursor=pointer]: Alla
+        - textbox "Sök efter alla..." [ref=f6e14]
+      - generic [ref=f6e15]:
+        - button "Min profil" [ref=f6e17] [cursor=pointer]
+        - generic [ref=f6e23]: "8"
+        - link "Meddelanden" [ref=f6e29] [cursor=pointer]:
+          - /url: /messages
+        - button "Öppna meny" [ref=f6e32] [cursor=pointer]
+  - generic [ref=f6e38]:
+    - generic [ref=f6e39]:
+      - heading "Anna Andersson" [level=1] [ref=f6e40]
+      - button "DELETE STUDENT" [ref=f6e41] [cursor=pointer]
+    - generic [ref=f6e45]:
+      - list [ref=f6e46]:
+        - listitem [ref=f6e47]:
+          - link "Allmänt" [ref=f6e48] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f6e49]:
+          - link "Studieplan" [ref=f6e50] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f6e51]:
+          - link "Kursarkiv" [active] [ref=f6e52] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f6e53]:
+          - link "Dokument" [ref=f6e54] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f6e55]:
+          - link "APL" [ref=f6e56] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f6e57]:
+          - link "Loggbok" [ref=f6e58] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f6e59]:
+          - link "Behörigheter" [ref=f6e60] [cursor=pointer]:
+            - /url: "#"
+      - generic [ref=f6e63]:
+        - generic [ref=f6e64]:
+          - generic [ref=f6e65]:
+            - generic [ref=f6e66]:
+              - heading "Svenska som andraspråk 1" [level=4] [ref=f6e67]
+              - generic [ref=f6e68]: SVASVE01
+            - generic [ref=f6e69]:
+              - generic [ref=f6e70]: active
+              - generic [ref=f6e71]: 2026-07-06 — 2026-09-28
+          - generic [ref=f6e72]:
+            - generic [ref=f6e73]:
+              - strong [ref=f6e74]: "Lärare:"
+              - text: —
+            - generic [ref=f6e76]:
+              - generic [ref=f6e78]:
+                - combobox "Dokumenttyp" [ref=f6e79]:
+                  - option "Kursarkiv" [selected]
+                  - option "Delprov"
+                  - option "Slutprov"
+                - button "Choose File" [ref=f6e80]
+                - button "Ladda upp" [disabled] [ref=f6e81]
+              - paragraph [ref=f6e82]: Inga dokument uppladdade än.
+        - generic [ref=f6e83]:
+          - generic [ref=f6e84]:
+            - generic [ref=f6e85]:
+              - heading "Okänd" [level=4] [ref=f6e86]
+              - generic [ref=f6e87]: APLE2E01
+            - generic [ref=f6e88]:
+              - generic [ref=f6e89]: active
+              - generic [ref=f6e90]: 2026-01-12 — 2027-04-21
+          - generic [ref=f6e93]:
+            - generic [ref=f6e95]:
+              - combobox "Dokumenttyp" [ref=f6e96]:
+                - option "Kursarkiv" [selected]
+                - option "Delprov"
+                - option "Slutprov"
+              - button "Choose File" [ref=f6e97]
+              - button "Ladda upp" [disabled] [ref=f6e98]
+            - paragraph [ref=f6e99]: Inga dokument uppladdade än.

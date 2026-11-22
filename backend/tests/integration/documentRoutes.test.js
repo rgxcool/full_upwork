@@ -612,6 +612,106 @@ describe("Document Routes", () => {
       .expect(403);
   });
 
+  it("lists APL contracts across students for the archive, scoped per document", async () => {
+    const assignedTeacherUser = await makeUser(["teacher"]);
+    const teacher = await makeTeacher(assignedTeacherUser.user);
+    const ownStudent = await makeStudent({ name: "AUDIT Avtalsson", teacherId: teacher._id });
+    const otherStudent = await makeStudent({ name: "AUDIT Annansson" });
+    for (const st of [ownStudent, otherStudent]) {
+      const f = writeUploadFile(`AUDIT-avtal-${st._id}.pdf`);
+      await Document.create({
+        student: st._id,
+        filename: f.filename,
+        originalName: `AUDIT-avtal-${st.name}.pdf`,
+        type: "APL_CONTRACT",
+      });
+    }
+    // A non-APL document must never show up in this listing.
+    const general = writeUploadFile("AUDIT-general.txt");
+    await Document.create({ student: ownStudent._id, filename: general.filename, originalName: "AUDIT-general.txt", type: "GENERAL" });
+
+    const adminList = await request(app)
+      .get("/api/documents")
+      .query({ type: "APL_CONTRACT" })
+      .set("Authorization", authHeader)
+      .expect(200);
+    expect(adminList.body.map((d) => d.studentName).sort()).toEqual(["AUDIT Annansson", "AUDIT Avtalsson"]);
+    expect(adminList.body.every((d) => d.type === "APL_CONTRACT")).toBe(true);
+
+    // The assigned teacher only sees their own student's contract.
+    const teacherList = await request(app)
+      .get("/api/documents")
+      .query({ type: "APL_CONTRACT" })
+      .set(authFor(assignedTeacherUser.token))
+      .expect(200);
+    expect(teacherList.body.map((d) => d.studentName)).toEqual(["AUDIT Avtalsson"]);
+
+    // Students and non-APL types are refused.
+    const { token: studentToken } = await makeUser(["student"]);
+    await request(app).get("/api/documents").query({ type: "APL_CONTRACT" }).set(authFor(studentToken)).expect(403);
+    await request(app).get("/api/documents").query({ type: "GENERAL" }).set("Authorization", authHeader).expect(400);
+  });
+
+  it("keeps slutprov/delprov exam files staff-only", async () => {
+    const email = `student-${new mongoose.Types.ObjectId()}@example.com`;
+    const student = await makeStudent({ email });
+    const { token } = await makeUser(["student"], { email });
+
+    const examFile = writeUploadFile("AUDIT-slutprov.txt");
+    const examDoc = await Document.create({
+      student: student._id,
+      filename: examFile.filename,
+      originalName: "AUDIT-slutprov.txt",
+      type: "SLUTPROV",
+    });
+    const archiveFile = writeUploadFile("AUDIT-kursarkiv.txt");
+    await Document.create({
+      student: student._id,
+      filename: archiveFile.filename,
+      originalName: "AUDIT-kursarkiv.txt",
+      type: "COURSE_ARCHIVE",
+    });
+
+    // Student: download blocked, exam files never listed (explicitly or not).
+    await request(app)
+      .get(`/api/documents/download/${examDoc._id.toString()}`)
+      .set(authFor(token))
+      .expect(403);
+    const own = await request(app)
+      .get(`/api/documents/${student._id.toString()}`)
+      .query({ type: "COURSE_ARCHIVE,DELPROV,SLUTPROV" })
+      .set(authFor(token))
+      .expect(200);
+    expect(own.body.map((d) => d.originalName)).toEqual(["AUDIT-kursarkiv.txt"]);
+    const explicit = await request(app)
+      .get(`/api/documents/${student._id.toString()}`)
+      .query({ type: "SLUTPROV" })
+      .set(authFor(token))
+      .expect(200);
+    expect(explicit.body).toEqual([]);
+
+    // Student cannot classify an upload as an exam file.
+    await request(app)
+      .post("/api/documents/upload")
+      .set(authFor(token))
+      .field("studentId", student._id.toString())
+      .field("type", "SLUTPROV")
+      .attach("file", Buffer.from("x"), "fake-exam.txt")
+      .expect(403);
+
+    // Staff (admin) still sees and downloads both.
+    const staffList = await request(app)
+      .get(`/api/documents/${student._id.toString()}`)
+      .query({ type: "COURSE_ARCHIVE,DELPROV,SLUTPROV" })
+      .set("Authorization", authHeader)
+      .expect(200);
+    expect(staffList.body).toHaveLength(2);
+    await request(app)
+      .get(`/api/documents/download/${examDoc._id.toString()}`)
+      .set("Authorization", authHeader)
+      .expect(200);
+  });
+
   it("lets only the assigned teacher list, upload and download a student's documents", async () => {
     const { user: assignedUser, token: assignedToken } = await makeUser([
       "teacher",
@@ -730,5 +830,36 @@ describe("Document Routes", () => {
 
     expect(response.body.message).toContain("tom");
     expect(await Document.countDocuments({})).toBe(0);
+  });
+  // #40: cross-tenant (and unknown) students are reported as 404, not 403,
+  // so scoped staff cannot enumerate students in other kommuner.
+  it("returns 404 for a student outside a scoped coordinator's kommun, 200 inside", async () => {
+    const { user: coord, token: coordToken } = await makeUser(["coordinator"]);
+    await User.updateOne({ _id: coord._id }, { $set: { municipalities: ["Huddinge"] } });
+
+    const inside = await makeStudent({ municipality: { type: "Huddinge" } });
+    const outside = await makeStudent({ municipality: { type: "Botkyrka" } });
+    await Document.create({
+      student: outside._id,
+      filename: "outside.txt",
+      originalName: "outside.txt",
+      type: "GENERAL",
+    });
+
+    await request(app)
+      .get(`/api/documents/${inside._id.toString()}`)
+      .set(authFor(coordToken))
+      .expect(200);
+
+    const res = await request(app)
+      .get(`/api/documents/${outside._id.toString()}`)
+      .set(authFor(coordToken))
+      .expect(404);
+    expect(JSON.stringify(res.body)).not.toContain("outside.txt");
+
+    await request(app)
+      .get(`/api/documents/${new mongoose.Types.ObjectId().toString()}`)
+      .set(authFor(coordToken))
+      .expect(404);
   });
 });

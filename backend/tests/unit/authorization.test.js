@@ -279,7 +279,9 @@ describe("individual permission overrides - privilege escalation prevention", ()
         const perms = getEffectivePermissions(user);
         expect(perms).toContain("statistics");
         expect(perms).toContain("course_templates");
-        expect(perms).toContain("analytics:read");
+        // Matrix "statistics" is Nej for coordinator, so roles.js no longer
+        // grants analytics:read; the override is honoured by can() instead.
+        expect(perms).not.toContain("analytics:read");
         expect(perms).not.toContain("users:create");
     });
 

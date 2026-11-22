@@ -314,6 +314,10 @@ export const getSession = async (req, res) => {
                 email: user.email,
                 role: primaryRole,
                 roles: mergedRoles,
+                // Per-user feature overrides, so the UI route guard can honour
+                // them the same way canFeature() does (same shape as login).
+                permissions:
+                    user.permissions && typeof user.permissions === "object" ? user.permissions : {},
             },
         });
     } catch (error) {
