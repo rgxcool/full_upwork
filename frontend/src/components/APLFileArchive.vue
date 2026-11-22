@@ -126,7 +126,7 @@ const downloadFile = async (fileId, filename) => {
         window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
         console.error('Download failed:', error);
-        toast.error('Failed to download file.');
+        toast.error('Kunde inte ladda ner filen.');
     }
 };
 

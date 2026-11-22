@@ -29,11 +29,13 @@ export default defineConfig({
         coverage: {
             enabled: true,
             provider: 'v8',
+            // Raised 2026-11-22 (P1-07, #43) to ~3 points below the measured coverage
+            // (70.9 / 62.3 / 60.1 / 73.0). Never lower these; raise them as coverage grows.
             thresholds: {
-                statements: 50,
-                branches: 40,
-                functions: 50,
-                lines: 50,
+                statements: 67,
+                branches: 59,
+                functions: 57,
+                lines: 70,
             },
         },
         envDir: __dirname,
