@@ -1,0 +1,20 @@
+- generic [ref=f6e3]:
+  - navigation [ref=f6e4]:
+    - generic [ref=f6e5]:
+      - link [ref=f6e7] [cursor=pointer]:
+        - /url: /
+        - img "Mindful logo" [ref=f6e8]
+      - generic [ref=f6e10]:
+        - generic [ref=f6e11] [cursor=pointer]: Alla
+        - textbox "Sök efter alla..." [ref=f6e14]
+      - generic [ref=f6e15]:
+        - button "Min profil" [ref=f6e17] [cursor=pointer]
+        - generic [ref=f6e23]: "8"
+        - link "Meddelanden" [ref=f6e29] [cursor=pointer]:
+          - /url: /messages
+        - button "Öppna meny" [ref=f6e32] [cursor=pointer]
+  - generic [ref=f6e38]:
+    - generic [ref=f6e39]:
+      - heading "Anna Andersson" [level=1] [ref=f6e40]
+      - button "DELETE STUDENT" [ref=f6e41] [cursor=pointer]
+    - paragraph [ref=f6e44]: Laddar elevinformation...

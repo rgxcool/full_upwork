@@ -1897,6 +1897,7 @@ export const updateEnrollmentStatus = async (req, res) => {
       notes,
       userId,
       role: req.user?.role,
+      roles: req.user?.roles,
     });
 
     res.json({

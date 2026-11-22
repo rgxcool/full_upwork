@@ -159,6 +159,29 @@ describe("questionBankRoutes", () => {
             expect(res.body.pages).toBe(1);
         });
 
+        it("strips answer keys from the question list for students", async () => {
+            currentUser = { role: "student", userId: "student-1", roles: ["student"] };
+            const chain = makeChain([{ questionText: "Q1" }]);
+            Question.find.mockReturnValue(chain);
+            Question.countDocuments.mockResolvedValue(1);
+
+            await request(app).get("/api/question-bank").expect(200);
+
+            expect(chain.select).toHaveBeenCalledWith("-correctAnswer -answerGuidelines");
+        });
+
+        it("keeps answer keys in the question list for teachers", async () => {
+            currentUser = { role: "teacher", userId: "teacher-1", roles: ["teacher"] };
+            const chain = makeChain([{ questionText: "Q1", correctAnswer: "A" }]);
+            Question.find.mockReturnValue(chain);
+            Question.countDocuments.mockResolvedValue(1);
+
+            const res = await request(app).get("/api/question-bank").expect(200);
+
+            expect(chain.select).toHaveBeenCalledWith("");
+            expect(res.body.questions[0].correctAnswer).toBe("A");
+        });
+
         it("returns 400 for an invalid course id", async () => {
             const res = await request(app)
                 .get("/api/question-bank?course=not-an-id")
@@ -777,9 +800,7 @@ describe("questionBankRoutes", () => {
         });
 
         it("returns 404 when the question does not exist", async () => {
-            Question.findById.mockReturnValue({
-                populate: vi.fn().mockResolvedValue(null),
-            });
+            Question.findById.mockReturnValue(makeChain(null));
 
             const res = await request(app)
                 .get(`/api/question-bank/${validObjectId}`)
@@ -788,14 +809,25 @@ describe("questionBankRoutes", () => {
         });
 
         it("returns the question", async () => {
-            Question.findById.mockReturnValue({
-                populate: vi.fn().mockResolvedValue({ _id: validObjectId, questionText: "Vad?" }),
-            });
+            const chain = makeChain({ _id: validObjectId, questionText: "Vad?" });
+            Question.findById.mockReturnValue(chain);
 
             const res = await request(app)
                 .get(`/api/question-bank/${validObjectId}`)
                 .expect(200);
             expect(res.body.question.questionText).toBe("Vad?");
+            // Staff (admin) get the full document including answer keys.
+            expect(chain.select).toHaveBeenCalledWith("");
+        });
+
+        it("strips answer keys from a single question for students", async () => {
+            currentUser = { role: "student", userId: "student-1", roles: ["student"] };
+            const chain = makeChain({ _id: validObjectId, questionText: "Vad?" });
+            Question.findById.mockReturnValue(chain);
+
+            await request(app).get(`/api/question-bank/${validObjectId}`).expect(200);
+
+            expect(chain.select).toHaveBeenCalledWith("-correctAnswer -answerGuidelines");
         });
     });
 

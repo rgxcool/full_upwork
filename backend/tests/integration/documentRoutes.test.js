@@ -612,6 +612,66 @@ describe("Document Routes", () => {
       .expect(403);
   });
 
+  it("keeps slutprov/delprov exam files staff-only", async () => {
+    const email = `student-${new mongoose.Types.ObjectId()}@example.com`;
+    const student = await makeStudent({ email });
+    const { token } = await makeUser(["student"], { email });
+
+    const examFile = writeUploadFile("AUDIT-slutprov.txt");
+    const examDoc = await Document.create({
+      student: student._id,
+      filename: examFile.filename,
+      originalName: "AUDIT-slutprov.txt",
+      type: "SLUTPROV",
+    });
+    const archiveFile = writeUploadFile("AUDIT-kursarkiv.txt");
+    await Document.create({
+      student: student._id,
+      filename: archiveFile.filename,
+      originalName: "AUDIT-kursarkiv.txt",
+      type: "COURSE_ARCHIVE",
+    });
+
+    // Student: download blocked, exam files never listed (explicitly or not).
+    await request(app)
+      .get(`/api/documents/download/${examDoc._id.toString()}`)
+      .set(authFor(token))
+      .expect(403);
+    const own = await request(app)
+      .get(`/api/documents/${student._id.toString()}`)
+      .query({ type: "COURSE_ARCHIVE,DELPROV,SLUTPROV" })
+      .set(authFor(token))
+      .expect(200);
+    expect(own.body.map((d) => d.originalName)).toEqual(["AUDIT-kursarkiv.txt"]);
+    const explicit = await request(app)
+      .get(`/api/documents/${student._id.toString()}`)
+      .query({ type: "SLUTPROV" })
+      .set(authFor(token))
+      .expect(200);
+    expect(explicit.body).toEqual([]);
+
+    // Student cannot classify an upload as an exam file.
+    await request(app)
+      .post("/api/documents/upload")
+      .set(authFor(token))
+      .field("studentId", student._id.toString())
+      .field("type", "SLUTPROV")
+      .attach("file", Buffer.from("x"), "fake-exam.txt")
+      .expect(403);
+
+    // Staff (admin) still sees and downloads both.
+    const staffList = await request(app)
+      .get(`/api/documents/${student._id.toString()}`)
+      .query({ type: "COURSE_ARCHIVE,DELPROV,SLUTPROV" })
+      .set("Authorization", authHeader)
+      .expect(200);
+    expect(staffList.body).toHaveLength(2);
+    await request(app)
+      .get(`/api/documents/download/${examDoc._id.toString()}`)
+      .set("Authorization", authHeader)
+      .expect(200);
+  });
+
   it("lets only the assigned teacher list, upload and download a student's documents", async () => {
     const { user: assignedUser, token: assignedToken } = await makeUser([
       "teacher",

@@ -20,13 +20,13 @@
 |---|---|---|
 | E1-01 | Roles & permission matrix | **PARTIAL** |
 | E1-02 | Per-user permission overrides | **PARTIAL** |
-| E1-03 | Global search (≥3 chars) | **PARTIAL** |
+| E1-03 | Global search (≥3 chars) | **PARTIAL** (password leak FIXED, §6) |
 | E1-04 | Profile – Allmänt | **PARTIAL** |
-| E1-05 | Profile – Studieplan | **PARTIAL** |
+| E1-05 | Profile – Studieplan | **PARTIAL** (Betygsatt bypass FIXED, §6) |
 | E1-06 | Profile – APL (hidden for staff) | **PASS** |
 | E1-07 | Profile – Behörigheter | **PARTIAL** |
 | E1-08 | Profile – Dokument | **PARTIAL** |
-| E1-09 | Profile – Kursarkiv | **FAIL** |
+| E1-09 | Profile – Kursarkiv | **PASS** (FIXED, §6; was FAIL) |
 | E1-10 | Placement, Alvis import, auto-calculations | **PARTIAL** |
 | E1-11 | Course packages, pace, plan changes | **FAIL** |
 | E1-12 | Avbrott / inactive / reactivation | **PARTIAL** |
@@ -37,7 +37,7 @@
 | E1-17 | F-grade & locked action plan | **PARTIAL** (reminder not locked in UI) |
 | E1-18 | Prövningar | **PARTIAL** (no teacher UI) |
 | E1-19 | Slutprov calendar (Sollentuna/Akalla) | **PARTIAL** (UI booking ✔) |
-| E1-20 | SYV & Specialpedagog functions | **FAIL** |
+| E1-20 | SYV & Specialpedagog functions | **FAIL** (meeting spoofing FIXED, §6; other defects remain) |
 | E1-21 | Economy & reports | **FAIL** (UI confirms) |
 | E2-01 | Internal messaging | **PASS** (UI ✔) |
 | E2-02 | Student chatbot | **PARTIAL** (UI confirms) |
@@ -49,17 +49,17 @@
 | E2-08 | Inactivity monitoring 5/14 days | **PARTIAL** |
 | E2-09 | APL kits & logbook | **FAIL** |
 | E2-10 | Studieintyg & diplom | **PARTIAL** |
-| E2-11 | Question bank & exam generation | **PARTIAL** |
+| E2-11 | Question bank & exam generation | **PARTIAL** (answer leak FIXED, §6) |
 
-**Totals (after pass 2):** 3 PASS, 0 PASS (API), 23 PARTIAL, 6 FAIL. *(Pass 1: 1 PASS, 3 PASS (API), 19 PARTIAL, 9 FAIL.)*
+**Totals (after Batch 1 fixes):** 4 PASS, 0 PASS (API), 23 PARTIAL, 5 FAIL. *(Pass 2: 3 PASS, 23 PARTIAL, 6 FAIL. Pass 1: 1 PASS, 3 PASS (API), 19 PARTIAL, 9 FAIL.)*
 
 ### Top issues (fix first)
 
-1. **Security: password hash disclosure.** `GET /api/details/teacher/:userId` returns the full User document, including the bcrypt `password`, to every role with `search_users`: teacher, syv, specped, coordinator. `backend/src/router/searchRoutes.js:425` (`User.findById(id).lean()` with no projection).
+1. ✅ **FIXED (Batch 1, §6).** ~~**Security: password hash disclosure.** `GET /api/details/teacher/:userId` returns the full User document, including the bcrypt `password`, to every role with `search_users`: teacher, syv, specped, coordinator. `backend/src/router/searchRoutes.js:425` (`User.findById(id).lean()` with no projection).~~
 2. **The legacy grade endpoint silently doesn't persist.** `POST /api/teacher/save-grade` writes into `Student.education[]`, but students placed via enrollments have `education: []`. The update matches nothing, yet the API returns `200 "✅ Betyg sparat!"`, still fires F-grade notifications, and ignores locks. `backend/src/router/gradeRoutes.js:~708`. *Pass 2: the `/betyg` UI does **not** use this path. It uses `PUT /api/update-grade/:enrollmentId`, which persists correctly, so the impact is limited to other callers of `save-grade`.*
-3. **Students can download staff exam files** (slutprov in Kursarkiv). `backend/src/utils/documentAuthorization.js` has no staff-only notion.
-4. **Students can read question-bank answers.** `GET /api/question-bank/` and `/:id` return `correctAnswer` to the student role.
-5. **Students can create meetings for other students** while posing as `bookedBy: "syv"`. `POST /api/meetings` has no role check (`backend/src/router/meetingroutes.js:106`).
+3. ✅ **FIXED (Batch 1, §6).** ~~**Students can download staff exam files** (slutprov in Kursarkiv). `backend/src/utils/documentAuthorization.js` has no staff-only notion.~~
+4. ✅ **FIXED (Batch 1, §6).** ~~**Students can read question-bank answers.** `GET /api/question-bank/` and `/:id` return `correctAnswer` to the student role.~~
+5. ✅ **FIXED (Batch 1, §6).** ~~**Students can create meetings for other students** while posing as `bookedBy: "syv"`. `POST /api/meetings` has no role check (`backend/src/router/meetingroutes.js:106`).~~
 6. **Broken frontend→backend wiring:** exam-accommodation saves 404, PermissionsTab gets `/api/api/permissions` → 404, StaffProfile's Behörigheter tab never renders, and responsible teachers can't post to the bulletin board (details below).
 7. **Revenue is wrong for Stockholm.** There is no Stockholm price entry, so revenue computes as 0, and the Alvis import rejects "Stockholm" entirely.
 
@@ -121,7 +121,7 @@
 - ✔ `POST /api/documents/upload` (type CV) 200; list 200; download 200 for staff and the owning student; **other student 403** on list and download.
 - ✘ **No rename or re-classify:** `PUT /api/documents/:id` → 404; `documentRoutes.js` has only upload/get/download/share/delete.
 
-### E1-09 Profile – Kursarkiv — FAIL
+### E1-09 Profile – Kursarkiv — PASS *(after Batch 1 fix, §6; findings below are pre-fix)*
 - `CourseArchiveTab.vue` uploads everything as a single `COURSE_ARCHIVE` type, with no delprov/slutprov classification (`Document.js` enum).
 - ✘ **Students can access staff exam files.** Admin uploaded `AUDIT-slutprov-SVA1.pdf` to Anna's Kursarkiv; `GET /api/documents/download/:id` as Anna → **200**.
 
@@ -332,11 +332,11 @@ E1-16 (Scrive), E1-20 (SYV/specped appointments, accommodation registration), E2
 
 | Severity | Finding | Location |
 |---|---|---|
-| Critical | bcrypt password hash returned to any staff user | `searchRoutes.js:425` `GET /api/details/teacher/:id` |
-| High | Student can download staff slutprov files | `utils/documentAuthorization.js` |
-| High | Students can read question-bank answers | `router/questionBankRoutes.js` GET `/`, `/:id` |
-| Medium | Student can book meetings for other students as "syv" | `router/meetingroutes.js:106` |
-| Medium | Teacher can set enrollment to Betygsatt, bypassing grading | `PUT /api/enrollments/:id/status` |
+| ~~Critical~~ ✅ FIXED | bcrypt password hash returned to any staff user | `searchRoutes.js:425` `GET /api/details/teacher/:id` |
+| ~~High~~ ✅ FIXED | Student can download staff slutprov files | `utils/documentAuthorization.js` |
+| ~~High~~ ✅ FIXED | Students can read question-bank answers | `router/questionBankRoutes.js` GET `/`, `/:id` |
+| ~~Medium~~ ✅ FIXED | Student can book meetings for other students as "syv" | `router/meetingroutes.js:106` |
+| ~~Medium~~ ✅ FIXED | Teacher can set enrollment to Betygsatt, bypassing grading | `PUT /api/enrollments/:id/status` |
 | Medium | Two disagreeing permission systems (`roles.js` vs `PERMISSION_MATRIX`) | `config/roles.js`, `config/permissions.js` |
 | Low | Linear frontend role hierarchy grants cross-role routes | `store/store.js:5` |
 | Low | `/api/stats/courses-per-month` open to students | `statsRoutes.js:10` |
@@ -361,4 +361,34 @@ The cleanup step was blocked by the environment's permission guard, so this data
   - **Untagged (the UI can't store a note):** slutprov 2026-10-15 (Eva Nahi), Doris `attended:true`, `examTime 09:00`, `examMunicipality Sollentuna`, `examLocation "Lilla rummet"`.
   - Local file `.playwright-mcp/avbrottsrapport.csv` (export test).
   - Re-running `node backend/scripts/seedE2EData.js` resets all of the above.
+  - **Note:** the DB was re-seeded again around 02:48 UTC (IDs now `6b0257e…`), so the pass-2 data above is gone too. A read-only `mongosh` check confirmed the seeded `gradingscales` have `scale: []` (seed-script field-name bug, §3b E1-15).
+- **Batch 1 verification data (current seed):**
+  - Question `6b025ad306b58efa74bcc7ce` "AUDIT: Vad är 2+2?" (answer key "AUDIT nyckel").
+  - Anna Kursarkiv document `6b025b1e06b58efa74bcc7d8` "AUDIT-slutprov-SVA1.txt" (type `SLUTPROV`).
+  - 2 meetings titled "AUDIT verify" for Berta (booked as syv by syv, and as syv by admin).
+  - No enrollment statuses changed: both teacher attempts were rejected with 403.
 - Reviewable cleanup script from pass 1 (keeps audit logs; written for the old seed's IDs): `/tmp/claude-1000/-home-cyrus-mindful-new/c7407930-ca14-40d1-8b5a-2b86c057dfe2/scratchpad/cleanup_audit_data.js`. Alternatively re-run `node backend/scripts/seedE2EData.js`.
+
+## 6. Batch 1 fixes: security & access control (applied after the audit)
+
+At the user's request, the five Batch 1 security items were fixed in `backend/` and `frontend/`. These are the only application-code changes.
+
+| # | Item | Change | Verified live |
+|---|---|---|---|
+| 1 | E1-03 password-hash leak | `GET /api/details/teacher/:userId` now selects `-password -mustChangePassword` (`backend/src/router/searchRoutes.js:428`). | Browser as teacher, plus curl as teacher and syv: response contains no `password` and no `$2…` hash. |
+| 2 | E1-09 staff exam files | **Model and helper:** new staff-only document types `DELPROV` / `SLUTPROV` (`models/Document.js`). `utils/documentAuthorization.js` adds `STAFF_ONLY_DOCUMENT_TYPES`, `isStaffOnlyDocumentType()` and `isStaffUser()`, and `canAccessDocument()` denies these types to non-staff before any ownership or sharing check. Because the protected `/uploads/:filename` route uses the same helper, it is covered too.<br>**Routes (`router/documentRoutes.js`):** students can't upload them (403); `GET /documents/:id` accepts comma-separated `type` and filters exam types out for non-staff; `/documents/shared` filters them for non-staff.<br>**UI:** Kursarkiv (`CourseArchiveTab.vue`) offers Kursarkiv / Delprov / Slutprov through a new optional `uploadTypes` prop on `DocumentSection.vue`. Students are never offered the exam types, and each file shows a type badge. | Admin uploaded `AUDIT-slutprov-SVA1.txt` as **Slutprov** through the UI and it shows with a "Slutprov" badge.<br>**Student (Anna):** `GET /api/documents/download/:id` → **403**, `GET :5010/uploads/<file>` → **403**, list → `[]`.<br>**Staff:** admin download 200; Anna's teacher download 200. |
+| 3 | E2-11 answer leak | `GET /api/question-bank/`, `/:id` and also `/by-course/:courseId` (same leak) now project out `correctAnswer` **and** `answerGuidelines` for any non-staff caller (`router/questionBankRoutes.js`). | Browser as student: list and `/:id` contain the AUDIT question with 0 `correctAnswer` / `answerGuidelines`. Teacher still receives both. |
+| 4 | E1-20 meeting spoofing | `POST /api/meetings`: only syv / specped / admin / systemadmin may create (403 otherwise), and `bookedBy` must be one of the caller's own roles. Admins may book on behalf of syv/specped, which the appointments page relies on (`router/meetingroutes.js`). | curl against :5010: student as syv **403**; syv as syv 201; syv as specped **403**; admin as syv 201. |
+| 5 | E1-05 Betygsatt bypass | `enrollmentService.updateEnrollmentStatus` lets a non-admin neither set `completed` directly nor change any status on a grade-locked enrollment; both return 403. The controller now passes the full `roles`. StudyPlanTab disables the "Betygsatt" option for non-admins. | curl as teacher: unlocked enrollment → completed **403** "Status Betygsatt sätts via betygssättningen"; locked enrollment → **403** "Betyget är låst". Browser as teacher: "Betygsatt" option rendered `[disabled]`. |
+
+**Tests:**
+- **Backend:** `npx vitest run` on the 9 affected suites (`documentAuthorization`, `questionBankRoutes` unit+integration, `searchRoutes` unit+integration, `enrollmentService`, `courseMatchingController`, `documentRoutes`, `meetingRoutes`) passes **279/279**. That includes 13 new tests covering each fix.
+- **Updated assertions:** existing tests that set `completed` with no role now run as admin, and the `Question.findById` / `User.findById` mocks support `.select()`.
+- **Frontend:** `StudyPlanTab.test.js` passes 7/7.
+- Not run: the full `make citest` suite.
+
+**Remaining caveats:**
+- **Older Kursarkiv files:** these were all stored as `COURSE_ARCHIVE` (also used for student "Praktikintyg") and stay student-visible. Exam files uploaded before this fix must be re-classified as Delprov/Slutprov, for example by re-uploading them.
+- **Teachers and meetings:** a teacher using "Lägg till möte" in `/kalender` sends `bookedBy: "teacher"`. That was already rejected before (400) and is now 403. If teachers should book meetings, the allowed set needs widening deliberately.
+- **Exam attempts:** `GET /api/question-bank/exam-attempts` was not reviewed for embedded answers.
+
