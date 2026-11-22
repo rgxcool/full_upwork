@@ -52,3 +52,4 @@ e2e/playwright-report/
 # Local test workbook (selected manually in the browser, never committed)
 test_mindful_CLEAN.xlsx
 repomix-output.xml
+*:Zone.Identifier
