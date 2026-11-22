@@ -138,4 +138,51 @@ describe("PermissionMatrixEditor", () => {
 
         expect(client.put).not.toHaveBeenCalled();
     });
+
+    it("revokes an overridden permission explicitly", async () => {
+        const wrapper = mountEditor({
+            user: {
+                ...user,
+                permissions: { calendar_final_exam: true },
+            },
+        });
+        await flushPromises();
+
+        const calendarBox = wrapper.findAll('input[type="checkbox"]')[0];
+        await calendarBox.setValue(false);
+        await flushPromises();
+
+        const saveButton = wrapper
+            .findAll("button")
+            .find((button) => button.text().includes("Spara behörigheter"));
+        await saveButton.trigger("click");
+        await flushPromises();
+
+        expect(client.put).toHaveBeenCalledWith("/users/user-1/permissions", {
+            permissions: { calendar_final_exam: false },
+        });
+    });
+
+    it("reports a save error and keeps the unsaved changes", async () => {
+        client.put.mockRejectedValueOnce({
+            response: { data: { message: "Behörigheten kunde inte sparas." } },
+        });
+        const wrapper = mountEditor();
+        await flushPromises();
+
+        const hierarchyBox = wrapper.findAll('input[type="checkbox"]')[1];
+        await hierarchyBox.setValue(true);
+        await flushPromises();
+
+        const saveButton = wrapper
+            .findAll("button")
+            .find((button) => button.text().includes("Spara behörigheter"));
+        await saveButton.trigger("click");
+        await flushPromises();
+
+        expect(toast.error).toHaveBeenCalledWith(
+            "Behörigheten kunde inte sparas."
+        );
+        expect(saveButton.attributes("disabled")).toBeUndefined();
+    });
 });

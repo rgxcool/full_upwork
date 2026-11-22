@@ -59,6 +59,11 @@ const FALLBACK_FEATURES = [
   { value: 'own_settings', label: 'Egna inställningar (ex profilbild)' },
   { value: 'add_municipalities_courses', label: 'Lägga till kommuner, kurser etc' },
   { value: 'course_templates', label: 'Kursmallar (kursmoduler)' },
+  { value: 'messaging', label: 'Meddelanden' },
+  { value: 'mass_messaging', label: 'Massutskick' },
+  { value: 'evaluations', label: 'Utvärderingar' },
+  { value: 'course_management', label: 'Kurshantering' },
+  { value: 'student_documents', label: 'Elevdokument' },
 ];
 
 const FALLBACK_MATRIX = {
@@ -71,6 +76,11 @@ const FALLBACK_MATRIX = {
   own_settings: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: true },
   add_municipalities_courses: { systemadmin: true, admin: false, teacher: false, syv: false, specped: false, coordinator: false, student: false },
   course_templates: { systemadmin: true, admin: true, teacher: true, syv: false, specped: false, coordinator: false, student: false },
+  messaging: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: true },
+  mass_messaging: { systemadmin: true, admin: true, teacher: false, syv: false, specped: false, coordinator: false, student: false },
+  evaluations: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: false },
+  course_management: { systemadmin: true, admin: true, teacher: true, syv: false, specped: false, coordinator: false, student: false },
+  student_documents: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: true },
 };
 
 export default {

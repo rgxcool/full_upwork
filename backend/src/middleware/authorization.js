@@ -47,6 +47,10 @@ const PERMISSION_TO_FEATURE = {
     'courseTemplates:update': PERMISSION_FEATURES.COURSE_TEMPLATES,
     'courseTemplates:delete': PERMISSION_FEATURES.COURSE_TEMPLATES,
     'analytics:read': PERMISSION_FEATURES.STATISTICS,
+    'assignments:create': PERMISSION_FEATURES.EVALUATIONS,
+    'assignments:read:own': PERMISSION_FEATURES.EVALUATIONS,
+    'assignments:update:own': PERMISSION_FEATURES.EVALUATIONS,
+    'assignments:grade': PERMISSION_FEATURES.EVALUATIONS,
 };
 
 // Effective feature access for a user: an explicit per-user override wins,

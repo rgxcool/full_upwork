@@ -1,9 +1,9 @@
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import { ROLES } from "../config/permissions.js";
 import { sendDiplomaEmail } from "../services/emailService.js";
-import { buildCertificateHtml, htmlToPdfBuffer } from "../services/certificatePdf.js";
-import { getSettingsSnapshot } from "../services/certificateService.js";
-import { CertificateTemplate } from "../models/certificateModel.js";
+import { buildCertificateHtml, htmlToPdfBuffer, readPdfBuffer } from "../services/certificatePdf.js";
+import { getSettingsSnapshot, getUserRoles } from "../services/certificateService.js";
+import { CertificateRecord, CertificateTemplate } from "../models/certificateModel.js";
 import logger from "../utils/logger.js";
 
 const STAFF_ROLES = [
@@ -72,12 +72,12 @@ export const getStudyCertificatePdf = async (req, res) => {
 
         // Staff can view any certificate; students only their own (matched by email)
         const isStaff = STAFF_ROLES.includes(req.user?.role);
-        const studentEmail = enrollment.studentId?.email;
+        const enrollmentStudentEmail = enrollment.studentId?.email;
         const callerEmail = req.user?.email;
         const isOwner =
-            !!studentEmail &&
+            !!enrollmentStudentEmail &&
             !!callerEmail &&
-            String(callerEmail).toLowerCase() === String(studentEmail).toLowerCase();
+            String(callerEmail).toLowerCase() === String(enrollmentStudentEmail).toLowerCase();
 
         if (!isStaff && !isOwner) {
             return res.status(403).json({ message: "Ej behörig" });
@@ -147,6 +147,34 @@ export const generateDiplomaPdf = async (req, res) => {
 
         if (!enrollment) {
             return res.status(404).json({ message: "Ingen antagning hittad" });
+        }
+
+        const isStaff = getUserRoles(req.user).some((role) => STAFF_ROLES.includes(role));
+        const enrollmentStudentEmail = enrollment.studentId?.email;
+        const callerEmail = req.user?.email;
+        const isOwner =
+            !!enrollmentStudentEmail &&
+            !!callerEmail &&
+            String(callerEmail).toLowerCase() === String(enrollmentStudentEmail).toLowerCase();
+        if (!isStaff && !isOwner) {
+            return res.status(403).json({ message: "Ej behörig" });
+        }
+
+        const existingRecord = await CertificateRecord.findOne({
+            enrollmentId: enrollment._id,
+            type: "diplom",
+        });
+        if (existingRecord?.status === "revoked") {
+            return res.status(410).json({ message: "Diplomet har återkallats" });
+        }
+        if (existingRecord?.status === "generated" && existingRecord.pdfFileId) {
+            const existingPdf = await readPdfBuffer(existingRecord.pdfFileId);
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader(
+                "Content-Disposition",
+                `attachment; filename="diplom-${enrollment._id}.pdf"`
+            );
+            return res.send(existingPdf);
         }
 
         // Check if enrollment is completed

@@ -343,6 +343,27 @@ describe("inactivityScanner", () => {
         expect(await Notification.countDocuments({ type: "inactivity_review" })).toBe(0);
     });
 
+    it("requires a 5-day login review even when the student has recent course activity", async () => {
+        const { student } = await enrollStudent({ lastLoginDaysAgo: 6 });
+        await Student.updateOne(
+            { _id: student._id },
+            { $set: { lastLearningActivityAt: today } }
+        );
+
+        const summary = await runInactivityScan({ today });
+
+        expect(summary.reviewNotifications).toBe(1);
+        expect(summary.inactiveForWarning).toBe(0);
+        expect(summary.warned).toBe(0);
+        expect(sendInactivityWarningEmail).not.toHaveBeenCalled();
+        expect(
+            await Notification.countDocuments({
+                type: "inactivity_review",
+                "meta.studentId": student._id,
+            })
+        ).toBe(1);
+    });
+
     it("never creates a duplicate review notification across repeated scans", async () => {
         const { student } = await enrollStudent({
             lastLoginDaysAgo: null,

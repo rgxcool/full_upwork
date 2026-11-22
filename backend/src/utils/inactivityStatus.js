@@ -10,18 +10,17 @@
  * they are expected to be studying right now.
  *
  * Two independent, env-configurable thresholds are reported separately:
- *  - mustWithdraw:        last LOGIN >= INACTIVITY_WITHDRAW_DAYS (default 5)
- *                         days ago -> the student must be withdrawn (municipal
- *                         compliance rule). Login-only per product decision;
- *                         never-logged-in students use their earliest current
- *                         enrollment start date as a proxy.
+ *  - mustWithdraw:        no LOGIN for INACTIVITY_WITHDRAW_DAYS (default 5)
+ *                         days while enrolled -> the student must be reviewed
+ *                         for withdrawal. Never-logged-in students use their
+ *                         earliest current enrollment start date as a proxy.
  *  - inactiveForWarning:  last ACTIVITY (login, assignment submission, or
  *                         course-card/lesson learning activity) >=
  *                         INACTIVITY_WARNING_DAYS (default 14) days ago ->
  *                         candidate for an automatic warning email. Activity
- *                         based per product decision so it is not automatically
- *                         a superset of mustWithdraw. Login is never used alone
- *                         when meaningful learning activity exists.
+ *                         based on the most recent login, submission, or
+ *                         course-card/lesson activity, independently of the
+ *                         login-only withdrawal-review rule.
  *
  * Schedule adherence is surfaced separately (daysSinceLastSubmission and
  * openSubmissions) rather than folded into the withdraw flag.
@@ -78,6 +77,7 @@ function daysBetween(later, earlier) {
  *   windowStart: (Date|null), windowEnd: (Date|null),
  *   daysSinceLastLogin: (number|null), daysSinceLastSubmission: (number|null),
  *   daysSinceLastLearningActivity: (number|null), daysSinceWindowStart: (number|null),
+ *   daysWithoutLoginInEnrollment: (number|null), lastActivityAt: (Date|null),
  *   openSubmissions: number,
  *   mustWithdraw: boolean, inactiveForWarning: boolean,
  *   daysUntilWithdraw: (number|null), level: "ok"|"warning"|"withdraw"
@@ -133,27 +133,28 @@ export function computeInactivitySignal({
     let daysUntilWithdraw = null;
     let level = "ok";
     let activityBasis = null;
+    let daysWithoutLoginInEnrollment = null;
+    let lastActivityAt = null;
 
     if (evaluated) {
-        const loginBasis =
-            daysSinceLastLogin !== null ? daysSinceLastLogin : daysSinceWindowStart;
-        const activityDays = [
-            daysSinceLastLogin,
-            daysSinceLastSubmission,
-            daysSinceLastLearningActivity,
-        ].filter((v) => v !== null);
-        activityBasis = activityDays.length > 0 ? Math.min(...activityDays) : daysSinceWindowStart;
+        const enrollmentStart = windowStart.getTime();
+        const relevantActivity = [login, submission, learning]
+            .filter(Boolean)
+            .map((date) => Math.max(date.getTime(), enrollmentStart));
+        const mostRecentActivity =
+            relevantActivity.length > 0 ? Math.max(...relevantActivity) : enrollmentStart;
+        lastActivityAt = new Date(mostRecentActivity);
+        activityBasis = daysBetween(now, new Date(mostRecentActivity));
 
-        // Requirement (Part 6 / 1): activity is the UNION of login, course-card
-        // and lesson access, assignment submissions and completions. A student
-        // with recently meaningful activity must never be flagged purely because
-        // their last *login* timestamp is stale — login alone is only used as a
-        // fallback when no other activity signal exists (i.e. the window start).
-        mustWithdraw = activityBasis !== null && activityBasis >= INACTIVITY_WITHDRAW_DAYS;
+        const relevantLogin = login
+            ? Math.max(login.getTime(), enrollmentStart)
+            : enrollmentStart;
+        daysWithoutLoginInEnrollment = daysBetween(now, new Date(relevantLogin));
+        mustWithdraw = daysWithoutLoginInEnrollment >= INACTIVITY_WITHDRAW_DAYS;
         inactiveForWarning =
             activityBasis !== null && activityBasis >= INACTIVITY_WARNING_DAYS;
         daysUntilWithdraw =
-            activityBasis === null ? null : Math.max(0, INACTIVITY_WITHDRAW_DAYS - activityBasis);
+            Math.max(0, INACTIVITY_WITHDRAW_DAYS - daysWithoutLoginInEnrollment);
 
         if (mustWithdraw) level = "withdraw";
         else if (inactiveForWarning) level = "warning";
@@ -167,6 +168,8 @@ export function computeInactivitySignal({
         windowEnd,
         activityBasis:
             evaluated ? activityBasis : null,
+        daysWithoutLoginInEnrollment,
+        lastActivityAt,
         daysSinceLastLogin,
         daysSinceLastSubmission,
         daysSinceLastLearningActivity,

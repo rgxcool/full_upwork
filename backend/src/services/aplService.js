@@ -105,7 +105,9 @@ export async function autoCreateRecords(userId) {
  */
 export const APL_LEARNING_KIT_TITLE = "APL-lärkit";
 
-export async function ensureAplLearningKit(studentId) {
+const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+export async function ensureAplLearningKit(studentId, { now = new Date() } = {}) {
     const student = await Student.findById(studentId);
     if (!student) return null;
 
@@ -114,8 +116,15 @@ export async function ensureAplLearningKit(studentId) {
     );
     if (existing) return existing;
 
-    const record = await AplRecord.findOne({ studentId });
     const period = computeAplPeriod(student.education || []);
+    if (
+        !period.aplStartDate ||
+        startOfDay(period.aplStartDate).getTime() > startOfDay(now).getTime()
+    ) {
+        return null;
+    }
+
+    const record = await AplRecord.findOne({ studentId });
     const fmt = (date) => (date ? new Date(date).toISOString().split("T")[0] : "ej fastställd");
 
     const kit = {
@@ -124,7 +133,7 @@ export async function ensureAplLearningKit(studentId) {
         description: `Personligt APL-lärkit för ${student.name}. APL-period: ${fmt(
             period.aplStartDate
         )} – ${fmt(period.aplEndDate)}.`,
-        startDate: new Date(),
+        startDate: new Date(period.aplStartDate),
         endDate: period.aplEndDate ? new Date(period.aplEndDate) : null,
         status: "active",
         placementId: record?.placementId || null,
@@ -136,6 +145,36 @@ export async function ensureAplLearningKit(studentId) {
 
     await notifyAplKit(student, kit);
     return kit;
+}
+
+/**
+ * Issue personalized kits for eligible students whose APL period has started.
+ * The daily scheduler calls this so issuance does not depend on staff opening
+ * the APL board or manually creating an APL record.
+ */
+export async function ensureStartedAplLearningKits(now = new Date()) {
+    const eligible = await findEligibleStudents();
+    const today = startOfDay(now);
+    const started = eligible.filter(
+        (student) =>
+            student.aplStartDate &&
+            startOfDay(student.aplStartDate).getTime() <= today.getTime()
+    );
+    let created = 0;
+
+    for (const student of started) {
+        const alreadyHasKit = (student.logbook || []).some(
+            (kit) => kit.title === APL_LEARNING_KIT_TITLE
+        );
+        if (alreadyHasKit) continue;
+
+        await ensureAplLearningKit(student._id, { now });
+        if ((student.logbook || []).some((kit) => kit.title === APL_LEARNING_KIT_TITLE)) {
+            created += 1;
+        }
+    }
+
+    return created;
 }
 
 /**

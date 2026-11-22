@@ -16,7 +16,8 @@ import { runInactivityScan } from "./inactivityScanner.js";
 import { runDiplomaNotificationScan } from "./diplomaNotificationScan.js";
 import { runGradingReminderScan } from "./gradingReminderScan.js";
 import { runTaskReminderScan } from "./taskReminderScan.js";
-import { autoTransitionStatuses } from "./aplService.js";
+import { autoTransitionStatuses, ensureStartedAplLearningKits } from "./aplService.js";
+import { runAutomaticDiplomaScan } from "./automaticDiplomaService.js";
 
 const SCAN_HOUR_UTC = (() => {
     const raw = parseInt(process.env.INACTIVITY_SCAN_HOUR_UTC, 10);
@@ -59,10 +60,22 @@ const executeScan = async () => {
             logger.error({ err }, "Diploma notification scan failed");
         }
         try {
+            const automaticDiplomaSummary = await runAutomaticDiplomaScan();
+            logger.info({ summary: automaticDiplomaSummary }, "Automatic diploma scan completed");
+        } catch (err) {
+            logger.error({ err }, "Automatic diploma scan failed");
+        }
+        try {
             const gradingSummary = await runGradingReminderScan();
             logger.info({ summary: gradingSummary }, "Grading reminder scan completed");
         } catch (err) {
             logger.error({ err }, "Grading reminder scan failed");
+        }
+        try {
+            const aplKitsCreated = await ensureStartedAplLearningKits();
+            logger.info({ count: aplKitsCreated }, "Started APL learning kits issued");
+        } catch (err) {
+            logger.error({ err }, "APL learning-kit issuance scan failed");
         }
         try {
             // Persisted APL status auto-transitions (RED near end / GREEN after

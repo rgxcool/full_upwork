@@ -670,7 +670,7 @@ describe("Inactivity Report Routes Integration Tests", () => {
     });
 
     describe("Part 6 — review flow, tenant isolation, package cascade", () => {
-        it("treats recent learning activity as activity even when the login is stale", async () => {
+        it("applies the 5-day login review even when the student has recent learning activity", async () => {
             await User.updateOne(
                 { email: "anna@elev.se" },
                 { $set: { lastLoginAt: daysAgo(20) } }
@@ -689,9 +689,9 @@ describe("Inactivity Report Routes Integration Tests", () => {
                 (s) => s.studentId === studentA._id.toString()
             );
             expect(anna).toBeDefined();
-            expect(anna.mustWithdraw).toBe(false);
+            expect(anna.mustWithdraw).toBe(true);
             expect(anna.inactiveForWarning).toBe(false);
-            expect(anna.level).toBe("ok");
+            expect(anna.level).toBe("withdraw");
             expect(anna.daysSinceLastLearningActivity).toBe(2);
         });
 

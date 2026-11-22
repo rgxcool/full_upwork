@@ -119,6 +119,7 @@ import {
     deleteAllCourseInstances,
     deleteCourseInstance,
     findCourseMatch,
+    getAllCourseCards,
     getCourseInstanceEnrollments,
     getCourseInstances,
     getCourseStatistics,
@@ -2232,7 +2233,6 @@ describe("createCourseInstance", () => {
                 sections: [
                     { title: "S1", description: "d1", instructions: "" },
                 ],
-                assignment: undefined,
             },
         ]);
     });
@@ -2786,5 +2786,27 @@ describe("getStudentCourseCards", () => {
 
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith({ error: "Invalid student id" });
+    });
+});
+
+describe("getAllCourseCards", () => {
+    it("returns all course cards ordered by end date", async () => {
+        const cards = [{ _id: "card-1", endDate: "2026-03-01" }];
+        const query = {
+            select: vi.fn(),
+            populate: vi.fn(),
+            sort: vi.fn().mockResolvedValue(cards),
+        };
+        query.select.mockReturnValue(query);
+        query.populate.mockReturnValue(query);
+        CourseInstance.find.mockReturnValue(query);
+        const res = createRes();
+
+        await getAllCourseCards(createReq(), res);
+
+        expect(CourseInstance.find).toHaveBeenCalledWith({});
+        expect(query.select).toHaveBeenCalledWith(expect.stringContaining("courseTemplateId"));
+        expect(query.sort).toHaveBeenCalledWith({ endDate: 1, _id: 1 });
+        expect(res.json).toHaveBeenCalledWith({ success: true, cards });
     });
 });

@@ -13,6 +13,11 @@ export const PERMISSION_FEATURES = {
   OWN_SETTINGS: 'own_settings',
   ADD_MUNICIPALITIES_COURSES: 'add_municipalities_courses',
   COURSE_TEMPLATES: 'course_templates',
+  MESSAGING: 'messaging',
+  MASS_MESSAGING: 'mass_messaging',
+  EVALUATIONS: 'evaluations',
+  COURSE_MANAGEMENT: 'course_management',
+  STUDENT_DOCUMENTS: 'student_documents',
 };
 
 export const ROLES = {
@@ -111,6 +116,51 @@ export const PERMISSION_MATRIX = {
     [ROLES.COORDINATOR]: 'Nej',
     [ROLES.STUDENT]: 'Nej',
   },
+  [PERMISSION_FEATURES.MESSAGING]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Ja',
+    [ROLES.SYV]: 'Ja',
+    [ROLES.SPECPED]: 'Ja',
+    [ROLES.COORDINATOR]: 'Ja',
+    [ROLES.STUDENT]: 'Ja',
+  },
+  [PERMISSION_FEATURES.MASS_MESSAGING]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Nej',
+    [ROLES.SYV]: 'Nej',
+    [ROLES.SPECPED]: 'Nej',
+    [ROLES.COORDINATOR]: 'Nej',
+    [ROLES.STUDENT]: 'Nej',
+  },
+  [PERMISSION_FEATURES.EVALUATIONS]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Ja',
+    [ROLES.SYV]: 'Ja',
+    [ROLES.SPECPED]: 'Ja',
+    [ROLES.COORDINATOR]: 'Nej',
+    [ROLES.STUDENT]: 'Nej',
+  },
+  [PERMISSION_FEATURES.COURSE_MANAGEMENT]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Utvalda lärare',
+    [ROLES.SYV]: 'Nej',
+    [ROLES.SPECPED]: 'Nej',
+    [ROLES.COORDINATOR]: 'Nej',
+    [ROLES.STUDENT]: 'Nej',
+  },
+  [PERMISSION_FEATURES.STUDENT_DOCUMENTS]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Utvalda dokument',
+    [ROLES.SYV]: 'Utvalda dokument',
+    [ROLES.SPECPED]: 'Utvalda dokument',
+    [ROLES.COORDINATOR]: 'Nej',
+    [ROLES.STUDENT]: 'Egna dokument',
+  },
 };
 
 /**
@@ -152,6 +202,11 @@ export const FEATURE_LABELS = {
   [PERMISSION_FEATURES.OWN_SETTINGS]: 'Egna inställningar (ex profilbild)',
   [PERMISSION_FEATURES.ADD_MUNICIPALITIES_COURSES]: 'Lägga till kommuner, kurser etc',
   [PERMISSION_FEATURES.COURSE_TEMPLATES]: 'Kursmallar (kursmoduler)',
+  [PERMISSION_FEATURES.MESSAGING]: 'Meddelanden',
+  [PERMISSION_FEATURES.MASS_MESSAGING]: 'Massutskick',
+  [PERMISSION_FEATURES.EVALUATIONS]: 'Utvärderingar',
+  [PERMISSION_FEATURES.COURSE_MANAGEMENT]: 'Kurshantering',
+  [PERMISSION_FEATURES.STUDENT_DOCUMENTS]: 'Elevdokument',
 };
 
 /**

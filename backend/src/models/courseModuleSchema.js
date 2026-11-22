@@ -7,6 +7,7 @@ export const sectionSchema = new mongoose.Schema(
         title: { type: String, default: "" },
         description: { type: String, default: "" },
         instructions: { type: String, default: "" },
+        blocks: { type: [mongoose.Schema.Types.Mixed], default: [] },
     },
     { _id: false }
 );
@@ -57,21 +58,29 @@ export const buildDefaultModules = () => {
 
 // Deep-clone module documents (for duplicating a template into course cards)
 export const cloneModules = (modules) =>
-    modules?.map((m) => ({
-        moduleNumber: m.moduleNumber,
-        title: m.title ?? "",
-        isPartialExam: !!m.isPartialExam,
-        isCaseStudy: !!m.isCaseStudy,
-        sections: (m.sections || []).map((s) => ({
-            title: s.title ?? "",
-            description: s.description ?? "",
-            instructions: s.instructions ?? "",
-        })),
-        assignment:
-            m.assignment?.title || m.assignment?.description
-                ? {
-                      title: m.assignment.title ?? "",
-                      description: m.assignment.description ?? "",
-                  }
-                : undefined,
-    })) ?? [];
+    modules?.map((m) => {
+        const cloned = {
+            moduleNumber: m.moduleNumber,
+            title: m.title ?? "",
+            isPartialExam: !!m.isPartialExam,
+            isCaseStudy: !!m.isCaseStudy,
+            sections: (m.sections || []).map((s) => {
+                const section = {
+                    title: s.title ?? "",
+                    description: s.description ?? "",
+                    instructions: s.instructions ?? "",
+                };
+                if (Array.isArray(s.blocks) && s.blocks.length > 0) {
+                    section.blocks = s.blocks;
+                }
+                return section;
+            }),
+        };
+        if (m.assignment?.title || m.assignment?.description) {
+            cloned.assignment = {
+                title: m.assignment.title ?? "",
+                description: m.assignment.description ?? "",
+            };
+        }
+        return cloned;
+    }) ?? [];

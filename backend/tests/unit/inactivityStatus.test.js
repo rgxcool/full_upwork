@@ -152,6 +152,48 @@ describe("computeInactivitySignal — withdraw flag (login-based)", () => {
         expect(signal.mustWithdraw).toBe(true);
         expect(signal.level).toBe("withdraw");
     });
+
+    it("uses login inactivity for the 5-day review even when learning activity is recent", () => {
+        const signal = computeInactivitySignal({
+            lastLoginAt: dateOffset(-INACTIVITY_WITHDRAW_DAYS),
+            lastSubmissionAt: today,
+            lastLearningActivityAt: today,
+            enrollments: [currentEnrollment()],
+            today,
+        });
+
+        expect(signal.mustWithdraw).toBe(true);
+        expect(signal.inactiveForWarning).toBe(false);
+        expect(signal.daysWithoutLoginInEnrollment).toBe(INACTIVITY_WITHDRAW_DAYS);
+        expect(signal.daysUntilWithdraw).toBe(0);
+    });
+
+    it("does not count a login from before enrollment against the 5-day rule", () => {
+        const signal = computeInactivitySignal({
+            lastLoginAt: dateOffset(-60),
+            enrollments: [currentEnrollment({ startDate: dateOffset(-2) })],
+            today,
+        });
+
+        expect(signal.mustWithdraw).toBe(false);
+        expect(signal.daysWithoutLoginInEnrollment).toBe(2);
+        expect(signal.daysUntilWithdraw).toBe(INACTIVITY_WITHDRAW_DAYS - 2);
+    });
+
+    it("does not consider the student inactive before their enrollment starts", () => {
+        const signal = computeInactivitySignal({
+            lastLoginAt: dateOffset(-60),
+            lastSubmissionAt: dateOffset(-60),
+            lastLearningActivityAt: dateOffset(-60),
+            enrollments: [currentEnrollment({ startDate: dateOffset(-2) })],
+            today,
+        });
+
+        expect(signal.mustWithdraw).toBe(false);
+        expect(signal.inactiveForWarning).toBe(false);
+        expect(signal.activityBasis).toBe(2);
+        expect(signal.lastActivityAt).toEqual(dateOffset(-2));
+    });
 });
 
 describe("computeInactivitySignal — warning flag (activity-based)", () => {

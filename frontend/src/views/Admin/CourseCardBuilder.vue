@@ -19,6 +19,14 @@
         >
           {{ isSavingTemplate ? 'Sparar mall...' : 'Spara som mall' }}
         </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="isSavingCard || isUploading || !selectedCourseInstanceId"
+          @click="saveCourseCard"
+        >
+          {{ isSavingCard ? 'Sparar kurskort...' : 'Spara kurskort' }}
+        </button>
       </div>
     </header>
 
@@ -45,40 +53,57 @@
       </div>
 
       <div class="instance-bar">
-        <label class="field field-grow">
-          <span>Välj mall från mall-banken</span>
-          <select
+        <div class="field field-grow">
+          <v-autocomplete
             v-model="selectedTemplateId"
-            class="instance-select"
+            :items="visibleTemplateItems"
+            :search="templateSearch || ''"
+            item-title="label"
+            item-value="value"
+            label="Välj mall från mall-banken"
+            placeholder="Skriv minst 3 tecken"
+            :loading="isLoadingTemplates || isLoadingTemplate"
             :disabled="isLoadingTemplates || isLoadingTemplate"
-            @change="onTemplateSelectionChange"
-          >
-            <option value="">
-              {{
-                isLoadingTemplates
-                  ? 'Laddar mallar...'
-                  : '-- Välj en sparad mall i menyn --'
-              }}
-            </option>
-            <option
-              v-for="tpl in courseTemplates"
-              :key="tpl._id || tpl.id"
-              :value="tpl._id || tpl.id"
-            >
-              {{ formatTemplateLabel(tpl) }}
-            </option>
-          </select>
-        </label>
+            :no-data-text="
+              (templateSearch || '').length < 3
+                ? 'Skriv minst 3 tecken för att söka'
+                : 'Inga matchande mallar hittades'
+            "
+            :custom-filter="filterAutocompleteItem"
+            :menu-props="{ maxHeight: '300px' }"
+            clearable
+            no-filter
+            @update:search="onTemplateSearchUpdate"
+            @update:model-value="onTemplateSelectionChange"
+          />
+        </div>
 
-        <div class="instance-buttons">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="isLoadingTemplates"
-            @click="fetchCourseTemplates"
-          >
-            Uppdatera lista
-          </button>
+      </div>
+
+      <div class="instance-bar">
+        <div class="field field-grow">
+          <v-autocomplete
+            v-model="selectedCourseInstanceId"
+            :items="visibleCourseInstanceItems"
+            :search="courseInstanceSearch || ''"
+            item-title="label"
+            item-value="value"
+            label="Koppla kurskort till kursinstans"
+            placeholder="Skriv minst 3 tecken"
+            :loading="isLoadingInstances"
+            :disabled="isLoadingInstances"
+            :no-data-text="
+              (courseInstanceSearch || '').length < 3
+                ? 'Skriv minst 3 tecken för att söka'
+                : 'Inga matchande kursinstanser hittades'
+            "
+            :custom-filter="filterAutocompleteItem"
+            :menu-props="{ maxHeight: '300px' }"
+            clearable
+            no-filter
+            @update:search="onCourseInstanceSearchUpdate"
+            @update:model-value="onCourseInstanceSelectionChange"
+          />
         </div>
       </div>
     </section>
@@ -140,6 +165,9 @@
               <button type="button" class="btn btn-sm" @click="triggerVideoPicker(mIdx, sIdx)">
                 + Video
               </button>
+              <button type="button" class="btn btn-sm" @click="triggerImagePicker(mIdx, sIdx)">
+                + Bild
+              </button>
               <button type="button" class="btn btn-sm" @click="triggerFilePicker(mIdx, sIdx)">
                 + Fil / PDF / Bild
               </button>
@@ -161,6 +189,13 @@
             accept="video/mp4,video/webm,video/quicktime,video/ogg,video/x-m4v,video/*"
             class="hidden-input"
             @change="(e) => onVideoSelected(e, mIdx, sIdx)"
+          />
+          <input
+            :ref="(el) => setInputRef(el, `image-${mIdx}-${sIdx}`)"
+            type="file"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.heic"
+            class="hidden-input"
+            @change="(e) => onImageSelected(e, mIdx, sIdx)"
           />
           <input
             :ref="(el) => setInputRef(el, `file-${mIdx}-${sIdx}`)"
@@ -260,6 +295,70 @@
                 <div v-else class="empty-media">Ingen video vald ännu.</div>
               </template>
 
+              <template v-else-if="block.type === 'image'">
+                <div class="block-top-row">
+                  <span class="block-type-pill">🖼️ Bild</span>
+                  <button
+                    v-if="!previewMode"
+                    type="button"
+                    class="btn-icon"
+                    title="Ta bort bild"
+                    @click="removeBlock(mIdx, sIdx, bIdx)"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div v-if="!previewMode" class="image-editor-controls">
+                  <label>
+                    <span>Bildtext</span>
+                    <input v-model="block.caption" type="text" placeholder="Bildtext (valfritt)" />
+                  </label>
+                  <label>
+                    <span>Alternativtext</span>
+                    <input v-model="block.altText" type="text" placeholder="Beskriv bilden" />
+                  </label>
+                  <label>
+                    <span>Visning</span>
+                    <select v-model="block.displayMode">
+                      <option value="inline">Visa i modulen</option>
+                      <option value="new-window">Öppna i nytt fönster</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Bildstorlek</span>
+                    <select v-model="block.imageWidth">
+                      <option value="small">Liten</option>
+                      <option value="medium">Mellan</option>
+                      <option value="full">Full bredd</option>
+                    </select>
+                  </label>
+                </div>
+
+                <figure v-if="block.url" class="image-preview" :class="`image-width-${block.imageWidth || 'full'}`">
+                  <a
+                    v-if="previewMode && block.displayMode === 'new-window'"
+                    :href="resolveMediaUrl(block.url)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      :src="resolveMediaUrl(block.url)"
+                      :alt="block.altText || block.caption || block.fileName"
+                      class="embedded-image"
+                    />
+                  </a>
+                  <img
+                    v-else
+                    :src="resolveMediaUrl(block.url)"
+                    :alt="block.altText || block.caption || block.fileName"
+                    class="embedded-image"
+                  />
+                  <figcaption v-if="block.caption">{{ block.caption }}</figcaption>
+                </figure>
+                <div v-else class="empty-media">Ingen bild vald ännu.</div>
+              </template>
+
               <!-- 3. Uppladdade filer (Bild/PDF -> ny sida, övriga -> nedladdning) -->
               <template v-else-if="block.type === 'file'">
                 <div class="file-row">
@@ -306,7 +405,7 @@
             </div>
 
             <p v-if="!sec.blocks.length" class="empty-section">
-              Inga delmoment i denna sektion ännu. Lägg till textblock, video eller fil.
+              Inga delmoment i denna sektion ännu. Lägg till text, video, bild eller fil.
             </p>
           </div>
         </div>
@@ -316,7 +415,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, reactive, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api/client'
 
@@ -331,8 +430,14 @@ const selectedTemplateId = ref(String(route.query?.templateId || ''))
 const courseTemplates = ref([])
 const isLoadingTemplates = ref(false)
 const isLoadingTemplate = ref(false)
+const courseInstances = ref([])
+const selectedCourseInstanceId = ref(String(route.query?.courseInstanceId || ''))
+const isLoadingInstances = ref(false)
+const templateSearch = ref('')
+const courseInstanceSearch = ref('')
 
 const isSavingTemplate = ref(false)
+const isSavingCard = ref(false)
 const isUploading = ref(false)
 const statusMessage = ref('')
 const statusType = ref('info')
@@ -367,6 +472,122 @@ function extractTemplatesList(data) {
   return []
 }
 
+function extractInstancesList(data) {
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.instances)) return data.instances
+  if (Array.isArray(data?.courseInstances)) return data.courseInstances
+  if (Array.isArray(data?.data)) return data.data
+  return []
+}
+
+function formatCourseInstanceLabel(instance) {
+  const name = toSafeText(instance.courseName || instance.name)
+  const code = toSafeText(instance.courseCode)
+  return [name, code].filter(Boolean).join(' - ') || 'Namnlös kursinstans'
+}
+
+function normalizeAutocompleteText(value) {
+  return toSafeText(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+}
+
+function onTemplateSearchUpdate(query) {
+  templateSearch.value = toSafeText(query)
+}
+
+function onCourseInstanceSearchUpdate(query) {
+  courseInstanceSearch.value = toSafeText(query)
+}
+
+function levenshteinDistance(a, b) {
+  const rows = a.length + 1
+  const cols = b.length + 1
+  const matrix = Array.from({ length: rows }, () => Array(cols).fill(0))
+  for (let i = 0; i < rows; i++) matrix[i][0] = i
+  for (let j = 0; j < cols; j++) matrix[0][j] = j
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      matrix[i][j] =
+        a[i - 1] === b[j - 1]
+          ? matrix[i - 1][j - 1]
+          : 1 + Math.min(matrix[i - 1][j], matrix[i][j - 1], matrix[i - 1][j - 1])
+    }
+  }
+  return matrix[a.length][b.length]
+}
+
+function rankAutocompleteItems(items, query) {
+  const normalizedQuery = normalizeAutocompleteText(query)
+  if (normalizedQuery.length < 3) return items
+
+  return items
+    .map((item) => {
+      const text = normalizeAutocompleteText(item.label)
+      const words = text.split(/\s+/).filter(Boolean)
+      let score = -levenshteinDistance(normalizedQuery, text.slice(0, normalizedQuery.length))
+      if (text === normalizedQuery) score += 100
+      else if (text.startsWith(normalizedQuery)) score += 80
+      else if (words.some((word) => word.startsWith(normalizedQuery))) score += 60
+      else if (text.includes(normalizedQuery)) score += 40
+      else if (normalizedQuery.split(/\s+/).every((word) => text.includes(word))) score += 20
+      return { item, score, text }
+    })
+    .filter(({ text, score }) => {
+      if (text.includes(normalizedQuery)) return true
+      if (normalizedQuery.split(/\s+/).every((word) => text.includes(word))) return true
+      if (text.startsWith(normalizedQuery) || score > 0) return true
+      return levenshteinDistance(normalizedQuery, text.slice(0, normalizedQuery.length)) <= 2
+    })
+    .sort((a, b) => b.score - a.score || a.text.localeCompare(b.text, 'sv'))
+    .slice(0, 15)
+    .map(({ item }) => item)
+}
+
+const visibleTemplateItems = computed(() =>
+  rankAutocompleteItems(
+    (courseTemplates.value || []).map((tpl) => ({
+      value: String(tpl._id || tpl.id || ''),
+      label: formatTemplateLabel(tpl),
+    })),
+    templateSearch.value
+  )
+)
+
+const visibleCourseInstanceItems = computed(() =>
+  rankAutocompleteItems(
+    (courseInstances.value || []).map((instance) => ({
+      value: String(instance._id || instance.id || ''),
+      label: formatCourseInstanceLabel(instance),
+    })),
+    courseInstanceSearch.value
+  )
+)
+
+function filterAutocompleteItem(value, query, item) {
+  const search = normalizeAutocompleteText(query)
+  if (search.length < 3) return false
+  const raw = item?.raw || item?.value || item || value
+  return normalizeAutocompleteText(raw?.label || raw || value).includes(search)
+}
+
+async function fetchCourseInstances() {
+  isLoadingInstances.value = true
+  try {
+    const { data } = await api.get('/course-instances')
+    courseInstances.value = extractInstancesList(data)
+  } catch (err) {
+    setStatus(
+      `Kunde inte hämta kursinstanser (${err?.response?.data?.message || err.message}).`,
+      'warning'
+    )
+  } finally {
+    isLoadingInstances.value = false
+  }
+}
+
 async function fetchCourseTemplates() {
   isLoadingTemplates.value = true
   try {
@@ -383,8 +604,67 @@ async function fetchCourseTemplates() {
 }
 
 function onTemplateSelectionChange() {
-  if (selectedTemplateId.value) {
-    loadTemplateById(selectedTemplateId.value)
+  if (!selectedTemplateId.value) {
+    templateSearch.value = ''
+    return
+  }
+  loadTemplateById(selectedTemplateId.value)
+}
+
+async function onCourseInstanceSelectionChange() {
+  if (!selectedCourseInstanceId.value) {
+    courseInstanceSearch.value = ''
+    return
+  }
+  isLoadingTemplate.value = true
+  try {
+    const instanceId = encodeURIComponent(selectedCourseInstanceId.value)
+    const [{ data: instanceData }, { data: contentData }] = await Promise.all([
+      api.get(`/course-instances/${instanceId}`),
+      api.get(`/course-instances/${instanceId}/content`),
+    ])
+    const instance = instanceData?.instance || instanceData?.data || instanceData
+    if (instance?.courseName) cardData.title = toSafeText(instance.courseName)
+    if (instance?.courseCode) cardData.courseCode = toSafeText(instance.courseCode)
+    if (instance?.cardContent?.title) cardData.title = toSafeText(instance.cardContent.title)
+    if (instance?.cardContent?.courseCode) {
+      cardData.courseCode = toSafeText(instance.cardContent.courseCode)
+    }
+    if (Array.isArray(instance?.modules) && instance.modules.length) {
+      cardData.modules = normalizeLoadedModules(instance.modules)
+    } else if (Array.isArray(instanceData?.modules) && instanceData.modules.length) {
+      cardData.modules = normalizeLoadedModules(instanceData.modules)
+    }
+    if (instance?.cardContent?.modules) {
+      cardData.modules = normalizeLoadedModules(instance.cardContent.modules)
+    }
+    templateSearch.value = ''
+    courseInstanceSearch.value = ''
+    const content = contentData?.content
+    if (content && typeof content === 'object') {
+      cardData.modules.forEach((mod) => {
+        const entry = content[String(mod.moduleNumber)]
+        if (entry?.title) mod.title = toSafeText(entry.title)
+      })
+    }
+    const hasCourseCard =
+      instance?.courseTemplateId ||
+      instance?.cardContent?.title ||
+      instance?.cardContent?.modules?.length ||
+      instance?.modules?.length
+    setStatus(
+      hasCourseCard
+        ? 'Laddade kurskortet från kursinstansen.'
+        : 'Laddade kursinstansen. Välj en mall eller använd standardinnehållet.',
+      hasCourseCard ? 'success' : 'info'
+    )
+  } catch (err) {
+    setStatus(
+      `Kunde inte ladda kurskortet från kursinstansen: ${err?.response?.data?.message || err.message}`,
+      'error'
+    )
+  } finally {
+    isLoadingTemplate.value = false
   }
 }
 
@@ -560,6 +840,10 @@ function triggerVideoPicker(mIdx, sIdx) {
   inputRefs.value[`video-${mIdx}-${sIdx}`]?.click()
 }
 
+function triggerImagePicker(mIdx, sIdx) {
+  inputRefs.value[`image-${mIdx}-${sIdx}`]?.click()
+}
+
 function triggerFilePicker(mIdx, sIdx) {
   inputRefs.value[`file-${mIdx}-${sIdx}`]?.click()
 }
@@ -611,6 +895,59 @@ async function onVideoSelected(event, mIdx, sIdx) {
     URL.revokeObjectURL(fallbackUrl)
     objectUrls.delete(fallbackUrl)
     setStatus(`Videon "${file.name}" laddades upp.`, 'success')
+  } catch (err) {
+    const status = err?.response?.status
+    const msg = formatUploadError(err, file.name)
+    if (status === 401 || status === 403) {
+      setStatus(`${msg} Visas tillfälligt lokalt i förhandsgranskningen.`, 'error')
+    } else {
+      setStatus(`${msg} Visas lokalt för förhandsgranskning.`, 'warning')
+    }
+  } finally {
+    isUploading.value = false
+  }
+}
+
+async function onImageSelected(event, mIdx, sIdx) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+
+  if (!/\.(jpe?g|png|gif|webp|bmp|tif|tiff|heic)$/i.test(file.name)) {
+    setStatus('Välj en giltig bildfil.', 'error')
+    return
+  }
+
+  const sec = cardData.modules[mIdx].sections[sIdx]
+  if (!Array.isArray(sec.blocks)) sec.blocks = []
+
+  const fallbackUrl = registerObjectUrl(file)
+  const block = reactive({
+    id: `img-${crypto.randomUUID?.() || Date.now()}`,
+    type: 'image',
+    title: file.name,
+    caption: '',
+    altText: '',
+    imageWidth: 'full',
+    displayMode: 'inline',
+    fileName: file.name,
+    mimeType: file.type,
+    size: file.size,
+    url: fallbackUrl,
+    fileId: null,
+  })
+
+  sec.blocks.push(block)
+  isUploading.value = true
+
+  try {
+    const uploaded = await uploadToBackend(file)
+    block.url = uploaded.url
+    block.fileId = uploaded.fileId
+    block.mimeType = uploaded.mimeType || block.mimeType
+    URL.revokeObjectURL(fallbackUrl)
+    objectUrls.delete(fallbackUrl)
+    setStatus(`Bilden "${file.name}" laddades upp.`, 'success')
   } catch (err) {
     const status = err?.response?.status
     const msg = formatUploadError(err, file.name)
@@ -742,6 +1079,12 @@ function serializeContent() {
               title: toSafeText(blk.title),
               heading: toSafeText(blk.heading),
               body: toSafeText(blk.body),
+              caption: toSafeText(blk.caption),
+              altText: toSafeText(blk.altText),
+              imageWidth: ['small', 'medium', 'full'].includes(blk.imageWidth)
+                ? blk.imageWidth
+                : 'full',
+              displayMode: blk.displayMode === 'new-window' ? 'new-window' : 'inline',
               colorCode: blk.colorCode || 'default',
               fileId: blk.fileId || null,
               fileName: toSafeText(blk.fileName),
@@ -791,9 +1134,17 @@ async function loadTemplateById(templateId) {
 
     cardData.title = toSafeText(tpl.templateName || tpl.title || tpl.name)
     cardData.courseCode = toSafeText(tpl.courseCode)
-    if (Array.isArray(tpl.modules) && tpl.modules.length) {
+    if (Array.isArray(tpl.cardContent?.modules) && tpl.cardContent.modules.length) {
+      cardData.title =
+        toSafeText(tpl.cardContent.title) ||
+        toSafeText(tpl.templateName || tpl.title || tpl.name)
+      cardData.courseCode =
+        toSafeText(tpl.cardContent.courseCode) || toSafeText(tpl.courseCode)
+      cardData.modules = normalizeLoadedModules(tpl.cardContent.modules)
+    } else if (Array.isArray(tpl.modules) && tpl.modules.length) {
       cardData.modules = normalizeLoadedModules(tpl.modules)
     }
+    templateSearch.value = ''
 
     setStatus(
       `Laddade mallen "${toSafeText(tpl.templateName || tpl.title || tpl.name || 'Mall')}" från mall-banken.`,
@@ -863,8 +1214,48 @@ async function saveAsTemplate() {
   }
 }
 
+async function saveCourseCard() {
+  if (!selectedCourseInstanceId.value) {
+    setStatus('Välj en kursinstans att koppla kurskortet till.', 'warning')
+    return
+  }
+
+  const snapshot = serializeContent()
+  isSavingCard.value = true
+  try {
+    const instanceId = encodeURIComponent(selectedCourseInstanceId.value)
+    await api.put(`/course-instances/${instanceId}/content`, {
+      content: serializeModuleContentMap(),
+      modules: snapshot.modules,
+      cardContent: snapshot,
+      courseTemplateId: selectedTemplateId.value || null,
+      syncModules: true,
+    })
+    setStatus('Kurskortet sparades och kopplades till kursinstansen.', 'success')
+  } catch (err) {
+    setStatus(
+      `Kunde inte spara kurskortet: ${err?.response?.data?.message || err?.response?.data?.error || err.message}`,
+      'error'
+    )
+  } finally {
+    isSavingCard.value = false
+  }
+}
+
 onMounted(async () => {
-  await fetchCourseTemplates()
+  if (route.query.courseName) cardData.title = toSafeText(route.query.courseName)
+  if (route.query.courseCode) cardData.courseCode = toSafeText(route.query.courseCode)
+
+  await Promise.all([fetchCourseTemplates(), fetchCourseInstances()])
+  if (selectedCourseInstanceId.value) {
+    const selectedInstance = courseInstances.value.find(
+      (instance) => String(instance._id || instance.id) === selectedCourseInstanceId.value
+    )
+    if (selectedInstance) {
+      courseInstanceSearch.value = formatCourseInstanceLabel(selectedInstance)
+    }
+    await onCourseInstanceSelectionChange()
+  }
   if (selectedTemplateId.value) {
     await loadTemplateById(selectedTemplateId.value)
   }
@@ -1029,7 +1420,9 @@ onBeforeUnmount(() => {
 
 .module-title-input,
 .section-title-input,
-.block-heading-input {
+.block-heading-input,
+.image-editor-controls input,
+.image-editor-controls select {
   padding: 7px 10px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
@@ -1157,6 +1550,52 @@ onBeforeUnmount(() => {
   max-height: 360px;
   border-radius: 6px;
   background: #000000;
+}
+
+.image-editor-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.image-editor-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.85rem;
+}
+
+.image-preview {
+  margin: 0;
+  max-width: 100%;
+}
+
+.image-width-small {
+  width: min(100%, 240px);
+}
+
+.image-width-medium {
+  width: min(100%, 480px);
+}
+
+.image-width-full {
+  width: 100%;
+}
+
+.embedded-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: 600px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.image-preview figcaption {
+  margin-top: 6px;
+  color: #6b7280;
+  font-size: 0.85rem;
 }
 
 .file-link-group {

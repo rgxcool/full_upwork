@@ -292,6 +292,11 @@ router.get(
                 own_settings: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: true },
                 add_municipalities_courses: { systemadmin: true, admin: false, teacher: false, syv: false, specped: false, coordinator: false, student: false },
                 course_templates: { systemadmin: true, admin: true, teacher: true, syv: false, specped: false, coordinator: false, student: false },
+                messaging: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: true, student: true },
+                mass_messaging: { systemadmin: true, admin: true, teacher: false, syv: false, specped: false, coordinator: false, student: false },
+                evaluations: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: false },
+                course_management: { systemadmin: true, admin: true, teacher: true, syv: false, specped: false, coordinator: false, student: false },
+                student_documents: { systemadmin: true, admin: true, teacher: true, syv: true, specped: true, coordinator: false, student: true },
             };
 
             const rbacPermissions = {
@@ -355,6 +360,11 @@ router.get(
                 { key: 'own_settings', label: 'Egna inställningar' },
                 { key: 'add_municipalities_courses', label: 'Lägga till kommuner, kurser etc.' },
                 { key: 'course_templates', label: 'Kursmallar (kursmoduler)' },
+                { key: 'messaging', label: 'Meddelanden' },
+                { key: 'mass_messaging', label: 'Massutskick' },
+                { key: 'evaluations', label: 'Utvärderingar' },
+                { key: 'course_management', label: 'Kurshantering' },
+                { key: 'student_documents', label: 'Elevdokument' },
             ];
 
             res.send({ roles, features, permissionMatrix: matrix, rbacPermissions, ALL_RBAC_KEYS, RBAC_LABELS });
