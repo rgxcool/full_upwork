@@ -13,6 +13,10 @@
 REPO=${REPO:-Cyrus-Malekani/mindful-new}
 PROJECT_OWNER=${PROJECT_OWNER:-Cyrus-Malekani}
 PROJECT_NUMBER=${PROJECT_NUMBER:-1}
+# Owner as passed to `gh project`. "@me" (the token's owner) skips gh's user/organization lookup,
+# which fails with "unknown owner type" for tokens without org read access. PROJECT_OWNER is
+# still used for links.
+PROJECT_GH_OWNER=${PROJECT_GH_OWNER:-$PROJECT_OWNER}
 STATE_BRANCH=${STATE_BRANCH:-reports-state}
 STATE_PATH=${STATE_PATH:-teams-state.json}
 MODE=${MODE:-dry-run}

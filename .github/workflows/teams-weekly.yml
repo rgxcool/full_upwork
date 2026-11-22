@@ -38,4 +38,5 @@ jobs:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           REPO: ${{ github.repository }}
+          PROJECT_GH_OWNER: "@me" # PROJECT_TOKEN belongs to the project owner
         run: bash .github/scripts/teams/weekly-report.sh
