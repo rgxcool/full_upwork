@@ -1,5 +1,26 @@
 import mongoose from "mongoose";
 
+/**
+ * Teacher-specific data, formerly the separate `Teacher` collection (#102).
+ * A User "has a teacher profile" when this sub-document exists; every teacher
+ * reference elsewhere (CourseInstance.responsibleTeacher, Student.teacherId, …)
+ * holds the User id, so there is one id per person.
+ */
+const TeacherProfileSchema = new mongoose.Schema(
+    {
+        subject: { type: String, trim: true, default: "Övrigt" },
+        colorCode: { type: String, default: "#FF0000" },
+        phoneNumbers: {
+            type: [{ type: String, trim: true }],
+            default: [],
+        },
+        // When the profile was created (carried over from Teacher.createdAt so
+        // teacher lists keep their "newest first" order after the migration).
+        createdAt: { type: Date, default: Date.now },
+    },
+    { _id: false }
+);
+
 const UserSchema = new mongoose.Schema(
     {
         username: { type: String },
@@ -43,6 +64,8 @@ const UserSchema = new mongoose.Schema(
         vacationStart: { type: Date },
         vacationEnd: { type: Date },
         vacationNote: { type: String },
+        // Present only for users who have a teacher profile (see above).
+        teacherProfile: { type: TeacherProfileSchema, default: undefined },
         createdAt: { type: Date, default: Date.now },
         updatedAt: { type: Date, default: Date.now },
     },
@@ -79,6 +102,7 @@ UserSchema.post("init", function mergeLegacyRoleField() {
 });
 
 UserSchema.index({ lastLoginAt: 1 });
+UserSchema.index({ "teacherProfile.createdAt": -1 }, { sparse: true });
 UserSchema.index({ name: 1 });
 UserSchema.index({ username: "text", name: "text", email: "text" });
 
