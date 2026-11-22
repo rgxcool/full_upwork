@@ -164,8 +164,17 @@
               APL redan genomförd på annan plats
             </label>
             <div v-if="aplCompletedElsewhere" class="apl-upload-note">
-              Dokumentet laddas upp till elevens Dokument.
-              <FileUploaderDownloader :student-id="student._id" :student-name="student.name" />
+              <label for="apl-intyg-input" class="form-label">Intyg (valfritt):</label>
+              <input
+                id="apl-intyg-input"
+                type="file"
+                class="form-control"
+                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                @change="handleAplIntygChange"
+              />
+              <small class="text-muted">
+                Intyget laddas upp när placeringen bekräftas och visas i elevens Dokument-flik.
+              </small>
             </div>
           </div>
           <div class="calculated-dates" aria-live="polite">
@@ -277,6 +286,9 @@
             </table>
             <div class="preview-summary">
               <p>Totalt: {{ previewData.courses.length }} kurs(er), {{ previewData.totalWeeks }} veckor</p>
+              <p v-if="placementType === 'package' && aplCompletedElsewhere" class="preview-apl">
+                APL: genomförd på annan plats<span v-if="aplIntygFile"> — intyg: {{ aplIntygFile.name }}</span>
+              </p>
               <p class="preview-hint">
                 Slutprovsdatum är förberäknat och kan ändras per kurs innan du bekräftar.
               </p>
@@ -338,11 +350,9 @@ import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
 import { municipalityPricing } from '@/utils/municipalityPricing.js';
 import { addWeeks, getNextMonday } from '@/utils/dateOnly.js';
-import FileUploaderDownloader from '@/components/FileUploaderDownloader.vue';
 
 export default {
   name: 'CoursePlacementWizard',
-  components: { FileUploaderDownloader },
   props: {
     student: { type: Object, required: true },
     preselectedCourseId: { type: String, default: null },
@@ -369,7 +379,13 @@ export default {
     const durationWeeks = ref(5);
     const pace = ref(100);
     const needsSupport = ref(Boolean(props.student.needsSupport));
-    const aplCompletedElsewhere = ref(false);
+    // "APL redan genomförd på annan plats" — same data as ManualAddStudent's
+    // "tidigare praktik": Student.priorAplCompleted + priorAplIntygDocId.
+    const aplCompletedElsewhere = ref(Boolean(props.student.priorAplCompleted));
+    const aplIntygFile = ref(null);
+    const handleAplIntygChange = (e) => {
+      aplIntygFile.value = e.target.files?.[0] || null;
+    };
 
     // The backend always schedules from the next Monday on or after the chosen
     // start date. Mirror that here so the summary shows the dates that will
@@ -533,6 +549,43 @@ export default {
       }
     };
 
+    // Mirror ManualAddStudent: upload the intyg as a GENERAL document (shown
+    // in the Dokument tab) and mark the APL as completed elsewhere on the
+    // student so completion/diploma checks treat it as approved. Runs after
+    // the placement succeeded; a failure here never undoes the placement.
+    const savePriorApl = async () => {
+      const update = { priorAplCompleted: true };
+      let uploadFailed = false;
+
+      if (aplIntygFile.value) {
+        try {
+          const formData = new FormData();
+          formData.append('file', aplIntygFile.value);
+          formData.append('studentId', props.student._id);
+          formData.append('type', 'GENERAL');
+          const docResponse = await client.post('/documents/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          if (docResponse.data?._id) update.priorAplIntygDocId = docResponse.data._id;
+        } catch (err) {
+          console.error('Prior-APL intyg upload failed:', err);
+          uploadFailed = true;
+        }
+      }
+
+      try {
+        await client.put(`/student/${props.student._id}`, update);
+      } catch (err) {
+        console.error('Could not mark APL as completed elsewhere:', err);
+        toast.warning('Placeringen skapades, men APL-statusen kunde inte sparas. Markera den i elevens profil.');
+        return;
+      }
+
+      if (uploadFailed) {
+        toast.warning('Placeringen skapades, men intyget kunde inte laddas upp. Ladda upp det i Dokument-fliken istället.');
+      }
+    };
+
     const submitPlacement = async () => {
       isSubmitting.value = true;
       submitError.value = '';
@@ -631,6 +684,10 @@ export default {
 
         submitSuccess.value = true;
         toast.success('Kursen har placerats!');
+
+        if (placementType.value === 'package' && aplCompletedElsewhere.value) {
+          await savePriorApl();
+        }
       } catch (err) {
         console.error('Error placing course:', err);
         submitError.value =
@@ -697,6 +754,8 @@ export default {
       selectedPackage,
       packageCourses,
       excludeCourseIds,
+      aplIntygFile,
+      handleAplIntygChange,
       startDate,
       effectiveStartDate,
       durationWeeks,
