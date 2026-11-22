@@ -27,6 +27,8 @@ jobs:
         run: npx eslint src/ --max-warnings 780
       - name: Test deploy.sh (stubbed git remote, pnpm, pm2, curl)
         run: bash tests/deploy/deploy.test.sh
+      - name: Test Teams reporting scripts (stubbed gh, curl)
+        run: bash tests/teams/teams.test.sh
 
   test:
     runs-on: ubuntu-latest

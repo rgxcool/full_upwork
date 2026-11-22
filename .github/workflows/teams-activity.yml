@@ -1,0 +1,40 @@
+name: Teams activity
+
+# INTERNAL channel only (secret TEAMS_DEV_WEBHOOK_URL): a card for every push with new commits
+# (any branch) and for every issue closed as completed. The client channel gets the daily digest
+# instead. Without the secret nothing is posted. Setup: .github/scripts/teams/README.md
+#
+# Security: event text (commit messages, titles) is read by the script from GITHUB_EVENT_PATH with
+# jq, never interpolated into this file. The script itself is always taken from the default branch.
+
+on:
+  push:
+    branches: ["**", "!reports-state"]
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: teams-activity-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: ${{ !endsWith(github.actor, '[bot]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+      - name: Post to Teams
+        env:
+          TEAMS_DEV_WEBHOOK_URL: ${{ secrets.TEAMS_DEV_WEBHOOK_URL }}
+        run: |
+          if [ ! -f .github/scripts/teams/activity.sh ]; then
+            echo "activity.sh is not on the default branch yet; skipping."
+            exit 0
+          fi
+          bash .github/scripts/teams/activity.sh
