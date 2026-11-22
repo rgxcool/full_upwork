@@ -151,6 +151,28 @@ describe("datePlan", () => {
             expect(plan.moduleDates).toHaveLength(3);
         });
 
+        it("divides each module slot evenly by its Avsnitt count", () => {
+            const plan = generateDatePlan({
+                startDate: "2026-11-16",
+                lengthWeeks: 10,
+                avsnittCounts: [2, 1, 0, 2],
+            });
+
+            expect(plan.avsnittDates.map((dates) => dates.map(formatDateOnly))).toEqual([
+                ["2026-11-16", "2026-11-23"],
+                ["2026-11-30"],
+                [],
+                ["2026-12-28", "2027-01-04"],
+                [],
+            ]);
+        });
+
+        it("returns empty Avsnitt dates when no counts are supplied", () => {
+            const plan = generateDatePlan({ startDate: "2026-11-16", lengthWeeks: 5 });
+
+            expect(plan.avsnittDates).toEqual([[], [], [], [], []]);
+        });
+
         it("returns null for an invalid start or an end before the start", () => {
             expect(
                 generateDatePlan({ startDate: "not-a-date", lengthWeeks: 5 })
