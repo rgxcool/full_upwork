@@ -74,6 +74,7 @@
               </v-btn>
 
               <v-btn
+                v-if="canDeleteTemplates"
                 size="small"
                 color="error"
                 variant="text"
@@ -96,6 +97,7 @@
   import { useRouter } from 'vue-router'
   import api from '@/api/client'
   import { useToast } from '@/composables/useToast.js'
+  import store from '@/store/store.js'
 
   const router = useRouter()
   const toast = useToast()
@@ -135,9 +137,16 @@
     })
   }
 
+  // Only admin/systemadmin hold courseTemplates:delete (config/roles.js).
+  const canDeleteTemplates = ['admin', 'systemadmin'].includes(store.getters.userRole)
+
   async function deleteTemplate(tpl) {
     const id = tpl?._id || tpl?.id
     if (!id) return
+    const name = tpl.templateName || tpl.title || 'mallen'
+    if (!window.confirm(`Ta bort "${name}" från mall-banken? Befintliga kurskort påverkas inte.`)) {
+      return
+    }
     deletingId.value = id
     try {
       await api.delete(`/course-templates/${encodeURIComponent(id)}`)

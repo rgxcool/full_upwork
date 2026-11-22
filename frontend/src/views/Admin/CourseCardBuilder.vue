@@ -11,13 +11,26 @@
         <button type="button" class="btn btn-secondary" @click="togglePreview">
           {{ previewMode ? 'Tillbaka till redigering' : 'Förhandsgranska' }}
         </button>
+        <!-- #31: a loaded template is updated in place; "Spara som ny mall"
+             is the explicit way to create a copy. -->
         <button
+          v-if="selectedTemplateId"
           type="button"
           class="btn btn-primary"
+          data-test="update-template"
           :disabled="isSavingTemplate || isUploading"
-          @click="saveAsTemplate"
+          @click="saveAsTemplate({ asNew: false })"
         >
-          {{ isSavingTemplate ? 'Sparar mall...' : 'Spara som mall' }}
+          {{ isSavingTemplate ? 'Sparar mall...' : 'Uppdatera mall' }}
+        </button>
+        <button
+          type="button"
+          :class="['btn', selectedTemplateId ? 'btn-secondary' : 'btn-primary']"
+          data-test="save-new-template"
+          :disabled="isSavingTemplate || isUploading"
+          @click="saveAsTemplate({ asNew: true })"
+        >
+          {{ isSavingTemplate ? 'Sparar mall...' : selectedTemplateId ? 'Spara som ny mall' : 'Spara som mall' }}
         </button>
         <button
           type="button"
@@ -1160,8 +1173,9 @@ async function loadTemplateById(templateId) {
   }
 }
 
-async function saveAsTemplate() {
+async function saveAsTemplate({ asNew = true } = {}) {
   const snapshot = serializeContent()
+  const updateId = !asNew && selectedTemplateId.value ? String(selectedTemplateId.value) : ''
   const cleanTitle = toSafeText(cardData.title).trim()
   const cleanCode = toSafeText(cardData.courseCode).trim()
   const templateTitle =
@@ -1181,9 +1195,11 @@ async function saveAsTemplate() {
       isTemplate: true,
     }
 
-    const { data } = await api.post('/course-templates', payload)
+    const { data } = updateId
+      ? await api.put(`/course-templates/${encodeURIComponent(updateId)}`, payload)
+      : await api.post('/course-templates', payload)
     const created = data?.template || data?.data || data
-    const createdId = created?._id || created?.id || ''
+    const createdId = created?._id || created?.id || updateId || ''
 
     await fetchCourseTemplates()
     if (createdId) {
@@ -1191,7 +1207,9 @@ async function saveAsTemplate() {
     }
 
     setStatus(
-      `Sparade "${templateTitle}" i mall-banken.`,
+      updateId
+        ? `Uppdaterade "${templateTitle}" i mall-banken.`
+        : `Sparade "${templateTitle}" som ny mall i mall-banken.`,
       'success'
     )
     emit('template-saved', created)

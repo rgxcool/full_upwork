@@ -48,13 +48,19 @@
    
  | P14 | Student self-service APL CV upload + "seeking" toggle | ✅ DONE | PATCH /apl/my { cvDocId, isSeeking }; upload authority via canUploadForStudent (audit #24b/#24c, addendum). |  
    
- | P15 | Profile sensitive-field minimization by role (personnummer, support notes, exam accommodations hidden from non-privileged staff) | 🟡 PARTIAL (verified 2026-11-22) | `utils/studentSerializer.js` projectStudentForViewer is applied on /student/:id, /students, /basic and student-details. Coordinator gets no personnummer/support fields. **Gap:** the teacher branch still returns personnummer (issue #37). |  
+ | P15 | Profile sensitive-field minimization by role (personnummer, support notes, exam accommodations hidden from non-privileged staff) | 🟡 PARTIAL (verified 2026-11-22) | `utils/studentSerializer.js` projectStudentForViewer is applied on /student/:id, /students, /basic and student-details. Coordinator gets no personnummer/support fields. **Decision 2026-11-22:** teachers may see personnummer (intended). Remaining: per-role snapshot tests (issue #37). |  
    
  | P16 | Study pace (kurspaket) persists and scales durations | ✅ DONE | StudentEnrollment.pace field added; paceFactor = 100/paceValue applied in placementRoutes.js + courseMatchingService.js; wizard now shows a pace selector and sends pace (audit addendum "Pace persistence"/"Pace UI"). Fixed since the original checklist was written. |  
    
  | P17 | Messaging tenant isolation | 🟡 PARTIAL (verified 2026-11-22) | Implemented in `c4b1a34`: `messagingService.canMessage` enforces sharesTenant/municipalityInScope; recipient search is filtered by userScopeFilter; unit tests pass. **Gap:** no report of existing cross-tenant threads (issue #38). |  
    
  | P19 | Kurskort (CourseInstance) access control: content + activity feed + noticeboard posting | ✅ DONE (2026-11-22, issues #29 + #28) | `utils/courseInstanceAccess.js` holds one rule. Students need a non-dropped enrollment; teachers must be responsible/assistant (Teacher id resolved via userId); admin/systemadmin/tester have full access. Applied to GET/PUT content and GET/PUT activity-feed. `tests/integration/courseInstanceAccess.test.js` has 26 cases; 10 fail on the old code. |  
+   
+ | P20 | Kurskort delete (admin) without data loss | ✅ DONE (2026-11-22) | DELETE /course-instances/:id refuses (409, Swedish reason) while any enrollment is linked; the old handler silently deleted enrollments. Empty cards are deleted with their discussions and audit-logged. Admin "Ta bort" + confirmation on the Kurskort overview; Kursinstanser shows the reason. |  
+   
+ | P21 | Kursmallar from the builder: update in place + auto-apply (issue #31) | ✅ DONE (2026-11-22) | The builder offers "Uppdatera mall" (PUT) for a loaded template and an explicit "Spara som ny mall" (POST); previously every save created a duplicate. The backend links a template to the course matching its Kurskod (exact, unique) so admission auto-applies it. The Kursmallar page asks for confirmation before deleting and shows the button to admins only. |  
+   
+ | P22 | Dead deploy workflow (issue #34) | ✅ REMOVED (2026-11-22) | `github/workflows/deploy.yml` (never ran) deleted by decision; a reviewed deploy workflow will be scoped separately. `.github/workflows/ci.yml` unchanged. |  
    
  | P18 | CI/CD pipeline + build/lint/test baseline | ✅ DONE | `.github/workflows/ci.yml` exists (lint + test + docker jobs). Backend/frontend tests, lint, build PASS locally (1859 backend / 251 frontend tests). Coverage gate is BACKEND DEPENDENCY (thresholds not met, not lowered — honest gap; Docker daemon was off this session so `make citest` could not be re-run). |  
    
@@ -452,7 +458,7 @@ All remaining actionable items from the 🟡/🔴 backlog were implemented; only
 
 Use this as the actual to-do queue; everything above marked ✅ DONE needs no further work.  
 **Architecturally larger / explicitly BACKEND DEPENDENCY (do not fake):**  
-- Profile field minimization: teacher personnummer rule (P15 remainder, #37)  
+- Profile field minimization: per-role snapshot tests (P15 remainder, #37)  
 - Messaging: report existing cross-tenant threads (P17 remainder, #38)  
 - /uploads storage migration off disk (IDOR itself mitigated, #39)  
 - Search by first/middle/last name (needs a Student schema change)  
