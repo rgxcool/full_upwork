@@ -74,7 +74,7 @@ describe("StudentEnrollment model notifications", () => {
         expect(doc._id.toString()).toBe(enrollment._id.toString());
         expect(changes).toEqual({
             changedFields: ["notes"],
-            previousValues: { notes: undefined },
+            previousValues: { notes: null }, // unset values are normalised to null
             newValues: { notes: "updated notes" },
         });
     });
