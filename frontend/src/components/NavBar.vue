@@ -920,10 +920,11 @@
         'Student Inskrivningar',
         'Elev+',
         'PDF',
-        'Prövningar',
         'Earnings',
         'Stats',
       ]
+
+      const PINNED_MENU_LINK = '/dashboard'
 
       const menuItems = [
         {
@@ -980,7 +981,7 @@
         },
         { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: ['teacher', 'admin', 'systemadmin'] },
         {
-          name: 'Alla kurskort',
+          name: 'Kurskort',
           link: '/course-cards/overview',
           role: ['teacher', 'admin', 'systemadmin'],
         },
@@ -1042,7 +1043,14 @@
 
       const filteredMenuItems = computed(() => {
         if (!isLoggedIn.value) return []
-        return menuItems.filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
+        return menuItems
+          .filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
+          .sort((a, b) => {
+            // The dashboard stays on top; everything else is alphabetical.
+            if (a.link === PINNED_MENU_LINK) return -1
+            if (b.link === PINNED_MENU_LINK) return 1
+            return a.name.localeCompare(b.name, 'sv')
+          })
       })
 
       const secretMenuItems = computed(() => {
