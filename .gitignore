@@ -53,3 +53,8 @@ e2e/playwright-report/
 test_mindful_CLEAN.xlsx
 repomix-output.xml
 *:Zone.Identifier
+
+# deploy.sh build/rollback directories
+frontend/dist.new
+frontend/dist.prev
+frontend/dist.failed
