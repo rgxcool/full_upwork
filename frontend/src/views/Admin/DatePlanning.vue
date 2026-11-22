@@ -6,6 +6,10 @@
       befintlig kursinstans. Sparade schemaparametrar för läraren används när
       de finns, annars används jämnt fördelade veckor.
     </p>
+    <p class="text-muted small">
+      Planera gärna klart minst två veckor före kursstart. Datumen nedan följer
+      kursens kalender och flyttas inte av denna rekommendation.
+    </p>
 
     <div class="row mb-3">
       <div class="col-md-6">
@@ -53,6 +57,9 @@
     <div v-if="successMessage" class="alert alert-success" role="alert">
       {{ successMessage }}
     </div>
+    <div v-if="planningWarning" class="alert alert-warning py-2" role="status">
+      {{ planningWarning }}
+    </div>
 
     <div v-if="previewPlan" class="card">
       <div class="card-header">Föreslagen plan ({{ previewPlan.lengthWeeks }} veckor)</div>
@@ -62,7 +69,7 @@
           {{ previewPlan.endDate }} · Offset:
           {{ previewPlan.source === 'saved' ? 'lärarens sparade värden' : 'standard' }}
         </p>
-        <table class="table table-sm">
+        <table class="table table-sm module-table">
           <thead>
             <tr>
               <th>Modul</th>
@@ -78,6 +85,32 @@
             </tr>
           </tbody>
         </table>
+
+        <div v-if="hasAvsnittDates" class="mt-3">
+          <h6 class="mb-2">{{ PLANNED_DATE_LABEL }} per Avsnitt</h6>
+          <table class="table table-sm avsnitt-table">
+            <thead>
+              <tr>
+                <th>Modul</th>
+                <th>Avsnitt</th>
+                <th>{{ PLANNED_DATE_LABEL }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template
+                v-for="(dates, moduleIndex) in previewPlan.avsnittDates"
+                :key="'avsnitt-module-' + moduleIndex"
+              >
+                <tr v-for="(date, avsnittIndex) in dates" :key="'avsnitt-' + avsnittIndex">
+                  <td>Modul {{ moduleIndex + 1 }}</td>
+                  <td>Avsnitt {{ avsnittIndex + 1 }}</td>
+                  <td>{{ date }}</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
         <p class="text-muted mb-0">
           Undervisningstillfällen: {{ previewPlan.sectionDates.join(', ') }}
         </p>
@@ -87,8 +120,9 @@
 </template>
 
 <script>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import client from '@/api/client.js'
+import { PLANNED_DATE_LABEL } from '@/utils/courseContent.js'
 
 const readError = (err, fallback) =>
   err.response?.data?.error?.message ||
@@ -109,6 +143,27 @@ export default {
     const successMessage = ref('')
 
     const formatDate = (value) => (value ? String(value).slice(0, 10) : '')
+
+    // D5: guidance only. Never shifts generated dates or blocks apply.
+    const selectedInstance = computed(
+      () => instances.value.find((i) => i._id === instanceId.value) || null
+    )
+    const planningWarning = computed(() => {
+      const source = selectedInstance.value?.startDate || previewPlan.value?.startDate
+      if (!source) return ''
+      const start = new Date(source).getTime()
+      if (!Number.isFinite(start)) return ''
+      const daysLeft = Math.ceil((start - Date.now()) / (24 * 60 * 60 * 1000))
+      if (daysLeft >= 14) return ''
+      const when = daysLeft < 0 ? 'har redan startat' : 'startar inom två veckor'
+      return `Kursen ${when}. Planeringen bör vara klar minst två veckor före kursstart.`
+    })
+
+    const hasAvsnittDates = computed(() =>
+      (previewPlan.value?.avsnittDates || []).some(
+        (dates) => Array.isArray(dates) && dates.length > 0
+      )
+    )
 
     const payload = () => {
       const body = { instanceId: instanceId.value }
@@ -173,6 +228,9 @@ export default {
       isApplying,
       errorMessage,
       successMessage,
+      planningWarning,
+      hasAvsnittDates,
+      PLANNED_DATE_LABEL,
       formatDate,
       preview,
       apply,

@@ -2,11 +2,26 @@ import { describe, expect, it } from 'vitest'
 import {
   contentItemLabel,
   contentMeta,
+  formatPlannedDate,
+  PLANNED_DATE_LABEL,
   shouldShowAvsnitt,
   sortedAvsnitt,
   sortedByOrder,
   visibleContentItems,
 } from '@/utils/courseContent.js'
+
+describe('planned date display helpers', () => {
+  it('uses the locked Swedish label', () => {
+    expect(PLANNED_DATE_LABEL).toBe('Planerat inlämningsdatum')
+  })
+
+  it('formats Date and ISO values but hides missing or invalid ones', () => {
+    expect(formatPlannedDate(new Date('2026-11-23T00:00:00.000Z'))).toBe('2026-11-23')
+    expect(formatPlannedDate('2026-11-23T00:00:00.000Z')).toBe('2026-11-23')
+    expect(formatPlannedDate(null)).toBe('')
+    expect(formatPlannedDate('not-a-date')).toBe('')
+  })
+})
 
 describe('sortedByOrder', () => {
   it('sorts numeric order ascending', () => {

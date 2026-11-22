@@ -25,6 +25,7 @@ const instance = {
           avsnittId: 'm1-a1',
           title: 'Avsnitt 1',
           order: 1,
+          plannedDate: '2026-11-23T00:00:00.000Z',
           contentItems: [
             {
               contentId: 'c1',
@@ -120,6 +121,7 @@ describe('CourseContentEditor', () => {
     const avsnitt = wrapper.vm.avsnittFor(wrapper.vm.modules[0])
     expect(avsnitt).toHaveLength(1)
     expect(avsnitt[0].title).toBe('Avsnitt 1')
+    expect(avsnitt[0].plannedDate).toBe('2026-11-23')
     expect(wrapper.vm.avsnittFor(wrapper.vm.modules[1])).toEqual([])
   })
 
@@ -175,6 +177,7 @@ describe('CourseContentEditor', () => {
 
     const text = wrapper.text()
     expect(text).toContain('Avsnitt 1')
+    expect(text).toContain('Planerat inlämningsdatum: 2026-11-23')
     expect(text).toContain('Lektion')
     expect(text).toContain('Läsning')
     expect(text).toContain('12 min')

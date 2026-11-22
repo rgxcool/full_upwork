@@ -1,7 +1,22 @@
 /**
  * Pure helpers for Avsnitt + content items (Slice 2 – read-only display).
- * Does not touch progress / currentModule semantics.
+ * Slice 4 adds the shared planned-date label/formatter; no progress or
+ * currentModule semantics are touched.
  */
+
+// Slice 4 / D11: one shared label for staff and student surfaces.
+export const PLANNED_DATE_LABEL = 'Planerat inlämningsdatum'
+
+/**
+ * Format an Avsnitt plannedDate as YYYY-MM-DD for display.
+ * Accepts a Date or an ISO string; missing/invalid values render as ''.
+ */
+export function formatPlannedDate(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString().slice(0, 10)
+}
 
 const TYPE_LABELS = {
   lektion: 'Lektion',

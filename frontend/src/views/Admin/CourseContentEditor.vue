@@ -74,7 +74,12 @@
                     :key="av.avsnittId || av.order"
                     class="avsnitt-block"
                   >
-                    <div class="avsnitt-title">{{ av.title || `Avsnitt ${av.order || ''}` }}</div>
+                    <div class="avsnitt-heading-row">
+                      <div class="avsnitt-title">{{ av.title || `Avsnitt ${av.order || ''}` }}</div>
+                      <span v-if="av.plannedDate" class="avsnitt-planned-date">
+                        {{ PLANNED_DATE_LABEL }}: {{ av.plannedDate }}
+                      </span>
+                    </div>
                     <ul class="content-item-list">
                       <li
                         v-for="item in visibleContentItems(av)"
@@ -137,6 +142,8 @@ import { useToast } from '@/composables/useToast.js'
 import {
   contentItemLabel,
   contentMeta,
+  formatPlannedDate,
+  PLANNED_DATE_LABEL,
   sortedAvsnitt,
   visibleContentItems,
 } from '@/utils/courseContent.js'
@@ -179,7 +186,14 @@ const normalizeModules = (rawModules, content) => {
         description: s.description ?? '',
         instructions: s.instructions ?? '',
       })),
-      avsnitt: Array.isArray(m.avsnitt) ? m.avsnitt : [],
+      // Slice 4: keep the generated planned date read-only; the content PUT
+      // below still sends only title/instructions/hide overlay fields.
+      avsnitt: Array.isArray(m.avsnitt)
+        ? m.avsnitt.map((av) => ({
+            ...av,
+            plannedDate: formatPlannedDate(av.plannedDate) || null,
+          }))
+        : [],
       assignment: {
         title: m.assignment?.title ?? '',
         description: m.assignment?.description ?? '',
@@ -252,10 +266,22 @@ onMounted(async () => {
 .avsnitt-block {
   margin: 0.5rem 0;
 }
+.avsnitt-heading-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
 .avsnitt-title {
   font-size: 0.95rem;
   font-weight: 600;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0;
+}
+.avsnitt-planned-date {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--v-theme-primary, #1d4f43);
 }
 .content-item-list {
   list-style: none;
