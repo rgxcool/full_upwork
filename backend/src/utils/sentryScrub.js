@@ -62,7 +62,7 @@ export function scrubString(value) {
 }
 
 export function scrubValue(value, depth = 0, seen = new WeakSet()) {
-    if (value === null) return value;
+    if (value === null || value === undefined) return value;
     if (typeof value === "string") return scrubString(value);
     if (typeof value !== "object") return value;
     if (depth >= MAX_DEPTH) return "[Truncated]";
@@ -106,7 +106,7 @@ export function scrubUrl(url) {
 function scrubUser(user) {
     if (!user) return user;
     const kept = {};
-    if (user.id !== null) kept.id = String(user.id);
+    if (user.id !== null && user.id !== undefined) kept.id = String(user.id);
     if (user.segment) kept.segment = user.segment; // role, e.g. "teacher"
     return kept;
 }
