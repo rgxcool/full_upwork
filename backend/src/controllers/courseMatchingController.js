@@ -2693,25 +2693,6 @@ export const addStudentsToInstance = async (req, res) => {
 };
 
 // Delete a course instance and its enrollments
-export const deleteCourseInstance = async (req, res) => {
-  try {
-    const { instanceId } = req.params;
-    const instance = await CourseInstance.findByIdAndDelete(instanceId);
-    if (!instance) {
-      return res.status(404).json({ error: "Course instance not found" });
-    }
-    // Delete related enrollments
-    await StudentEnrollment.deleteMany({ courseInstanceId: instanceId });
-    res.json({
-      success: true,
-      message: "Course instance and related enrollments deleted",
-    });
-  } catch (error) {
-    logger.error({ err: error }, "Error deleting course instance");
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
 // GET /api/course-instances/:instanceId/content - get content for a course instance
 // Admins/systemadmin and responsible teacher can see all content;
 // students see content that is not hidden.
@@ -3053,6 +3034,60 @@ export const postCourseInstanceActivityFeed = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "Error posting to activity feed");
+    res.status(500).json({ error: "Intern servererror" });
+  }
+};
+
+/**
+ * DELETE /course-instances/:instanceId — delete ONE kurskort (admin/systemadmin).
+ *
+ * Refused with 409 while any student enrollment (any status) points at the
+ * card: enrollments carry grades, certificates and exam history, so a card
+ * with students is never deleted implicitly. An empty card is deleted together
+ * with its own discussion threads, and the action is audit-logged.
+ */
+export const deleteCourseInstance = async (req, res) => {
+  try {
+    const { instanceId } = req.params;
+    if (!mongoose.isValidObjectId(instanceId)) {
+      return res.status(400).json({ error: "Ogiltigt kursinstans-id" });
+    }
+
+    const instance = await CourseInstance.findById(instanceId)
+      .select("courseName courseCode startDate endDate")
+      .lean();
+    if (!instance) {
+      return res.status(404).json({ error: "Kurskortet hittades inte" });
+    }
+
+    const enrollmentCount = await StudentEnrollment.countDocuments({
+      courseInstanceId: instance._id,
+    });
+    if (enrollmentCount > 0) {
+      return res.status(409).json({
+        error:
+          `Kurskortet har ${enrollmentCount} kopplade ${enrollmentCount === 1 ? "elev" : "elever"} ` +
+          "och kan inte tas bort. Ta bort eller flytta elevernas kursregistrering först.",
+        enrollmentCount,
+      });
+    }
+
+    const CourseCardDiscussion = mongoose.model("CourseCardDiscussion");
+    const discussionResult = await CourseCardDiscussion.deleteMany({
+      courseInstanceId: instance._id,
+    });
+    await CourseInstance.deleteOne({ _id: instance._id });
+
+    await recordAudit(req, {
+      entityType: "CourseInstance",
+      entityId: instance._id,
+      action: "delete",
+      description: `Deleted kurskort ${instance.courseCode || ""} ${instance.courseName || ""} (${discussionResult.deletedCount} discussions)`.trim(),
+    });
+
+    res.json({ success: true, deletedId: String(instance._id) });
+  } catch (error) {
+    logger.error({ err: error }, "Error deleting course instance");
     res.status(500).json({ error: "Intern servererror" });
   }
 };

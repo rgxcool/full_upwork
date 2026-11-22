@@ -320,4 +320,56 @@ describe("Kurskort access control (content + activity feed)", () => {
             expect(saved.modules[0].endDate.toISOString()).toBe(end1.toISOString());
         });
     });
+    describe("DELETE /course-instances/:id (single kurskort)", () => {
+        const del = (id, who) =>
+            request(app).delete(`/api/course-instances/${id}`).set(auth(users[who]));
+
+        it("refuses with 409 while students are linked, and keeps everything", async () => {
+            const res = await del(instance._id, "admin");
+            expect(res.status).toBe(409);
+            expect(res.body.enrollmentCount).toBe(3);
+            expect(res.body.error).toContain("3 kopplade elever");
+            expect(await CourseInstance.exists({ _id: instance._id })).toBeTruthy();
+            expect(await StudentEnrollment.countDocuments({ courseInstanceId: instance._id })).toBe(3);
+        });
+
+        it("deletes an empty card and its discussions", async () => {
+            const empty = await CourseInstance.create({
+                mainCourseId: instance.mainCourseId,
+                courseName: "Tomt kurskort",
+                courseCode: "SVESVE01",
+                startDate: new Date("2026-05-04"),
+                endDate: new Date("2026-06-08"),
+            });
+            await mongoose.model("CourseCardDiscussion").create({
+                courseInstanceId: empty._id,
+                moduleNumber: 1,
+                title: "Testtråd",
+                promptText: "Diskutera modul 1",
+                createdBy: users.admin._id,
+            });
+            expect(
+                await mongoose.model("CourseCardDiscussion").countDocuments({ courseInstanceId: empty._id })
+            ).toBe(1);
+
+            const res = await del(empty._id, "admin");
+            expect(res.status).toBe(200);
+            expect(res.body.deletedId).toBe(String(empty._id));
+            expect(await CourseInstance.exists({ _id: empty._id })).toBeNull();
+            expect(
+                await mongoose.model("CourseCardDiscussion").countDocuments({ courseInstanceId: empty._id })
+            ).toBe(0);
+        });
+
+        it.each(["resp", "enrolled"])("%s cannot delete → 403", async (who) => {
+            const res = await del(instance._id, who);
+            expect(res.status).toBe(403);
+            expect(await CourseInstance.exists({ _id: instance._id })).toBeTruthy();
+        });
+
+        it("returns 404 for an unknown id and 400 for a malformed one", async () => {
+            expect((await del(new mongoose.Types.ObjectId(), "admin")).status).toBe(404);
+            expect((await del("not-an-id", "admin")).status).toBe(400);
+        });
+    });
 });

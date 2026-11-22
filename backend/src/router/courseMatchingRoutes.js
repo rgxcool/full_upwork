@@ -100,7 +100,8 @@ router.delete(
     hasRole(["admin", "systemadmin"]),
     asyncHandler(deleteAllCourseInstances)
 );
-// Delete a course instance
+// Delete ONE kurskort; refused with 409 while students are linked.
+// Must stay after DELETE /course-instances/all.
 router.delete(
     "/course-instances/:instanceId",
     isAuthenticated,
