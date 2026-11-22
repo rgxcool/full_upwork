@@ -114,6 +114,23 @@ function getNextMonth(currentMonth) {
     return MONTHS[(monthIndex + 1) % 12];
 }
 
+// Keep the legacy materialReceived.status summary in sync with the per-level
+// (SVE/SVA 1 and 3) flags whenever a client sends the split fields.
+export function normalizeMaterialReceived(material) {
+    if (!material || typeof material !== "object") return material;
+    const hasLevels = material.level1 !== undefined || material.level3 !== undefined;
+    if (!hasLevels) return material;
+    const level1 = { status: Boolean(material.level1?.status), receivedDate: material.level1?.receivedDate || undefined };
+    const level3 = { status: Boolean(material.level3?.status), receivedDate: material.level3?.receivedDate || undefined };
+    const dates = [level1, level3].filter((l) => l.status && l.receivedDate).map((l) => new Date(l.receivedDate));
+    return {
+        level1,
+        level3,
+        status: level1.status || level3.status,
+        receivedDate: dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : undefined,
+    };
+}
+
 router.post("/exams", isAuthenticated, hasRole(['admin', 'systemadmin']), async (req, res) => {
     try {
         // Clean up the request body
@@ -127,6 +144,9 @@ router.post("/exams", isAuthenticated, hasRole(['admin', 'systemadmin']), async 
         // Handle empty paymentDate
         if (examData.paymentDate === "") {
             delete examData.paymentDate;
+        }
+        if (examData.materialReceived) {
+            examData.materialReceived = normalizeMaterialReceived(examData.materialReceived);
         }
 
         const exam = new Exam(examData);
@@ -179,6 +199,13 @@ router.put("/exams/:id", isAuthenticated, hasRole(['admin', 'systemadmin']), asy
         const examUpdates = {};
         for (const field of allowedExamFields) {
             if (req.body[field] !== undefined) examUpdates[field] = req.body[field];
+        }
+        if (examUpdates.materialReceived) {
+            examUpdates.materialReceived = normalizeMaterialReceived(examUpdates.materialReceived);
+        }
+        // A deny decision always needs a motivation, also via the edit form.
+        if (examUpdates.decision === "deny" && !String(examUpdates.comment || "").trim()) {
+            return res.status(400).json({ error: "Motivering krävs för att neka en prövning." });
         }
         const updatedExam = await Exam.findByIdAndUpdate(req.params.id, examUpdates, { returnDocument: 'after' });
         if (!updatedExam) {
@@ -2753,6 +2780,11 @@ router.put("/exams/:id/decision", isAuthenticated, hasRole(['admin', 'systemadmi
         const examId = req.params.id;
 
         logger.info({ decision, examId }, "Handling decision");
+
+        // Denying a prövning requires a written motivation (spec E1-18).
+        if (decision === "deny" && (typeof comment !== "string" || !comment.trim())) {
+            return res.status(400).json({ error: "Motivering krävs för att neka en prövning." });
+        }
 
         // Hämta den befintliga prövningen
         const exam = await Exam.findById(examId).populate("teacherId");

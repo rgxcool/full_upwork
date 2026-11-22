@@ -612,6 +612,46 @@ describe("Document Routes", () => {
       .expect(403);
   });
 
+  it("lists APL contracts across students for the archive, scoped per document", async () => {
+    const assignedTeacherUser = await makeUser(["teacher"]);
+    const teacher = await makeTeacher(assignedTeacherUser.user);
+    const ownStudent = await makeStudent({ name: "AUDIT Avtalsson", teacherId: teacher._id });
+    const otherStudent = await makeStudent({ name: "AUDIT Annansson" });
+    for (const st of [ownStudent, otherStudent]) {
+      const f = writeUploadFile(`AUDIT-avtal-${st._id}.pdf`);
+      await Document.create({
+        student: st._id,
+        filename: f.filename,
+        originalName: `AUDIT-avtal-${st.name}.pdf`,
+        type: "APL_CONTRACT",
+      });
+    }
+    // A non-APL document must never show up in this listing.
+    const general = writeUploadFile("AUDIT-general.txt");
+    await Document.create({ student: ownStudent._id, filename: general.filename, originalName: "AUDIT-general.txt", type: "GENERAL" });
+
+    const adminList = await request(app)
+      .get("/api/documents")
+      .query({ type: "APL_CONTRACT" })
+      .set("Authorization", authHeader)
+      .expect(200);
+    expect(adminList.body.map((d) => d.studentName).sort()).toEqual(["AUDIT Annansson", "AUDIT Avtalsson"]);
+    expect(adminList.body.every((d) => d.type === "APL_CONTRACT")).toBe(true);
+
+    // The assigned teacher only sees their own student's contract.
+    const teacherList = await request(app)
+      .get("/api/documents")
+      .query({ type: "APL_CONTRACT" })
+      .set(authFor(assignedTeacherUser.token))
+      .expect(200);
+    expect(teacherList.body.map((d) => d.studentName)).toEqual(["AUDIT Avtalsson"]);
+
+    // Students and non-APL types are refused.
+    const { token: studentToken } = await makeUser(["student"]);
+    await request(app).get("/api/documents").query({ type: "APL_CONTRACT" }).set(authFor(studentToken)).expect(403);
+    await request(app).get("/api/documents").query({ type: "GENERAL" }).set("Authorization", authHeader).expect(400);
+  });
+
   it("keeps slutprov/delprov exam files staff-only", async () => {
     const email = `student-${new mongoose.Types.ObjectId()}@example.com`;
     const student = await makeStudent({ email });
