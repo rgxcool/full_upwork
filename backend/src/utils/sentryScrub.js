@@ -47,7 +47,7 @@ const SENSITIVE_KEYS = new Set(
         "cookie",
         "grade",
         "motivation",
-    ].map((k) => k.toLowerCase())
+    ].map((k) => k.toLowerCase()),
 );
 
 const FILTERED = "[Filtered]";
@@ -62,7 +62,7 @@ export function scrubString(value) {
 }
 
 export function scrubValue(value, depth = 0, seen = new WeakSet()) {
-    if (value == null) return value;
+    if (value === null) return value;
     if (typeof value === "string") return scrubString(value);
     if (typeof value !== "object") return value;
     if (depth >= MAX_DEPTH) return "[Truncated]";
@@ -106,7 +106,7 @@ export function scrubUrl(url) {
 function scrubUser(user) {
     if (!user) return user;
     const kept = {};
-    if (user.id != null) kept.id = String(user.id);
+    if (user.id !== null) kept.id = String(user.id);
     if (user.segment) kept.segment = user.segment; // role, e.g. "teacher"
     return kept;
 }
@@ -133,7 +133,10 @@ export function scrubEvent(event) {
         const out = { ...event };
         if (out.message) out.message = scrubString(out.message);
         if (out.logentry?.message) {
-            out.logentry = { ...out.logentry, message: scrubString(out.logentry.message) };
+            out.logentry = {
+                ...out.logentry,
+                message: scrubString(out.logentry.message),
+            };
         }
         if (out.exception?.values) {
             out.exception = {
@@ -145,7 +148,8 @@ export function scrubEvent(event) {
             };
         }
         if (out.transaction) out.transaction = scrubUrl(out.transaction);
-        if (out.breadcrumbs) out.breadcrumbs = out.breadcrumbs.map(scrubBreadcrumb);
+        if (out.breadcrumbs)
+            out.breadcrumbs = out.breadcrumbs.map(scrubBreadcrumb);
         if (out.extra) out.extra = scrubValue(out.extra);
         if (out.contexts) out.contexts = scrubValue(out.contexts);
         if (out.tags) out.tags = scrubValue(out.tags);
