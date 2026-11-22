@@ -10,6 +10,11 @@ const STAFF_ROLES = new Set([
     "tester",
 ]);
 
+// Exam papers (delprov/slutprov) stored in a student's Kursarkiv are staff
+// material: the student the file is filed under must never be able to list or
+// download them.
+export const STAFF_ONLY_DOCUMENT_TYPES = Object.freeze(["DELPROV", "SLUTPROV"]);
+
 const getModel = (name) => mongoose.models?.[name] || mongoose.model(name);
 
 const getRoles = (user) => {
@@ -44,6 +49,17 @@ const selectIfSupported = async (query, fields) => {
     }
     return query;
 };
+
+export function isStaffOnlyDocumentType(type) {
+    return typeof type === "string" && STAFF_ONLY_DOCUMENT_TYPES.includes(type.toUpperCase());
+}
+
+// Staff = any role allowed to handle exam material: the global staff roles
+// plus teachers. A pure student (or unknown role) is never staff.
+export function isStaffUser(user) {
+    const roles = getRoles(user);
+    return roles.has("teacher") || [...roles].some((role) => STAFF_ROLES.has(role));
+}
 
 export async function canAccessStudentDocuments(user, studentId) {
     if (!user || !studentId) {
@@ -104,6 +120,12 @@ export async function canAccessTeacherDocuments(user, teacherId) {
 
 export async function canAccessDocument(user, document) {
     if (!user) {
+        return false;
+    }
+
+    // Checked before sharing/ownership so no path can hand an exam file to a
+    // non-staff user.
+    if (isStaffOnlyDocumentType(document?.type) && !isStaffUser(user)) {
         return false;
     }
 

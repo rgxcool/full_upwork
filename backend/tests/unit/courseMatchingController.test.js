@@ -1885,7 +1885,7 @@ describe("updateEnrollmentStatus", () => {
         const req = {
             params: { enrollmentId: "enroll-1" },
             body: { status: "completed", reason: "done", notes: "ok" },
-            user: { userId: "user1" },
+            user: { userId: "user1", role: "admin", roles: ["admin"] },
         };
         const res = createRes();
 

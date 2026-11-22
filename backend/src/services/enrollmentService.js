@@ -434,7 +434,7 @@ const syncStudentDropoutState = async ({ studentId, userId, role, reason }) => {
  * reloaded enrollment. Throws AppError(404) when the enrollment is missing and
  * AppError(400) for unknown statuses (with the valid statuses attached).
  */
-export const updateEnrollmentStatus = async ({ enrollmentId, status, reason, notes, userId, role }) => {
+export const updateEnrollmentStatus = async ({ enrollmentId, status, reason, notes, userId, role, roles = [] }) => {
     const enrollment = await StudentEnrollment.findById(enrollmentId);
     if (!enrollment) {
         throw new AppError("Enrollment not found", 404);
@@ -444,6 +444,19 @@ export const updateEnrollmentStatus = async ({ enrollmentId, status, reason, not
         const error = new AppError("Invalid status", 400);
         error.validStatuses = VALID_ENROLLMENT_STATUSES;
         throw error;
+    }
+
+    // "completed" (Betygsatt) must come from the grading flow, and a locked
+    // grade freezes the enrollment; only admins may override either rule.
+    const callerRoles = new Set([role, ...(Array.isArray(roles) ? roles : [])].filter(Boolean));
+    const isAdminCaller = callerRoles.has("admin") || callerRoles.has("systemadmin");
+    if (!isAdminCaller) {
+        if (enrollment.isGradeLocked) {
+            throw new AppError("Betyget är låst – statusen kan inte ändras", 403);
+        }
+        if (status === "completed" && enrollment.status !== "completed") {
+            throw new AppError("Status Betygsatt sätts via betygssättningen, inte direkt", 403);
+        }
     }
 
     await enrollment.changeStatus(status, reason, notes, userId);

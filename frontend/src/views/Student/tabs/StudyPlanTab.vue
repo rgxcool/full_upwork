@@ -127,7 +127,8 @@
                       @change="updateStatus(element)"
                     >
                       <option value="enrolled">Antagen</option>
-                      <option value="completed">Betygsatt</option>
+                      <!-- Betygsatt comes from grading; only admins may set it directly. -->
+                      <option value="completed" :disabled="!canSetCompleted">Betygsatt</option>
                       <option value="dropped">Avbrott</option>
                       <option value="inactive">Ej påbörjad</option>
                       <option value="reviderad">Reviderad</option>
@@ -301,6 +302,7 @@ export default {
       const role = store.getters.userRole;
       return ['admin', 'systemadmin', 'teacher'].includes(role);
     });
+    const canSetCompleted = computed(() => store.getters.isAdmin);
 
     // Sort education: CoursePackages first, then courses chronologically
     const sortEducation = (education) => {
@@ -861,6 +863,7 @@ export default {
       updateStatus,
       rememberStatus,
       canEditStatus,
+      canSetCompleted,
       updatingStatus,
       handleRemoveEnrollment,
       removingEnrollment,

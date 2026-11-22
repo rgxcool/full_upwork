@@ -12,6 +12,9 @@ import {
   canAccessDocument,
   canAccessStudentDocuments,
   canAccessTeacherDocuments,
+  isStaffOnlyDocumentType,
+  isStaffUser,
+  STAFF_ONLY_DOCUMENT_TYPES,
 } from "../utils/documentAuthorization.js";
 import logger from "../utils/logger.js";
 
@@ -111,6 +114,8 @@ const ALLOWED_DOCUMENT_TYPES = new Set([
   "ACTION_PLAN",
   "REPORT",
   "COURSE_ARCHIVE",
+  "DELPROV",
+  "SLUTPROV",
   "TEACHER_DOCUMENT",
   "APL_CONTRACT",
   "APL_CV",
@@ -535,6 +540,13 @@ router.post(
         return res.status(400).json({ message: "Ogiltig dokumenttyp." });
       }
 
+      if (isStaffOnlyDocumentType(normalizedType) && !isStaffUser(user)) {
+        removeUploadedFile(req.file);
+        return res.status(403).json({
+          message: "Endast personal kan ladda upp provfiler (delprov/slutprov).",
+        });
+      }
+
       const userRoles = getUserRoles(user);
       const isAdmin = userRoles.has("admin") || userRoles.has("systemadmin");
 
@@ -659,7 +671,11 @@ router.get("/documents/shared", authenticateUser, async (req, res) => {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const docs = await Document.find({ sharedWith: userId })
+    const sharedFilter = { sharedWith: userId };
+    if (!isStaffUser(req.user)) {
+      sharedFilter.type = { $nin: STAFF_ONLY_DOCUMENT_TYPES };
+    }
+    const docs = await Document.find(sharedFilter)
       .sort({ createdAt: -1 })
       .populate({ path: "uploadedBy", select: "name email" })
       .populate({ path: "teacher", select: "name email" });
@@ -698,7 +714,22 @@ router.get("/documents/:id", authenticateUser, async (req, res) => {
       });
     }
 
-    if (type) filter.type = type;
+    // `type` may be a single type or a comma-separated list (e.g. the
+    // Kursarkiv shows COURSE_ARCHIVE,DELPROV,SLUTPROV together).
+    const requestedTypes =
+      typeof type === "string" && type.trim()
+        ? type.split(",").map((t) => t.trim()).filter(Boolean)
+        : [];
+    const visibleTypes = isStaffUser(user)
+      ? requestedTypes
+      : requestedTypes.filter((t) => !isStaffOnlyDocumentType(t));
+
+    if (requestedTypes.length > 0) {
+      if (visibleTypes.length === 0) return res.json([]);
+      filter.type = { $in: visibleTypes };
+    } else if (!isStaffUser(user)) {
+      filter.type = { $nin: STAFF_ONLY_DOCUMENT_TYPES };
+    }
     if (enrollmentId) filter.enrollmentId = enrollmentId;
 
     const docs = await Document.find(filter)

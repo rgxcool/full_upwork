@@ -137,6 +137,20 @@ router.post('/meetings', authenticateUser, async (req, res) => {
             return res.status(400).json({ error: `Invalid bookedBy value: ${bookedBy}. Must be one of: ${validBookedByValues.join(', ')}` });
         }
 
+        // Only SYV/specialpedagog (and admins on their behalf) may book
+        // meetings, and a caller can only book as a role they actually hold.
+        const callerRoles = new Set([
+            ...(Array.isArray(req.user?.roles) ? req.user.roles : []),
+            req.user?.role,
+        ].filter(Boolean));
+        const isAdminCaller = callerRoles.has('admin') || callerRoles.has('systemadmin');
+        if (!isAdminCaller && !validBookedByValues.some((role) => callerRoles.has(role))) {
+            return res.status(403).json({ error: 'Du har inte behörighet att boka möten' });
+        }
+        if (!isAdminCaller && !callerRoles.has(bookedBy)) {
+            return res.status(403).json({ error: 'bookedBy måste motsvara din egen roll' });
+        }
+
         logger.info({ title, studentId, studentName, bookedBy, createdBy: userId, userRole: req.user.role }, "Creating meeting")
 
         const saved = await new Meeting({

@@ -425,7 +425,10 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                 break;
             case "Lärare":
             case "teacher":
-                const teacherUser = await User.findById(id).lean();
+                // Never expose credentials/auth state to the staff roles that can search.
+                const teacherUser = await User.findById(id)
+                    .select("-password -mustChangePassword")
+                    .lean();
                 if (!teacherUser) {
                     return res.status(404).json({ message: "User not found" });
                 }
