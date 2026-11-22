@@ -920,10 +920,11 @@
         'Student Inskrivningar',
         'Elev+',
         'PDF',
-        'Prövningar',
         'Earnings',
         'Stats',
       ]
+
+      const PINNED_MENU_LINK = '/dashboard'
 
       const menuItems = [
         {
@@ -1044,7 +1045,12 @@
         if (!isLoggedIn.value) return []
         return menuItems
           .filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
-          .sort((a, b) => a.name.localeCompare(b.name, 'sv'))
+          .sort((a, b) => {
+            // The dashboard stays on top; everything else is alphabetical.
+            if (a.link === PINNED_MENU_LINK) return -1
+            if (b.link === PINNED_MENU_LINK) return 1
+            return a.name.localeCompare(b.name, 'sv')
+          })
       })
 
       const secretMenuItems = computed(() => {

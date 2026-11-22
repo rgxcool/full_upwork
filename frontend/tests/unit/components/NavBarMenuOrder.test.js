@@ -46,17 +46,22 @@ const swedishSorted = (list) =>
 
 describe("NavBar hamburger menu", () => {
     it.each([["admin"], ["teacher"], ["student"]])(
-        "lists %s entries in Swedish alphabetical order",
+        "pins Översikt on top and lists the other %s entries in Swedish alphabetical order",
         (role) => {
-            const list = names(mountAs([role]));
-            expect(list.length).toBeGreaterThan(1);
-            expect(list).toEqual(swedishSorted(list));
+            const [first, ...rest] = names(mountAs([role]));
+            expect(first).toBe("Översikt");
+            expect(rest.length).toBeGreaterThan(1);
+            expect(rest).toEqual(swedishSorted(rest));
         }
     );
 
-    it("puts Å/Ä/Ö after Z", () => {
-        const list = names(mountAs(["admin"]));
-        expect(list.at(-1)).toBe("Översikt");
+    it("shows Prövningar to students in the main menu", () => {
+        const wrapper = mountAs(["student"]);
+        const item = wrapper.vm.filteredMenuItems.find(
+            (i) => i.link === "/examform"
+        );
+        expect(item?.name).toBe("Prövningar");
+        expect(wrapper.vm.secretMenuItems).toHaveLength(0);
     });
 
     it("names the course-card overview 'Kurskort'", () => {
