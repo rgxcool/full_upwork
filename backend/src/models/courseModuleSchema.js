@@ -95,26 +95,68 @@ export const buildDefaultModules = () => {
     return modules;
 };
 
+// Mongoose subdocuments must be converted before spreading: spreading one
+// directly copies internals (`$__`, `_doc`, ...) instead of the stored fields.
+const toPlainObject = (value) =>
+    value && typeof value.toObject === "function"
+        ? value.toObject({ minimize: false })
+        : value;
+
+// Clone one Avsnitt (and its content items) without sharing nested references.
+const cloneAvsnitt = (rawAvsnitt) => {
+    const avsnitt = toPlainObject(rawAvsnitt);
+    return {
+        avsnittId: avsnitt.avsnittId,
+        title: avsnitt.title ?? "",
+        order: avsnitt.order,
+        contentItems: (avsnitt.contentItems || []).map((rawItem) => {
+            const item = toPlainObject(rawItem);
+            const cloned = {
+                contentId: item.contentId,
+                type: item.type,
+                title: item.title ?? "",
+                order: item.order,
+            };
+            for (const payload of ["lektion", "lasning", "uppgift"]) {
+                if (item[payload]) cloned[payload] = { ...toPlainObject(item[payload]) };
+            }
+            return cloned;
+        }),
+    };
+};
+
 // Deep-clone module documents (for duplicating a template into course cards)
 export const cloneModules = (modules) =>
-    modules?.map((m) => ({
-        moduleNumber: m.moduleNumber,
-        title: m.title ?? "",
-        isPartialExam: !!m.isPartialExam,
-        isCaseStudy: !!m.isCaseStudy,
-        sections: (m.sections || []).map((s) => ({
-            title: s.title ?? "",
-            description: s.description ?? "",
-            instructions: s.instructions ?? "",
-        })),
-        assignment:
-            m.assignment?.title || m.assignment?.description
-                ? {
-                      title: m.assignment.title ?? "",
-                      description: m.assignment.description ?? "",
-                  }
-                : undefined,
-    })) ?? [];
+    modules?.map((rawModule) => {
+        const m = toPlainObject(rawModule);
+        return {
+            moduleNumber: m.moduleNumber,
+            title: m.title ?? "",
+            isPartialExam: !!m.isPartialExam,
+            isCaseStudy: !!m.isCaseStudy,
+            sections: (m.sections || []).map((rawSection) => {
+                const s = toPlainObject(rawSection);
+                return {
+                    title: s.title ?? "",
+                    description: s.description ?? "",
+                    instructions: s.instructions ?? "",
+                };
+            }),
+            // Preserve the hierarchy when cloning already-migrated templates.
+            // Templates without Avsnitt are left untouched (the migration
+            // script is responsible for backfilling them).
+            ...(Array.isArray(m.avsnitt)
+                ? { avsnitt: m.avsnitt.map(cloneAvsnitt) }
+                : {}),
+            assignment:
+                m.assignment?.title || m.assignment?.description
+                    ? {
+                          title: m.assignment.title ?? "",
+                          description: m.assignment.description ?? "",
+                      }
+                    : undefined,
+        };
+    }) ?? [];
 
 // ---------------------------------------------------------------------------
 // Slice 1: Avsnitt backfill helpers
@@ -172,7 +214,8 @@ export const ensureModuleAvsnitt = (module) => {
     if (!module) return module;
     if (Array.isArray(module.avsnitt) && module.avsnitt.length > 0) return module;
 
-    return { ...module, avsnitt: [buildSyntheticAvsnitt(module)] };
+    const plain = toPlainObject(module);
+    return { ...plain, avsnitt: [buildSyntheticAvsnitt(plain)] };
 };
 
 // Apply the backfill to a whole modules array. Returns the original array

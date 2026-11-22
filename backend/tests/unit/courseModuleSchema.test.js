@@ -112,6 +112,93 @@ describe("courseModuleSchema helpers", () => {
 
         expect(cloned[0].assignment).toBeUndefined();
     });
+
+    it("deep-clones the Avsnitt hierarchy when cloning a migrated module", () => {
+        const original = [
+            {
+                moduleNumber: 1,
+                avsnitt: [
+                    {
+                        avsnittId: "m1-a1",
+                        title: "Avsnitt 1",
+                        order: 1,
+                        contentItems: [
+                            {
+                                contentId: "c1",
+                                type: "lektion",
+                                title: "Film",
+                                order: 1,
+                                lektion: { videoUrl: "v", durationMinutes: 5 },
+                            },
+                            {
+                                contentId: "c2",
+                                type: "lasning",
+                                title: "Text",
+                                order: 2,
+                                lasning: { resourceUrl: "r", estimatedMinutes: 10 },
+                            },
+                            {
+                                contentId: "c3",
+                                type: "uppgift",
+                                title: "Skriv",
+                                order: 3,
+                                uppgift: { title: "Skriv", description: "d" },
+                            },
+                        ],
+                    },
+                ],
+            },
+        ];
+
+        const cloned = cloneModules(original);
+
+        expect(cloned[0].avsnitt).toEqual(original[0].avsnitt);
+        expect(cloned[0].avsnitt[0]).not.toBe(original[0].avsnitt[0]);
+        expect(cloned[0].avsnitt[0].contentItems[0]).not.toBe(
+            original[0].avsnitt[0].contentItems[0]
+        );
+        expect(cloned[0].avsnitt[0].contentItems[0].lektion).not.toBe(
+            original[0].avsnitt[0].contentItems[0].lektion
+        );
+    });
+
+    it("clones Mongoose-like module and Avsnitt subdocuments via toObject", () => {
+        const contentDoc = {
+            toObject: () => ({
+                contentId: "c1",
+                type: "lektion",
+                title: "Film",
+                order: 1,
+                lektion: { videoUrl: "u", durationMinutes: 2 },
+            }),
+        };
+        const avsnittDoc = {
+            toObject: () => ({
+                avsnittId: "m2-a1",
+                title: "Avsnitt 1",
+                order: 1,
+                contentItems: [contentDoc],
+            }),
+        };
+        const moduleDoc = {
+            toObject: () => ({
+                moduleNumber: 2,
+                title: "Modul 2",
+                avsnitt: [avsnittDoc],
+            }),
+        };
+
+        const cloned = cloneModules([moduleDoc]);
+
+        expect(cloned[0].moduleNumber).toBe(2);
+        expect(cloned[0].avsnitt[0].contentItems[0]).toEqual({
+            contentId: "c1",
+            type: "lektion",
+            title: "Film",
+            order: 1,
+            lektion: { videoUrl: "u", durationMinutes: 2 },
+        });
+    });
 });
 
 describe("Avsnitt backfill helpers", () => {
@@ -218,6 +305,25 @@ describe("Avsnitt backfill helpers", () => {
         expect(migrated.avsnitt).toEqual([
             expect.objectContaining({ avsnittId: "m5-a1", title: "Avsnitt 1" }),
         ]);
+    });
+
+    it("backfills a Mongoose-like module without leaking subdocument internals", () => {
+        const module = {
+            $__: { internal: true },
+            toObject: () => ({
+                moduleNumber: 6,
+                title: "Modul 6",
+                assignment: { title: "Inlämning", description: "" },
+                avsnitt: [],
+            }),
+        };
+
+        const migrated = ensureModuleAvsnitt(module);
+
+        expect(migrated.$__).toBeUndefined();
+        expect(migrated.toObject).toBeUndefined();
+        expect(migrated.avsnitt[0].avsnittId).toBe("m6-a1");
+        expect(migrated.avsnitt[0].contentItems[0].contentId).toBe("m6-a1-c1");
     });
 
     it("ensures Avsnitt across a modules array without changing untouched modules", () => {
