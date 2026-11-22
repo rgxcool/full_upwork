@@ -31,4 +31,9 @@ jobs:
       - name: Post to Teams
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-        run: bash .github/scripts/teams/activity.sh
+        run: |
+          if [ ! -f .github/scripts/teams/activity.sh ]; then
+            echo "activity.sh is not on the default branch yet; skipping."
+            exit 0
+          fi
+          bash .github/scripts/teams/activity.sh
