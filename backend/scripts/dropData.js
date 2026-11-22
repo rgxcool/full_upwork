@@ -1,59 +1,26 @@
-import dotenv from "dotenv";
-import path from "path";
-import mongoose from "mongoose";
-import Program from "../src/models/Program.js";
-import Course from "../src/models/Course.js";
-import CoursePackage from "../src/models/CoursePackage.js";
+// Wipes EVERYTHING in the local database: every collection (all users,
+// admins included), GridFS files, and the disk files in public/uploads.
+// Collections are emptied, not dropped, so indexes survive.
+//
+// Usage (from backend/):
+//   DRY_RUN=1 node scripts/dropData.js   # preview counts
+//   node scripts/dropData.js --yes       # execute
+// Afterwards create an admin to log in again, e.g. node scripts/createSystemAdmin.js
+//
+// To reload only the education catalog, use scripts/dropEducation.js instead.
+import { formatCounts, wipeEverything } from "./lib/dbReset.js";
+import { runReset } from "./lib/runReset.js";
 
-const envFile =
-    process.env.NODE_ENV === "production"
-        ? ".env.production"
-        : process.env.NODE_ENV === "test"
-          ? ".env.test"
-          : ".env.development";
-
-dotenv.config({ path: path.resolve(import.meta.dirname, "..", envFile) });
-
-async function dropData() {
-    const mongoUri = process.env.MONGODB_URI;
-    if (!mongoUri) {
-        console.error(
-            `❌ MONGODB_URI is not set. Set it in backend/${envFile} or export it before running this script.`
-        );
-        process.exitCode = 1;
-        return;
-    }
-
-    let connected = false;
-    try {
-        console.log("🔗 Connecting to MongoDB...");
-        await mongoose.connect(mongoUri);
-        connected = true;
-
-        // Dropping all programs
-        console.log("🚨 Dropping all programs...");
-        await Program.deleteMany({});
-        console.log("✅ All programs dropped.");
-
-        // Dropping all courses
-        console.log("🚨 Dropping all courses...");
-        await Course.deleteMany({});
-        console.log("✅ All courses dropped.");
-
-        // Dropping all course packages
-        console.log("🚨 Dropping all course packages...");
-        await CoursePackage.deleteMany({});
-        console.log("✅ All course packages dropped.");
-    } catch (error) {
-        console.error("❌ Error dropping data:", error);
-        process.exitCode = 1;
-    } finally {
-        if (connected) {
-            console.log("🔌 Disconnecting from MongoDB...");
-            await mongoose.disconnect();
-            console.log("🔌 Disconnected from MongoDB.");
+runReset({
+    title: "dropData (wipe everything)",
+    describe:
+        "It empties EVERY collection, including all admin accounts, GridFS files and public/uploads.",
+    action: async (db, opts) => {
+        const { deleted, uploadFiles } = await wipeEverything(db, opts);
+        console.log(`\n${opts.dryRun ? "Would delete" : "Deleted"} documents per collection:\n${formatCounts(deleted)}`);
+        console.log(`Upload files on disk: ${uploadFiles}`);
+        if (!opts.dryRun) {
+            console.log("\nNo accounts are left. Create an admin, e.g. node scripts/createSystemAdmin.js");
         }
-    }
-}
-
-dropData();
+    },
+});
