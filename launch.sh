@@ -93,6 +93,12 @@ log "Loading education data (dropData + updateEducation)..."
   node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
   node scripts/seedE2EData.js
   node scripts/seedMindfulFaq.js
+  if [ "${DEMO:-0}" = "1" ]; then
+    # Demo mode: restore the full GY25 catalog (seedE2EData wipes courses)
+    # and add current-dated kursinstanser with filled kurskort.
+    node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
+    node scripts/seedDemoData.js
+  fi
 ) || {
   err "Failed to load education data. Check the script output above."
   exit 1
@@ -161,7 +167,7 @@ echo -e "  │ Role         │ Email              │ Password     │"
 echo -e "  ├──────────────┼────────────────────┼──────────────┤"
 echo -e "  │ Admin        │ admin@mindful.se   │ Admin123!    │"
 echo -e "  │ Teacher      │ teacher@mindful.se │ Teacher123!  │"
-echo -e "  │ User         │ user@mindful.se    │ User12345!   │"
+echo -e "  │ Student      │ student@mindful.se │ Student123!  │"
 echo -e "  └──────────────┴────────────────────┴──────────────┘"
 echo ""
 echo -e "  Logs:      $ROOT/backend.log"
