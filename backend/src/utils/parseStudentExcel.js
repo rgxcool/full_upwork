@@ -200,7 +200,7 @@ export async function parseStudentExcel(fileBuffer, teacherName) {
     }
 
     logger.debug({ count: studentsToSave.length }, "Excel parsing: Completed");
-    logger.debug({ studentNames: studentsToSave.map(s => s.name || "unknown") }, "Student names parsed");
+    logger.debug({ count: studentsToSave.length }, "Students parsed");
 
     return studentsToSave;
 }

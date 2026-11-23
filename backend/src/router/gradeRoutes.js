@@ -132,166 +132,21 @@ export async function verifyTeacherAuthorizedForEnrollment(userId, enrollment) {
   return true;
 }
 
-export async function verifyTeacherAuthorizedForStudentCourse(userId, studentId, courseId) {
-  if (!userId) return false;
-  // Teacher references hold the teacher's User id (#102).
-  const teacherIdStr = String(userId);
 
-  let hasExplicitAssignments = false;
-
-  if (studentId && typeof Student?.findById === "function") {
-    try {
-      const query = Student.findById(studentId);
-      const student = query && typeof query.lean === "function" ? await query.lean().catch(() => null) : await Promise.resolve(query).catch(() => null);
-      if (student?.teacherId) {
-        hasExplicitAssignments = true;
-        if (student.teacherId.toString() === teacherIdStr) return true;
-      }
-      if (student?.examHistory?.length) {
-        hasExplicitAssignments = true;
-        if (student.examHistory.some((e) => e.teacherId?.toString() === teacherIdStr && (!courseId || e.courseId?.toString() === courseId.toString()))) return true;
-      }
-    } catch (err) {
-      // ignore
-    }
-  }
-
-  if (courseId && typeof CourseInstance?.find === "function") {
-    try {
-      const query = CourseInstance.find({
-        $or: [{ _id: courseId }, { mainCourseId: courseId }],
-      });
-      const instances = query && typeof query.lean === "function" ? await query.lean().catch(() => []) : await Promise.resolve(query).catch(() => []);
-      if (Array.isArray(instances) && instances.length > 0) {
-        hasExplicitAssignments = true;
-        const isMatch = instances.some(
-          (ci) =>
-            ci.responsibleTeacher?.toString() === teacherIdStr ||
-            ci.assistantTeacher?.toString() === teacherIdStr
-        );
-        if (isMatch) return true;
-      }
-    } catch (err) {
-      // ignore
-    }
-  }
-
-  if (mongoose.connection?.readyState === 1 && studentId && (typeof ExamAttendance?.exists === "function" || typeof ExamAttendance?.findOne === "function")) {
-    try {
-      const hasExam = await (ExamAttendance.exists
-        ? ExamAttendance.exists({ studentId, teacherId: teacher._id }).catch(() => false)
-        : ExamAttendance.findOne({ studentId, teacherId: teacher._id }).catch(() => null));
-      if (hasExam) return true;
-    } catch (err) {
-      // ignore
-    }
-  }
-
-  if (hasExplicitAssignments) {
-    return false;
-  }
-  return true;
+/**
+ * The enrollment a grade belongs to (#103: enrollments are the only source).
+ * `courseId` may be the main course id or the course instance id; the newest
+ * non-dropped enrollment wins. Null when the student has no such enrollment.
+ */
+async function findGradeEnrollment(studentId, courseId) {
+  if (!mongoose.isValidObjectId(studentId) || !mongoose.isValidObjectId(courseId)) return null;
+  const query = StudentEnrollment.findOne({
+    studentId,
+    $or: [{ mainCourseId: courseId }, { courseInstanceId: courseId }],
+    status: { $ne: "dropped" },
+  });
+  return query && typeof query.sort === "function" ? query.sort({ startDate: -1 }) : query;
 }
-
-router.get("/students/ungraded", authenticateUser, async (req, res) => {
-  if (!ALLOWED_GRADING_ROLES.includes(req.user?.role)) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-  try {
-    await evaluateGradingStatusAndNotify();
-
-    const students = await Student.find({
-      education: {
-        $elemMatch: {
-          removedAt: null,
-          $or: [
-            { grade: null },
-            { grade: "" },
-            { locked: false },
-            { grade: "F", locked: true },
-          ],
-        },
-      },
-    }).lean();
-
-    const enrichedStudents = (
-      await Promise.all(
-        students.map(async (student) => {
-          const relevantEducation = await Promise.all(
-            student.education
-              .filter(async (edu) => {
-                if (edu.removedAt) return false;
-
-                const isUngraded = !edu.grade || edu.grade === "";
-                const isFAndLocked = edu.grade === "F" && edu.locked;
-
-                if (isFAndLocked) {
-                  const pendingPlan = await Notification.findOne({
-                    studentId: student._id,
-                    courseId: edu.redId,
-                    type: "action_plan_required",
-                    resolved: false,
-                  });
-
-                  return !!pendingPlan;
-                }
-
-                return isUngraded;
-              })
-              .map(async (edu) => {
-                let populated = { ...edu };
-
-                try {
-                  if (edu.type === "Course") {
-                    const course = await Course.findById(edu.refId).lean();
-                    if (course) {
-                      populated.details = course;
-                      populated.displayName = course.courseName;
-                      populated.scriveLink =
-                        "https://scrive.com/new/login?lang=sv"; // Anpassa efter behov
-                    }
-                  } else if (edu.type === "Program") {
-                    const program = await Program.findById(edu.refId).lean();
-                    if (program) {
-                      populated.details = program;
-                      populated.displayName = program.programName;
-                    }
-                  } else if (edu.type === "CoursePackage") {
-                    const cp = await CoursePackage.findById(edu.refId).lean();
-                    if (cp) {
-                      populated.details = cp;
-                      populated.displayName = cp.coursePackageName;
-                    }
-                  }
-                } catch (err) {
-                  logger.error({ err }, "Fel vid hämtning av utbildningsdata");
-                }
-
-                populated.isGraded = !!populated.grade;
-
-                populated.requireActionPlan = edu.grade === "F" && edu.locked;
-
-                return populated;
-              })
-          );
-
-          return {
-            studentId: student._id,
-            name: student.name,
-            personalNumber: student.personalNumber,
-            email: student.email,
-            ungradedEducation: relevantEducation,
-          };
-        })
-      )
-    ).filter((s) => s.ungradedEducation.length > 0);
-
-    res.json(enrichedStudents);
-  } catch (error) {
-    logger.error({ err: error }, "Fel vid hämtning av obetygsatta elever");
-    res.status(500).json({ message: "Serverfel vid hämtning av elever" });
-  }
-});
 
 router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
   const user = req.user;
@@ -322,28 +177,14 @@ router.put("/admin/unlock-grade", authenticateUser, async (req, res) => {
       }
     }
 
-    if (studentId && courseId) {
-      const result = await Student.updateOne(
-        {
-          _id: studentId,
-          "education.refId": courseId,
-          "education.type": "Course",
-          "education.removedAt": null,
-        },
-        {
-          $set: {
-            "education.$.locked": false,
-          },
-        }
-      );
-      if (result && result.matchedCount > 0) {
+    if (studentId && courseId && !enrollmentId) {
+      const enrollment = await findGradeEnrollment(studentId, courseId);
+      if (enrollment) {
         found = true;
-      }
-      if (StudentEnrollment.updateMany) {
-        await StudentEnrollment.updateMany(
-          { studentId, courseInstanceId: courseId },
-          { $set: { isGradeLocked: false, gradeLockedBy: null, gradeLockedAt: null } }
-        );
+        enrollment.isGradeLocked = false;
+        enrollment.gradeLockedBy = null;
+        enrollment.gradeLockedAt = null;
+        await enrollment.save();
       }
     }
 
@@ -544,149 +385,7 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
       };
     });
 
-    // Also include students from Student.education entries (older data path)
-    let studentEducationQuery = {
-      education: {
-        $elemMatch: {
-          removedAt: null,
-          endDate: { $lt: now },
-          $or: [{ grade: null }, { grade: "" }],
-        },
-      },
-    };
-
-    // For teachers, we need to check both responsible students AND students in their courses with exams
-    // So we'll fetch all matching students and filter after
-    const studentsWithPastEducation = await Student.find(studentEducationQuery).lean();
-
-    // Placement writes BOTH a StudentEnrollment and a Student.education entry for the
-    // same course. Where an enrollment exists (in any status) it is the source of
-    // truth, so its legacy education twin must not become a second grading row —
-    // and a dropped enrollment must not resurface through its education entry.
-    const enrolledPairs = new Set();
-    if (studentsWithPastEducation.length > 0) {
-      const covering = await StudentEnrollment.find({
-        studentId: { $in: studentsWithPastEducation.map((s) => s._id) },
-      })
-        .select("studentId mainCourseId coursePackageId")
-        .lean();
-      for (const e of covering) {
-        if (e.mainCourseId) enrolledPairs.add(`${e.studentId}-${e.mainCourseId}`);
-        if (e.coursePackageId) enrolledPairs.add(`${e.studentId}-${e.coursePackageId}`);
-      }
-    }
-    const coveredByEnrollment = (studentId, edu) =>
-      Boolean(edu?.refId) && enrolledPairs.has(`${studentId}-${edu.refId}`);
-
-    const studentsFromEducation = [];
-    
-    // Batch check for course instances and exams if teacher
-    let courseInstanceMap = new Map();
-    let examCheckMap = new Map();
-    
-    if (!isAdmin && teacherFilter) {
-      // Get all unique course IDs from education entries
-      const courseIds = new Set();
-      const studentCoursePairs = [];
-      
-      for (const s of studentsWithPastEducation) {
-        for (const edu of (s.education || [])) {
-          if (!edu || edu.removedAt) continue;
-          if (!edu.endDate || edu.endDate >= now) continue;
-          if (edu.grade && edu.grade !== "") continue;
-          if (edu.refId) {
-            courseIds.add(edu.refId.toString());
-            studentCoursePairs.push({ studentId: s._id.toString(), courseId: edu.refId.toString() });
-          }
-        }
-      }
-      
-      // Batch fetch course instances
-      if (courseIds.size > 0) {
-        const courseInstances = await CourseInstance.find({
-          mainCourseId: { $in: Array.from(courseIds).map(id => new mongoose.Types.ObjectId(id)) },
-          responsibleTeacher: teacherFilter
-        }).lean();
-        
-        courseInstances.forEach(ci => {
-          const key = ci.mainCourseId.toString();
-          if (!courseInstanceMap.has(key)) {
-            courseInstanceMap.set(key, []);
-          }
-          courseInstanceMap.get(key).push(ci);
-        });
-      }
-      
-      // Batch fetch exam attendances
-      const studentIds = Array.from(new Set(studentsWithPastEducation.map(s => s._id.toString())));
-      if (studentIds.length > 0 && courseIds.size > 0) {
-        const examAttendances = await ExamAttendance.find({
-          studentId: { $in: studentIds.map(id => new mongoose.Types.ObjectId(id)) },
-          courseId: { $in: Array.from(courseIds).map(id => new mongoose.Types.ObjectId(id)) },
-          teacherId: teacherFilter
-        }).lean();
-        
-        examAttendances.forEach(exam => {
-          const key = `${exam.studentId.toString()}-${exam.courseId?.toString()}`;
-          examCheckMap.set(key, true);
-        });
-      }
-    }
-    
-    for (const s of studentsWithPastEducation) {
-      const studentTeacherMatches = !isAdmin && teacherFilter 
-        ? s.teacherId?.toString() === teacherFilter.toString() 
-        : true; // Admins see all
-      
-      for (const edu of (s.education || [])) {
-        if (!edu || edu.removedAt) continue;
-        if (!edu.endDate || edu.endDate >= now) continue;
-        if (edu.grade && edu.grade !== "") continue;
-        if (coveredByEnrollment(s._id, edu)) continue;
-
-        // For teacher filtering
-        if (!isAdmin && teacherFilter) {
-          if (!studentTeacherMatches && edu.refId) {
-            // Check if there's a course instance with this teacher
-            const courseInstances = courseInstanceMap.get(edu.refId.toString());
-            if (!courseInstances || courseInstances.length === 0) {
-              // No course instance with this teacher, skip
-              continue;
-            }
-            
-            // Check if student has done exams for this course with this teacher
-            const examKey = `${s._id.toString()}-${edu.refId.toString()}`;
-            const hasExam = examCheckMap.has(examKey);
-            
-            // Also check student's examHistory
-            const hasExamInHistory = s.examHistory?.some(exam => 
-              exam.teacherId?.toString() === teacherFilter.toString() &&
-              exam.courseId?.toString() === edu.refId.toString()
-            );
-            
-            if (!hasExam && !hasExamInHistory) {
-              // Student hasn't done exams, skip this education entry
-              continue;
-            }
-          }
-        }
-
-        studentsFromEducation.push({
-          student: { _id: s._id, name: s.name, email: s.email },
-          courseInstance: null,
-          endDate: edu.endDate,
-          grade: edu.grade || null,
-          npScore: edu.npScore ?? null,
-          enrollmentId: edu._id, // refers to education entry id
-          courseRefId: edu.refId, // The actual course ID for saving grades
-          courseName: edu.name || null, // Course name if available
-          courseCode: null, // Will need to be populated from Course model if needed
-          source: "student_education",
-        });
-      }
-    }
-
-    const studentsToGrade = [...studentsFromEnrollments, ...studentsFromEducation]
+    const studentsToGrade = [...studentsFromEnrollments]
       .sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
 
     res.json(studentsToGrade);
@@ -700,7 +399,7 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
   if (!ALLOWED_GRADING_ROLES.includes(req.user?.role)) {
     return res.status(403).json({ error: "Forbidden" });
   }
-  const { studentId, courseId, grade, reason, comments, npScore, type } =
+  const { studentId, courseId, grade, reason, comments, npScore } =
     req.body;
 
   if (grade && (!reason || reason.trim() === "")) {
@@ -712,72 +411,30 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
   }
 
   try {
-    // The grade's source of truth is the StudentEnrollment. Resolve it by the
-    // course (main course or course instance) so this legacy endpoint can
-    // neither silently write nowhere nor bypass a grade lock.
-    let enrollment = null;
-    if (mongoose.isValidObjectId(studentId) && mongoose.isValidObjectId(courseId) && StudentEnrollment.findOne) {
-      const query = StudentEnrollment.findOne({
-        studentId,
-        $or: [{ mainCourseId: courseId }, { courseInstanceId: courseId }],
-        status: { $ne: "dropped" },
-      });
-      enrollment = query && typeof query.sort === "function"
-        ? await query.sort({ startDate: -1 })
-        : await query;
+    // The grade's source of truth is the StudentEnrollment (#103: the only one).
+    const enrollment = await findGradeEnrollment(studentId, courseId);
+    if (!enrollment) {
+      return res.status(404).json({ error: "Ingen kurs att betygsätta hittades för eleven" });
     }
 
-    if (enrollment) {
-      if (enrollment.isGradeLocked) {
-        return res.status(403).json({ error: "Grade is locked and cannot be modified" });
-      }
-      if (req.user?.role === "teacher") {
-        const authorized = await verifyTeacherAuthorizedForEnrollment(req.user.userId, enrollment);
-        if (!authorized) {
-          return res.status(403).json({ error: "Du är inte behörig att betygsätta denna kurs/elev." });
-        }
-      }
-      if (grade !== undefined) enrollment.grade = grade;
-      if (reason !== undefined) enrollment.motivation = reason;
-      if (comments !== undefined) enrollment.comments = comments;
-      if (npScore !== undefined) {
-        enrollment.nationalTestPoints = npScore === null || npScore === "" ? null : Number(npScore);
-      }
-      enrollment.gradeDate = new Date();
-      enrollment.gradeBy = req.user?.userId;
-      await enrollment.save();
-    } else {
-      if (req.user?.role === "teacher") {
-        const isAuthorized = await verifyTeacherAuthorizedForStudentCourse(req.user.userId, studentId, courseId);
-        if (!isAuthorized) {
-          return res.status(403).json({ error: "Du är inte behörig att betygsätta denna kurs/elev." });
-        }
-      }
-      // Legacy Student.education row (no enrollment exists).
-      const result = await Student.updateOne(
-        {
-          _id: studentId,
-          education: { $elemMatch: { refId: courseId, locked: { $ne: true } } },
-        },
-        {
-          $set: {
-            "education.$.grade": grade,
-            "education.$.type": type || "Course",
-          },
-        }
-      );
-      const matched = result?.matchedCount ?? result?.n ?? 0;
-      if (!matched) {
-        // Either no such course row, or it is locked: never report success.
-        const lockedRow = Student.exists
-          ? await Student.exists({ _id: studentId, education: { $elemMatch: { refId: courseId, locked: true } } })
-          : null;
-        if (lockedRow) {
-          return res.status(403).json({ error: "Grade is locked and cannot be modified" });
-        }
-        return res.status(404).json({ error: "Ingen kurs att betygsätta hittades för eleven" });
+    if (enrollment.isGradeLocked) {
+      return res.status(403).json({ error: "Grade is locked and cannot be modified" });
+    }
+    if (req.user?.role === "teacher") {
+      const authorized = await verifyTeacherAuthorizedForEnrollment(req.user.userId, enrollment);
+      if (!authorized) {
+        return res.status(403).json({ error: "Du är inte behörig att betygsätta denna kurs/elev." });
       }
     }
+    if (grade !== undefined) enrollment.grade = grade;
+    if (reason !== undefined) enrollment.motivation = reason;
+    if (comments !== undefined) enrollment.comments = comments;
+    if (npScore !== undefined) {
+      enrollment.nationalTestPoints = npScore === null || npScore === "" ? null : Number(npScore);
+    }
+    enrollment.gradeDate = new Date();
+    enrollment.gradeBy = req.user?.userId;
+    await enrollment.save();
 
     await recordAudit(req, {
       entityType: "StudentEnrollment",
@@ -879,37 +536,26 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
       if (enrollment.courseInstanceId) courseName = enrollment.courseInstanceId.courseName || courseName;
       targetStudentId = enrollment.studentId?._id?.toString() || targetStudentId;
     } else if (targetStudentId) {
+      const enrollment = await findGradeEnrollment(targetStudentId, targetCourseId);
+      if (!enrollment) {
+        return res.status(404).json({ error: "Kursen hittades inte för eleven" });
+      }
       if (role === "teacher") {
-        const authorized = await verifyTeacherAuthorizedForStudentCourse(userId, targetStudentId, targetCourseId);
+        const authorized = await verifyTeacherAuthorizedForEnrollment(userId, enrollment);
         if (!authorized) {
           return res.status(403).json({ error: "Du är inte behörig att låsa detta betyg." });
         }
       }
-      const student = await Student.findById(targetStudentId);
-      if (!student) {
-        return res.status(404).json({ error: "Student not found" });
-      }
-      studentName = student.name || studentName;
-      if (targetCourseId && Array.isArray(student.education)) {
-        const educationEntry = student.education.find(
-          (edu) => edu.refId?.toString() === targetCourseId.toString()
-        );
-        if (!educationEntry) {
-          return res.status(404).json({ error: "Course not found in student's education" });
-        }
-        educationEntry.locked = true;
-        courseName = educationEntry.name || courseName;
-      } else {
-        return res.status(404).json({ error: "Course not found in student's education" });
-      }
-      await student.save();
-
-      if (StudentEnrollment.updateMany) {
-        await StudentEnrollment.updateMany(
-          { studentId: targetStudentId, courseInstanceId: targetCourseId },
-          { $set: { isGradeLocked: true, gradeLockedBy: userId, gradeLockedAt: new Date() } }
-        );
-      }
+      enrollment.isGradeLocked = true;
+      enrollment.gradeLockedBy = userId;
+      enrollment.gradeLockedAt = new Date();
+      await enrollment.save();
+      const populated = await StudentEnrollment.findById(enrollment._id)
+        .populate("studentId", "name")
+        .populate("mainCourseId", "courseName")
+        .lean();
+      studentName = populated?.studentId?.name || studentName;
+      courseName = populated?.mainCourseId?.courseName || courseName;
     } else {
       return res
         .status(400)

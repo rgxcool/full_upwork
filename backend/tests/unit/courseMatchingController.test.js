@@ -171,9 +171,12 @@ const createReq = (overrides = {}) => ({
 });
 
 const createPopulateChain = (result) => {
+    // `.sort()` resolves like a query; `.sort().lean()` and `.lean()` too.
+    const settled = () => Object.assign(Promise.resolve(result), { lean: () => Promise.resolve(result) });
     const chain = {
         populate: vi.fn(() => chain),
-        sort: vi.fn(() => Promise.resolve(result)),
+        sort: vi.fn(() => settled()),
+        lean: vi.fn(() => Promise.resolve(result)),
     };
     return chain;
 };
@@ -510,58 +513,6 @@ describe("uploadStudentsForMatching", () => {
                 }),
             })
         );
-    });
-
-    it("does not abort when a student already has a course package but no new enrollments", async () => {
-        const req = createReq();
-        const res = createRes();
-        const course = {
-            _id: "course-package",
-            courseCode: "COURSE123",
-            courseName: "Course 123",
-        };
-
-        parseStudentExcel.mockResolvedValue([
-            {
-                email: "pkgowner@example.com",
-                name: "Package Owner",
-                municipality: { type: "Lidingö" },
-                education: [
-                    {
-                        name: "COURSE123",
-                        startDate: "2024-01-01",
-                        endDate: "2024-02-01",
-                    },
-                ],
-            },
-        ]);
-
-        CoursePackage.find.mockReturnValue({
-            lean: vi.fn().mockResolvedValue([]),
-        });
-        Course.find.mockReturnValue({
-            lean: vi.fn().mockResolvedValue([course]),
-        });
-
-        CourseMatchingService.processStudentEducation.mockResolvedValue({
-            enrollments: [],
-            warnings: [],
-            errors: [],
-        });
-
-        Student.findById.mockReturnValue({
-            lean: vi.fn().mockResolvedValue({
-                _id: "pkg-existing",
-                education: [{ type: "CoursePackage" }],
-            }),
-        });
-
-        await uploadStudentsForMatching(req, res);
-
-        expect(res.status).not.toHaveBeenCalled();
-        const payload = res.json.mock.calls[0][0];
-        expect(payload.success).toBe(true);
-        expect(payload.results.enrollments).toHaveLength(0);
     });
 
     it("returns 422 when no enrollments can be created", async () => {
@@ -906,17 +857,12 @@ describe("uploadStudentsForMatching", () => {
             warnings: [],
             errors: [],
         });
-        Student.findById.mockReturnValue({
-            lean: vi.fn().mockResolvedValue({
-                _id: "empty-norm",
-                education: [{ type: "CoursePackage" }],
-            }),
-        });
 
         await uploadStudentsForMatching(req, res);
 
         expect(CourseMatchingService.processStudentEducation).not.toHaveBeenCalled();
-        expect(res.status).not.toHaveBeenCalled();
+        // #103: nothing placed → the upload is aborted (no legacy package shortcut).
+        expect(res.status).toHaveBeenCalledWith(422);
     });
 
     it("coerces numeric education names and text fields before processing", async () => {
@@ -1139,12 +1085,6 @@ describe("uploadStudentsForMatching", () => {
         Course.find.mockReturnValue({
             lean: vi.fn().mockResolvedValue([]),
         });
-        Student.findById.mockReturnValue({
-            lean: vi.fn().mockResolvedValue({
-                _id: "pkg-skip",
-                education: [{ type: "CoursePackage" }],
-            }),
-        });
         CourseMatchingService.processStudentEducation.mockResolvedValue({
             enrollments: [],
             warnings: [],
@@ -1154,9 +1094,9 @@ describe("uploadStudentsForMatching", () => {
         await uploadStudentsForMatching(req, res);
 
         expect(CourseMatchingService.processStudentEducation).not.toHaveBeenCalled();
-        expect(res.status).not.toHaveBeenCalled();
-        const payload = res.json.mock.calls[0][0];
-        expect(payload.success).toBe(true);
+        // #103: nothing placed → the upload is aborted (no legacy package shortcut).
+        expect(res.status).toHaveBeenCalledWith(422);
+        expect(res.json.mock.calls[0][0].success).toBe(false);
     });
 
     it("records teacher creation errors without aborting the upload", async () => {

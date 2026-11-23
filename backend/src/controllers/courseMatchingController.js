@@ -1,4 +1,5 @@
 import CourseMatchingService from "../utils/courseMatchingService.js";
+import { loadEducationByStudent } from "../utils/enrollmentEducation.js";
 import Student from "../models/Student.js";
 import CourseInstance from "../models/CourseInstance.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
@@ -156,12 +157,6 @@ export const uploadStudentsForMatching = async (req, res) => {
       { count: parsedStudents.length },
       "Total students parsed from Excel",
     );
-    logger.debug(
-      {
-        names: parsedStudents.map((s) => s.name || s.email || "unknown"),
-      },
-      "Student names from Excel",
-    );
 
     // ✅ Group by email and merge multiple entries (same logic as studentController.js)
     const grouped = new Map();
@@ -179,12 +174,6 @@ export const uploadStudentsForMatching = async (req, res) => {
 
     const mergedStudents = [...grouped.values()];
     logger.debug({ count: mergedStudents.length }, "After deduplication");
-    logger.debug(
-      {
-        names: mergedStudents.map((s) => s.name || s.email || "unknown"),
-      },
-      "Merged student names",
-    );
 
     if (mergedStudents.length === 0) {
       return res.status(400).json({ error: "No valid data found in file." });
@@ -736,7 +725,6 @@ export const uploadStudentsForMatching = async (req, res) => {
             teacherId: studentTeacherInfo?._id || null,
             dropout: studentData.dropout || false,
             aplStatus: studentData.aplStatus || "GRAY",
-            education: [],
           });
 
           await dbStudent.save();
@@ -1052,19 +1040,15 @@ export const uploadStudentsForMatching = async (req, res) => {
         studentId: dbStudent._id,
       });
 
-      // Consider it a success if either enrollments increased or the student has a CoursePackage in education
-      const refreshedStudent = await Student.findById(dbStudent._id).lean();
-      const hasAnyCoursePackage = Array.isArray(refreshedStudent?.education)
-        ? refreshedStudent.education.some((e) => e?.type === "CoursePackage")
-        : false;
-
       // Treat as success if the student has any enrollments at all after processing
       const noNewEnrollments =
         enrollmentsAfter === enrollmentsBefore &&
         dbEnrollmentsAfter === dbEnrollmentsBefore &&
         dbEnrollmentsAfter === 0;
 
-      if (noNewEnrollments && !hasAnyCoursePackage) {
+      // A placed package creates enrollments for its courses (#103), so no
+      // enrollments at all means nothing could be placed.
+      if (noNewEnrollments) {
         // No enrollments created for this student → treat as fatal error
         const studentEducationCodes =
           studentData.education
@@ -1187,12 +1171,6 @@ export const uploadStudentsForMatching = async (req, res) => {
       { studentsProcessed: results.students.length },
       "Processing results",
     );
-    logger.debug(
-      {
-        names: results.students.map((s) => s.name || s.email || "unknown"),
-      },
-      "Students created/found",
-    );
 
     // After processing all students, deduplicate missing package errors globally
     const seenPackages = new Set();
@@ -1254,88 +1232,12 @@ export const uploadStudentsForMatching = async (req, res) => {
       (w) => w.type !== "instance_created",
     );
 
-    // Populate education data from enrollments for each student
-    if (results.students && Array.isArray(results.students)) {
-      try {
-        const { default: StudentEnrollment } =
-          await import("../models/StudentEnrollment.js");
-        for (const student of results.students) {
-          try {
-            // Ensure we have a valid student ID
-            const studentId = student._id || student.id;
-            if (!studentId) {
-              logger.warn(
-                { studentName: student.name || student.email },
-                "Student missing ID, skipping education population",
-              );
-              student.education = Array.isArray(student.education)
-                ? student.education
-                : [];
-              continue;
-            }
-
-            const enrollments = await StudentEnrollment.find({
-              studentId: studentId,
-            })
-              .populate("mainCourseId", "courseName courseCode")
-              .populate(
-                "coursePackageId",
-                "coursePackageName coursePackageCode",
-              )
-              .lean();
-
-            const enrollmentEducation = enrollments
-              .map((enrollment) => {
-                if (enrollment.mainCourseId) {
-                  return {
-                    type: "Course",
-                    refId: enrollment.mainCourseId._id,
-                    name: enrollment.mainCourseId.courseName,
-                    startDate: enrollment.startDate,
-                    endDate: enrollment.endDate,
-                    slutprovDate: enrollment.slutprovDate,
-                  };
-                } else if (enrollment.coursePackageId) {
-                  return {
-                    type: "CoursePackage",
-                    refId: enrollment.coursePackageId._id,
-                    name: enrollment.coursePackageId.coursePackageName,
-                    startDate: enrollment.startDate,
-                    endDate: enrollment.endDate,
-                    slutprovDate: enrollment.slutprovDate,
-                  };
-                }
-                return null;
-              })
-              .filter(Boolean);
-
-            // Merge with existing education entries from student document
-            const existingEducation = Array.isArray(student.education)
-              ? student.education
-              : [];
-            student.education = [...existingEducation, ...enrollmentEducation];
-          } catch (err) {
-            logger.error(
-              { err, studentId: student._id || student.id || "unknown" },
-              "Error populating education for student",
-            );
-            // If enrollment fetch fails, use existing education or empty array
-            student.education = Array.isArray(student.education)
-              ? student.education
-              : [];
-          }
-        }
-      } catch (importErr) {
-        logger.error(
-          { err: importErr },
-          "Error importing StudentEnrollment model",
-        );
-        // If import fails, just use existing education data
-        for (const student of results.students) {
-          student.education = Array.isArray(student.education)
-            ? student.education
-            : [];
-        }
+    // Each student's study plan from their enrollments (#103), one query.
+    if (Array.isArray(results.students) && results.students.length > 0) {
+      const ids = results.students.map((st) => st._id || st.id).filter(Boolean);
+      const plans = await loadEducationByStudent(ids);
+      for (const student of results.students) {
+        student.education = plans.get(String(student._id || student.id)) || [];
       }
     }
 

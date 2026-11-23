@@ -32,6 +32,14 @@ vi.mock("../../src/models/User.js", () => ({
     findOne: vi.fn(),
   },
 }));
+// #103: imported course rows become enrollments through the placement service;
+// they are never stored on the student.
+vi.mock("../../src/utils/courseMatchingService.js", () => ({
+  __esModule: true,
+  default: {
+    processStudentEducation: vi.fn(() => Promise.resolve({ enrollments: [], errors: [] })),
+  },
+}));
 vi.mock("../../src/utils/teacherService.js", () => ({
   createOrFindTeacher: vi.fn(() =>
     Promise.resolve({ teacher: { _id: "created-teacher" } })
@@ -77,6 +85,12 @@ import {
 import * as parseModule from "../../src/utils/parseStudentExcel.js";
 import { maybeSendLarteametEmail } from "../../src/services/emailService.js";
 import { createOrFindTeacher } from "../../src/utils/teacherService.js";
+import CourseMatchingService from "../../src/utils/courseMatchingService.js";
+
+/** Entries the import passed to placement for the n-th student. */
+const placedEntries = (n = 0) => CourseMatchingService.processStudentEducation.mock.calls[n][1];
+/** The student document the import wrote (bulkWrite $set) for the n-th student. */
+const writtenStudent = (n = 0) => Student.bulkWrite.mock.calls[0][0][n].updateOne.update.$set;
 
 const createOrFindTeacherMock = vi.mocked(createOrFindTeacher);
 
@@ -95,7 +109,18 @@ const createMockRes = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  Student.find.mockResolvedValue([]);
+  // Awaited directly: existing students (none). Via .select().lean(): the
+  // students saved by the bulk write, one per uploaded e-mail.
+  Student.find.mockImplementation((query) =>
+    Object.assign(Promise.resolve([]), {
+      select: () => ({
+        lean: () =>
+          Promise.resolve(
+            (query?.email?.$in || []).map((email, i) => ({ _id: `saved-${i}`, email, pace: 100 }))
+          ),
+      }),
+    })
+  );
   Student.findOne.mockResolvedValue({ education: [] });
   Student.bulkWrite.mockResolvedValue({});
   Program.find.mockReturnValue(createLeanResult([]));
@@ -199,9 +224,8 @@ describe("uploadXlsx", () => {
     await uploadXlsx(req, res);
 
     expect(Student.bulkWrite).toHaveBeenCalledTimes(1);
-    expect(Student.findOne).toHaveBeenCalledWith({
-      email: "merge@example.com",
-    });
+    expect(writtenStudent().education).toBeUndefined();
+    expect(CourseMatchingService.processStudentEducation).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -215,7 +239,7 @@ describe("uploadXlsx", () => {
     expect(payload.warnings).toEqual([]);
   });
 
-  it("stores spreadsheet dates and an ObjectId addedBy on uploaded education", async () => {
+  it("places entries with the spreadsheet dates and an ObjectId addedBy", async () => {
     const uploaderId = "64b7f9f9f9f9f9f9f9f9f9f9";
     parseModule.parseStudentExcel.mockResolvedValue([
       {
@@ -244,8 +268,8 @@ describe("uploadXlsx", () => {
     await uploadXlsx(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    const bulkOps = Student.bulkWrite.mock.calls[0][0];
-    const educationEntry = bulkOps[0].updateOne.update.$set.education[0];
+    expect(writtenStudent().education).toBeUndefined();
+    const educationEntry = placedEntries()[0];
     expect(educationEntry).toMatchObject({
       type: "CoursePackage",
       refId: "pkg-1",
@@ -289,8 +313,8 @@ describe("uploadXlsx", () => {
     await uploadXlsx(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    const bulkOps = Student.bulkWrite.mock.calls[0][0];
-    const educationEntry = bulkOps[0].updateOne.update.$set.education[0];
+    expect(writtenStudent().education).toBeUndefined();
+    const educationEntry = placedEntries()[0];
     expect(educationEntry).toMatchObject({
       type: "Course",
       refId: "course-9",
@@ -617,10 +641,10 @@ describe("uploadXlsx", () => {
       null,
       "Mathematics"
     );
-    const bulkOps = Student.bulkWrite.mock.calls[0][0];
-    const studentUpdate = bulkOps[0].updateOne.update.$set;
+    const studentUpdate = writtenStudent();
     expect(studentUpdate.teacherId).toBe("created-teacher");
-    expect(studentUpdate.education[0]).toMatchObject({
+    expect(studentUpdate.education).toBeUndefined();
+    expect(placedEntries()[0]).toMatchObject({
       type: "Program",
       refId: "prog-1",
     });

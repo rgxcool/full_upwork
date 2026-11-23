@@ -20,6 +20,27 @@ const { AplRecordMock } = vi.hoisted(() => {
 vi.mock("../../src/models/AplRecord.js", () => ({
     default: AplRecordMock,
 }));
+
+// #103: whether a student has an APL package comes from their enrollments.
+const { enrollmentRows } = vi.hoisted(() => ({ enrollmentRows: [] }));
+vi.mock("../../src/models/StudentEnrollment.js", () => {
+    const chain = {
+        populate: () => chain,
+        sort: () => chain,
+        lean: () => Promise.resolve([...enrollmentRows]),
+    };
+    return { default: { find: vi.fn(() => chain) } };
+});
+/** A course enrollment that belongs to an APL package. */
+const packageEnrollment = (studentId) => ({
+    _id: `enr-${studentId}`,
+    studentId,
+    mainCourseId: { _id: `course-${studentId}`, courseName: "Vård och omsorg" },
+    coursePackageId: "pkg-1",
+    startDate: new Date("2026-03-01"),
+    endDate: new Date("2026-06-30"),
+    status: "active",
+});
 vi.mock("../../src/models/Student.js", () => ({
     default: {
         find: vi.fn().mockReturnValue({ populate: vi.fn().mockReturnThis(), lean: vi.fn().mockResolvedValue([]) }),
@@ -85,6 +106,7 @@ import {
 describe("APL Status Transitions", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        enrollmentRows.length = 0;
     });
 
     describe("APL_STATUSES constant", () => {
@@ -395,33 +417,28 @@ describe("APL Status Transitions", () => {
     });
 
     describe("findEligibleStudents", () => {
-        it("returns students with an active CoursePackage education", async () => {
+        it("returns students enrolled in an APL package course", async () => {
             Student.find.mockReturnValue({
                 populate: vi.fn().mockReturnThis(),
                 lean: vi.fn().mockResolvedValue([
                     {
                         _id: "s1",
-                        name: "Anna",
+                        name: "Test Elev Ett",
                         dropout: false,
-                        education: [{ type: "CoursePackage", startDate: new Date() }],
                         aplStatus: "BLUE",
                         teacherId: { _id: "t1", name: "Lärare", email: "t@x.se" },
                     },
-                    {
-                        _id: "s2",
-                        name: "Bertil",
-                        dropout: false,
-                        education: [{ type: "SingleCourse", startDate: new Date() }],
-                    },
-                    {
-                        _id: "s3",
-                        name: "Cecilia",
-                        dropout: false,
-                        education: [
-                            { type: "CoursePackage", startDate: new Date(), removedAt: new Date() },
-                        ],
-                    },
+                    { _id: "s2", name: "Test Elev Två", dropout: false },
+                    { _id: "s3", name: "Test Elev Tre", dropout: false },
                 ]),
+            });
+            // s1 takes a package course; s2 a single course; s3 nothing any more.
+            enrollmentRows.push(packageEnrollment("s1"), {
+                _id: "enr-s2",
+                studentId: "s2",
+                mainCourseId: { _id: "course-s2", courseName: "Svenska 1" },
+                startDate: new Date(),
+                endDate: new Date(),
             });
             computeAplEffectiveStatus.mockImplementation((status) => ({
                 aplStatus: status,
@@ -443,10 +460,11 @@ describe("APL Status Transitions", () => {
             Student.find.mockReturnValue({
                 populate: vi.fn().mockReturnThis(),
                 lean: vi.fn().mockResolvedValue([
-                    { _id: "s1", education: [{ type: "CoursePackage" }], aplStatus: "GRAY" },
-                    { _id: "s2", education: [{ type: "CoursePackage" }], aplStatus: "BLUE" },
+                    { _id: "s1", aplStatus: "GRAY" },
+                    { _id: "s2", aplStatus: "BLUE" },
                 ]),
             });
+            enrollmentRows.push(packageEnrollment("s1"), packageEnrollment("s2"));
             AplRecord.findOne
                 .mockResolvedValueOnce(null)
                 .mockResolvedValueOnce({ _id: "existing" });
@@ -566,9 +584,10 @@ describe("APL Status Transitions", () => {
             Student.find.mockReturnValue({
                 populate: vi.fn().mockReturnThis(),
                 lean: vi.fn().mockResolvedValue([
-                    { _id: "s1", education: [{ type: "CoursePackage" }], aplStatus: "GRAY" },
+                    { _id: "s1", aplStatus: "GRAY" },
                 ]),
             });
+            enrollmentRows.push(packageEnrollment("s1"));
             Student.findById.mockResolvedValue(student);
             AplRecord.findOne.mockResolvedValue(null);
 
@@ -587,6 +606,7 @@ describe("APL Status Transitions", () => {
                 populate: vi.fn().mockReturnThis(),
                 lean: vi.fn().mockResolvedValue([student]),
             });
+            enrollmentRows.push(packageEnrollment("s1"));
             Student.findById.mockResolvedValue(student);
             AplRecord.findOne.mockResolvedValue(null);
             computeAplPeriod.mockReturnValue({

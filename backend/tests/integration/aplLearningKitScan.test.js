@@ -9,6 +9,10 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import mongoose from "mongoose";
 import Student from "../../src/models/Student.js";
+import Course from "../../src/models/Course.js";
+import CoursePackage from "../../src/models/CoursePackage.js";
+import CourseInstance from "../../src/models/CourseInstance.js";
+import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import {
     ensureAplLearningKit,
     ensureStartedAplLearningKits,
@@ -23,22 +27,42 @@ vi.mock("../../src/services/emailService.js", () => ({
 
 const NOW = new Date("2026-06-15T12:00:00");
 
-const makeStudent = (name, email, packageStart, extra = {}) =>
-    Student.create({
+// #103: the APL period comes from the student's package course enrollments.
+let seq = 0;
+const makeStudent = async (name, email, packageStart, extra = {}) => {
+    seq++;
+    const student = await Student.create({
         name,
         email,
         personalNumber: "19000101-0000",
         municipality: { type: "Sollentuna" },
-        education: [
-            {
-                type: "CoursePackage",
-                name: "Vård- och omsorgspaket",
-                startDate: packageStart,
-                endDate: new Date("2026-12-18"),
-            },
-        ],
         ...extra,
     });
+    const pkg = await CoursePackage.create({
+        coursePackageName: "Vård- och omsorgspaket",
+        coursePackageCode: `VOO${seq}`,
+        coursePackagePoints: "400",
+        coursePackageExtent: "Termin",
+    });
+    const course = await Course.create({ courseName: "Vård och omsorg", courseCode: `VARVAR${seq}` });
+    const endDate = new Date("2026-12-18");
+    const instance = await CourseInstance.create({
+        mainCourseId: course._id,
+        courseName: course.courseName,
+        courseCode: `VARVAR${seq}-1`,
+        startDate: packageStart,
+        endDate,
+    });
+    await StudentEnrollment.create({
+        studentId: student._id,
+        courseInstanceId: instance._id,
+        mainCourseId: course._id,
+        coursePackageId: pkg._id,
+        startDate: packageStart,
+        endDate,
+    });
+    return student;
+};
 
 describe("ensureStartedAplLearningKits (real models)", () => {
     beforeAll(async () => {
@@ -50,7 +74,13 @@ describe("ensureStartedAplLearningKits (real models)", () => {
     });
 
     beforeEach(async () => {
-        await Student.deleteMany({});
+        await Promise.all([
+            Student.deleteMany({}),
+            Course.deleteMany({}),
+            CoursePackage.deleteMany({}),
+            CourseInstance.deleteMany({}),
+            StudentEnrollment.deleteMany({}),
+        ]);
     });
 
     it("reports the number of kits it actually created, then 0 on a re-run", async () => {

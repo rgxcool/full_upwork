@@ -56,7 +56,6 @@ const RoleBasedAppointments = () => import('@/views/Appointments/RoleBasedAppoin
 // Student Views
 import StudentDetails from '@/views/Student/StudentDetails.vue'
 import APLView from '@/views/APLView.vue'
-import GradeStudent from '../views/Admin/gradeStudent.vue'
 import ExamForm from '../views/Exams/ExamOverview.vue'
 import EducationDetails from '../views/Admin/EducationDetails.vue'
 import CourseCards from '@/views/Student/CourseCards.vue'
