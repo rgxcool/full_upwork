@@ -19,7 +19,7 @@ const gradeSchema = new mongoose.Schema(
         }, // or use numbers if preferred
         gradedAt: { type: Date },
         completed: { type: Boolean, default: false },
-        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "Teacher" }, // optional
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // optional
     },
     { timestamps: true }
 );

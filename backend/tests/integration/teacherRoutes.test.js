@@ -13,7 +13,6 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import app from "../../index.js";
-import Teacher from "../../src/models/Teacher.js";
 import User from "../../src/models/User.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
@@ -23,6 +22,7 @@ import {
     connectTestDatabase,
     disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const TEACHER_COLORS = [
     "#e6194b",
@@ -76,12 +76,9 @@ const createUser = async (overrides = {}) => {
 
 const createTeacher = async (overrides = {}) => {
     const user = overrides.user || (await createUser({ password: overrides.password }));
-    const teacher = await Teacher.create({
-        userId: user._id,
-        subject: overrides.subject || "Math",
+    const teacher = await giveTeacherProfile(user._id, { subject: overrides.subject || "Math",
         colorCode: overrides.colorCode || TEACHER_COLORS[0],
-        phoneNumbers: overrides.phoneNumbers || [],
-    });
+        phoneNumbers: overrides.phoneNumbers || [] });
     return { user, teacher };
 };
 
@@ -100,7 +97,6 @@ describe("Teacher Routes", () => {
 
     beforeEach(async () => {
         await Promise.all([
-            Teacher.deleteMany({}),
             User.deleteMany({}),
             Student.deleteMany({}),
         ]);
@@ -122,9 +118,9 @@ describe("Teacher Routes", () => {
             expect(response.body.success).toBe(true);
             expect(response.body.count).toBe(1);
             expect(response.body.teachers[0]).toMatchObject({
-                teacherId: teacher._id.toString(),
-                subject: teacher.subject,
-                colorCode: teacher.colorCode,
+                teacherId: user._id.toString(), // one id per person (#102)
+                subject: teacher.teacherProfile.subject,
+                colorCode: teacher.teacherProfile.colorCode,
                 user: {
                     id: user._id.toString(),
                     username: user.username,
@@ -134,13 +130,9 @@ describe("Teacher Routes", () => {
             });
         });
 
-        it("returns null user when teacher has no linked user", async () => {
-            await Teacher.create({
-                userId: new mongoose.Types.ObjectId(),
-                subject: "No User",
-                colorCode: TEACHER_COLORS[0],
-                phoneNumbers: [],
-            });
+        it("lists only users that have a teacher profile", async () => {
+            await createTeacher({ password: hashedPassword });
+            await createUser({ password: hashedPassword, role: "teacher" }); // no profile
 
             const response = await request(app)
                 .get("/api/debug-teachers")
@@ -148,13 +140,12 @@ describe("Teacher Routes", () => {
                 .expect(200);
 
             expect(response.body.count).toBe(1);
-            expect(response.body.teachers[0].user).toBeNull();
         });
 
         it("returns 500 when populate fails", async () => {
-            vi.spyOn(Teacher, "find").mockRejectedValueOnce(
-                new Error("populate failed")
-            );
+            vi.spyOn(User, "find").mockImplementationOnce(() => {
+                throw new Error("populate failed");
+            });
 
             const response = await request(app)
                 .get("/api/debug-teachers")
@@ -176,11 +167,14 @@ describe("Teacher Routes", () => {
                 .expect(200);
 
             expect(response.body).toHaveLength(2);
-            expect(response.body[0]).toHaveProperty("userId");
+            // _id is the User id; userId repeats the account for older frontend code.
+            expect(String(response.body[0]._id)).toBe(String(response.body[0].userId._id));
+            expect(response.body[0]).not.toHaveProperty("password");
+            expect(response.body.map((t) => t.subject).sort()).toEqual(["Math", "Science"]);
         });
 
         it("returns 500 when fetching teachers fails", async () => {
-            vi.spyOn(Teacher, "find").mockImplementationOnce(() => {
+            vi.spyOn(User, "find").mockImplementationOnce(() => {
                 throw new Error("find failed");
             });
 
@@ -244,11 +238,10 @@ describe("Teacher Routes", () => {
             const savedUser = await User.findOne({
                 email: "generated@example.com",
             });
-            const savedTeacher = await Teacher.findOne({
-                userId: savedUser._id,
-            });
+            const savedTeacher = savedUser.teacherProfile;
 
             expect(await bcrypt.compare(response.body.password, savedUser.password)).toBe(true);
+            expect(String(response.body.data.teacher.id)).toBe(String(savedUser._id));
             expect(savedTeacher.subject).toBe("English");
             expect(savedTeacher.colorCode).toBe(TEACHER_COLORS[0]);
             expect(savedTeacher.phoneNumbers).toEqual(["123"]);
@@ -272,18 +265,14 @@ describe("Teacher Routes", () => {
             const savedUser = await User.findOne({
                 email: "default@example.com",
             });
-            const savedTeacher = await Teacher.findOne({
-                userId: savedUser._id,
-            });
+            const savedTeacher = savedUser.teacherProfile;
 
             expect(await bcrypt.compare("ChangeMe123!", savedUser.password)).toBe(true);
             expect(savedTeacher.colorCode).toBe("#123456");
         }, 15000);
 
         it("returns 500 when teacher creation fails", async () => {
-            vi.spyOn(User.prototype, "save").mockRejectedValueOnce(
-                new Error("db error")
-            );
+            vi.spyOn(User, "create").mockRejectedValueOnce(new Error("db error"));
 
             const response = await request(app)
                 .post("/api/admin/teacher")
@@ -327,20 +316,8 @@ describe("Teacher Routes", () => {
             });
         });
 
-        it("creates a teacher with default subject and cycled color", async () => {
-            const userSaveSpy = vi
-                .spyOn(User.prototype, "save")
-                .mockImplementationOnce(function mockSave() {
-                    return Promise.resolve({
-                        _id: this._id,
-                        username: this.username,
-                        email: this.email,
-                        role: this.role,
-                    });
-                });
-            const allColors = TEACHER_COLORS.map((color) => ({ colorCode: color }));
-            allColors.push({ colorCode: TEACHER_COLORS[0] });
-            vi.spyOn(Teacher, "find").mockResolvedValueOnce(allColors);
+        it("creates a teacher with default subject and the next free color", async () => {
+            await createTeacher({ password: hashedPassword, colorCode: TEACHER_COLORS[0] });
 
             const response = await request(app)
                 .post("/api/teacher")
@@ -353,27 +330,19 @@ describe("Teacher Routes", () => {
                 .expect(201);
 
             expect(response.body.message).toBe("Teacher created successfully.");
-            expect(userSaveSpy).toHaveBeenCalled();
+            expect(response.body.data.user).not.toHaveProperty("password");
 
-            const savedTeacher = await Teacher.findOne({
-                subject: "Övrigt",
-            });
+            const savedTeacher = (await User.findOne({ email: "legacy@example.com" })).teacherProfile;
+            expect(savedTeacher.subject).toBe("Övrigt");
             expect(savedTeacher.colorCode).toBe(TEACHER_COLORS[1]);
             expect(savedTeacher.phoneNumbers).toEqual(["555"]);
         });
 
         it("uses fallback color when color lookup fails", async () => {
-            vi.spyOn(User.prototype, "save").mockImplementationOnce(function mockSave() {
-                return Promise.resolve({
-                    _id: this._id,
-                    username: this.username,
-                    email: this.email,
-                    role: this.role,
-                });
+            await createTeacher({ password: hashedPassword, colorCode: TEACHER_COLORS[0] });
+            vi.spyOn(User, "find").mockImplementationOnce(() => {
+                throw new Error("color error");
             });
-            vi.spyOn(Teacher, "find").mockRejectedValueOnce(
-                new Error("color error")
-            );
 
             await request(app)
                 .post("/api/teacher")
@@ -384,17 +353,12 @@ describe("Teacher Routes", () => {
                 })
                 .expect(201);
 
-            const savedTeacher = await Teacher.findOne({
-                subject: "Övrigt",
-                userId: { $exists: true },
-            });
+            const savedTeacher = (await User.findOne({ email: "fallback@example.com" })).teacherProfile;
             expect(savedTeacher.colorCode).toBe(TEACHER_COLORS[0]);
         });
 
         it("returns 500 when creation fails", async () => {
-            vi.spyOn(User.prototype, "save").mockRejectedValueOnce(
-                new Error("create error")
-            );
+            vi.spyOn(User, "create").mockRejectedValueOnce(new Error("create error"));
 
             const response = await request(app)
                 .post("/api/teacher")
@@ -481,7 +445,7 @@ describe("Teacher Routes", () => {
 
             expect(response.body.teacher.subject).toBe("Math");
 
-            const updatedUser = await User.findById(teacher.userId);
+            const updatedUser = await User.findById(teacher._id);
             expect(updatedUser.username).toBe("UserOnly");
         });
 
@@ -498,17 +462,18 @@ describe("Teacher Routes", () => {
                 .send({ email: "useronly@example.com" })
                 .expect(200);
 
-            const updatedUser = await User.findById(teacher.userId);
+            const updatedUser = await User.findById(teacher._id);
             expect(updatedUser.email).toBe("useronly@example.com");
         });
 
         it("returns 500 when update fails", async () => {
-            vi.spyOn(Teacher, "findById").mockImplementationOnce(() => {
+            const { teacher } = await createTeacher({ password: hashedPassword });
+            vi.spyOn(User, "findOneAndUpdate").mockImplementationOnce(() => {
                 throw new Error("update failed");
             });
 
             const response = await request(app)
-                .put(`/api/teachers/${new mongoose.Types.ObjectId()}`)
+                .put(`/api/teachers/${teacher._id}`)
                 .set(buildAuthHeader("admin"))
                 .send({ subject: "Chemistry" })
                 .expect(500);
@@ -558,12 +523,13 @@ describe("Teacher Routes", () => {
         }, 15000);
 
         it("returns 500 when password update fails", async () => {
-            vi.spyOn(Teacher, "findById").mockImplementationOnce(() => {
+            const { teacher } = await createTeacher({ password: hashedPassword });
+            vi.spyOn(User, "findByIdAndUpdate").mockImplementationOnce(() => {
                 throw new Error("password update failed");
             });
 
             const response = await request(app)
-                .put(`/api/teachers/${new mongoose.Types.ObjectId()}/password`)
+                .put(`/api/teachers/${teacher._id}/password`)
                 .set(buildAuthHeader("admin"))
                 .send({ password: "NewPassword123!" })
                 .expect(500);
@@ -639,10 +605,8 @@ describe("Teacher Routes", () => {
                 assistantCourses: 1,
             });
 
-            const removedTeacher = await Teacher.findById(teacher._id);
-            const removedUser = await User.findById(user._id);
-            expect(removedTeacher).toBeNull();
-            expect(removedUser).toBeNull();
+            expect(String(teacher._id)).toBe(String(user._id));
+            expect(await User.findById(user._id)).toBeNull();
 
             const remaining = await Student.find({ teacherId: teacher._id });
             expect(remaining).toHaveLength(0);
@@ -673,19 +637,18 @@ describe("Teacher Routes", () => {
                 },
             });
 
-            const removedTeacher = await Teacher.findById(teacher._id);
-            const removedUser = await User.findById(user._id);
-            expect(removedTeacher).toBeNull();
-            expect(removedUser).toBeNull();
+            expect(String(teacher._id)).toBe(String(user._id));
+            expect(await User.findById(user._id)).toBeNull();
         });
 
         it("returns 500 when delete fails", async () => {
-            vi.spyOn(Teacher, "findById").mockImplementationOnce(() => {
+            const { teacher } = await createTeacher({ password: hashedPassword });
+            vi.spyOn(User, "findByIdAndDelete").mockImplementationOnce(() => {
                 throw new Error("delete failed");
             });
 
             const response = await request(app)
-                .delete(`/api/teachers/${new mongoose.Types.ObjectId()}`)
+                .delete(`/api/teachers/${teacher._id}`)
                 .set(buildAuthHeader("admin"))
                 .expect(500);
 

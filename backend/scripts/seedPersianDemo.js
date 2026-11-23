@@ -26,7 +26,6 @@ import path from "path";
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import User from "../src/models/User.js";
-import Teacher from "../src/models/Teacher.js";
 import Student from "../src/models/Student.js";
 import Course from "../src/models/Course.js";
 import CourseInstance from "../src/models/CourseInstance.js";
@@ -172,7 +171,8 @@ export async function removePreviousDemo() {
     const students = await Student.find({ email: { $in: emails } }).select("_id").lean();
     const studentIds = students.map((s) => s._id);
     const docs = await Document.find({ uploadedBy: { $in: userIds } }).select("filename").lean();
-    const teacherIds = (await Teacher.find({ userId: { $in: userIds } }).select("_id").lean()).map((t) => t._id);
+    // Teacher references hold the teacher's User id (#102).
+    const teacherIds = userIds;
     const templateIds = (await CourseTemplate.find({ description: DEMO_MARKER }).select("_id").lean()).map((t) => t._id);
     // Seeded instances, plus any made live during a demo with Cyrus/Xerxes or a Persepolis mall.
     const instances = await CourseInstance.find({
@@ -196,14 +196,15 @@ export async function removePreviousDemo() {
     const removed = {
         enrollments: (await StudentEnrollment.deleteMany({ $or: [{ studentId: { $in: studentIds } }, { courseInstanceId: { $in: instanceIds } }] })).deletedCount,
         courseInstances: (await CourseInstance.deleteMany({ _id: { $in: instanceIds } })).deletedCount,
-        // Only real Notification fields: studentId (Student) and teacher (Teacher id).
+        // Only real Notification fields: studentId (Student) and teacher (User id).
         notifications: (await Notification.deleteMany({ $or: [{ studentId: { $in: studentIds } }, { teacher: { $in: teacherIds } }] })).deletedCount,
         documents: (await Document.deleteMany({ uploadedBy: { $in: userIds } })).deletedCount,
         templates: (await CourseTemplate.deleteMany({ _id: { $in: templateIds } })).deletedCount,
         calendarEntries: calendar.entries,
         calendarEventsDeleted: calendar.deleted,
         students: (await Student.deleteMany({ _id: { $in: studentIds } })).deletedCount,
-        teachers: (await Teacher.deleteMany({ userId: { $in: userIds } })).deletedCount,
+        // Legacy rows from runs before #102 (the collection has no model any more).
+        teachers: (await mongoose.connection.db.collection("teachers").deleteMany({ userId: { $in: userIds } })).deletedCount,
         users: (await User.deleteMany({ _id: { $in: userIds } })).deletedCount,
     };
     return { removed, files: docs.map((d) => d.filename) };
@@ -242,8 +243,10 @@ export async function seedPersianDemo({ now = new Date(), uploadsDir = null } = 
             active: true,
             mustChangePassword: false,
             lastLoginAt: daysFromNow(-1, now),
+            teacherProfile: { subject: t.subject, colorCode: t.colorCode, createdAt: now },
         });
-        teachers[t.key] = await Teacher.create({ userId: teacherUsers[t.key]._id, subject: t.subject, colorCode: t.colorCode });
+        // The User is the teacher (#102).
+        teachers[t.key] = teacherUsers[t.key];
     }
     const cyrusUser = teacherUsers.cyrus;
 

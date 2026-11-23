@@ -6,11 +6,11 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import mongoose from "mongoose";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import CourseMatchingService from "../../src/utils/courseMatchingService.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const start = new Date("2026-11-02T00:00:00Z");
 const end = new Date("2027-01-11T00:00:00Z");
@@ -21,7 +21,7 @@ let course;
 
 const makeTeacher = async (name) => {
     const user = await User.create({ name, username: name, email: `${name.toLowerCase().replace(/\s+/g, ".")}@example.se`, password: "x".repeat(20), roles: ["teacher"] });
-    return Teacher.create({ userId: user._id, subject: "Svenska" });
+    return giveTeacherProfile(user._id, { subject: "Svenska" });
 };
 
 describe("CourseMatchingService.findOrCreateCourseInstance — shared kurskort", () => {

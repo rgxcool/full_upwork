@@ -1,7 +1,7 @@
 /**
  * GET /api/teachers/:id/profile: a teacher can open their OWN staff profile
  * (Filarkiv, Kurser, Elever) but not a colleague's; admins can open any.
- * `:id` is a Teacher id, so ownership goes through Teacher.userId.
+ * `:id` is the teacher's User id (#102): one id per person.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
@@ -9,8 +9,8 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const authFor = (user) => ({
     Authorization: `Bearer ${jwt.sign({ userId: String(user._id), role: user.roles[0], roles: user.roles }, process.env.JWT_SECRET)}`,
@@ -38,9 +38,9 @@ describe("GET /api/teachers/:id/profile — who may read a staff profile", () =>
             await mongoose.connection.collections[name].deleteMany({});
         }
         ownUser = await makeUser("Test Lärare", ["teacher"]);
-        ownTeacher = await Teacher.create({ userId: ownUser._id, subject: "Svenska" });
+        ownTeacher = await giveTeacherProfile(ownUser._id, { subject: "Svenska" });
         const colleagueUser = await makeUser("Test Kollega", ["teacher"]);
-        colleagueTeacher = await Teacher.create({ userId: colleagueUser._id, subject: "Engelska" });
+        colleagueTeacher = await giveTeacherProfile(colleagueUser._id, { subject: "Engelska" });
         admin = await makeUser("Test Admin", ["admin"]);
     });
 
@@ -54,9 +54,17 @@ describe("GET /api/teachers/:id/profile — who may read a staff profile", () =>
         expect(res.status).toBe(403);
     });
 
-    it("does not treat the teacher's User id as their Teacher id", async () => {
+    it("uses the teacher's User id as the profile id (#102)", async () => {
+        expect(String(ownTeacher._id)).toBe(String(ownUser._id));
         const res = await request(app).get(`/api/teachers/${ownUser._id}/profile`).set(authFor(ownUser));
-        expect(res.status).toBe(403);
+        expect(res.status).toBe(200);
+        expect(String(res.body.teacher._id)).toBe(String(ownUser._id));
+        expect(res.body.teacher.subject).toBe("Svenska");
+    });
+
+    it("returns 404 for a user without a teacher profile", async () => {
+        const res = await request(app).get(`/api/teachers/${admin._id}/profile`).set(authFor(admin));
+        expect(res.status).toBe(404);
     });
 
     it("lets an admin open any profile", async () => {
@@ -79,7 +87,7 @@ describe("GET /api/me/teacher — own Teacher id (used by \"Mitt filarkiv\")", (
             await mongoose.connection.collections[name].deleteMany({});
         }
         const user = await makeUser("Test Adminlärare", ["admin", "teacher"]);
-        const teacher = await Teacher.create({ userId: user._id, subject: "Svenska" });
+        const teacher = await giveTeacherProfile(user._id, { subject: "Svenska" });
 
         const res = await request(app).get("/api/me/teacher").set(authFor(user));
 

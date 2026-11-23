@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import mongoose from "mongoose";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
@@ -40,9 +39,10 @@ describe("scripts/seedPersianDemo", () => {
         const result = await seedPersianDemo({ now: NOW });
 
         const cyrusUser = await User.findOne({ email: TEACHERS[0].email });
-        const cyrus = await Teacher.findOne({ userId: cyrusUser._id });
-        const xerxes = await Teacher.findOne({ userId: (await User.findOne({ email: TEACHERS[1].email }))._id });
-        expect(cyrus.colorCode).toBe("#7B2CBF");
+        // Teachers are Users with a teacher profile; their User id is the teacher id (#102).
+        const cyrus = cyrusUser;
+        const xerxes = await User.findOne({ email: TEACHERS[1].email });
+        expect(cyrus.teacherProfile.colorCode).toBe("#7B2CBF");
 
         const sva = await CourseInstance.findById(result.instances.svaNow);
         expect(String(sva.responsibleTeacher)).toBe(String(cyrus._id));
@@ -170,7 +170,7 @@ describe("scripts/seedPersianDemo", () => {
         });
         const afterFirst = await counts();
         // An instance created live during the demo (no marker) is cleaned up too.
-        const cyrusTeacher = await Teacher.findOne({ userId: (await User.findOne({ email: TEACHERS[0].email }))._id });
+        const cyrusTeacher = await User.findOne({ email: TEACHERS[0].email });
         const liveInstance = await CourseInstance.create({
             mainCourseId: course._id, courseName: "Live", courseCode: "LIVE1", startDate: NOW,
             endDate: new Date(NOW.getTime() + 30 * 86400000), responsibleTeacher: cyrusTeacher._id,

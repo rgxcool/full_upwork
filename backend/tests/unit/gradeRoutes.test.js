@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("../../src/controllers/authController.js", () => ({
   authenticateUser: (req, res, next) => {
     const role = req.headers["x-user-role"] || "teacher";
-    req.user = { role, userId: "user123", name: "TestUser" };
+    req.user = { role, userId: "64b000000000000000000123", name: "TestUser" };
     next();
   },
 }));
@@ -76,12 +76,15 @@ vi.mock("../../src/models/Program.js", () => ({
     findById: vi.fn(),
   },
 }));
-vi.mock("../../src/models/Teacher.js", () => ({
-  __esModule: true,
-  default: {
-    findOne: vi.fn().mockResolvedValue({ _id: "teacher-1", userId: "user123" }),
-  },
-}));
+// The caller is a teacher User with a teacher profile; its id is the teacher id (#102).
+vi.mock("../../src/models/User.js", () => {
+  const teacherUser = { _id: "64b000000000000000000123", username: "TestUser" };
+  const chain = () => ({ select: () => ({ lean: () => Promise.resolve(teacherUser) }), lean: () => Promise.resolve(teacherUser) });
+  return {
+    __esModule: true,
+    default: { findOne: vi.fn(chain), findById: vi.fn(chain) },
+  };
+});
 vi.mock("../../src/models/AuditLog.js", () => ({
   __esModule: true,
   default: {
@@ -732,7 +735,7 @@ describe("PUT /grades/update-grade/:enrollmentId", () => {
     const enrollment = createEnrollmentRecord({
       courseInstanceId: {
         _id: "ci1",
-        responsibleTeacher: "teacher-1",
+        responsibleTeacher: "64b000000000000000000123",
       },
     });
     StudentEnrollment.findById.mockResolvedValueOnce(enrollment);
@@ -992,7 +995,7 @@ describe("Grading scales (/grades/grading-scale)", () => {
         expect.objectContaining({
           studentId: "s-1",
           enrollmentId: "en-1",
-          teacherId: "user123",
+          teacherId: "64b000000000000000000123",
           routedTo: "admin/systemadmin",
         })
       );

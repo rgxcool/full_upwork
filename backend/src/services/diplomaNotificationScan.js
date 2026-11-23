@@ -22,7 +22,7 @@
  *
  * Notification scoping mirrors GET /notifications:
  *   - admin/systemadmin see everything (except dropout)
- *   - teachers see `teacher` = Teacher._id
+ *   - teachers see `teacher` = the teacher's User id (#102)
  *   - students see `meta.studentUserId` = User email account (+ email delivery)
  */
 import logger from "../utils/logger.js";
@@ -125,8 +125,8 @@ async function createAdminNotification(type, data) {
 }
 
 /**
- * Create a teacher-facing notification. `teacher` = Teacher._id (the field
- * GET /notifications filters on); meta.teacherId = the teacher's User id.
+ * Create a teacher-facing notification. `teacher` (the field GET
+ * /notifications filters on) and meta.teacherId are both the teacher's User id (#102).
  * @returns {Promise<Notification|null>}
  */
 async function createTeacherNotification(type, data) {

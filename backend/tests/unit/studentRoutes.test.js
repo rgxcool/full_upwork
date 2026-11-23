@@ -127,10 +127,19 @@ vi.mock("../../src/utils/logger.js", () => ({
     default: loggerMock,
 }));
 
-const { TeacherMock } = vi.hoisted(() => ({
-    TeacherMock: {
+// #102: a teacher is a User with teacherProfile; Student.teacherId holds that User id.
+const { UserMock, userLookup, TEACHER_USER_ID } = vi.hoisted(() => ({
+    UserMock: {
         findOne: vi.fn(),
     },
+    // User.findOne(...).select(...).lean()
+    userLookup: (value) => ({ select: () => ({ lean: () => Promise.resolve(value) }) }),
+    TEACHER_USER_ID: "64b0000000000000000000aa",
+}));
+
+vi.mock("../../src/models/User.js", () => ({
+    __esModule: true,
+    default: UserMock,
 }));
 
 let StudentEnrollmentQuery;
@@ -186,7 +195,6 @@ vi.mock("mongoose", () => {
         findByIdAndDelete: vi.fn(),
     };
     const model = vi.fn((name) => {
-        if (name === "Teacher") return TeacherMock;
         if (name === "StudentEnrollment") return StudentEnrollmentMock;
         return undefined;
     });
@@ -196,6 +204,7 @@ vi.mock("mongoose", () => {
             Schema: schema,
             model,
             Types: types,
+            isValidObjectId: (value) => /^[0-9a-f]{24}$/i.test(String(value)),
         },
     };
 });
@@ -270,7 +279,7 @@ beforeEach(() => {
     maybeSendLarteametEmail.mockReset();
     maybeSendLarteametEmail.mockResolvedValue({ sent: true });
     updateAplStatusMock.mockReset();
-    TeacherMock.findOne.mockReset();
+    UserMock.findOne.mockReset();
     StudentEnrollmentQuery = {
         populate: vi.fn().mockReturnThis(),
         sort: vi.fn().mockReturnThis(),
@@ -305,8 +314,7 @@ describe("studentRoutes router", () => {
                 additionalInfo: "notes",
             },
         ]);
-        const req = { params: { teacherId: "teacher-1" }, user: { role: "teacher" } };
-        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-1" });
+        const req = { params: { teacherId: "teacher-1" }, user: { role: "teacher", userId: "teacher-1" } };
         const res = createRes();
 
         sendDropoutNotification.mockResolvedValue({ id: "notif" });
@@ -538,9 +546,9 @@ describe("studentRoutes router", () => {
     describe("GET /students", () => {
         it("returns 403 when teacher profile is missing", async () => {
             const handler = findRouteHandler("/students", "GET");
-            TeacherMock.findOne.mockResolvedValue(null);
+            UserMock.findOne.mockReturnValue(userLookup(null));
 
-            const req = { user: { role: "teacher", userId: "user-1" } };
+            const req = { user: { role: "teacher", userId: TEACHER_USER_ID } };
             const res = createRes();
 
             await handler(req, res);
@@ -553,7 +561,7 @@ describe("studentRoutes router", () => {
 
         it("returns enriched students and merges course/package entries", async () => {
             const handler = findRouteHandler("/students", "GET");
-            TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+            UserMock.findOne.mockReturnValue(userLookup({ _id: TEACHER_USER_ID }));
             const studentDoc = {
                 _id: "student-1",
                 education: [
@@ -587,7 +595,7 @@ describe("studentRoutes router", () => {
                 grade: "C",
                 notes: "note",
                 courseInstanceId: "ci-1",
-                teacherId: "teacher-123",
+                teacherId: TEACHER_USER_ID,
                 createdAt: new Date("2025-03-01"),
             };
             const packageEnrollment = {
@@ -600,7 +608,7 @@ describe("studentRoutes router", () => {
                 grade: "B",
                 notes: null,
                 courseInstanceId: null,
-                teacherId: "teacher-123",
+                teacherId: TEACHER_USER_ID,
                 createdAt: new Date("2025-03-03"),
             };
             const programEnrollment = {
@@ -613,7 +621,7 @@ describe("studentRoutes router", () => {
                 grade: "A",
                 notes: null,
                 courseInstanceId: null,
-                teacherId: "teacher-123",
+                teacherId: TEACHER_USER_ID,
                 createdAt: new Date("2025-01-05"),
             };
             StudentEnrollmentQuery.lean.mockResolvedValue([
@@ -626,16 +634,16 @@ describe("studentRoutes router", () => {
                 coursePackageName: "Full Package",
             });
 
-            const req = { user: { role: "teacher", userId: "user-1" } };
+            const req = { user: { role: "teacher", userId: TEACHER_USER_ID } };
         const res = createRes();
 
         await handler(req, res);
 
-        expect(TeacherMock.findOne).toHaveBeenCalledWith({
-            userId: "user-1",
-        });
+        expect(UserMock.findOne).toHaveBeenCalledWith(
+            expect.objectContaining({ _id: TEACHER_USER_ID })
+        );
             expect(Student.find).toHaveBeenCalledWith({
-                teacherId: "teacher-123",
+                teacherId: TEACHER_USER_ID,
             });
             expect(StudentEnrollmentMock.find).toHaveBeenCalledWith({
                 studentId: studentDoc._id,
@@ -656,7 +664,7 @@ describe("studentRoutes router", () => {
 
         it("filters out enrollments without recognized education references", async () => {
             const handler = findRouteHandler("/students", "GET");
-            TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+            UserMock.findOne.mockReturnValue(userLookup({ _id: TEACHER_USER_ID }));
             const studentDoc = { _id: "student-null", education: [] };
             Student.find.mockReturnValue({
                 lean: vi.fn().mockResolvedValue([studentDoc]),
@@ -675,7 +683,7 @@ describe("studentRoutes router", () => {
                     status: "active",
                     grade: "C",
                     courseInstanceId: "ci-1",
-                    teacherId: "teacher-123",
+                    teacherId: TEACHER_USER_ID,
                     createdAt: new Date("2025-03-01"),
                 },
                 {
@@ -689,7 +697,7 @@ describe("studentRoutes router", () => {
             ]);
 
             const res = createRes();
-            await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+            await handler({ user: { role: "teacher", userId: TEACHER_USER_ID } }, res);
 
             const responseStudents = res.json.mock.calls[0][0];
             expect(responseStudents).toHaveLength(1);
@@ -703,12 +711,12 @@ describe("studentRoutes router", () => {
 
         it("handles Student.find errors gracefully", async () => {
             const handler = findRouteHandler("/students", "GET");
-            TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+            UserMock.findOne.mockReturnValue(userLookup({ _id: TEACHER_USER_ID }));
             Student.find.mockReturnValue({
                 lean: vi.fn().mockRejectedValue(new Error("boom")),
             });
 
-            const req = { user: { role: "teacher", userId: "user-1" } };
+            const req = { user: { role: "teacher", userId: TEACHER_USER_ID } };
             const res = createRes();
 
         await handler(req, res);
@@ -719,7 +727,7 @@ describe("studentRoutes router", () => {
 
         it("synthesizes a course package when enrollments reference packages but no package entries exist yet", async () => {
         const handler = findRouteHandler("/students", "GET");
-        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+        UserMock.findOne.mockReturnValue(userLookup({ _id: TEACHER_USER_ID }));
         const studentDoc = { _id: "student-synth", education: [] };
         const studentFindQuery = {
             lean: vi.fn().mockResolvedValue([studentDoc]),
@@ -736,7 +744,7 @@ describe("studentRoutes router", () => {
             grade: "B",
             notes: "package notes",
             courseInstanceId: null,
-            teacherId: "teacher-123",
+            teacherId: TEACHER_USER_ID,
             createdAt: new Date("2025-04-01"),
         };
         StudentEnrollmentQuery.lean.mockResolvedValue([enrollmentWithPackage]);
@@ -748,7 +756,7 @@ describe("studentRoutes router", () => {
         }));
 
         const res = createRes();
-        await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+        await handler({ user: { role: "teacher", userId: TEACHER_USER_ID } }, res);
 
         expect(CoursePackage.findById).toHaveBeenCalledWith("pkg-synth");
         const responseStudents = res.json.mock.calls[0][0];
@@ -761,7 +769,7 @@ describe("studentRoutes router", () => {
 
     it("dedupes CoursePackage entries by refId so APL dates follow enrollment dates", async () => {
         const handler = findRouteHandler("/students", "GET");
-        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+        UserMock.findOne.mockReturnValue(userLookup({ _id: TEACHER_USER_ID }));
         const studentDoc = {
             _id: "student-apl",
             education: [
@@ -790,13 +798,13 @@ describe("studentRoutes router", () => {
             grade: null,
             notes: null,
             courseInstanceId: null,
-            teacherId: "teacher-123",
+            teacherId: TEACHER_USER_ID,
             createdAt: new Date("2025-03-01"),
         };
         StudentEnrollmentQuery.lean.mockResolvedValue([packageEnrollment]);
 
         const res = createRes();
-        await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+        await handler({ user: { role: "teacher", userId: TEACHER_USER_ID } }, res);
 
         const responseStudents = res.json.mock.calls[0][0];
         const packageEntries = responseStudents[0].education.filter(
@@ -810,7 +818,7 @@ describe("studentRoutes router", () => {
 
     it("auto-sets APL status to RED when the APL period ends within 3 weeks", async () => {
         const handler = findRouteHandler("/students", "GET");
-        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+        UserMock.findOne.mockReturnValue(userLookup({ _id: TEACHER_USER_ID }));
         const soon = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
         const studentDoc = {
             _id: "student-auto-red",
@@ -832,7 +840,7 @@ describe("studentRoutes router", () => {
         StudentEnrollmentQuery.lean.mockResolvedValue([]);
 
         const res = createRes();
-        await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+        await handler({ user: { role: "teacher", userId: TEACHER_USER_ID } }, res);
 
         const responseStudents = res.json.mock.calls[0][0];
         expect(responseStudents[0].aplStatus).toBe("RED");
@@ -846,7 +854,7 @@ describe("studentRoutes router", () => {
 
     it("keeps the stored APL status when the APL period is far in the future", async () => {
         const handler = findRouteHandler("/students", "GET");
-        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-123" });
+        UserMock.findOne.mockReturnValue(userLookup({ _id: TEACHER_USER_ID }));
         const studentDoc = {
             _id: "student-not-red",
             aplStatus: "YELLOW",
@@ -867,7 +875,7 @@ describe("studentRoutes router", () => {
         StudentEnrollmentQuery.lean.mockResolvedValue([]);
 
         const res = createRes();
-        await handler({ user: { role: "teacher", userId: "user-1" } }, res);
+        await handler({ user: { role: "teacher", userId: TEACHER_USER_ID } }, res);
 
         const responseStudents = res.json.mock.calls[0][0];
         expect(responseStudents[0].aplStatus).toBe("YELLOW");
@@ -2054,7 +2062,7 @@ describe("PUT /student/:id", () => {
             education: [],
         };
         Student.findById.mockResolvedValue(studentDoc);
-        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-new" });
+        UserMock.findOne.mockReturnValue(userLookup({ _id: "teacher-new" }));
         const existingEnrollment = {
             _id: "en-1",
             grade: "F",
@@ -2105,24 +2113,21 @@ describe("PUT /student/:id", () => {
             education: [],
         };
         Student.findById.mockResolvedValue(studentDoc);
-        TeacherMock.findOne.mockResolvedValue({ _id: "teacher-linked" });
+        UserMock.findOne.mockReturnValue(userLookup({ _id: "teacher-linked" }));
         Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
         StudentEnrollmentQuery.lean.mockResolvedValue([]);
 
         const res = createRes();
-        global.Teacher = TeacherMock;
-        try {
-            await handler(
-                { params: { id: "put-teacher" }, body: { name: "Updated Student" } },
-                res
-            );
-        } finally {
-            delete global.Teacher;
-        }
+        await handler(
+            { params: { id: "put-teacher" }, body: { name: "Updated Student" } },
+            res
+        );
 
-        expect(TeacherMock.findOne).toHaveBeenCalledWith({
-            name: "Linked Teacher",
-        });
+        expect(UserMock.findOne).toHaveBeenCalledWith(
+            expect.objectContaining({
+                $or: [{ name: "Linked Teacher" }, { username: "Linked Teacher" }],
+            })
+        );
         expect(Student.findByIdAndUpdate).toHaveBeenCalledWith(
             "put-teacher",
             expect.objectContaining({
@@ -2177,7 +2182,7 @@ describe("PUT /student/:id", () => {
             });
         StudentEnrollmentMock.findByIdAndDelete.mockResolvedValue(enrollment);
         Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
-        TeacherMock.findOne.mockResolvedValue(null);
+        UserMock.findOne.mockReturnValue(userLookup(null));
 
         const res = createRes();
         await handler(
@@ -2309,7 +2314,7 @@ describe("PUT /student/:id", () => {
                 sort: vi.fn().mockResolvedValue([]),
             });
         Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
-        TeacherMock.findOne.mockResolvedValue(null);
+        UserMock.findOne.mockReturnValue(userLookup(null));
 
         const res = createRes();
         await handler(
@@ -2351,7 +2356,7 @@ describe("PUT /student/:id", () => {
                 sort: vi.fn().mockResolvedValue([]),
             });
         Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
-        TeacherMock.findOne.mockResolvedValue(null);
+        UserMock.findOne.mockReturnValue(userLookup(null));
         CourseMatchingServiceMock.default.processStudentEducation.mockResolvedValue({ enrollments: [] });
 
         const req = {
@@ -2405,7 +2410,7 @@ describe("PUT /student/:id", () => {
                 sort: vi.fn().mockResolvedValue([]),
             });
         Student.findByIdAndUpdate.mockResolvedValue(studentDoc);
-        TeacherMock.findOne.mockResolvedValue(null);
+        UserMock.findOne.mockReturnValue(userLookup(null));
         CourseMatchingServiceMock.default.processStudentEducation.mockRejectedValueOnce(
             new Error("enroll-fail")
         );
@@ -2448,15 +2453,10 @@ describe("PUT /student/:id", () => {
             populate: vi.fn().mockReturnThis(),
             sort: vi.fn().mockResolvedValue([]),
         });
-        TeacherMock.findOne.mockResolvedValue(null);
+        UserMock.findOne.mockReturnValue(userLookup(null));
         const res = createRes();
 
-        global.Teacher = TeacherMock;
-        try {
-            await handler({ params: { id: "put-warn" }, body: {} }, res);
-        } finally {
-            delete global.Teacher;
-        }
+        await handler({ params: { id: "put-warn" }, body: {} }, res);
 
         expect(loggerMock.warn).toHaveBeenCalled();
     });

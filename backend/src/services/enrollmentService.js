@@ -9,6 +9,7 @@ import CourseInstance from "../models/CourseInstance.js";
 import Course from "../models/Course.js";
 import User from "../models/User.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
+import { TEACHER_POPULATE_FIELDS } from "../utils/teacherProfile.js";
 
 export const VALID_ENROLLMENT_STATUSES = [
     "enrolled",
@@ -57,10 +58,7 @@ export const buildCourseCards = async (studentId, { applyStudentVisibility = fal
         .populate({
             path: "courseInstanceId",
             populate: [
-                {
-                    path: "responsibleTeacher",
-                    populate: { path: "userId", select: "username" },
-                },
+                { path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS },
                 { path: "mainCourseId" },
             ],
         })
@@ -146,7 +144,7 @@ export const buildCourseCards = async (studentId, { applyStudentVisibility = fal
                     enrollment.mainCourseId?.courseExtent ||
                     "",
                 responsibleTeacher:
-                    instance?.responsibleTeacher?.userId?.username ||
+                    instance?.responsibleTeacher?.username ||
                     instance?.responsibleTeacher?.name ||
                     instance?.responsibleTeacher?.email ||
                     "",

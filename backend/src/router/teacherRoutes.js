@@ -1,81 +1,23 @@
 import express from "express";
 const router = express.Router();
-import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
 import bcrypt from "bcrypt";
-import crypto from "crypto";
 import { isAuthenticated } from "../middleware/auth.js";
 import { can } from "../middleware/authorization.js";
 import logger from "../utils/logger.js";
+import {
+    cleanPhoneNumbers,
+    findTeacherUser,
+    generateStrongPassword,
+    getNextAvailableColor,
+    listTeacherUsers,
+    teacherUserFilter,
+    toTeacherDTO,
+} from "../utils/teacherProfile.js";
 
-// Predefined color list for teacher profiles
-const TEACHER_COLORS = [
-    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', 
-    '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', 
-    '#ffffff', '#000000'
-];
-
-/**
- * Get the next available color from the predefined list
- * Ensures each teacher gets a unique color
- */
-async function getNextAvailableColor() {
-    try {
-        // Get all existing teachers and their colors
-        const existingTeachers = await Teacher.find({}, 'colorCode');
-        const usedColors = new Set(existingTeachers.map(t => t.colorCode).filter(Boolean));
-        
-        // Find the first color in the list that's not used
-        for (const color of TEACHER_COLORS) {
-            if (!usedColors.has(color)) {
-                return color;
-            }
-        }
-        
-        // If all colors are used, cycle through the list
-        // This shouldn't happen with 22 colors, but handle it gracefully
-        const index = existingTeachers.length % TEACHER_COLORS.length;
-        return TEACHER_COLORS[index];
-    } catch (error) {
-        logger.error({ err: error }, "Error getting next available color")
-        // Fallback to first color if there's an error
-        return TEACHER_COLORS[0];
-    }
-}
-
-// Function to generate a strong random password
-function generateStrongPassword(length = 12) {
-    const charset =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
-    let password = "";
-
-    // Ensure at least one character from each category
-    const categories = [
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ", // uppercase
-        "abcdefghijklmnopqrstuvwxyz", // lowercase
-        "0123456789", // numbers
-        "!@#$%^&*()_+-=[]{}|;:,.<>?", // special characters
-    ];
-
-    // Add one character from each category
-    categories.forEach((category) => {
-        password += category[crypto.randomInt(0, category.length)];
-    });
-
-    // Fill the rest with random characters
-    for (let i = password.length; i < length; i++) {
-        password += charset[crypto.randomInt(0, charset.length)];
-    }
-
-    // Shuffle the password to randomize the order
-    return password
-        .split("")
-        .sort(() => crypto.randomInt(0, 3) - 1)
-        .join("");
-}
 // DEBUG: Testa populering av userId för alla lärare
 router.get(
   "/debug-teachers",
@@ -83,20 +25,13 @@ router.get(
   can("teachers:read"),
   async (req, res) => {
     try {
-      const teachers = await Teacher.find().populate("userId", "username email roles");
+      const teachers = await listTeacherUsers();
 
       const results = teachers.map((t) => ({
         teacherId: t._id,
-        subject: t.subject,
-        colorCode: t.colorCode,
-        user: t.userId
-          ? {
-              id: t.userId._id,
-              username: t.userId.username,
-              email: t.userId.email,
-              roles: t.userId.roles,
-            }
-          : null,
+        subject: t.teacherProfile?.subject,
+        colorCode: t.teacherProfile?.colorCode,
+        user: { id: t._id, username: t.username, email: t.email, roles: t.roles },
       }));
 
       res.json({ success: true, count: results.length, teachers: results });
@@ -118,13 +53,12 @@ router.get(
             if (!roles.includes("teacher")) {
                 return res.status(403).json({ error: "Only teachers can access this endpoint" });
             }
-            const teacher = await Teacher.findOne({ userId: req.user.userId })
-                .populate("userId", "username email")
-                .select("_id userId subject colorCode");
+            // The teacher's own User, which is also their teacher id (#102).
+            const teacher = await findTeacherUser(req.user.userId, { lean: true });
             if (!teacher) {
                 return res.status(404).json({ error: "Teacher profile not found" });
             }
-            res.status(200).json(teacher);
+            res.status(200).json(toTeacherDTO(teacher));
         } catch (error) {
             logger.error({ err: error.message }, "Error fetching teacher profile")
             res.status(500).json({ error: "Failed to fetch teacher profile." });
@@ -139,10 +73,8 @@ router.get(
     can("teachers:read"),
     async (req, res) => {
         try {
-            const teachers = await Teacher.find()
-                .populate("userId", "username email")
-                .sort({ createdAt: -1 });
-            res.status(200).json(teachers);
+            const teachers = await listTeacherUsers();
+            res.status(200).json(teachers.map(toTeacherDTO));
         } catch (error) {
             logger.error({ err: error.message }, "Error fetching teachers")
             res.status(500).json({ error: "Failed to fetch teachers." });
@@ -190,30 +122,20 @@ router.post(
             }
 
             // Create new User
-            const user = new User({
+            const savedUser = await User.create({
                 username,
                 email,
                 password: hashedPassword,
                 roles: ["teacher"],
                 mustChangePassword: !generatePassword,
+                teacherProfile: {
+                    colorCode: colorCode || (await getNextAvailableColor()),
+                    subject: (subject || "").trim(),
+                    phoneNumbers: cleanPhoneNumbers(phoneNumbers) || [],
+                },
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
-
-            const savedUser = await user.save();
-
-            // Create new Teacher linked to the User
-            const teacherColor = colorCode || await getNextAvailableColor();
-            const teacher = new Teacher({
-                userId: savedUser._id,
-                colorCode: teacherColor,
-                subject: (subject || "").trim(),
-                phoneNumbers: Array.isArray(phoneNumbers)
-                    ? phoneNumbers.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => p.trim())
-                    : [],
-            });
-
-            const savedTeacher = await teacher.save();
 
             // Return success with password if generated
             const response = {
@@ -226,10 +148,11 @@ router.post(
                         email: savedUser.email,
                         roles: savedUser.roles,
                     },
+                    // Same id as the user since #102.
                     teacher: {
-                        id: savedTeacher._id,
-                        subject: savedTeacher.subject,
-                        colorCode: savedTeacher.colorCode,
+                        id: savedUser._id,
+                        subject: savedUser.teacherProfile.subject,
+                        colorCode: savedUser.teacherProfile.colorCode,
                     },
                 },
             };
@@ -272,32 +195,27 @@ router.post("/teacher", isAuthenticated, can("teachers:create"), async (req, res
         const hashedPassword = await bcrypt.hash(plainPassword, 12);
 
         // Create new User
-        const user = new User({
+        const savedUser = await User.create({
             username,
             email,
             password: hashedPassword,
             roles: ["teacher"],
             mustChangePassword: !generatePassword,
+            teacherProfile: {
+                colorCode: colorCode || (await getNextAvailableColor()),
+                subject: subject || "Övrigt",
+                phoneNumbers: cleanPhoneNumbers(phoneNumbers) || [],
+            },
         });
-        const savedUser = await user.save();
 
-        // Create new Teacher linked to the User
-        const teacherColor = colorCode || await getNextAvailableColor();
-        const teacher = new Teacher({
-            userId: savedUser._id,
-            colorCode: teacherColor,
-            subject: subject || "Övrigt", // Default subject if not provided
-            phoneNumbers: Array.isArray(phoneNumbers)
-                ? phoneNumbers.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => p.trim())
-                : [],
-        });
-        const savedTeacher = await teacher.save();
-
+        // Never echo the password hash back.
+        const userWithoutPassword = savedUser.toObject();
+        delete userWithoutPassword.password;
         res.status(201).json({
             message: "Teacher created successfully.",
             data: {
-                user: savedUser,
-                teacher: savedTeacher,
+                user: userWithoutPassword,
+                teacher: toTeacherDTO(savedUser),
             },
             password: plainPassword,
         });
@@ -317,41 +235,29 @@ router.put(
             const { id } = req.params;
             const { username, email, subject, colorCode, phoneNumbers } = req.body;
 
-            // Find teacher
-            const teacher = await Teacher.findById(id).populate("userId");
+            const teacher = await findTeacherUser(id, { select: "_id" });
             if (!teacher) {
                 return res.status(404).json({ error: "Teacher not found." });
             }
 
-            // Update user information
-            if (username || email) {
-                const updateData = {};
-                if (username) updateData.username = username;
-                if (email) updateData.email = email;
+            const update = {};
+            if (username) update.username = username;
+            if (email) update.email = email;
+            if (subject) update["teacherProfile.subject"] = subject;
+            if (colorCode) update["teacherProfile.colorCode"] = colorCode;
+            const phones = cleanPhoneNumbers(phoneNumbers);
+            if (phones) update["teacherProfile.phoneNumbers"] = phones;
 
-                await User.findByIdAndUpdate(teacher.userId._id, updateData);
-            }
-
-            // Update teacher information
-            const teacherUpdateData = {};
-            if (subject) teacherUpdateData.subject = subject;
-            if (colorCode) teacherUpdateData.colorCode = colorCode;
-            if (Array.isArray(phoneNumbers)) {
-                teacherUpdateData.phoneNumbers = phoneNumbers
-                    .filter((p) => typeof p === "string" && p.trim() !== "")
-                    .map((p) => p.trim());
-            }
-
-            const updatedTeacher = await Teacher.findByIdAndUpdate(
-                id,
-                teacherUpdateData,
-                { returnDocument: 'after' }
-            ).populate("userId", "username email");
+            const updated = await User.findOneAndUpdate(
+                teacherUserFilter({ _id: teacher._id }),
+                { $set: update },
+                { returnDocument: "after" }
+            ).lean();
 
             res.json({
                 success: true,
                 message: "Teacher updated successfully",
-                teacher: updatedTeacher,
+                teacher: toTeacherDTO(updated),
             });
         } catch (error) {
             logger.error({ err: error.message }, "Error updating teacher")
@@ -374,17 +280,13 @@ router.put(
                 return res.status(400).json({ error: "Password is required." });
             }
 
-            // Find teacher
-            const teacher = await Teacher.findById(id).populate("userId");
+            const teacher = await findTeacherUser(id, { select: "_id" });
             if (!teacher) {
                 return res.status(404).json({ error: "Teacher not found." });
             }
 
-            // Hash new password
             const hashedPassword = await bcrypt.hash(password, 12);
-
-            // Update password
-            await User.findByIdAndUpdate(teacher.userId._id, {
+            await User.findByIdAndUpdate(teacher._id, {
                 password: hashedPassword,
                 updatedAt: new Date(),
             });
@@ -437,19 +339,15 @@ router.delete(
         try {
             const { id } = req.params;
 
-            // Find teacher
-            const teacher = await Teacher.findById(id).populate("userId");
+            const teacher = await findTeacherUser(id, { select: "_id" });
             if (!teacher) {
                 return res.status(404).json({ error: "Teacher not found." });
             }
 
             // Cascade: unassign the departing teacher from all students,
             // enrollments and course instances before deleting the account.
-            const unassigned = await unassignTeacherFromAll(id);
-
-            // Delete teacher and user
-            await Teacher.findByIdAndDelete(id);
-            await User.findByIdAndDelete(teacher.userId._id);
+            const unassigned = await unassignTeacherFromAll(teacher._id);
+            await User.findByIdAndDelete(teacher._id);
 
             res.json({
                 success: true,
@@ -489,18 +387,12 @@ router.put(
 /**
  * Staff profile read access: staff with "teachers:read" (admin/systemadmin) see any
  * profile; a teacher may open their OWN profile (Filarkiv, courses, students), which
- * the frontend route already offers. `:id` is a Teacher id, so it is resolved to its
- * User before comparing (CLAUDE.md §5).
+ * the frontend route already offers. `:id` is the teacher's User id (#102).
  */
 const canReadStaffProfile = async (req, res, next) => {
     const roles = Array.isArray(req.user?.roles) && req.user.roles.length ? req.user.roles : [req.user?.role];
-    if (roles.includes("teacher")) {
-        try {
-            const teacher = await Teacher.findById(req.params.id).select("userId").lean();
-            if (teacher && String(teacher.userId) === String(req.user.userId)) return next();
-        } catch {
-            // Invalid id: fall through to the normal permission check (403).
-        }
+    if (roles.includes("teacher") && req.user?.userId && String(req.params.id) === String(req.user.userId)) {
+        return next();
     }
     return can("teachers:read")(req, res, next);
 };
@@ -514,8 +406,7 @@ router.get(
         try {
             const { id } = req.params;
 
-            const teacher = await Teacher.findById(id)
-                .populate("userId", "username email roles onVacation vacationStart vacationEnd vacationNote");
+            const teacher = await findTeacherUser(id, { lean: true });
             if (!teacher) {
                 return res.status(404).json({ error: "Teacher not found." });
             }
@@ -571,13 +462,7 @@ router.get(
                 : 0;
 
             res.json({
-                teacher: {
-                    _id: teacher._id,
-                    subject: teacher.subject,
-                    colorCode: teacher.colorCode,
-                    phoneNumbers: teacher.phoneNumbers,
-                    user: teacher.userId,
-                },
+                teacher: (({ userId: user, ...dto }) => ({ ...dto, user }))(toTeacherDTO(teacher)),
                 activeCourses,
                 completedCourses,
                 totalStudents,
@@ -654,7 +539,7 @@ router.put(
             const { id } = req.params;
             const { onVacation, vacationStart, vacationEnd, vacationNote } = req.body;
 
-            const teacher = await Teacher.findById(id).populate("userId");
+            const teacher = await findTeacherUser(id, { select: "_id" });
             if (!teacher) {
                 return res.status(404).json({ error: "Teacher not found." });
             }
@@ -662,7 +547,7 @@ router.put(
             // Only admin or the teacher themselves can update vacation
             const userRoles = req.user.roles || (req.user.role ? [req.user.role] : []);
             const isAdmin = userRoles.some(r => ["admin", "systemadmin", "tester"].includes(r));
-            const isSelf = req.user.userId?.toString() === teacher.userId._id.toString();
+            const isSelf = req.user.userId?.toString() === teacher._id.toString();
 
             if (!isAdmin && !isSelf) {
                 return res.status(403).json({ error: "You can only update your own vacation." });
@@ -690,9 +575,9 @@ router.put(
                 updateData.vacationNote = "";
             }
 
-            await User.findByIdAndUpdate(teacher.userId._id, { $set: updateData });
+            await User.findByIdAndUpdate(teacher._id, { $set: updateData });
 
-            const updatedUser = await User.findById(teacher.userId._id)
+            const updatedUser = await User.findById(teacher._id)
                 .select("username email roles onVacation vacationStart vacationEnd vacationNote");
 
             res.json({
@@ -717,26 +602,26 @@ router.put(
             const { id } = req.params;
             const { subject, phoneNumbers } = req.body;
 
-            const teacher = await Teacher.findById(id).populate("userId");
+            const teacher = await findTeacherUser(id, { select: "_id" });
             if (!teacher) {
                 return res.status(404).json({ error: "Teacher not found." });
             }
 
             const updateData = {};
-            if (subject !== undefined) updateData.subject = subject;
-            if (Array.isArray(phoneNumbers)) {
-                updateData.phoneNumbers = phoneNumbers
-                    .filter(p => typeof p === "string" && p.trim() !== "")
-                    .map(p => p.trim());
-            }
+            if (subject !== undefined) updateData["teacherProfile.subject"] = subject;
+            const phones = cleanPhoneNumbers(phoneNumbers);
+            if (phones) updateData["teacherProfile.phoneNumbers"] = phones;
 
-            const updatedTeacher = await Teacher.findByIdAndUpdate(id, updateData, { returnDocument: 'after' })
-                .populate("userId", "username email roles onVacation vacationStart vacationEnd vacationNote");
+            const updated = await User.findOneAndUpdate(
+                teacherUserFilter({ _id: teacher._id }),
+                { $set: updateData },
+                { returnDocument: "after" }
+            ).lean();
 
             res.json({
                 success: true,
                 message: "Profile updated.",
-                teacher: updatedTeacher,
+                teacher: toTeacherDTO(updated),
             });
         } catch (error) {
             logger.error({ err: error }, "Error updating teacher profile")
