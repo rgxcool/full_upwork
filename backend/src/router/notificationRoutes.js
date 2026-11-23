@@ -2,7 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import Notification from "../models/Notification.js";
 import ActionPlan from "../models/ActionPlan.js";
-import Teacher from "../models/Teacher.js";
+import { findTeacherUser } from "../utils/teacherProfile.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
 import logger from "../utils/logger.js";
@@ -31,9 +31,8 @@ async function isUserAuthorizedForNotification(req, note) {
   }
 
   if (role === "teacher") {
-    const teacher = await Teacher.findOne({ userId });
-    if (!teacher) return false;
-    return String(note.teacher || "") === String(objectId(teacher._id));
+    // Notification.teacher is the teacher's User id (#102).
+    return String(note.teacher || "") === userIdStr;
   }
 
   if (role === "admin" || role === "systemadmin") {
@@ -102,24 +101,17 @@ router.get("/notifications", authenticateUser, async (req, res) => {
     
     // If user is a teacher, filter notifications by their teacherId
     if (req.user.role === "teacher") {
-      // Find the teacher record for this user
-      const teacher = await Teacher.findOne({ userId: req.user.userId });
+      // Notification.teacher is the teacher's User id (#102).
+      const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
       
       if (!teacher) {
-        logger.warn({ userId: req.user.userId, name: req.user.name || req.user.username }, "No Teacher record found for user")
+        logger.warn({ userId: req.user.userId }, "No teacher profile found for user")
         return res.status(403).json({ error: "Teacher profile not found" });
       }
       
-      // Filter notifications by this teacher's ID - ensure it's an ObjectId
-      const mongoose = (await import("mongoose")).default;
-      // Convert teacher._id to ObjectId for consistent comparison
-      const teacherObjectId = mongoose.Types.ObjectId.isValid(teacher._id) 
-        ? new mongoose.Types.ObjectId(teacher._id) 
-        : teacher._id;
+      query.teacher = teacher._id;
       
-      query.teacher = teacherObjectId;
-      
-      logger.debug({ teacherId: teacher._id.toString(), userId: req.user.userId }, "Teacher fetching notifications")
+      logger.debug({ teacherId: teacher._id.toString() }, "Teacher fetching notifications")
       logger.debug({ queryTeacher: query.teacher.toString(), queryTeacherType: query.teacher.constructor.name, query }, "Query teacher details")
       
       // Debug: Check all dropout notifications to see what teacher IDs they have

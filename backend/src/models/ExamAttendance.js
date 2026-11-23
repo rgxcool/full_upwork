@@ -6,7 +6,7 @@ const examAttendanceSchema = new mongoose.Schema(
         examDate: { type: Date, required: true },
         courseName: { type: String, required: true },
         courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
-        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', required: true },
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
         
         // Student details
         studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },

@@ -5,6 +5,7 @@ import { buildCertificateHtml, htmlToPdfBuffer, readPdfBuffer } from "../service
 import { getSettingsSnapshot, getUserRoles } from "../services/certificateService.js";
 import { CertificateRecord, CertificateTemplate } from "../models/certificateModel.js";
 import logger from "../utils/logger.js";
+import { TEACHER_POPULATE_FIELDS } from "../utils/teacherProfile.js";
 
 const STAFF_ROLES = [
     ROLES.SYSTEMADMIN,
@@ -54,10 +55,7 @@ export const getStudyCertificatePdf = async (req, res) => {
     try {
         const enrollment = await StudentEnrollment.findById(req.params.enrollmentId)
             .populate("mainCourseId", "courseName courseCode")
-            .populate({
-                path: "teacherId",
-                populate: { path: "userId", select: "username" },
-            })
+            .populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS })
             .populate("studentId", "name personalNumber email");
 
         if (!enrollment) {
@@ -94,7 +92,7 @@ export const getStudyCertificatePdf = async (req, res) => {
                 periodStart: enrollment.startDate,
                 periodEnd: enrollment.endDate,
                 completedAt: enrollment.completedAt,
-                teacherName: enrollment.teacherId?.userId?.username || "",
+                teacherName: enrollment.teacherId?.username || "",
                 certificateNumber: enrollment.completionCertificate || "",
             },
             ...settings,
@@ -138,10 +136,7 @@ export const generateDiplomaPdf = async (req, res) => {
     try {
         const enrollment = await StudentEnrollment.findById(req.params.enrollmentId)
             .populate("mainCourseId", "courseName courseCode")
-            .populate({
-                path: "teacherId",
-                populate: { path: "userId", select: "username" },
-            })
+            .populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS })
             .populate("studentId", "name personalNumber email aplStatus")
             .populate("coursePackageId");
 
@@ -276,7 +271,7 @@ export const generateDiplomaPdf = async (req, res) => {
                 periodEnd: enrollment.endDate,
                 completedAt: enrollment.completedAt,
                 grade: enrollment.grade || "",
-                teacherName: enrollment.teacherId?.userId?.username || "",
+                teacherName: enrollment.teacherId?.username || "",
                 certificateNumber: enrollment.completionCertificate || "",
             },
             ...settings,

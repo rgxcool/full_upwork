@@ -5,13 +5,13 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import TeacherScheduleParameters from "../../src/models/TeacherScheduleParameters.js";
 import AuditLog from "../../src/models/AuditLog.js";
 import {
     connectTestDatabase,
     disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const VALID_OFFSETS = [0, 1, 2, 3, 4];
 
@@ -44,7 +44,6 @@ describe("teacherScheduleParameterRoutes", () => {
         await Promise.all([
             TeacherScheduleParameters.deleteMany({}),
             User.deleteMany({}),
-            Teacher.deleteMany({}),
             AuditLog.deleteMany({}),
         ]);
 
@@ -64,10 +63,7 @@ describe("teacherScheduleParameterRoutes", () => {
             password: hashed,
             roles: ["teacher"],
         });
-        const teacher = await Teacher.create({
-            userId: teacherUser._id,
-            subject: "Matematik",
-        });
+        const teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
         teacherId = teacher._id;
     });
 

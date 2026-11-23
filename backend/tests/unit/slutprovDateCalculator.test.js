@@ -1,26 +1,27 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 
 vi.mock("../../src/utils/logger.js", () => ({
     __esModule: true,
     default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const h = vi.hoisted(() => ({
-    teacherModel: { findById: vi.fn() },
-}));
-
-vi.mock("../../src/models/Teacher.js", () => ({ default: h.teacherModel }));
-
+import mongoose from "mongoose";
 import {
     calculateSlutprovDate,
     hasAutomaticSlutprovRule,
 } from "../../src/utils/slutprovDateCalculator.js";
-
-const teacherQuery = (result) => ({
-    populate: vi.fn().mockResolvedValue(result),
-});
+import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { createTeacherUser } from "../helpers/teacherFixture.js";
 
 describe("slutprovDateCalculator", () => {
+    beforeAll(async () => {
+        await connectTestDatabase();
+    }, 60000);
+
+    afterAll(async () => {
+        await disconnectTestDatabase();
+    }, 60000);
+
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -28,50 +29,42 @@ describe("slutprovDateCalculator", () => {
     describe("calculateSlutprovDate", () => {
         it("returns null for missing inputs", async () => {
             expect(await calculateSlutprovDate(null, new Date())).toBeNull();
-            expect(await calculateSlutprovDate({ userId: { username: "eva" } }, null)).toBeNull();
+            expect(await calculateSlutprovDate({ username: "eva" }, null)).toBeNull();
         });
 
         it("returns null when the username cannot be resolved", async () => {
-            h.teacherModel.findById.mockReturnValue(teacherQuery(null));
+            // Unknown and invalid ids: no User, no username, no rule.
             expect(
-                await calculateSlutprovDate({ _id: "t-missing" }, new Date("2026-12-18"))
+                await calculateSlutprovDate({ _id: new mongoose.Types.ObjectId() }, new Date("2026-12-18"))
             ).toBeNull();
-            expect(h.teacherModel.findById).toHaveBeenCalledWith("t-missing");
+            expect(await calculateSlutprovDate({ _id: "t-missing" }, new Date("2026-12-18"))).toBeNull();
         });
 
         it("returns null when the teacher has no matching rule", async () => {
             const result = await calculateSlutprovDate(
-                { userId: { username: "per.nilsson" } },
+                { username: "per.nilsson" },
                 new Date("2026-12-18")
             );
             expect(result).toBeNull();
         });
 
-        it("resolves username from a populated teacher via model lookup", async () => {
-            h.teacherModel.findById.mockReturnValue(
-                teacherQuery({ userId: { username: "eva" } })
-            );
+        it("resolves the username from the teacher's User id (#102)", async () => {
+            const eva = await createTeacherUser({ name: "eva" });
 
-            const result = await calculateSlutprovDate(
-                { _id: "t1" },
-                new Date("2026-12-18")
-            );
+            const result = await calculateSlutprovDate({ _id: eva._id }, new Date("2026-12-18"));
             expect(result).not.toBeNull();
-            expect(h.teacherModel.findById).toHaveBeenCalledWith("t1");
         });
 
-        it("resolves username from a raw teacher id string", async () => {
-            h.teacherModel.findById.mockReturnValue(
-                teacherQuery({ userId: { username: "mirsada" } })
-            );
+        it("resolves the username from a raw User id string", async () => {
+            const mirsada = await createTeacherUser({ name: "mirsada" });
 
-            const result = await calculateSlutprovDate("t1", new Date("2026-12-18"));
+            const result = await calculateSlutprovDate(String(mirsada._id), new Date("2026-12-18"));
             expect(result).not.toBeNull();
         });
 
         it("applies the Allan rule: Saturday the week before course end", async () => {
             const result = await calculateSlutprovDate(
-                { userId: { username: "Allan Smith" } },
+                { username: "Allan Smith" },
                 new Date("2026-12-18")
             );
             expect(result.getDay()).toBe(6);
@@ -79,7 +72,7 @@ describe("slutprovDateCalculator", () => {
 
         it("applies the Maja rule case-insensitively", async () => {
             const result = await calculateSlutprovDate(
-                { userId: { username: "MAJA" } },
+                { username: "MAJA" },
                 new Date("2026-12-18")
             );
             expect(result.getDay()).toBe(6);
@@ -87,7 +80,7 @@ describe("slutprovDateCalculator", () => {
 
         it("applies the Eva rule: Thursday before course end", async () => {
             const result = await calculateSlutprovDate(
-                { userId: { username: "eva" } },
+                { username: "eva" },
                 new Date("2026-12-18")
             );
             expect(result.getDay()).toBe(4);
@@ -97,7 +90,7 @@ describe("slutprovDateCalculator", () => {
         it("steps back a full week when the course ends on a Thursday", async () => {
             const thursday = new Date("2026-12-17");
             const result = await calculateSlutprovDate(
-                { userId: { username: "eva" } },
+                { username: "eva" },
                 thursday
             );
             expect(result.getDay()).toBe(4);
@@ -106,7 +99,7 @@ describe("slutprovDateCalculator", () => {
 
         it("applies the Mirsada rule: Wednesday the week before", async () => {
             const result = await calculateSlutprovDate(
-                { userId: { username: "mirsada" } },
+                { username: "mirsada" },
                 new Date("2026-12-18")
             );
             expect(result.getDay()).toBe(3);
@@ -114,7 +107,7 @@ describe("slutprovDateCalculator", () => {
 
         it("applies the Elham rule: Sunday the week before", async () => {
             const result = await calculateSlutprovDate(
-                { userId: { username: "elham" } },
+                { username: "elham" },
                 new Date("2026-12-18")
             );
             expect(result.getDay()).toBe(0);
@@ -122,7 +115,7 @@ describe("slutprovDateCalculator", () => {
 
         it("applies the Linnéa rule via the accented variant", async () => {
             const result = await calculateSlutprovDate(
-                { userId: { username: "linnéa" } },
+                { username: "linnéa" },
                 new Date("2026-12-18")
             );
             expect(result.getDay()).toBe(0);
@@ -130,7 +123,7 @@ describe("slutprovDateCalculator", () => {
 
         it("applies the Angelina rule: Wednesday the week before", async () => {
             const result = await calculateSlutprovDate(
-                { userId: { username: "angelina" } },
+                { username: "angelina" },
                 new Date("2026-12-18")
             );
             expect(result.getDay()).toBe(3);

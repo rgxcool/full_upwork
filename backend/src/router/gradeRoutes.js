@@ -11,7 +11,7 @@ import Program from "../models/Program.js";
 import CoursePackage from "../models/CoursePackage.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
-import Teacher from "../models/Teacher.js";
+import User from "../models/User.js";
 import ExamAttendance from "../models/ExamAttendance.js";
 import GradingScale from "../models/GradingScale.js";
 import {
@@ -27,17 +27,16 @@ import {
   evaluateActionPlanStatusAndNotify,
 } from "../controllers/notificationController.js";
 import NOTIFICATION_TYPES from "../controllers/notificationTypes.js";
+import { TEACHER_POPULATE_FIELDS, findTeacherUser } from "../utils/teacherProfile.js";
 
 const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"];
 const ALLOWED_ADMIN_ROLES = ["systemadmin", "admin"];
 const ALLOWED_GRADING_ROLES = ["systemadmin", "admin", "teacher"];
 
 export async function verifyTeacherAuthorizedForEnrollment(userId, enrollment) {
-  if (!enrollment) return false;
-  if (!Teacher?.findOne) return true;
-  const teacher = await Teacher.findOne({ userId }).catch(() => null);
-  if (!teacher) return false;
-  const teacherIdStr = teacher._id?.toString() || teacher.toString();
+  if (!enrollment || !userId) return false;
+  // Teacher references hold the teacher's User id (#102).
+  const teacherIdStr = String(userId);
 
   const ci = enrollment.courseInstanceId;
   const stu = enrollment.studentId;
@@ -134,10 +133,9 @@ export async function verifyTeacherAuthorizedForEnrollment(userId, enrollment) {
 }
 
 export async function verifyTeacherAuthorizedForStudentCourse(userId, studentId, courseId) {
-  if (!Teacher?.findOne) return true;
-  const teacher = await Teacher.findOne({ userId }).catch(() => null);
-  if (!teacher) return false;
-  const teacherIdStr = teacher._id?.toString() || teacher.toString();
+  if (!userId) return false;
+  // Teacher references hold the teacher's User id (#102).
+  const teacherIdStr = String(userId);
 
   let hasExplicitAssignments = false;
 
@@ -393,7 +391,7 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
 
     // If user is a teacher, get their Teacher record and set up filtering
     if (!isAdmin && user.role === 'teacher') {
-      const teacher = await Teacher.findOne({ userId: user.userId });
+      const teacher = await findTeacherUser(user.userId, { select: "_id", lean: true });
       if (!teacher) {
         return res.status(403).json({ error: 'Teacher profile not found' });
       }
@@ -418,21 +416,13 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
     const enrollments = await StudentEnrollment.find(enrollmentQuery)
       .populate({
         path: "studentId",
-        populate: {
-          path: "teacherId",
-          populate: { path: "userId", select: "username email" },
-          select: "userId subject"
-        }
+        populate: { path: "teacherId", select: TEACHER_POPULATE_FIELDS }
       })
       .populate({
         path: "courseInstanceId",
         populate: [
           { path: "mainCourseId", select: "courseName courseCode resultTypes" },
-          {
-            path: "responsibleTeacher",
-            populate: { path: "userId", select: "username email" },
-            select: "userId subject"
-          }
+          { path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS }
         ]
       })
       .populate({ path: "gradeBy", select: "username email" })
@@ -802,15 +792,15 @@ router.post("/teacher/save-grade", authenticateUser, async (req, res) => {
       try {
         const query = Student.findById(studentId);
         studentRecord = query && typeof query.lean === "function" ? await query.lean() : await query;
-        if (studentRecord?.teacherId && Teacher?.findById) {
-          teacherRecord = await Teacher.findById(studentRecord.teacherId).catch(() => null);
+        if (studentRecord?.teacherId) {
+          teacherRecord = await User.findById(studentRecord.teacherId).select("_id").lean().catch(() => null);
         }
       } catch (findErr) {
         studentRecord = null;
       }
     }
-    if (!teacherRecord && req.user?.userId && Teacher?.findOne) {
-      teacherRecord = await Teacher.findOne({ userId: req.user.userId }).catch(() => null);
+    if (!teacherRecord && req.user?.userId) {
+      teacherRecord = await findTeacherUser(req.user.userId, { select: "_id", lean: true }).catch(() => null);
     }
 
     // Match update-grade: notifications are keyed on the course instance.
@@ -939,14 +929,13 @@ router.post("/teacher/lock-grade", authenticateUser, async (req, res) => {
         ? await Student.findById(targetStudentId).select("teacherId").catch(() => null)
         : null;
       if (studentForTarget?.teacherId) {
-        responsibleTeacherRecord = await Teacher.findById(studentForTarget.teacherId).catch(() => null) ||
-          (Teacher.findOne ? await Teacher.findOne({ userId: studentForTarget.teacherId }).catch(() => null) : null);
+        responsibleTeacherRecord = await User.findById(studentForTarget.teacherId).select("_id").lean().catch(() => null);
       }
-      if (!responsibleTeacherRecord && Teacher?.findOne) {
-        responsibleTeacherRecord = await Teacher.findOne({ userId }).catch(() => null);
+      if (!responsibleTeacherRecord) {
+        responsibleTeacherRecord = await findTeacherUser(userId, { select: "_id", lean: true }).catch(() => null);
       }
       if (responsibleTeacherRecord) {
-        responsibleTeacherUser = responsibleTeacherRecord.userId || responsibleTeacherRecord._id;
+        responsibleTeacherUser = responsibleTeacherRecord._id;
       }
     } catch (targetErr) {
       logger.warn({ err: targetErr }, "Could not resolve responsible teacher for grade lock notification");
@@ -1027,8 +1016,7 @@ router.get('/locked-grades', authenticateUser, async (req, res) => {
       .populate("studentId", "name email personalNumber")
       .populate("courseInstanceId", "courseName courseCode")
       .populate("mainCourseId", "courseName courseCode")
-      .populate("teacherId", "userId subject")
-      .populate("teacherId.userId", "username email")
+      .populate("teacherId", TEACHER_POPULATE_FIELDS)
       .populate("gradeLockedBy", "username email")
       .sort({ gradeLockedAt: -1 });
 
@@ -1057,8 +1045,7 @@ router.get('/student/:studentId/grades', authenticateUser, async (req, res) => {
     })
       .populate("courseInstanceId", "courseName courseCode startDate endDate")
       .populate("mainCourseId", "courseName courseCode")
-      .populate("teacherId", "userId subject")
-      .populate("teacherId.userId", "username email")
+      .populate("teacherId", TEACHER_POPULATE_FIELDS)
       .populate("gradeBy", "username email")
       .sort({ gradeDate: -1 });
 
@@ -1088,8 +1075,7 @@ router.get('/course-instance/:courseInstanceId/grades', authenticateUser, async 
       .populate("studentId", "name email personalNumber")
       .populate("courseInstanceId", "courseName courseCode startDate endDate")
       .populate("mainCourseId", "courseName courseCode")
-      .populate("teacherId", "userId subject")
-      .populate("teacherId.userId", "username email")
+      .populate("teacherId", TEACHER_POPULATE_FIELDS)
       .populate("gradeBy", "username email")
       .sort({ gradeDate: -1 });
 
@@ -1200,15 +1186,15 @@ router.put('/update-grade/:enrollmentId', authenticateUser, async (req, res) => 
         try {
           const query = Student.findById(targetStudentId);
           studentRecord = query && typeof query.lean === "function" ? await query.lean() : await query;
-          if (studentRecord?.teacherId && Teacher?.findById) {
-            teacherRecord = await Teacher.findById(studentRecord.teacherId).catch(() => null);
+          if (studentRecord?.teacherId) {
+            teacherRecord = await User.findById(studentRecord.teacherId).select("_id").lean().catch(() => null);
           }
         } catch (findErr) {
           studentRecord = null;
         }
       }
-      if (!teacherRecord && userId && Teacher?.findOne) {
-        teacherRecord = await Teacher.findOne({ userId }).catch(() => null);
+      if (!teacherRecord && userId) {
+        teacherRecord = await findTeacherUser(userId, { select: "_id", lean: true }).catch(() => null);
       }
       const studentName = studentRecord?.name || "Elev";
       await createNotification({

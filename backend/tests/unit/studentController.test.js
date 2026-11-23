@@ -32,12 +32,6 @@ vi.mock("../../src/models/User.js", () => ({
     findOne: vi.fn(),
   },
 }));
-vi.mock("../../src/models/Teacher.js", () => ({
-  __esModule: true,
-  default: {
-    findOne: vi.fn(),
-  },
-}));
 vi.mock("../../src/utils/teacherService.js", () => ({
   createOrFindTeacher: vi.fn(() =>
     Promise.resolve({ teacher: { _id: "created-teacher" } })
@@ -76,7 +70,6 @@ import Program from "../../src/models/Program.js";
 import Course from "../../src/models/Course.js";
 import CoursePackage from "../../src/models/CoursePackage.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import {
   uploadXlsx,
   normalizeMunicipalityName,
@@ -109,7 +102,6 @@ beforeEach(() => {
   CoursePackage.find.mockReturnValue(createLeanResult([]));
   Course.find.mockReturnValue(createLeanResult([]));
   User.findOne.mockResolvedValue(null);
-  Teacher.findOne.mockResolvedValue(null);
   createOrFindTeacherMock.mockClear();
   parseModule.parseStudentExcel.mockResolvedValue([]);
   maybeSendLarteametEmail.mockReset();
@@ -198,8 +190,8 @@ describe("uploadXlsx", () => {
     Course.find.mockReturnValue(
       createLeanResult([{ courseCode: "CRS-ABC", _id: "course-1" }])
     );
-    User.findOne.mockResolvedValue({ _id: "user-1", username: "teacheruser" });
-    Teacher.findOne.mockResolvedValue({ _id: "teacher-1" });
+    // #102: the matched User is the teacher when it has a teacher profile.
+    User.findOne.mockResolvedValue({ _id: "user-1", username: "teacheruser", teacherProfile: { subject: "Övrigt" } });
     const res = createMockRes();
     const req = {
       file: { buffer: Buffer.from("data"), originalname: "valid.xlsx" },
@@ -530,8 +522,7 @@ describe("uploadXlsx", () => {
       createLeanResult([{ courseCode: "CRS-777 NIVÅ 2", _id: "course-7" }])
     );
     User.findOne.mockResolvedValue(null);
-    Teacher.findOne.mockResolvedValue(null);
-    const res = createMockRes();
+      const res = createMockRes();
     const req = {
       file: { buffer: Buffer.from("data"), originalname: "teacher.xlsx" },
     };

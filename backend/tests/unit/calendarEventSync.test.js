@@ -20,7 +20,8 @@ vi.mock("../../src/models/Student.js", () => {
     return { __esModule: true, default: ctor };
 });
 
-vi.mock("../../src/models/Teacher.js", () => {
+// Teacher references are User ids since #102.
+vi.mock("../../src/models/User.js", () => {
     const ctor = vi.fn(function (data = {}) {
         Object.assign(this, data);
         return this;
@@ -40,7 +41,7 @@ vi.mock("../../src/models/StudentEnrollment.js", () => ({
 
 import CalendarEvent from "../../src/models/Event.js";
 import Student from "../../src/models/Student.js";
-import Teacher from "../../src/models/Teacher.js";
+import User from "../../src/models/User.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import {
     syncAllCalendarEvents,
@@ -52,6 +53,7 @@ const makeChain = (result) => {
     const chain = {
         populate: vi.fn(() => chain),
         select: vi.fn(() => chain),
+        lean: vi.fn(() => chain),
         then: undefined,
     };
     chain.then = (resolve, reject) => Promise.resolve(result).then(resolve, reject);
@@ -70,7 +72,7 @@ const baseStudent = () => ({
     examLocation: "Hallen",
     examTime: "09:00",
     education: [],
-    teacherId: { _id: "teacher-1", userId: { username: "Läraren" } },
+    teacherId: { _id: "teacher-1", username: "Läraren" },
 });
 
 describe("calendarEventSync", () => {
@@ -259,7 +261,7 @@ describe("calendarEventSync", () => {
                 courseInstanceId: {
                     _id: "ci1",
                     courseName: "Matematik 1",
-                    responsibleTeacher: { _id: "rt1", userId: { username: "Rektor" } },
+                    responsibleTeacher: { _id: "rt1", username: "Rektor" },
                 },
                 teacherId: null,
             };
@@ -290,7 +292,7 @@ describe("calendarEventSync", () => {
                 },
                 mainCourseId: { courseName: "Engelska 5" },
                 courseInstanceId: null,
-                teacherId: { _id: "et1", userId: { username: "En lärare" } },
+                teacherId: { _id: "et1", username: "En lärare" },
             };
             StudentEnrollment.findById.mockReturnValue(makeChain(enrollment));
             CalendarEvent.findOne.mockResolvedValue(null);
@@ -299,7 +301,7 @@ describe("calendarEventSync", () => {
 
             const event = CalendarEvent.mock.instances.at(-1);
             expect(event.extendedProps.teacherId).toBe("et1");
-            expect(Teacher.findById).not.toHaveBeenCalled();
+            expect(User.findById).not.toHaveBeenCalled();
         });
 
         it("uses the student teacher as a last resort", async () => {
@@ -320,14 +322,14 @@ describe("calendarEventSync", () => {
                 teacherId: null,
             };
             StudentEnrollment.findById.mockReturnValue(makeChain(enrollment));
-            Teacher.findById.mockReturnValue(
-                makeChain({ _id: "st1", userId: { username: "Sista utpost" } })
+            User.findById.mockReturnValue(
+                makeChain({ _id: "st1", username: "Sista utpost" })
             );
             CalendarEvent.findOne.mockResolvedValue(null);
 
             await syncCalendarEventFromEnrollment("e1");
 
-            expect(Teacher.findById).toHaveBeenCalledWith("st1");
+            expect(User.findById).toHaveBeenCalledWith("st1");
             const event = CalendarEvent.mock.instances.at(-1);
             expect(event.extendedProps.teacherId).toBe("st1");
         });
@@ -355,7 +357,7 @@ describe("calendarEventSync", () => {
                 },
                 mainCourseId: null,
                 courseInstanceId: { _id: "ci1", courseName: "Kemi 1", responsibleTeacher: null },
-                teacherId: { _id: "et1", userId: null },
+                teacherId: { _id: "et1" },
             };
             StudentEnrollment.findById.mockReturnValue(makeChain(enrollment));
             CalendarEvent.findOne.mockResolvedValue(existingEvent);
@@ -390,7 +392,7 @@ describe("calendarEventSync", () => {
                 },
                 mainCourseId: null,
                 courseInstanceId: { _id: "ci1", courseName: "Kemi 1", responsibleTeacher: null },
-                teacherId: { _id: "et1", userId: null },
+                teacherId: { _id: "et1" },
             };
             StudentEnrollment.findById.mockReturnValue(makeChain(enrollment));
             CalendarEvent.findOne.mockResolvedValue(existingEvent);

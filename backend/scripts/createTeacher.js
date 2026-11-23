@@ -17,7 +17,7 @@ import { parseArgs } from "util";
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import User from "../src/models/User.js";
-import Teacher from "../src/models/Teacher.js";
+import { getNextAvailableColor } from "../src/utils/teacherProfile.js";
 import { assertDevEnvironment, assertLocalMongoUri } from "./lib/dbReset.js";
 
 export const DEFAULT_TEACHER = Object.freeze({
@@ -27,10 +27,10 @@ export const DEFAULT_TEACHER = Object.freeze({
     subject: "Svenska",
 });
 
-const TEACHER_COLORS = ["#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#17BECF"];
 
 /**
  * Create or repair a teacher account. Returns what happened, for logging and tests.
+ * The teacher profile lives on the User (#102), so `teacher` is the same document as `user`.
  * @returns {Promise<{ action: "created"|"updated"|"would-create"|"would-update", user, teacher, changes: string[] }>}
  */
 export async function createTeacher(options = {}, { dryRun = false } = {}) {
@@ -67,21 +67,17 @@ export async function createTeacher(options = {}, { dryRun = false } = {}) {
         }
     }
 
-    let teacher = user._id ? await Teacher.findOne({ userId: user._id }) : null;
     const isNew = changes.includes("create user");
-    if (!teacher && !isNew) changes.push("create Teacher profile");
-    if (dryRun) return { action: "would-update", user, teacher, changes };
+    const hasProfile = Boolean(user.teacherProfile);
+    if (!hasProfile && !isNew) changes.push("create Teacher profile");
+    if (dryRun) return { action: "would-update", user, teacher: hasProfile ? user : null, changes };
 
-    if (!teacher) {
-        const count = await Teacher.countDocuments({});
-        teacher = await Teacher.create({
-            userId: user._id,
-            subject,
-            colorCode: TEACHER_COLORS[count % TEACHER_COLORS.length],
-        });
+    if (!hasProfile) {
+        user.teacherProfile = { subject, colorCode: await getNextAvailableColor() };
+        await user.save();
     }
 
-    return { action: isNew ? "created" : "updated", user, teacher, changes };
+    return { action: isNew ? "created" : "updated", user, teacher: user, changes };
 }
 
 async function main() {

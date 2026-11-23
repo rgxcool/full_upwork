@@ -15,8 +15,8 @@
  * Content editing stays with the responsible teacher (unchanged behaviour);
  * the assistant teacher can read the card and post on the anslagstavla.
  *
- * `responsibleTeacher` / `assistantTeacher` are Teacher ids, not User ids, so
- * the caller's Teacher profile is resolved through `Teacher.userId`.
+ * `responsibleTeacher` / `assistantTeacher` hold the teacher's User id (#102),
+ * so they are compared with `req.user.userId` directly.
  *
  * Note: CourseInstance carries no kommun, so there is no per-instance tenant
  * filter here; scoped staff roles (coordinator/syv/specped) get no access.
@@ -53,12 +53,10 @@ export async function getCourseInstanceAccess(user, instance) {
     }
 
     if (roles.includes("teacher") && user.userId && mongoose.isValidObjectId(user.userId)) {
-        const Teacher = mongoose.model("Teacher");
-        const teacher = await Teacher.findOne({ userId: user.userId }).select("_id").lean();
-        if (teacher && sameId(instance.responsibleTeacher, teacher)) {
+        if (sameId(instance.responsibleTeacher, user.userId)) {
             return { canRead: true, canEdit: true, canPost: true, relation: "responsible" };
         }
-        if (teacher && sameId(instance.assistantTeacher, teacher)) {
+        if (sameId(instance.assistantTeacher, user.userId)) {
             return { canRead: true, canEdit: false, canPost: true, relation: "assistant" };
         }
     }

@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const TeacherScheduleParametersSchema = new mongoose.Schema({
     teacherId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Teacher",
+        ref: "User",
         required: true,
     },
     courseId: {

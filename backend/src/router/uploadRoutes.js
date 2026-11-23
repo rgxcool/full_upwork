@@ -96,11 +96,6 @@ async function checkStudentAccess(req, res, next) {
     }
 
     if (isTeacher && !isStaff) {
-      const Teacher = mongoose.model("Teacher");
-      const teacher = await Teacher.findOne({ userId: user.userId });
-      if (!teacher) {
-        return res.status(403).json({ error: "Teacher profile not found" });
-      }
 
       const Student = mongoose.model("Student");
       const student = await Student.findById(studentId);
@@ -108,7 +103,8 @@ async function checkStudentAccess(req, res, next) {
         return res.status(404).json({ error: "Student not found" });
       }
 
-      if (!student.teacherId || student.teacherId.toString() !== teacher._id.toString()) {
+      // Student.teacherId is the teacher's User id (#102).
+      if (!student.teacherId || student.teacherId.toString() !== String(user.userId)) {
         return res.status(403).json({ error: "Forbidden: You are not assigned to this student." });
       }
     }
@@ -185,11 +181,6 @@ export async function checkFileAccess(req, res, next) {
     }
 
     if (isTeacher && !isStaff) {
-      const Teacher = mongoose.model("Teacher");
-      const teacher = await Teacher.findOne({ userId: user.userId });
-      if (!teacher) {
-        return res.status(403).json({ error: "Teacher profile not found" });
-      }
 
       const Student = mongoose.model("Student");
       const student = await Student.findById(studentId);
@@ -197,7 +188,8 @@ export async function checkFileAccess(req, res, next) {
         return res.status(404).json({ error: "Student not found" });
       }
 
-      if (!student.teacherId || student.teacherId.toString() !== teacher._id.toString()) {
+      // Student.teacherId is the teacher's User id (#102).
+      if (!student.teacherId || student.teacherId.toString() !== String(user.userId)) {
         return res.status(403).json({ error: "Forbidden: You are not assigned to the student associated with this file." });
       }
     }

@@ -46,7 +46,7 @@ router.post(
         const { default: Student } = await import("../models/Student.js");
         const { default: Course } = await import("../models/Course.js");
         const { default: CoursePackage } = await import("../models/CoursePackage.js");
-        const { default: Teacher } = await import("../models/Teacher.js");
+        const { default: User } = await import("../models/User.js");
         const { calculateSlutprovDate } = await import("../utils/slutprovDateCalculator.js");
         const { default: CourseMatchingService } = await import("../utils/courseMatchingService.js");
 
@@ -103,8 +103,9 @@ router.post(
         const getTeacherName = async (teacherId) => {
             if (!teacherId) return null;
             try {
-                const teacher = await Teacher.findById(teacherId).populate("userId", "username");
-                return teacher?.userId?.username || null;
+                // teacherId is the teacher's User id (#102).
+                const teacher = await User.findById(teacherId).select("username").lean();
+                return teacher?.username || null;
             } catch {
                 return null;
             }

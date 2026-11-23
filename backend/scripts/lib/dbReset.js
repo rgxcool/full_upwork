@@ -154,8 +154,8 @@ export async function wipeEverything(db, { dryRun = false, uploadsDir } = {}) {
 /**
  * flushAllButAdmins: clear all people and activity data, keep
  *  - KEEP_COLLECTIONS (education catalog, content, config),
- *  - users with an admin/systemadmin role, their Teacher profiles and those
- *    teachers' schedule parameters,
+ *  - users with an admin/systemadmin role (incl. their teacher profile on the
+ *    User, #102), their schedule parameters and any legacy `teachers` rows,
  *  - GridFS files still referenced by kept config (certificate logo/signature).
  */
 export async function flushAllButAdmins(db, { dryRun = false, uploadsDir } = {}) {
@@ -212,7 +212,8 @@ export async function flushAllButAdmins(db, { dryRun = false, uploadsDir } = {})
         let filter = {};
         if (name === "users") filter = { _id: { $nin: keptUserIds } };
         else if (name === "teachers") filter = { _id: { $nin: keptTeacherIds } };
-        else if (name === "teacherscheduleparameters") filter = { teacherId: { $nin: keptTeacherIds } };
+        // teacherId is a User id after #102, a Teacher id on a not-yet-migrated DB.
+        else if (name === "teacherscheduleparameters") filter = { teacherId: { $nin: [...keptUserIds, ...keptTeacherIds] } };
         else if (name === "fs.files") filter = { _id: { $nin: keptFileIds } };
         else if (name === "fs.chunks") filter = { files_id: { $nin: keptFileIds } };
         deleted[name] = await clear(db, name, filter, { dryRun });
