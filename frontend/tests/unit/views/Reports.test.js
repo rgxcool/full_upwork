@@ -42,6 +42,9 @@ const reportPayload = {
             scheduled: true,
             scheduleDate: '2026-02-10',
             submissionDate: null,
+            avsnitt: [
+                { avsnittId: 'm2-a1', title: 'Avsnitt 1', order: 1, plannedDate: null },
+            ],
         },
         {
             moduleNumber: 1,
@@ -50,6 +53,10 @@ const reportPayload = {
             scheduled: true,
             scheduleDate: null,
             submissionDate: '2026-01-20T10:00:00.000Z',
+            avsnitt: [
+                { avsnittId: 'm1-a1', title: 'Avsnitt 1', order: 1, plannedDate: '2026-11-16' },
+                { avsnittId: 'm1-a2', title: 'Avsnitt 2', order: 2, plannedDate: '2026-11-23' },
+            ],
         },
     ],
     scheduledDates: [{ moduleIndex: 0, date: '2026-01-05' }],
@@ -132,11 +139,31 @@ describe('Reports.vue', () => {
         expect(rows[0].text()).toContain('Klar')
         expect(rows[0].text()).toContain('2026-01-05')
         expect(rows[0].text()).toContain('2026-01-20')
+        expect(wrapper.text()).toContain('Planerat inlämningsdatum')
+        expect(rows[0].text()).toContain('Avsnitt 1: 2026-11-16')
+        expect(rows[0].text()).toContain('Avsnitt 2: 2026-11-23')
         expect(rows[1].text()).toContain('Modul 2 · Delprov')
         expect(rows[1].text()).toContain('Ej klar')
         expect(rows[1].text()).toContain('2026-02-10')
+        expect(rows[1].text()).toContain('Avsnitt 1: –')
         expect(wrapper.text()).not.toContain('✓')
         expect(wrapper.text()).not.toContain('✗')
+        wrapper.unmount()
+    })
+
+    it('keeps nested Avsnitt dates from the report payload in table data', async () => {
+        const wrapper = await mountView()
+        await selectInstance(wrapper)
+        wrapper.vm.selectedStudent = 'stu-1'
+        await flushPromises()
+        await wrapper.vm.loadReport()
+        await flushPromises()
+
+        expect(wrapper.vm.tableData[0].avsnitt).toEqual([
+            { avsnittId: 'm1-a1', title: 'Avsnitt 1', order: 1, plannedDate: '2026-11-16' },
+            { avsnittId: 'm1-a2', title: 'Avsnitt 2', order: 2, plannedDate: '2026-11-23' },
+        ])
+        expect(wrapper.vm.tableData[1].avsnitt).toHaveLength(1)
         wrapper.unmount()
     })
 
@@ -196,17 +223,20 @@ describe('Reports.vue', () => {
 
         expect(exportToCSV).toHaveBeenCalledWith(
             'rapport-Anna Andersson.csv',
-            ['Modul', 'Status', 'Planerat datum', 'Inlämnat'],
+            ['Modul', 'Status', 'Planerat datum', 'Planerat inlämningsdatum', 'Inlämnat'],
             [
-                [1, 'Klar', '2026-01-05', '2026-01-20'],
-                [2, 'Ej klar', '2026-02-10', 'Ej uppfört'],
+                [1, 'Klar', '2026-01-05', 'Avsnitt 1: 2026-11-16; Avsnitt 2: 2026-11-23', '2026-01-20'],
+                [2, 'Ej klar', '2026-02-10', 'Avsnitt 1: –', 'Ej uppfört'],
             ]
         )
         expect(exportToPDF).toHaveBeenCalledWith(
             'rapport-Anna Andersson.pdf',
             'Kompletionsrapport – Anna Andersson',
-            ['Modul', 'Status', 'Planerat datum', 'Inlämnat'],
-            expect.any(Array)
+            ['Modul', 'Status', 'Planerat datum', 'Planerat inlämningsdatum', 'Inlämnat'],
+            [
+                [1, 'Klar', '2026-01-05', 'Avsnitt 1: 2026-11-16; Avsnitt 2: 2026-11-23', '2026-01-20'],
+                [2, 'Ej klar', '2026-02-10', 'Avsnitt 1: –', 'Ej uppfört'],
+            ]
         )
         wrapper.unmount()
     })

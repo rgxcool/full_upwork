@@ -556,8 +556,25 @@ describe("learningController", () => {
             _id: INSTANCE_ID,
             courseName: "Svenska 1",
             modules: [
-                { moduleNumber: 1, title: "Modul 1", isPartialExam: false, isCaseStudy: false },
-                { moduleNumber: 2, title: "Modul 2", isPartialExam: true, isCaseStudy: true },
+                {
+                    moduleNumber: 1,
+                    title: "Modul 1",
+                    isPartialExam: false,
+                    isCaseStudy: false,
+                    avsnitt: [
+                        { avsnittId: "m1-a2", title: "Avsnitt 2", order: 2, plannedDate: new Date("2026-09-28") },
+                        { avsnittId: "m1-a1", title: "Avsnitt 1", order: 1, plannedDate: new Date("2026-09-21") },
+                    ],
+                },
+                {
+                    moduleNumber: 2,
+                    title: "Modul 2",
+                    isPartialExam: true,
+                    isCaseStudy: true,
+                    avsnitt: [
+                        { avsnittId: "m2-a1", title: "Avsnitt 1", order: 1, plannedDate: null },
+                    ],
+                },
             ],
             sectionDates: [new Date("2026-09-21"), new Date("2026-10-05")],
         };
@@ -606,6 +623,16 @@ describe("learningController", () => {
             expect(payload.assignmentStatus[1].status).toBe("godkänd");
             expect(payload.scheduledDates).toHaveLength(2);
             expect(payload.studentActivity.lastAccess).toBeInstanceOf(Date);
+            // Slice 4 / D9: nested Avsnitt rows, ordered, with planned dates.
+            expect(payload.modules[0].avsnitt).toEqual([
+                { avsnittId: "m1-a1", title: "Avsnitt 1", order: 1, plannedDate: "2026-09-21" },
+                { avsnittId: "m1-a2", title: "Avsnitt 2", order: 2, plannedDate: "2026-09-28" },
+            ]);
+            expect(payload.modules[1].avsnitt).toEqual([
+                { avsnittId: "m2-a1", title: "Avsnitt 1", order: 1, plannedDate: null },
+            ]);
+            // No Avsnitt-level actual date: module-level submissionDate is unchanged.
+            expect(payload.modules[0].submissionDate).toEqual(new Date("2026-09-22"));
         });
 
         it("flags unscheduled modules instead of reporting them as not completed", async () => {

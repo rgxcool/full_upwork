@@ -118,12 +118,13 @@
                     <th>Modul</th>
                     <th>Status</th>
                     <th>Planerat datum</th>
+                    <th>{{ PLANNED_DATE_LABEL }}</th>
                     <th>Inlämnat</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="visibleTableData.length === 0">
-                    <td colspan="5" class="text-muted">
+                    <td colspan="6" class="text-muted">
                       {{ searchQuery ? 'Inga moduler matchar sökningen' : 'Inga moduler hittades' }}
                     </td>
                   </tr>
@@ -137,6 +138,14 @@
                       </span>
                     </td>
                     <td>{{ formatDate(item.scheduledDate) }}</td>
+                    <td>
+                      <ul v-if="item.avsnitt && item.avsnitt.length" class="avsnitt-date-list">
+                        <li v-for="av in item.avsnitt" :key="av.avsnittId || av.order">
+                          {{ avsnittLabel(av) }}: {{ formatDate(av.plannedDate) }}
+                        </li>
+                      </ul>
+                      <span v-else>–</span>
+                    </td>
                     <td>{{ formatDate(item.submittedAt) }}</td>
                   </tr>
                 </tbody>
@@ -170,6 +179,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import client from '@/api/client.js'
 import { exportToCSV, exportToPDF } from '@/utils/exportUtils.js'
+import { PLANNED_DATE_LABEL } from '@/utils/courseContent.js'
 
 // Matches the convention in ResourceVisitsReport, extended with the normalized
 // error shape produced by @/api/client.js (status/message/code/raw).
@@ -228,6 +238,11 @@ export default {
     const moduleLabel = (item) =>
       item.moduleName ? `Modul ${item.moduleNumber} · ${item.moduleName}` : `Modul ${item.moduleNumber}`
     const studentColumn = (item) => item.studentName || selectedStudentName.value || '–'
+    const avsnittLabel = (av) => av.title || `Avsnitt ${av.order || ''}`
+    const avsnittDatesText = (item) =>
+      (item.avsnitt || [])
+        .map((av) => `${avsnittLabel(av)}: ${formatDate(av.plannedDate)}`)
+        .join('; ') || '–'
 
     const formatDate = (value) => {
       if (!value) return '–'
@@ -346,6 +361,8 @@ export default {
               status: m.completed ? '✓' : m.scheduled ? '✗' : '–',
               scheduledDate: m.scheduleDate || scheduleByNumber.get(Number(m.moduleNumber)) || null,
               submittedAt: m.submissionDate || m.assignment?.submittedAt || null,
+              // Slice 4 / D9: nested Avsnitt dates from the report payload.
+              avsnitt: Array.isArray(m.avsnitt) ? m.avsnitt : [],
             }))
         } else {
           const completed = data.completedComponents || {}
@@ -355,6 +372,7 @@ export default {
             status: typeof value === 'object' ? (value.completed ? '✓' : '✗') : value,
             scheduledDate: typeof value === 'object' ? value.scheduledDate : null,
             submittedAt: typeof value === 'object' ? value.submittedAt : null,
+            avsnitt: [],
           }))
         }
         hasReport.value = true
@@ -374,9 +392,10 @@ export default {
           ? statusLabel(item.status)
           : 'Ej valt',
         item.scheduledDate ? formatDate(item.scheduledDate) : 'Ej planerat',
+        avsnittDatesText(item),
         item.submittedAt ? formatDate(item.submittedAt) : 'Ej uppfört',
       ])
-      const headers = ['Modul', 'Status', 'Planerat datum', 'Inlämnat']
+      const headers = ['Modul', 'Status', 'Planerat datum', PLANNED_DATE_LABEL, 'Inlämnat']
       exportToCSV(`rapport-${studentName}.csv`, headers, rows)
       exportToPDF(`rapport-${studentName}.pdf`, `Kompletionsrapport – ${studentName}`, headers, rows)
     }
@@ -418,6 +437,8 @@ export default {
       statusClass,
       moduleLabel,
       studentColumn,
+      avsnittLabel,
+      PLANNED_DATE_LABEL,
       loadCourseInstances,
       loadParticipants,
       loadReport,
@@ -517,5 +538,17 @@ export default {
 
 .status-indicator.is-unscheduled {
   color: #6b7280;
+}
+
+.avsnitt-date-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.avsnitt-date-list li {
+  padding: 0.05rem 0;
+  white-space: nowrap;
 }
 </style>
