@@ -13,25 +13,6 @@ warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✘]${NC} $*"; }
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-
-# Resolve node once. Some launch contexts put /usr/bin/node on PATH without the
-# npm/npx shims (nvm's npx is then not visible), so never rely on `npx` here.
-NODE_BIN="$(command -v node || true)"
-if [ -z "$NODE_BIN" ]; then
-  err "Node.js not found on PATH. Install Node 25+ and retry."
-  exit 1
-fi
-
-# Prefer pnpm, but fall back to npm when pnpm is not on PATH.
-if command -v pnpm &>/dev/null; then
-  PKG_MANAGER=pnpm
-elif command -v npm &>/dev/null; then
-  PKG_MANAGER=npm
-else
-  err "No package manager found on PATH (need pnpm or npm)."
-  exit 1
-fi
-
 BACKEND_PORT=5010
 FRONTEND_PORT=5173
 MONGO_PORT=27017
@@ -50,7 +31,7 @@ fi
 # ── 0. Generate JWT_SECRET if placeholder ───────────
 if [ -f "$ENV_FILE" ]; then
   if grep -q "REPLACE_WITH_GENERATED_SECRET" "$ENV_FILE"; then
-    SECRET=$("$NODE_BIN" -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+    SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
     sed -i "s|REPLACE_WITH_GENERATED_SECRET_MIN_32_CHARS|$SECRET|" "$ENV_FILE"
     log "Generated new JWT_SECRET"
   fi
@@ -86,40 +67,38 @@ fi
 
 # ── 2. Install dependencies ─────────────────────────
 log "Checking dependencies..."
-install_deps() {
-  local dir="$1"
-  if [ "$PKG_MANAGER" = pnpm ]; then
-    (cd "$dir" && pnpm install --frozen-lockfile 2>/dev/null || pnpm install)
-  else
-    (cd "$dir" && npm install)
-  fi
-}
 if [ ! -d "$ROOT/node_modules" ]; then
   warn "Installing root dependencies..."
-  install_deps "$ROOT"
+  (cd "$ROOT" && pnpm install --frozen-lockfile 2>/dev/null || pnpm install)
 fi
 if [ ! -d "$ROOT/backend/node_modules" ]; then
   warn "Installing backend dependencies..."
-  install_deps "$ROOT/backend"
+  (cd "$ROOT/backend" && pnpm install --frozen-lockfile 2>/dev/null || pnpm install)
 fi
 if [ ! -d "$ROOT/frontend/node_modules" ]; then
   warn "Installing frontend dependencies..."
-  install_deps "$ROOT/frontend"
+  (cd "$ROOT/frontend" && pnpm install --frozen-lockfile 2>/dev/null || pnpm install)
 fi
 log "Dependencies ready"
 
 # ── 3. Load education data ───────────────────────────
-log "Loading education data (dropData + updateEducation)..."
+log "Loading education data (dropEducation + updateEducation)..."
 (
   set -a
   # shellcheck disable=SC1091
   source "$ENV_FILE"
   set +a
   cd "$ROOT/backend"
-  "$NODE_BIN" scripts/dropData.js
-  "$NODE_BIN" scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
-  "$NODE_BIN" scripts/seedE2EData.js
-  "$NODE_BIN" scripts/seedMindfulFaq.js
+  node scripts/dropEducation.js
+  node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
+  node scripts/seedE2EData.js
+  node scripts/seedMindfulFaq.js
+  if [ "${DEMO:-0}" = "1" ]; then
+    # Demo mode: restore the full GY25 catalog (seedE2EData wipes courses)
+    # and add current-dated kursinstanser with filled kurskort.
+    node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
+    node scripts/seedDemoData.js
+  fi
 ) || {
   err "Failed to load education data. Check the script output above."
   exit 1
@@ -138,7 +117,7 @@ done
 
 # ── 5. Start backend ────────────────────────────────
 log "Starting backend on port $BACKEND_PORT..."
-(cd "$ROOT/backend" && "$NODE_BIN" index.js &>"$ROOT/backend.log") &
+(cd "$ROOT/backend" && node index.js &>"$ROOT/backend.log") &
 BACKEND_PID=$!
 sleep 3
 
@@ -156,13 +135,7 @@ fi
 
 # ── 6. Start frontend ───────────────────────────────
 log "Starting frontend on port $FRONTEND_PORT..."
-# Invoke Vite's local JS entry directly instead of `npx vite`: npx is often
-# absent from restricted PATHs even when node itself is available.
-if [ ! -f "$ROOT/frontend/node_modules/vite/bin/vite.js" ]; then
-  err "Vite is not installed in frontend/node_modules. Run the dependency install step first."
-  exit 1
-fi
-(cd "$ROOT/frontend" && "$NODE_BIN" node_modules/vite/bin/vite.js --host &>"$ROOT/frontend.log") &
+(cd "$ROOT/frontend" && npx vite --host &>"$ROOT/frontend.log") &
 FRONTEND_PID=$!
 sleep 4
 
@@ -194,7 +167,7 @@ echo -e "  │ Role         │ Email              │ Password     │"
 echo -e "  ├──────────────┼────────────────────┼──────────────┤"
 echo -e "  │ Admin        │ admin@mindful.se   │ Admin123!    │"
 echo -e "  │ Teacher      │ teacher@mindful.se │ Teacher123!  │"
-echo -e "  │ User         │ user@mindful.se    │ User12345!   │"
+echo -e "  │ Student      │ student@mindful.se │ Student123!  │"
 echo -e "  └──────────────┴────────────────────┴──────────────┘"
 echo ""
 echo -e "  Logs:      $ROOT/backend.log"

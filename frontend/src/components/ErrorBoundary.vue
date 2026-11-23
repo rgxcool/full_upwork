@@ -16,6 +16,7 @@ import { onErrorCaptured, ref } from 'vue'
 
 const error = ref(null)
 onErrorCaptured((err) => {
+  console.error('Vue render error:', err)
   error.value = err
   return false
 })

@@ -76,13 +76,7 @@ export const createInactivityReviewNotification = async ({
         .filter(Boolean)
         .slice(0, 10);
 
-    const daysInactive = Math.min(
-        ...[
-            signal.daysSinceLastLogin,
-            signal.daysSinceLastSubmission,
-            signal.daysSinceLastLearningActivity,
-        ].filter((v) => v !== null)
-    );
+    const daysInactive = signal.activityBasis;
 
     const meta = {
         studentId,

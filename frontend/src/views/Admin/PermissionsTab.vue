@@ -63,7 +63,8 @@ import { ref, onMounted } from 'vue'
 import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
 
-const PERMISSIONS_API = '/api/permissions'
+// client's baseURL is already /api
+const PERMISSIONS_API = '/permissions'
 
 const ROLE_OPTIONS = [
   { key: 'systemadmin', label: 'Systemadmin' },

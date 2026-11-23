@@ -10,6 +10,10 @@ const courseTemplateSchema = new mongoose.Schema(
             required: false,
         },
         templateName: { type: String, required: true, trim: true },
+        title: { type: String, default: "" },
+        courseCode: { type: String, default: "" },
+        description: { type: String, default: "" },
+        cardContent: { type: mongoose.Schema.Types.Mixed, default: {} },
         // 5 modules × 2 sections by default
         modules: { type: [courseModuleSchema], default: [] },
         // "Select teachers" grant is enforced via permission middleware; record who created it

@@ -18,6 +18,14 @@ router.use(requireFeature("QUESTION_BANK"));
 
 const STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"];
 
+// Answer keys must never reach students (or any non-staff role).
+const ANSWER_KEY_FIELDS = "-correctAnswer -answerGuidelines";
+const isStaff = (user) => {
+    const roles = [...(Array.isArray(user?.roles) ? user.roles : []), user?.role];
+    return roles.some((role) => STAFF_ROLES.includes(role));
+};
+const questionProjection = (user) => (isStaff(user) ? "" : ANSWER_KEY_FIELDS);
+
 // GET /api/question-bank - Fetch questions with filtering
 // Query params: subject, questionType, course, active, search, page, limit
 router.get(
@@ -62,6 +70,7 @@ router.get(
 
             const skip = (Number(page) - 1) * Number(limit);
             const questions = await Question.find(filter)
+                .select(questionProjection(req.user))
                 .populate("course", "courseName courseCode")
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -271,7 +280,7 @@ router.put(
                     selectedQuestions: validIds,
                     selectedCount: validIds.length,
                 },
-                { new: true }
+                { returnDocument: 'after' }
             );
 
             if (!examAttempt) {
@@ -301,6 +310,7 @@ router.get(
             if (questionType && questionType !== "Alla") filter.questionType = questionType;
 
             const questions = await Question.find(filter)
+                .select(questionProjection(req.user))
                 .populate("course", "courseName courseCode")
                 .sort({ subject: 1, difficulty: 1, createdAt: -1 });
 
@@ -732,6 +742,7 @@ router.get(
             }
 
             const question = await Question.findById(req.params.id)
+                .select(questionProjection(req.user))
                 .populate("course", "courseName courseCode");
 
             if (!question) {
@@ -815,7 +826,7 @@ router.put(
             }
 
             const question = await Question.findByIdAndUpdate(req.params.id, updateData, {
-                new: true,
+                returnDocument: 'after',
                 runValidators: true,
             });
 
@@ -849,7 +860,7 @@ router.delete(
             const question = await Question.findByIdAndUpdate(
                 req.params.id,
                 { active: false },
-                { new: true }
+                { returnDocument: 'after' }
             );
 
             if (!question) {

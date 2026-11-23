@@ -36,11 +36,19 @@ vi.mock("../../src/services/certificatePdf.js", () => ({
         return `<html><body><h1>${title}</h1><p>${snapshot.studentName}</p><p>${snapshot.courseName}</p><p>${snapshot.teacherName}</p><p>${snapshot.certificateNumber}</p><p>${schoolName || "Mindful Learning"}</p></body></html>`;
     }),
     htmlToPdfBuffer: vi.fn(async (html) => Buffer.from(`%PDF-1.4 ${html}`, "latin1")),
+    readPdfBuffer: vi.fn(async () => Buffer.from("automatically generated signed diploma")),
 }));
 
 import { sendDiplomaEmail } from "../../src/services/emailService.js";
-import { buildCertificateHtml, htmlToPdfBuffer } from "../../src/services/certificatePdf.js";
-import { CertificateSettings } from "../../src/models/certificateModel.js";
+import {
+    buildCertificateHtml,
+    htmlToPdfBuffer,
+    readPdfBuffer,
+} from "../../src/services/certificatePdf.js";
+import {
+    CertificateRecord,
+    CertificateSettings,
+} from "../../src/models/certificateModel.js";
 
 const settingsFor = (overrides = {}) =>
     CertificateSettings.create({
@@ -229,6 +237,31 @@ describe("Study Certificate Routes", () => {
             .expect(403);
 
         expect(response.body.message).toBe("Ej behörig");
+    });
+
+    it("serves the automatically generated diploma without sending a duplicate email", async () => {
+        await CertificateRecord.create({
+            type: "diplom",
+            status: "generated",
+            studentId: student._id,
+            enrollmentId: completedEnrollment._id,
+            courseId: course._id,
+            pdfFileId: new mongoose.Types.ObjectId(),
+            certificateNumber: "ML-2026-00001",
+        });
+        sendDiplomaEmail.mockClear();
+
+        const response = await request(app)
+            .get(`/api/diploma/${completedEnrollment._id}/pdf`)
+            .set("x-test-user-role", "student")
+            .set("x-test-user-email", "anna@student.se")
+            .expect(200);
+
+        expect(response.headers["content-type"]).toBe("application/pdf");
+        expect(readPdfBuffer).toHaveBeenCalledWith(
+            expect.objectContaining({ _bsontype: "ObjectId" })
+        );
+        expect(sendDiplomaEmail).not.toHaveBeenCalled();
     });
 
     it("rejects a certificate for an enrollment that is not completed", async () => {

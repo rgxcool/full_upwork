@@ -570,6 +570,7 @@ describe("updateEnrollmentStatus", () => {
             reason: "done",
             notes: "ok",
             userId: "user1",
+            role: "admin",
         });
 
         expect(enrollmentDoc.changeStatus).toHaveBeenCalledWith("completed", "done", "ok", "user1");
@@ -596,9 +597,44 @@ describe("updateEnrollmentStatus", () => {
             enrollmentId: "enroll-1",
             status: "completed",
             userId: "user1",
+            role: "admin",
         });
 
         expect(result).toEqual(populatedEnrollment);
+    });
+
+    it("forbids a teacher from setting status completed directly", async () => {
+        const enrollmentDoc = { status: "active", changeStatus: vi.fn() };
+        StudentEnrollmentMock.findById.mockResolvedValueOnce(enrollmentDoc);
+
+        await expect(
+            updateEnrollmentStatus({ enrollmentId: "enroll-1", status: "completed", role: "teacher", roles: ["teacher"] })
+        ).rejects.toMatchObject({ statusCode: 403 });
+        expect(enrollmentDoc.changeStatus).not.toHaveBeenCalled();
+    });
+
+    it("forbids a teacher from changing the status of a grade-locked enrollment", async () => {
+        const enrollmentDoc = { status: "completed", isGradeLocked: true, changeStatus: vi.fn() };
+        StudentEnrollmentMock.findById.mockResolvedValueOnce(enrollmentDoc);
+
+        await expect(
+            updateEnrollmentStatus({ enrollmentId: "enroll-1", status: "dropped", role: "teacher" })
+        ).rejects.toMatchObject({ statusCode: 403 });
+        expect(enrollmentDoc.changeStatus).not.toHaveBeenCalled();
+    });
+
+    it("lets an admin set status completed directly", async () => {
+        const enrollmentDoc = { _id: "enroll-1", status: "active", changeStatus: vi.fn().mockResolvedValue(undefined) };
+        StudentEnrollmentMock.findById
+            .mockResolvedValueOnce(enrollmentDoc)
+            .mockReturnValueOnce({
+                populate: vi.fn().mockReturnThis(),
+                then: (resolve) => resolve({ _id: "enroll-1", status: "completed" }),
+            });
+
+        await updateEnrollmentStatus({ enrollmentId: "enroll-1", status: "completed", role: "teacher", roles: ["teacher", "admin"] });
+
+        expect(enrollmentDoc.changeStatus).toHaveBeenCalledWith("completed", undefined, undefined, undefined);
     });
 
     it("throws a 404 AppError when the enrollment is missing", async () => {

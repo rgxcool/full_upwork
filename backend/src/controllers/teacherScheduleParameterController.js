@@ -100,7 +100,7 @@ export const updateTeacherScheduleParameter = async (req, res) => {
         const parameter = await TeacherScheduleParameters.findOneAndUpdate(
             { teacherId, courseId, lengthWeeks: Number(lengthWeeks) },
             updateData,
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         ).lean();
 
         if (!parameter) {

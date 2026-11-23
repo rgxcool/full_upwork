@@ -5,6 +5,7 @@ import ConfirmDialog from '@/components/base/ConfirmDialog.vue'
 import EmptyState from '@/components/base/EmptyState.vue'
 import ErrorState from '@/components/base/ErrorState.vue'
 import StatusBadge from '@/components/base/StatusBadge.vue'
+import PageHeader from '@/components/base/PageHeader.vue'
 import { renderWithVuetify } from '../helpers/render.js'
 
 /**
@@ -157,6 +158,32 @@ describe('Feature: shared base UI components', () => {
             expect(screen.queryByRole('status')).not.toBeInTheDocument()
             await userEvent.click(button)
             expect(onClick).toHaveBeenCalledOnce()
+        })
+    })
+
+    describe('PageHeader', () => {
+        it('renders a title, subtitle and action slot', async () => {
+            const { container } = await renderWithVuetify(PageHeader, {
+                props: { title: 'Elevöversikt', subtitle: 'Aktiva elever' },
+                slots: { actions: '<button>Ny elev</button>' },
+            })
+            expect(container.querySelector('h1')).toHaveTextContent('Elevöversikt')
+            expect(container.querySelector('.page-header__subtitle')).toHaveTextContent('Aktiva elever')
+            expect(screen.getByRole('button', { name: 'Ny elev' })).toBeInTheDocument()
+        })
+
+        it('renders link and current crumb navigation', async () => {
+            await renderWithVuetify(PageHeader, {
+                props: {
+                    title: 'Elevdetaljer',
+                    crumbs: [
+                        { label: 'Start', to: '/' },
+                        { label: 'Elever' },
+                    ],
+                },
+            })
+            expect(screen.getByRole('navigation', { name: 'Brödsmulor' })).toBeInTheDocument()
+            expect(screen.getByRole('link', { name: 'Start' })).toBeInTheDocument()
         })
     })
 })

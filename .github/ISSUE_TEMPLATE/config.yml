@@ -1,0 +1,6 @@
+# Tvinga alla ärenden genom ett formulär så att etiketter, etapp och estimat alltid fylls i.
+blank_issues_enabled: false
+contact_links:
+    - name: Säkerhetsbrist (rapportera inte publikt)
+      url: https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
+      about: Använd "Report a vulnerability" under repots Security-flik för allt som exponerar elevdata (personnummer, stödbehov, betyg).

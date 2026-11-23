@@ -3,6 +3,9 @@ import logger from "../utils/logger.js";
 import { courseModuleSchema } from "./courseModuleSchema.js";
 import { PLAN_LENGTHS } from "../utils/datePlan.js";
 
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const MIN_VALID_SLUTPROV_YEAR = 1970;
+
 // Optional snapshot of a 5/10/20 week plan applied by the date-planning UI.
 // The legacy `sectionDates` and module dates remain the dates that drive
 // students' course cards; this field records the plan that produced them.
@@ -28,218 +31,184 @@ const datePlanSchema = new mongoose.Schema(
     { _id: false }
 );
 
-const courseInstanceSchema = new mongoose.Schema(
-    {
-        // Reference to the main course (static definition)
-        mainCourseId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Course",
-            required: true,
-        },
-
-        // Temporal information
-        startDate: {
-            type: Date,
-            required: true,
-        },
-        endDate: {
-            type: Date,
-            required: true,
-        },
-
-        // Instance-specific data (can override main course data)
-        courseName: { type: String, required: true },
-        courseCode: { type: String, required: true },
-        coursePoints: { type: String },
-        courseExtent: String,
-
-        // Version tracking
-        version: {
-            type: String,
-            default: "1.0",
-        },
-
-        // Status
-        isActive: {
-            type: Boolean,
-            default: true,
-        },
-
-        // Metadata
-        createdBy: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-        },
-        responsibleTeacher: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Teacher",
-        },
-        assistantTeacher: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Teacher",
-        },
-        notes: String,
-        slutprovDate: Date,
-
-        // Copied modules from a course template (course card content)
-        modules: { type: [courseModuleSchema], default: [] },
-
-        // Auto-generated section start dates (weeks from course start, one per module)
-        // Populated at instance creation from teacher's saved schedule parameters,
-        // or evenly-spaced defaults if no parameters exist.
-        sectionDates: [{ type: Date }],
-
-        // Optional saved plan from the date-planning preview/apply endpoints
-        datePlan: { type: datePlanSchema, default: null },
-
-        // Course card content (instructions, assignment descriptions, etc.)
-        // Admins/systemadmin and the responsible teacher can view/edit all content.
-        // Students can view content that is not hidden; hidden content is replaced
-        // with a "blickat ej" placeholder.
-        content: {
-            type: Map,
-        of: {
-                title: String,
-                instructions: String,
-                isHiddenFromStudent: {
-                    type: Boolean,
-                    default: false,
-                },
-            },
-            default: new Map(),
-        },
-
-        // Activity feed / notice board
-        // Staff (admin/systemadmin/responsible teacher) can post; students can read only
-        activityFeed: {
-            type: [
-                {
-                    id: { type: mongoose.Schema.Types.ObjectId, required: true },
-                    text: { type: String, required: true },
-                    by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-                    at: { type: Date, default: Date.now },
-                    // If set, only show to students in this course instance
-                    courseInstanceId: { type: mongoose.Schema.Types.ObjectId, ref: "CourseInstance" },
-                }
-            ],
-            default: [],
-        },
-
-        // Track which assignments each student has submitted (for course card overview)
-        // Populated at read-time from AssignmentSubmission queries
-        submittedAssignments: {
-            type: Map,
-            of: Number, // moduleNumber -> count of submissions
-            default: new Map(),
-        },
-
-        // Which section each student is on (ordinal position in student's sorted course cards)
-        // Computed at read-time based on study period ordering
-        sectionPositions: {
-            type: Map,
-            of: Number, // studentId -> studyPeriod (1-based)
-            default: new Map(),
-        },
-
-        // Statistics tracking
-        enrollmentCount: {
-            type: Number,
-            default: 0,
-        },
-        completionCount: {
-            type: Number,
-            default: 0,
-        },
-        dropoutCount: {
-            type: Number,
-            default: 0,
-        },
-    },
-    {
-        timestamps: true,
-        // Index for efficient queries
-        indexes: [
-            { mainCourseId: 1, startDate: 1, endDate: 1 },
-            { startDate: 1, endDate: 1 },
-            { isActive: 1 },
-        ],
-    }
+const moduleContentEntrySchema = new mongoose.Schema(
+  {
+    title: { type: String, default: "" },
+    instructions: { type: String, default: "" },
+    isHiddenFromStudent: { type: Boolean, default: false },
+  },
+  { _id: false },
 );
 
-// Validation: endDate must be after startDate
+const activityFeedItemSchema = new mongoose.Schema(
+  {
+    id: { type: mongoose.Schema.Types.ObjectId, required: true },
+    text: { type: String, required: true },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    at: { type: Date, default: Date.now },
+    // Begränsa till en specifik kursinstans om satt
+    courseInstanceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CourseInstance",
+    },
+  },
+  { _id: false },
+);
+
+const courseInstanceSchema = new mongoose.Schema(
+  {
+    // Referens till huvudkursen (statisk definition)
+    mainCourseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Course",
+      required: true,
+    },
+
+    // Tidsperiod
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+
+    // Instansspecifika kursuppgifter
+    courseName: { type: String, required: true },
+    courseCode: { type: String, required: true },
+    coursePoints: { type: String },
+    courseExtent: { type: String },
+
+    // Versionering och status
+    version: { type: String, default: "1.0" },
+    isActive: { type: Boolean, default: true },
+
+    // Metadata och personal
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    responsibleTeacher: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Teacher",
+    },
+    assistantTeacher: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Teacher",
+    },
+    notes: { type: String },
+    slutprovDate: { type: Date },
+
+    // Kopierade moduler från kursmall / kurskort
+    modules: { type: [courseModuleSchema], default: [] },
+    courseTemplateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CourseTemplate",
+    },
+    cardContent: { type: mongoose.Schema.Types.Mixed, default: {} },
+
+    // Startdatum per modul/sektion
+    sectionDates: [{ type: Date }],
+
+    // Optional saved plan from the date-planning preview/apply endpoints
+    datePlan: { type: datePlanSchema, default: null },
+
+    // Kurskortsinnehåll per modulnyckel (strängnycklar i MongooseMap)
+    content: {
+      type: Map,
+      of: moduleContentEntrySchema,
+      default: () => new Map(),
+    },
+
+    // Aktivitetsflöde / anslagstavla
+    activityFeed: {
+      type: [activityFeedItemSchema],
+      default: [],
+    },
+
+    // Beräknas vid läsning från AssignmentSubmission (modulnyckel -> antal)
+    submittedAssignments: {
+      type: Map,
+      of: Number,
+      default: () => new Map(),
+    },
+
+    // Beräknas vid läsning utifrån studieperiodsordning (studentId -> studieperiod)
+    sectionPositions: {
+      type: Map,
+      of: Number,
+      default: () => new Map(),
+    },
+
+    // Statistik
+    enrollmentCount: { type: Number, default: 0 },
+    completionCount: { type: Number, default: 0 },
+    dropoutCount: { type: Number, default: 0 },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+// Validering: slutdatum måste vara efter startdatum
 courseInstanceSchema.pre("validate", function () {
-    if (this.startDate && this.endDate && this.endDate <= this.startDate) {
-        this.invalidate("endDate", "End date must be after start date");
-    }
+  if (this.startDate && this.endDate && this.endDate <= this.startDate) {
+    this.invalidate("endDate", "End date must be after start date");
+  }
 });
 
-// Auto-calculate slutprovDate based on teacher and course end date
+// Beräkna slutprovDate automatiskt om det saknas eller är ogiltigt
 courseInstanceSchema.pre("save", async function () {
-    // Check if this was explicitly set via the update endpoint (bypass auto-calculation)
-    if (this._slutprovDateExplicitlySet) {
-        logger.debug({ slutprovDate: this.slutprovDate }, "Pre-save hook: _slutprovDateExplicitlySet flag is true, preserving");
-        delete this._slutprovDateExplicitlySet; // Clean up the flag
-        return; // Don't auto-calculate
+  if (this._slutprovDateExplicitlySet) {
+    delete this._slutprovDateExplicitlySet;
+    return;
+  }
+
+  const parsedDate = this.slutprovDate ? new Date(this.slutprovDate) : null;
+  const hasValidSlutprovDate =
+    parsedDate !== null &&
+    !Number.isNaN(parsedDate.getTime()) &&
+    parsedDate.getFullYear() > MIN_VALID_SLUTPROV_YEAR;
+
+  if (hasValidSlutprovDate || !this.responsibleTeacher || !this.endDate) {
+    return;
+  }
+
+  try {
+    const { calculateSlutprovDate } =
+      await import("../utils/slutprovDateCalculator.js");
+    const calculatedDate = await calculateSlutprovDate(
+      this.responsibleTeacher,
+      this.endDate,
+    );
+
+    if (calculatedDate) {
+      this.slutprovDate = calculatedDate;
+      logger.info(
+        {
+          courseName: this.courseName,
+          calculatedDate: calculatedDate.toDateString(),
+        },
+        "Auto-calculated slutprovDate for course",
+      );
     }
-    
-    // Check if slutprovDate was explicitly set/modified
-    const isSlutprovDateExplicitlySet = this.isModified('slutprovDate');
-    const hasValidSlutprovDate = this.slutprovDate !== null && 
-                                  this.slutprovDate !== undefined && 
-                                  !isNaN(new Date(this.slutprovDate).getTime()) &&
-                                  new Date(this.slutprovDate).getFullYear() > 1970; // Not epoch date
-    
-    logger.debug({
-        value: this.slutprovDate,
-        isModified: isSlutprovDateExplicitlySet,
-        hasValidDate: hasValidSlutprovDate,
-        responsibleTeacher: this.responsibleTeacher,
-        endDate: this.endDate,
-        dateType: typeof this.slutprovDate,
-        dateInstance: this.slutprovDate instanceof Date
-    }, "Pre-save hook - slutprovDate");
-    
-    // If slutprovDate was explicitly modified and has a valid date, preserve it
-    if (isSlutprovDateExplicitlySet && hasValidSlutprovDate) {
-        logger.debug({ slutprovDate: this.slutprovDate }, "Pre-save hook: Preserving explicitly set slutprovDate");
-        return; // Don't auto-calculate
-    }
-    
-    // Only auto-calculate if slutprovDate is not set or is invalid
-    if (this.responsibleTeacher && this.endDate && !hasValidSlutprovDate) {
-        try {
-            const { calculateSlutprovDate } = await import("../utils/slutprovDateCalculator.js");
-            const calculatedDate = await calculateSlutprovDate(this.responsibleTeacher, this.endDate);
-            if (calculatedDate) {
-                this.slutprovDate = calculatedDate;
-                logger.info({ courseName: this.courseName, calculatedDate: calculatedDate.toDateString() }, "Auto-calculated slutprovDate for course");
-            }
-        } catch (error) {
-            logger.error({ err: error }, "Error calculating slutprovDate");
-            // Don't fail the save if calculation fails
-        }
-    }
-    // If slutprovDate is already set, we preserve it (could be manually set via drag-and-drop)
+  } catch (error) {
+    logger.error({ err: error }, "Error calculating slutprovDate");
+  }
 });
 
-// Method to check if instance overlaps with date range
+// Instansmetoder
 courseInstanceSchema.methods.overlapsWith = function (startDate, endDate) {
-    return this.startDate < endDate && this.endDate > startDate;
+  return this.startDate < endDate && this.endDate > startDate;
 };
 
-// Method to get duration in days
 courseInstanceSchema.methods.getDuration = function () {
-    return Math.ceil((this.endDate - this.startDate) / (1000 * 60 * 60 * 24));
+  return Math.ceil((this.endDate - this.startDate) / MS_PER_DAY);
 };
 
-// Prevent duplicate instances for same course/date/teacher
+// Index
+courseInstanceSchema.index({ mainCourseId: 1, startDate: 1, endDate: 1 });
+courseInstanceSchema.index({ startDate: 1, endDate: 1 });
+courseInstanceSchema.index({ isActive: 1 });
 courseInstanceSchema.index(
-    { mainCourseId: 1, startDate: 1, endDate: 1, responsibleTeacher: 1 },
-    { unique: true }
+  { mainCourseId: 1, startDate: 1, endDate: 1, responsibleTeacher: 1 },
+  { unique: true },
 );
 
 export default mongoose.model(
-    "CourseInstance",
-    courseInstanceSchema,
-    "courseInstances"
+  "CourseInstance",
+  courseInstanceSchema,
+  "courseInstances",
 );

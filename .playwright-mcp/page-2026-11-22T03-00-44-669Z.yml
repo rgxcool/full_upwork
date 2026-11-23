@@ -1,0 +1,42 @@
+- generic [ref=f7e3]:
+  - navigation [ref=f7e25]:
+    - generic [ref=f7e26]:
+      - link [ref=f7e28] [cursor=pointer]:
+        - /url: /
+        - img "Mindful logo" [ref=f7e29]
+      - generic [ref=f7e30]:
+        - button "Min profil" [ref=f7e32] [cursor=pointer]
+        - generic [ref=f7e38]: "1"
+        - link "Meddelanden" [ref=f7e44] [cursor=pointer]:
+          - /url: /messages
+        - button "Öppna meny" [ref=f7e47] [cursor=pointer]
+  - generic [ref=f7e50]:
+    - heading "Min profil" [level=1] [ref=f7e51]
+    - generic [ref=f7e52]:
+      - complementary [ref=f7e53]:
+        - list [ref=f7e54]:
+          - listitem [ref=f7e55] [cursor=pointer]:
+            - generic [ref=f7e56]: 👤
+            - text: Min profil
+          - listitem [ref=f7e57] [cursor=pointer]:
+            - generic [ref=f7e58]: 🔒
+            - text: Byt lösenord
+          - listitem [ref=f7e59] [cursor=pointer]:
+            - generic [ref=f7e60]: 📁
+            - text: Delade dokument
+          - listitem [ref=f7e61] [cursor=pointer]:
+            - generic [ref=f7e62]: 📋
+            - text: Att göra
+      - main [ref=f7e63]:
+        - generic [ref=f7e64]:
+          - heading "Kontouppgifter" [level=3] [ref=f7e66]
+          - generic [ref=f7e68]:
+            - generic [ref=f7e69]:
+              - generic [ref=f7e70]: Namn
+              - text: Anna Andersson
+            - generic [ref=f7e71]:
+              - generic [ref=f7e72]: E-post
+              - text: student@mindful.se
+            - generic [ref=f7e73]:
+              - generic [ref=f7e74]: Roll
+              - text: Elev

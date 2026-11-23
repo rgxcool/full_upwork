@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import mongoose from "mongoose";
 
 vi.mock("../../src/services/emailService.js", () => ({
     __esModule: true,
@@ -343,6 +342,43 @@ describe("inactivityScanner", () => {
         expect(await Notification.countDocuments({ type: "inactivity_review" })).toBe(0);
     });
 
+    it("does not require a 5-day login review when course activity is recent, but does when nothing is recent", async () => {
+        const { student } = await enrollStudent({ lastLoginDaysAgo: 6 });
+        await Student.updateOne(
+            { _id: student._id },
+            { $set: { lastLearningActivityAt: today } }
+        );
+
+        const withRecentActivity = await runInactivityScan({ today });
+
+        expect(withRecentActivity.reviewNotifications).toBe(0);
+        expect(withRecentActivity.inactiveForWarning).toBe(0);
+        expect(withRecentActivity.warned).toBe(0);
+        expect(sendInactivityWarningEmail).not.toHaveBeenCalled();
+        expect(
+            await Notification.countDocuments({
+                type: "inactivity_review",
+                "meta.studentId": student._id,
+            })
+        ).toBe(0);
+
+        // Same stale login, but no other recent activity: the union rule still
+        // requires the admin review.
+        await Student.updateOne(
+            { _id: student._id },
+            { $unset: { lastLearningActivityAt: "" } }
+        );
+        const nothingRecent = await runInactivityScan({ today });
+
+        expect(nothingRecent.reviewNotifications).toBe(1);
+        expect(
+            await Notification.countDocuments({
+                type: "inactivity_review",
+                "meta.studentId": student._id,
+            })
+        ).toBe(1);
+    });
+
     it("never creates a duplicate review notification across repeated scans", async () => {
         const { student } = await enrollStudent({
             lastLoginDaysAgo: null,
@@ -388,7 +424,7 @@ describe("inactivityScanner", () => {
     });
 
     it("stops pending review when the student becomes active", async () => {
-        const { user } = await enrollStudent({
+        await enrollStudent({
             lastLoginDaysAgo: null,
             startDaysAgo: 7,
             createLogin: false,

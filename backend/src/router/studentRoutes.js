@@ -1452,7 +1452,7 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
         let updatedStudent = await Student.findByIdAndUpdate(
             req.params.id,
             { $set: updates },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!updatedStudent) {

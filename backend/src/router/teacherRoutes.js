@@ -344,7 +344,7 @@ router.put(
             const updatedTeacher = await Teacher.findByIdAndUpdate(
                 id,
                 teacherUpdateData,
-                { new: true }
+                { returnDocument: 'after' }
             ).populate("userId", "username email");
 
             res.json({
@@ -710,7 +710,7 @@ router.put(
                     .map(p => p.trim());
             }
 
-            const updatedTeacher = await Teacher.findByIdAndUpdate(id, updateData, { new: true })
+            const updatedTeacher = await Teacher.findByIdAndUpdate(id, updateData, { returnDocument: 'after' })
                 .populate("userId", "username email roles onVacation vacationStart vacationEnd vacationNote");
 
             res.json({

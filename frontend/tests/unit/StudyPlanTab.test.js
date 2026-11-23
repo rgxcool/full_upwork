@@ -15,11 +15,11 @@ vi.mock('@/api/client.js', () => ({
     },
 }))
 
+const mockGetters = vi.hoisted(() => ({ userRole: 'teacher', userRoles: ['teacher'], isAdmin: false }))
+
 vi.mock('vuex', () => ({
     useStore: () => ({
-        getters: {
-            userRole: 'teacher',
-        },
+        getters: mockGetters,
     }),
 }))
 
@@ -253,5 +253,31 @@ describe('StudyPlanTab.vue - study pace', () => {
         )
         expect(client.get).toHaveBeenCalledWith('/student-details/stu-1')
         expect(wrapper.emitted('student-updated')).toBeTruthy()
+    })
+})
+
+describe('StudyPlanTab.vue - Revidera plan (E1-20)', () => {
+    const setRole = (role) => {
+        mockGetters.userRole = role
+        mockGetters.userRoles = [role]
+        mockGetters.isAdmin = ['admin', 'systemadmin'].includes(role)
+    }
+
+    beforeEach(() => {
+        vi.resetAllMocks()
+        client.get.mockResolvedValue({ data: buildStudent([]) })
+    })
+
+    it.each([
+        ['syv', true],
+        ['admin', true],
+        ['teacher', false],
+        ['specped', false],
+    ])('shows the revise button for %s: %s', async (role, visible) => {
+        setRole(role)
+        const wrapper = mount(StudyPlanTab, { props: { student: buildStudent([]) } })
+        await wrapper.vm.$nextTick()
+        expect(wrapper.find('.revision-button').exists()).toBe(visible)
+        setRole('teacher')
     })
 })

@@ -247,7 +247,7 @@ router.get('/form-questions/:type', isAuthenticated, hasRole(ALLOWED_STAFF_ROLES
           questions, 
           createdBy: req.user._id 
         },
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
       )
   
       res.json(updatedConfig)

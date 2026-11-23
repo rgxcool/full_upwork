@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import store from '@/store/store.js'
+import { detailRouteMeta, educationRouteMeta } from './routeRoles.js'
 
 // Public Views
 import Home from '@/views/Home.vue'
@@ -40,6 +41,8 @@ const ActionPlanManager = () => import('@/views/Admin/ActionPlanManager.vue')
 const LearningManagement = () => import('@/views/Admin/LearningManagement.vue')
 const NotificationManager = () => import('@/views/Admin/NotificationManager.vue')
 const CalendarHousekeeping = () => import('@/views/Admin/CalendarHousekeeping.vue')
+const CourseCardBuilder = () => import('@/views/Admin/CourseCardBuilder.vue')
+const CourseCardsOverview = () => import('@/views/Admin/CourseCardsOverview.vue')
 
 // Lazy-loaded Teacher Views
 const FullCalendar = () => import('@/views/Teacher/ExamCalendar.vue')
@@ -60,7 +63,6 @@ import CourseCards from '@/views/Student/CourseCards.vue'
 import Dashboard from '@/views/Dashboard.vue'
 const ChatbotView = () => import('@/views/Student/ChatbotView.vue')
 const MessagingView = () => import('@/views/MessagingView.vue')
-
 
 const routes = [
   // Public Routes
@@ -103,7 +105,7 @@ const routes = [
     meta: { title: 'Kursstatistik', role: 'admin' },
   },
 
-  // Admin Routes (Requires "admin" or higher)
+  // Admin Routes (role "admin"; systemadmin implies admin)
   { path: '/lagg-till-anvandare', component: AddUser, meta: { title: 'Add User', role: 'admin' } },
   {
     path: '/lagg-till-larare',
@@ -112,8 +114,17 @@ const routes = [
   },
   { path: '/anvandare', component: SearchUser, meta: { title: 'Search Users', role: 'admin' } },
   { path: '/admin/users', component: SearchUser, meta: { title: 'Admin Users', role: 'admin' } },
-  { path: '/admin/edit-user/:id', component: EditUser, props: true, meta: { title: 'Redigera användare', role: ['admin', 'systemadmin'] } },
-  { path: '/admin/permissions', component: PermissionsTab, meta: { title: 'Behörigheter', role: ['admin', 'systemadmin'] } },
+  {
+    path: '/admin/edit-user/:id',
+    component: EditUser,
+    props: true,
+    meta: { title: 'Redigera användare', role: ['admin', 'systemadmin'] },
+  },
+  {
+    path: '/admin/permissions',
+    component: PermissionsTab,
+    meta: { title: 'Behörigheter', role: ['admin', 'systemadmin'] },
+  },
   {
     path: '/addstudent',
     name: 'AddStudent',
@@ -133,9 +144,20 @@ const routes = [
       // Preserve query parameters if any
       return {
         path: `/student/${to.params.id}`,
-        query: to.query
+        query: to.query,
       }
-    }
+    },
+  },
+  // CourseCardBuilder route for staff who can manage course content
+  {
+    path: '/admin/course-card-builder',
+    name: 'CourseCardBuilder',
+    component: CourseCardBuilder,
+    meta: {
+      title: 'Kurskortsbyggare',
+      requiresAuth: true,
+      role: ['teacher', 'admin', 'systemadmin'],
+    },
   },
   // Redirect /detaljer/Kursinstans/:id to /education/:id?type=instance
   {
@@ -143,45 +165,45 @@ const routes = [
     redirect: (to) => {
       return {
         path: `/education/${to.params.id}`,
-        query: { ...to.query, type: 'instance' }
+        query: { ...to.query, type: 'instance' },
       }
-    }
+    },
   },
   {
     path: '/detaljer/:type/:id',
     component: SearchResultDetails,
     props: true,
-    meta: { title: 'Search Result Details', role: ['teacher', 'coordinator', 'syv', 'specped', 'admin', 'systemadmin'] },
+    meta: detailRouteMeta,
     beforeEnter: (to, from, next) => {
       // Redirect Elev type to student view
       if (to.params.type === 'Elev' || to.params.type === 'Student') {
         next({
           path: `/student/${to.params.id}`,
-          query: to.query
+          query: to.query,
         })
       } else if (to.params.type === 'Kursinstans' || to.params.type === 'CourseInstance') {
         // Redirect Kursinstans to education view
         next({
           path: `/education/${to.params.id}`,
-          query: { ...to.query, type: 'instance' }
+          query: { ...to.query, type: 'instance' },
         })
       } else if (to.params.type === 'Lärare' || to.params.type === 'Teacher') {
         // Redirect Lärare to staff profile view
         next({
           path: `/teacher/${to.params.id}`,
-          query: to.query
+          query: to.query,
         })
       } else {
         next()
       }
-    }
+    },
   },
   {
     path: '/education/:id',
     name: 'EducationDetials',
     component: EducationDetails,
     props: true,
-    meta: { title: 'Education Details', role: ['teacher', 'coordinator', 'syv', 'specped', 'admin', 'systemadmin'] },
+    meta: educationRouteMeta,
   },
   {
     path: '/students',
@@ -288,7 +310,12 @@ const routes = [
     path: '/admin/analytics',
     name: 'AnalyticsDashboard',
     component: () => import('@/views/Admin/AnalyticsDashboard.vue'),
-    meta: { title: 'Rapporter & Analys', role: ['admin', 'systemadmin'] },
+    // Matrix 'Statistik': Ja for staff except coordinator; per-user overrides win.
+    meta: {
+      title: 'Rapporter & Analys',
+      role: ['admin', 'systemadmin', 'teacher', 'syv', 'specped'],
+      feature: 'statistics',
+    },
   },
   {
     path: '/admin/inactivity',
@@ -334,7 +361,8 @@ const routes = [
     path: '/provningar',
     name: 'ProvningarCrud',
     component: () => import('@/views/Provningar/ProvningarCrud.vue'),
-    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin'], requiresAuth: true }
+    // Teachers see only their assigned prövningar and may make decisions.
+    meta: { title: 'Hantera Prövningar', role: ['admin', 'systemadmin', 'teacher'], requiresAuth: true },
   },
 
   // Chatbot FAQ / Knowledge Base management (same view for admin & teacher;
@@ -352,31 +380,44 @@ const routes = [
     meta: { title: 'Vanliga frågor (Chatbot)', role: ['teacher', 'admin', 'systemadmin'] },
   },
 
-  // Teacher Routes (Requires "teacher" or higher)
+  // Teacher Routes (explicit role lists; no role inherits another's routes)
   {
     path: '/larare/kurser',
     name: 'TeacherKurser',
     component: () => import('@/views/Teacher/TeacherKurserPage.vue'),
-    meta: { title: 'Kurser', role: 'teacher' }
+    meta: { title: 'Kurser', role: ['teacher', 'admin', 'systemadmin'] },
   },
   {
     path: '/kalender',
     component: FullCalendar,
-    meta: { title: 'Kalender', role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'] },
+    // Matrix 'Kalender (slutprov)': coordinator Nej unless overridden per user.
+    meta: {
+      title: 'Kalender',
+      role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'],
+      feature: 'calendar_final_exam',
+    },
   },
   {
     path: '/syv/appointments',
     name: 'SyvAppointments',
     component: RoleBasedAppointments,
-    meta: { title: 'SYV Samtal', role: 'syv', requiredRoles: ['syv', 'admin', 'systemadmin'] },
+    meta: { title: 'SYV Samtal', role: ['syv', 'admin', 'systemadmin'], requiredRoles: ['syv', 'admin', 'systemadmin'] },
   },
   {
     path: '/specped/appointments',
     name: 'SpecpedAppointments',
     component: RoleBasedAppointments,
-    meta: { title: 'Specped Samtal', role: 'specped', requiredRoles: ['specped', 'admin', 'systemadmin'] },
+    meta: {
+      title: 'Specped Samtal',
+      role: ['specped', 'admin', 'systemadmin'],
+      requiredRoles: ['specped', 'admin', 'systemadmin'],
+    },
   },
-  { path: '/betyg', component: BetygSattning, meta: { title: 'Grade Setting', role: 'teacher' } },
+  {
+    path: '/betyg',
+    component: BetygSattning,
+    meta: { title: 'Grade Setting', role: ['teacher', 'admin', 'systemadmin'] },
+  },
   {
     path: '/profile',
     name: 'profile',
@@ -438,6 +479,15 @@ const routes = [
   },
 
   {
+    path: '/course-cards/overview/:courseInstanceId?',
+    name: 'CourseCardsOverview',
+    component: CourseCardsOverview,
+    meta: {
+      title: 'Kurskort',
+      role: ['teacher', 'admin', 'systemadmin'],
+    },
+  },
+  {
     path: '/course-cards',
     name: 'CourseCards',
     component: CourseCards,
@@ -481,7 +531,7 @@ const routes = [
     },
   },
 
-// Remove duplicate /betyg route
+  // Remove duplicate /betyg route
   // Admin Category A – Activity Feed
   {
     path: '/admin/activity-feed',
@@ -554,8 +604,10 @@ const router = createRouter({
 })
 
 router.onError((error, to) => {
-  if (/Failed to fetch dynamically imported module/.test(error.message) ||
-      /Loading chunk .* failed/.test(error.message)) {
+  if (
+    /Failed to fetch dynamically imported module/.test(error.message) ||
+    /Loading chunk .* failed/.test(error.message)
+  ) {
     console.error('Chunk load failed, reloading page:', error)
     window.location.href = to.fullPath
   }
@@ -566,17 +618,19 @@ router.beforeEach((to, from, next) => {
   document.title = to.meta.title || 'Mindful Learning' // Dynamically set page titles
 
   const isAuthenticated = store.getters.isLoggedIn
-  const hasPermission = store.getters.hasPermission
+  // Explicit role lists + per-user feature overrides (no role hierarchy).
+  const canAccess = store.getters.canAccess
+  const restricted = !!to.meta.role || !!to.meta.feature
 
   // Any route that restricts by role implicitly requires being logged in —
   // an anonymous "guest" role should never satisfy a role check, but we
   // enforce it explicitly here too so a route can't be reached just because
   // someone forgot to also set meta.requiresAuth.
-  const needsAuth = to.meta.requiresAuth || !!to.meta.role
+  const needsAuth = to.meta.requiresAuth || restricted
 
   if (needsAuth && !isAuthenticated) {
     next('/login') // Redirect unauthenticated users
-  } else if (to.meta.role && !hasPermission(to.meta.role)) {
+  } else if (restricted && !canAccess({ role: to.meta.role, feature: to.meta.feature })) {
     next('/unauthorized') // Redirect if role is insufficient
   } else if (
     isAuthenticated &&

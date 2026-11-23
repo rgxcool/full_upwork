@@ -90,10 +90,11 @@ describe("Analytics Routes Integration Tests", () => {
                 .expect(401);
         });
 
-        it("returns 403 for non-admin user accessing /filters", async () => {
+        // Teachers have analytics:read (matrix "statistics": Ja); coordinators do not.
+        it("returns 403 for a role without analytics:read accessing /filters", async () => {
             await request(app)
                 .get("/api/analytics/filters")
-                .set(buildAuthHeader("teacher"))
+                .set(buildAuthHeader("coordinator"))
                 .expect(403);
         });
 

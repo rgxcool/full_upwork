@@ -1,11 +1,10 @@
 
 import rolesConfig from '../config/roles.js';
-import { PERMISSION_FEATURES, hasPermission as roleHasPermission } from '../config/permissions.js';
+import { PERMISSION_FEATURES, userHasFeature } from '../config/permissions.js';
 import { logger } from '../utils/errorHandler.js';
 import User from '../models/User.js';
 import { collectRoles, getPrimaryRole } from '../utils/roles.js';
 
-const SUPERUSER_ROLES = ['systemadmin', 'admin', 'tester'];
 
 const getUserRoles = (user) => {
     const roles = Array.isArray(user?.roles) && user.roles.length > 0 ? user.roles : user?.role ? [user.role] : [];
@@ -47,22 +46,15 @@ const PERMISSION_TO_FEATURE = {
     'courseTemplates:update': PERMISSION_FEATURES.COURSE_TEMPLATES,
     'courseTemplates:delete': PERMISSION_FEATURES.COURSE_TEMPLATES,
     'analytics:read': PERMISSION_FEATURES.STATISTICS,
+    'assignments:create': PERMISSION_FEATURES.EVALUATIONS,
+    'assignments:read:own': PERMISSION_FEATURES.EVALUATIONS,
+    'assignments:update:own': PERMISSION_FEATURES.EVALUATIONS,
+    'assignments:grade': PERMISSION_FEATURES.EVALUATIONS,
 };
 
 // Effective feature access for a user: an explicit per-user override wins,
 // otherwise the role default from the permission matrix is used.
-export const hasFeaturePermission = (user, feature) => {
-    if (!user) return false;
-
-    const overrides = getOverrideObject(user);
-    if (hasExplicitOverride(overrides, feature)) {
-        return overrides[feature] === true;
-    }
-
-    const roles = getUserRoles(user);
-    if (roles.some((r) => SUPERUSER_ROLES.includes(r))) return true;
-    return roles.some((r) => roleHasPermission(r, feature));
-};
+export const hasFeaturePermission = (user, feature) => userHasFeature(user, feature);
 
 /**
  * Refresh the caller's authorization state (roles/permissions) from the

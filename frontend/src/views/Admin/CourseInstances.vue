@@ -1085,10 +1085,14 @@
 
         try {
           await client.delete(`/course-instances/${instanceId}`)
+          toast.success('Kursinstansen togs bort.')
           await loadInstances()
         } catch (error) {
           console.error('Error deleting instance:', error)
-          toast.error('Ett fel uppstod när instansen skulle tas bort.')
+          // 409 = students still linked; show the server's reason (Swedish).
+          toast.error(
+            error?.response?.data?.error || 'Ett fel uppstod när instansen skulle tas bort.'
+          )
         }
       }
 

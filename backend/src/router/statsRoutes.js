@@ -4,10 +4,14 @@ import Student from "../models/Student.js";
 import Course from "../models/Course.js";
 import { authenticateUser } from "../controllers/authController.js";
 import logger from "../utils/logger.js";
+import { canFeature } from "../middleware/authorization.js";
+import { PERMISSION_FEATURES } from "../config/permissions.js";
 
 const router = express.Router();
 
-router.get("/courses-per-month", authenticateUser, async (req, res) => {
+// Statistics follow PERMISSION_MATRIX "statistics" (+ per-user overrides);
+// students and coordinators get 403 (audit E1-01).
+router.get("/courses-per-month", authenticateUser, canFeature(PERMISSION_FEATURES.STATISTICS), async (req, res) => {
   try {
     const students = await Student.find().select({ municipality: 1, education: 1 });
 

@@ -82,7 +82,7 @@ if (-not (Test-Path "$Root\frontend\node_modules")) {
     Pop-Location
 }
 Write-Log "Dependencies ready"
-Write-Log "Loading education data (dropData + updateEducation)..."
+Write-Log "Loading education data (dropEducation + updateEducation)..."
 try {
     Push-Location "$Root\backend"
     if (Test-Path $EnvFile) {
@@ -92,7 +92,7 @@ try {
             }
         }
     }
-    node scripts/dropData.js
+    node scripts/dropEducation.js
     node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
     node scripts/seedE2EData.js
     node scripts/seedMindfulFaq.js

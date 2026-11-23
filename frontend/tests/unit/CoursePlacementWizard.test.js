@@ -204,3 +204,176 @@ describe('CoursePlacementWizard.vue - individual course placement', () => {
         expect(wrapper.emitted('placed')).toBeUndefined();
     });
 });
+
+describe('CoursePlacementWizard.vue - APL completed elsewhere (P1-08 parity with ManualAddStudent)', () => {
+    let wrapper;
+
+    const pkg = { _id: 'pkg-1', coursePackageName: 'Vård- och omsorgspaket' };
+    const packageCourse = { _id: 'course-2', courseName: 'Vård och omsorg 1' };
+
+    const mountWizard = async (studentOverrides = {}) => {
+        wrapper = mount(CoursePlacementWizard, {
+            props: { student: { ...student, ...studentOverrides } },
+        });
+        await flush(wrapper);
+    };
+
+    const walkPackageToConfirm = async () => {
+        wrapper.vm.placementType = 'package';
+        await wrapper.vm.nextStep();
+        await wrapper.vm.selectPackage(pkg);
+        await flush(wrapper);
+        await wrapper.vm.nextStep(); // -> period
+        wrapper.vm.startDate = '2026-11-16';
+        await flush(wrapper);
+    };
+
+    const finishAndSubmit = async () => {
+        await wrapper.vm.nextStep(); // -> student info
+        await wrapper.vm.nextStep(); // -> exam
+        await wrapper.vm.nextStep(); // -> preview
+        await wrapper.vm.nextStep(); // -> confirm
+        await wrapper.vm.submitPlacement();
+        await flush(wrapper);
+    };
+
+    beforeEach(() => {
+        vi.resetAllMocks();
+        client.get.mockImplementation((url) => {
+            if (url === '/courses') return Promise.resolve({ data: [course] });
+            if (url === '/coursepackages') return Promise.resolve({ data: [pkg] });
+            if (url === '/coursepackages/pkg-1') {
+                return Promise.resolve({ data: { courses: [packageCourse] } });
+            }
+            return Promise.resolve({ data: {} });
+        });
+        client.post.mockImplementation((url) => {
+            if (url === '/placement/preview') {
+                return Promise.resolve({
+                    data: {
+                        courses: [
+                            {
+                                courseId: 'course-2',
+                                courseName: 'Vård och omsorg 1',
+                                startDate: '2026-11-16T00:00:00.000Z',
+                                endDate: '2026-12-21T00:00:00.000Z',
+                                slutprovDate: '2026-12-09T00:00:00.000Z',
+                                examMode: 'on-site',
+                            },
+                        ],
+                        totalWeeks: 5,
+                    },
+                });
+            }
+            if (url === '/process-education') {
+                return Promise.resolve({
+                    data: { success: true, results: { enrollments: [{ _id: 'enr-1' }], warnings: [], errors: [] } },
+                });
+            }
+            if (url === '/documents/upload') {
+                return Promise.resolve({ data: { _id: 'doc-intyg-1' } });
+            }
+            return Promise.resolve({ data: {} });
+        });
+        client.put.mockResolvedValue({ data: {} });
+    });
+
+    it('renders a native certificate input (not the legacy /uploads uploader) when the box is ticked', async () => {
+        await mountWizard();
+        await walkPackageToConfirm();
+
+        expect(wrapper.find('.apl-checkbox input[type="checkbox"]').exists()).toBe(true);
+        expect(wrapper.find('#apl-intyg-input').exists()).toBe(false);
+
+        await wrapper.find('.apl-checkbox input[type="checkbox"]').setValue(true);
+        expect(wrapper.find('#apl-intyg-input').exists()).toBe(true);
+        expect(wrapper.text()).toContain('Dokument-flik');
+    });
+
+    it('uploads the intyg to the Dokument tab and marks the student APL as completed elsewhere', async () => {
+        await mountWizard();
+        await walkPackageToConfirm();
+
+        wrapper.vm.aplCompletedElsewhere = true;
+        const file = new File(['intyg'], 'apl-intyg.pdf', { type: 'application/pdf' });
+        wrapper.vm.handleAplIntygChange({ target: { files: [file] } });
+
+        await wrapper.vm.nextStep(); // -> student info
+        await wrapper.vm.nextStep(); // -> exam
+        await wrapper.vm.nextStep(); // -> preview
+        expect(wrapper.text()).toContain('APL: genomförd på annan plats');
+        expect(wrapper.text()).toContain('apl-intyg.pdf');
+        await wrapper.vm.nextStep(); // -> confirm
+        await wrapper.vm.submitPlacement();
+        await flush(wrapper);
+
+        expect(client.post).toHaveBeenCalledWith(
+            '/process-education',
+            expect.objectContaining({ aplCompletedElsewhere: true })
+        );
+
+        const uploadCall = client.post.mock.calls.find(([url]) => url === '/documents/upload');
+        expect(uploadCall).toBeDefined();
+        const formData = uploadCall[1];
+        expect(formData.get('studentId')).toBe('stu-1');
+        expect(formData.get('type')).toBe('GENERAL');
+        expect(formData.get('file').name).toBe('apl-intyg.pdf');
+
+        // Placement first, then the certificate (never before the placement succeeded).
+        const order = client.post.mock.calls.map(([url]) => url);
+        expect(order.indexOf('/process-education')).toBeLessThan(order.indexOf('/documents/upload'));
+
+        expect(client.put).toHaveBeenCalledWith('/student/stu-1', {
+            priorAplCompleted: true,
+            priorAplIntygDocId: 'doc-intyg-1',
+        });
+        expect(wrapper.vm.submitSuccess).toBe(true);
+        expect(mockToast.warning).not.toHaveBeenCalled();
+    });
+
+    it('marks APL completed elsewhere without an upload when no intyg is chosen', async () => {
+        await mountWizard();
+        await walkPackageToConfirm();
+        wrapper.vm.aplCompletedElsewhere = true;
+        await finishAndSubmit();
+
+        expect(client.post.mock.calls.some(([url]) => url === '/documents/upload')).toBe(false);
+        expect(client.put).toHaveBeenCalledWith('/student/stu-1', { priorAplCompleted: true });
+        expect(wrapper.vm.submitSuccess).toBe(true);
+    });
+
+    it('keeps the placement and warns when the intyg upload fails', async () => {
+        await mountWizard();
+        const base = client.post.getMockImplementation();
+        client.post.mockImplementation((url, ...rest) =>
+            url === '/documents/upload'
+                ? Promise.reject(new Error('upload failed'))
+                : base(url, ...rest)
+        );
+        await walkPackageToConfirm();
+        wrapper.vm.aplCompletedElsewhere = true;
+        wrapper.vm.handleAplIntygChange({
+            target: { files: [new File(['x'], 'intyg.pdf', { type: 'application/pdf' })] },
+        });
+        await finishAndSubmit();
+
+        expect(wrapper.vm.submitSuccess).toBe(true);
+        expect(client.put).toHaveBeenCalledWith('/student/stu-1', { priorAplCompleted: true });
+        expect(mockToast.warning).toHaveBeenCalledWith(expect.stringContaining('Dokument-fliken'));
+    });
+
+    it('pre-ticks the box for a student who already has prior APL registered', async () => {
+        await mountWizard({ priorAplCompleted: true });
+        expect(wrapper.vm.aplCompletedElsewhere).toBe(true);
+    });
+
+    it('does not touch APL data when nothing is ticked', async () => {
+        await mountWizard();
+        await walkPackageToConfirm();
+        await finishAndSubmit();
+
+        expect(wrapper.vm.submitSuccess).toBe(true);
+        expect(client.put).not.toHaveBeenCalled();
+        expect(client.post.mock.calls.some(([url]) => url === '/documents/upload')).toBe(false);
+    });
+});

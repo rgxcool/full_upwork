@@ -5,6 +5,25 @@ import mongoose from "mongoose";
 import { buildDefaultModules, cloneModules } from "../models/courseModuleSchema.js";
 
 // List templates. Teachers see their own + all templates; admins/systemadmins see all.
+/**
+ * #31: admission picks a template by `courseId` only, but the builder sends a
+ * course code, not an id. When no courseId is given, link the template to the
+ * course whose courseCode matches exactly (case-insensitive). Ambiguous or
+ * unknown codes leave the template unlinked.
+ */
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+async function resolveCourseIdFromCode(courseCode) {
+    const code = String(courseCode || "").trim();
+    if (!code) return undefined;
+    const matches = await Course.find({
+        courseCode: { $regex: `^${escapeRegExp(code)}$`, $options: "i" },
+    })
+        .select("_id")
+        .limit(2)
+        .lean();
+    return matches.length === 1 ? matches[0]._id : undefined;
+}
+
 export const getCourseTemplates = async (req, res) => {
     try {
         const { courseId, includeInactive } = req.query;
@@ -52,7 +71,7 @@ export const getCourseTemplateById = async (req, res) => {
 // Create a template. Defaults to 5 modules × 2 sections when modules are not provided.
 export const createCourseTemplate = async (req, res) => {
     try {
-        const { templateName, courseId, modules } = req.body;
+        const { templateName, title, name, courseCode, description, courseId, modules, content, cardContent } = req.body;
 
         if (!templateName || !String(templateName).trim()) {
             return res.status(400).json({ error: "Template name is required" });
@@ -77,6 +96,7 @@ export const createCourseTemplate = async (req, res) => {
                                 title: s.title ?? "",
                                 description: s.description ?? "",
                                 instructions: s.instructions ?? "",
+                                blocks: Array.isArray(s.blocks) ? s.blocks : [],
                             }))
                           : [],
                       assignment:
@@ -89,9 +109,15 @@ export const createCourseTemplate = async (req, res) => {
                   }))
                 : buildDefaultModules();
 
+        const linkedCourseId = courseId || (await resolveCourseIdFromCode(courseCode));
+
         const template = await CourseTemplate.create({
             templateName: String(templateName).trim(),
-            courseId: courseId || undefined,
+            title: String(title || name || templateName).trim(),
+            courseCode: String(courseCode || "").trim(),
+            description: String(description || "").trim(),
+            cardContent: cardContent || content || {},
+            courseId: linkedCourseId || undefined,
             modules: templateModules,
             createdBy: mongoose.isValidObjectId(req.user?.userId) ? req.user.userId : undefined,
             isActive: true,
@@ -108,7 +134,7 @@ export const createCourseTemplate = async (req, res) => {
 export const updateCourseTemplate = async (req, res) => {
     try {
         const { templateId } = req.params;
-        const { templateName, courseId, modules, isActive } = req.body;
+        const { templateName, title, name, courseCode, description, courseId, modules, content, cardContent, isActive } = req.body;
 
         const template = await CourseTemplate.findById(templateId);
         if (!template) {
@@ -121,6 +147,14 @@ export const updateCourseTemplate = async (req, res) => {
             }
             template.templateName = String(templateName).trim();
         }
+        if (title !== undefined || name !== undefined) {
+            template.title = String(title || name || "").trim();
+        }
+        if (courseCode !== undefined) template.courseCode = String(courseCode).trim();
+        if (description !== undefined) template.description = String(description).trim();
+        if (cardContent !== undefined || content !== undefined) {
+            template.cardContent = cardContent || content || {};
+        }
 
         if (courseId !== undefined) {
             if (!courseId) {
@@ -132,6 +166,11 @@ export const updateCourseTemplate = async (req, res) => {
                 }
                 template.courseId = courseId;
             }
+        } else if (!template.courseId) {
+            // #31: link an unlinked template via its course code (never
+            // overrides an existing link).
+            const resolved = await resolveCourseIdFromCode(template.courseCode);
+            if (resolved) template.courseId = resolved;
         }
 
         if (Array.isArray(modules) && modules.length > 0) {
@@ -145,6 +184,7 @@ export const updateCourseTemplate = async (req, res) => {
                           title: s.title ?? "",
                           description: s.description ?? "",
                           instructions: s.instructions ?? "",
+                          blocks: Array.isArray(s.blocks) ? s.blocks : [],
                       }))
                     : [],
                 assignment:
@@ -201,6 +241,10 @@ export const duplicateCourseTemplate = async (req, res) => {
 
         const template = await CourseTemplate.create({
             templateName: `${source.templateName || "Mall"} (kopia)`,
+            title: `${source.title || source.templateName || "Mall"} (kopia)`,
+            courseCode: source.courseCode || "",
+            description: source.description || "",
+            cardContent: source.cardContent || {},
             courseId: source.courseId || undefined,
             modules:
                 Array.isArray(source.modules) && source.modules.length > 0

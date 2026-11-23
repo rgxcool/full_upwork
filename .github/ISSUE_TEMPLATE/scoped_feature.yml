@@ -1,0 +1,111 @@
+name: 📐 Specificerad funktion (Offertad)
+description: Överenskommen eller offertad funktion med acceptanskriterier, checklista för dolt arbete och 2,2× buffrat estimat.
+title: "[Funktion] "
+labels: ["feature"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Använd endast denna mall för arbete som kunden har godkänt, eller som du ska offerera.
+              **Estimatregel:** buffrat estimat = grundestimat × **2,2**. Bufferten täcker det dolda arbetet nedan;
+              bocka inte ur någon punkt som "gratis".
+    - type: dropdown
+      id: etapp
+      attributes:
+          label: Etapp
+          options:
+              - Etapp 1
+              - Etapp 2
+              - Utanför etapplistan (offertieras separat)
+      validations:
+          required: true
+    - type: textarea
+      id: summary
+      attributes:
+          label: Sammanfattning
+          description: Ett stycke. Hänvisa gärna till relevant avsnitt i specifikationen (Etapp_1.docx / Etapp_2.docx).
+      validations:
+          required: true
+    - type: textarea
+      id: acceptance
+      attributes:
+          label: Acceptanskriterier
+          description: Testbara punkter som kunden godkänner leveransen mot.
+          value: |
+              - [ ] 
+              - [ ] 
+              - [ ]
+      validations:
+          required: true
+    - type: textarea
+      id: out_of_scope
+      attributes:
+          label: Uttryckligen utanför omfattningen (Out of scope)
+          description: Vad detta ärende INTE inkluderar (förhindrar scope creep vid granskning).
+      validations:
+          required: true
+    - type: checkboxes
+      id: hidden_work
+      attributes:
+          label: Checklista för dolt arbete (allt ingår i estimatet)
+          description: Bocka i det som gäller vid specificering; ta inte bort något i efterhand utan att räkna om estimatet.
+          options:
+              - label: Roll- och behörighetskontroller (elev / lärare / admin / systemadmin / SYV / specped / praktiksamordnare)
+              - label: Kommunavgränsning (tenant scoping) för avgränsad personal
+              - label: Tomma lägen, laddningsvyer och felmeddelanden (svensk text)
+              - label: Formulärvalidering och gränsfall (tomma datum, kurspaket vs enstaka kurs, saknad lärare)
+              - label: Datamigrering / backfill för befintliga poster
+              - label: Notiser, e-postutskick och bieffekter i ändringslogg (audit log)
+              - label: Enhets- och integrationstester mot riktiga Mongoose-dokument
+              - label: Playwright E2E happy path
+              - label: Responsivitet / mobilanpassning
+              - label: Driftsättning till staging + smoke-test i produktions-Docker-imagen
+              - label: Dokumentation / hjälptext för administratörer
+              - label: Kunddemo + 1 revideringsrunda
+    - type: input
+      id: base_estimate
+      attributes:
+          label: Grundestimat (timmar)
+          description: Ren byggtid före buffert.
+          placeholder: "10"
+      validations:
+          required: true
+    - type: input
+      id: buffer
+      attributes:
+          label: Buffertmultiplikator
+          value: "2.2"
+      validations:
+          required: true
+    - type: input
+      id: buffered_estimate
+      attributes:
+          label: Buffrat estimat (timmar) = grundestimat × buffert
+          description: Detta är siffran du offererar och lägger in i projektets fält "Estimate (h)" / "Uppskattad tid (tim)".
+          placeholder: "22"
+      validations:
+          required: true
+    - type: dropdown
+      id: risk
+      attributes:
+          label: Leveransrisk
+          options:
+              - Låg – kända mönster, inga externa parter
+              - Medel – berör flera moduler eller kräver migrering
+              - Hög – extern leverantör, AI, juridik/GDPR eller betalningar
+      validations:
+          required: true
+    - type: textarea
+      id: dependencies
+      attributes:
+          label: Beroenden / blockeras av
+          placeholder: "Blockeras av #12 (tenant isolation). Kräver kundbeslut kring …"
+      validations:
+          required: false
+    - type: input
+      id: quote_ref
+      attributes:
+          label: Offert- / sprintreferens
+          placeholder: "Offert 2026-12 / Etapp 2 Sprint 3"
+      validations:
+          required: false

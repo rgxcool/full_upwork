@@ -77,6 +77,15 @@ vi.mock("../../src/services/revisionService.js", () => {
 vi.mock("../../src/utils/courseMatchingService.js", () => ({
     default: {
         findOrCreateCourseInstance: vi.fn(),
+        // Reactivation falls back to the Wednesday before the course end for slutprovDate.
+        getWednesdayBefore: vi.fn((date) => {
+            const d = new Date(date);
+            let back = (d.getDay() - 3 + 7) % 7;
+            if (back === 0) back = 7;
+            d.setDate(d.getDate() - back);
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }),
     },
 }));
 

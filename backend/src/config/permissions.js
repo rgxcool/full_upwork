@@ -13,6 +13,11 @@ export const PERMISSION_FEATURES = {
   OWN_SETTINGS: 'own_settings',
   ADD_MUNICIPALITIES_COURSES: 'add_municipalities_courses',
   COURSE_TEMPLATES: 'course_templates',
+  MESSAGING: 'messaging',
+  MASS_MESSAGING: 'mass_messaging',
+  EVALUATIONS: 'evaluations',
+  COURSE_MANAGEMENT: 'course_management',
+  STUDENT_DOCUMENTS: 'student_documents',
 };
 
 export const ROLES = {
@@ -121,6 +126,51 @@ export const PERMISSION_MATRIX = {
     [ROLES.COORDINATOR]: 'Nej',
     [ROLES.STUDENT]: 'Nej',
   },
+  [PERMISSION_FEATURES.MESSAGING]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Ja',
+    [ROLES.SYV]: 'Ja',
+    [ROLES.SPECPED]: 'Ja',
+    [ROLES.COORDINATOR]: 'Ja',
+    [ROLES.STUDENT]: 'Ja',
+  },
+  [PERMISSION_FEATURES.MASS_MESSAGING]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Nej',
+    [ROLES.SYV]: 'Nej',
+    [ROLES.SPECPED]: 'Nej',
+    [ROLES.COORDINATOR]: 'Nej',
+    [ROLES.STUDENT]: 'Nej',
+  },
+  [PERMISSION_FEATURES.EVALUATIONS]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Ja',
+    [ROLES.SYV]: 'Ja',
+    [ROLES.SPECPED]: 'Ja',
+    [ROLES.COORDINATOR]: 'Nej',
+    [ROLES.STUDENT]: 'Nej',
+  },
+  [PERMISSION_FEATURES.COURSE_MANAGEMENT]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Utvalda lärare',
+    [ROLES.SYV]: 'Nej',
+    [ROLES.SPECPED]: 'Nej',
+    [ROLES.COORDINATOR]: 'Nej',
+    [ROLES.STUDENT]: 'Nej',
+  },
+  [PERMISSION_FEATURES.STUDENT_DOCUMENTS]: {
+    [ROLES.SYSTEMADMIN]: 'Ja',
+    [ROLES.ADMIN]: 'Ja',
+    [ROLES.TEACHER]: 'Utvalda dokument',
+    [ROLES.SYV]: 'Utvalda dokument',
+    [ROLES.SPECPED]: 'Utvalda dokument',
+    [ROLES.COORDINATOR]: 'Nej',
+    [ROLES.STUDENT]: 'Egna dokument',
+  },
 };
 
 /**
@@ -136,6 +186,27 @@ export function getPermission(role, feature) {
 export function hasPermission(role, feature) {
   const permission = getPermission(role, feature);
   return permission !== 'Nej' && permission !== null && permission !== undefined;
+}
+
+// Roles that implicitly have every feature unless explicitly overridden.
+export const FEATURE_SUPERUSER_ROLES = ['systemadmin', 'admin', 'tester'];
+
+/**
+ * Effective feature access for a (request) user, without any DB access:
+ * an explicit per-user override (`user.permissions[feature]` true/false)
+ * wins, otherwise superusers pass and other roles use PERMISSION_MATRIX.
+ * Callers must refresh `req.user` first (hasRole()/canFeature() do).
+ */
+export function userHasFeature(user, feature) {
+  if (!user) return false;
+  const overrides = user.permissions && typeof user.permissions === 'object' && !Array.isArray(user.permissions)
+    ? user.permissions
+    : {};
+  const override = overrides[feature];
+  if (override === true || override === false) return override;
+  const roles = Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : user.role ? [user.role] : [];
+  if (roles.some((r) => FEATURE_SUPERUSER_ROLES.includes(r))) return true;
+  return roles.some((r) => hasPermission(r, feature));
 }
 
 /**
@@ -162,6 +233,11 @@ export const FEATURE_LABELS = {
   [PERMISSION_FEATURES.OWN_SETTINGS]: 'Egna inställningar (ex profilbild)',
   [PERMISSION_FEATURES.ADD_MUNICIPALITIES_COURSES]: 'Lägga till kommuner, kurser etc',
   [PERMISSION_FEATURES.COURSE_TEMPLATES]: 'Kursmallar (kursmoduler)',
+  [PERMISSION_FEATURES.MESSAGING]: 'Meddelanden',
+  [PERMISSION_FEATURES.MASS_MESSAGING]: 'Massutskick',
+  [PERMISSION_FEATURES.EVALUATIONS]: 'Utvärderingar',
+  [PERMISSION_FEATURES.COURSE_MANAGEMENT]: 'Kurshantering',
+  [PERMISSION_FEATURES.STUDENT_DOCUMENTS]: 'Elevdokument',
 };
 
 /**

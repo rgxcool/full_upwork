@@ -167,12 +167,8 @@ describe("Upload Routes", () => {
     it("stores fallback metadata when no user is present", async () => {
         const appWithoutUser = buildAppWithoutUser();
         const studentId = new mongoose.Types.ObjectId().toString();
-        const response = await uploadTestFile(
-            studentId,
-            "fallback.txt",
-            "fallback content",
-            appWithoutUser
-        );
+        const response = await request(appWithoutUser)
+            .post(`/api/uploads/${studentId}`);
 
         expect(response.status).toBe(401);
     });
@@ -583,21 +579,15 @@ describe("Upload Routes - Auth Enforcement", () => {
     describe("POST /:studentId (upload)", () => {
         it("returns 401 without auth token", async () => {
             const studentId = new mongoose.Types.ObjectId().toString();
-            const { tempDir, filePath } = createTempFile("test.txt", "content");
             const response = await request(noAuthApp)
-                .post(`/api/uploads/${studentId}`)
-                .attach("file", filePath);
-            cleanupTempDir(tempDir);
+                .post(`/api/uploads/${studentId}`);
             expect(response.status).toBe(401);
         });
 
         it("returns 403 for student role", async () => {
             const studentId = new mongoose.Types.ObjectId().toString();
-            const { tempDir, filePath } = createTempFile("test.txt", "content");
             const response = await request(studentApp)
-                .post(`/api/uploads/${studentId}`)
-                .attach("file", filePath);
-            cleanupTempDir(tempDir);
+                .post(`/api/uploads/${studentId}`);
             expect(response.status).toBe(403);
         });
     });
@@ -792,5 +782,74 @@ describe("Upload Routes - File Size Limit", () => {
         cleanupTempDir(tempDir);
         expect(response.status).toBe(413);
         expect(response.body.error).toMatch(/too large/i);
+    });
+});
+
+// Scoped staff must not list files or read file counts for students in
+// another kommun (same rule as checkFileAccess for downloads).
+describe("Upload Routes - tenant scope for scoped staff", () => {
+    let coordApp;
+    let globalApp;
+    let inside;
+    let outside;
+
+    beforeAll(async () => {
+        await connectTestDatabase();
+        globalApp = buildApp();
+        coordApp = buildApp("coordinator", {
+            roles: ["coordinator"],
+            municipalities: ["Huddinge"],
+        });
+    }, 60000);
+
+    afterAll(async () => {
+        await disconnectTestDatabase();
+    }, 60000);
+
+    beforeEach(async () => {
+        await clearGridFs();
+        await clearStudents();
+        const Student = mongoose.model("Student");
+        inside = await Student.create({
+            name: "Test Elev Inne",
+            email: "inne@test.invalid",
+            personalNumber: "19000101-0000",
+            municipality: { type: "Huddinge" },
+        });
+        outside = await Student.create({
+            name: "Test Elev Ute",
+            email: "ute@test.invalid",
+            personalNumber: "19000101-0001",
+            municipality: { type: "Botkyrka" },
+        });
+        // Seed one file per student as a global account.
+        await uploadTestFile(inside._id.toString(), "inne.txt", "inne", globalApp);
+        await uploadTestFile(outside._id.toString(), "ute.txt", "ute", globalApp);
+    });
+
+    it("lists files for an in-tenant student", async () => {
+        const res = await request(coordApp).get(`/api/uploads/${inside._id}`);
+        expect(res.status).toBe(200);
+        expect(JSON.stringify(res.body)).toContain("inne.txt");
+    });
+
+    it("refuses to list files for a student in another kommun", async () => {
+        const res = await request(coordApp).get(`/api/uploads/${outside._id}`);
+        expect(res.status).toBe(403);
+        expect(JSON.stringify(res.body)).not.toContain("ute.txt");
+    });
+
+    it("refuses uploads for a student in another kommun", async () => {
+        const res = await uploadTestFile(outside._id.toString(), "x.txt", "x", coordApp);
+        expect(res.status).toBe(403);
+    });
+
+    it("reports 0 file count for out-of-tenant students", async () => {
+        const res = await request(coordApp)
+            .get("/api/uploads/file-counts")
+            .query({ studentIds: `${inside._id},${outside._id}` });
+        expect(res.status).toBe(200);
+        expect(res.body[String(inside._id)]).toBe(1);
+        expect(res.body[String(outside._id)]).toBe(0);
     });
 });

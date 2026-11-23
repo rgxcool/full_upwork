@@ -7,6 +7,16 @@
     <div v-else>
       <div v-if="canUpload" class="upload-section">
         <form @submit.prevent="uploadFile">
+          <select
+            v-if="availableUploadTypes.length > 1"
+            v-model="selectedUploadType"
+            class="type-select"
+            aria-label="Dokumenttyp"
+          >
+            <option v-for="opt in availableUploadTypes" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
           <input type="file" @change="handleFileChange" />
           <button type="submit" :disabled="!selectedFile">Ladda upp</button>
         </form>
@@ -18,6 +28,9 @@
             <a :href="`${baseURL}/uploads/${doc.filename}`" target="_blank" class="document-link">
               {{ doc.originalName }}
             </a>
+            <span v-if="uploadTypes && typeLabel(doc.type)" class="doc-type-badge">
+              {{ typeLabel(doc.type) }}
+            </span>
             <span v-if="doc.uploadedBy && doc.uploadedBy !== entityId" class="uploaded-by">
               (uppladdad av admin)
             </span>
@@ -80,6 +93,13 @@ export default {
       type: Boolean,
       default: false,
     },
+    // Optional list of { value, label, staffOnly? } document types. When set,
+    // the list shows all of them and uploaders pick the type; staffOnly types
+    // are never offered to students (the API enforces this too).
+    uploadTypes: {
+      type: Array,
+      default: null,
+    },
   },
   setup(props) {
     const store = useStore();
@@ -135,6 +155,15 @@ export default {
       return false;
     });
 
+    const isStudentViewer = computed(() => store.getters.userRole === 'student');
+    const availableUploadTypes = computed(() => {
+      if (!props.uploadTypes) return [];
+      return props.uploadTypes.filter((opt) => !(opt.staffOnly && isStudentViewer.value));
+    });
+    const selectedUploadType = ref(props.uploadTypes?.[0]?.value || props.type);
+    const typeLabel = (value) =>
+      props.uploadTypes?.find((opt) => opt.value === value)?.label || '';
+
     const canDelete = (doc) => {
       // Admins can delete any document
       if (isAdmin.value) return true;
@@ -184,7 +213,11 @@ export default {
       const id = entityId.value;
       if (!id) return;
       try {
-        const params = { type: props.type };
+        const params = {
+          type: props.uploadTypes
+            ? props.uploadTypes.map((opt) => opt.value).join(',')
+            : props.type,
+        };
         if (props.enrollmentId) {
           params.enrollmentId = props.enrollmentId;
         }
@@ -219,7 +252,7 @@ export default {
         formData.append('teacherId', id);
       }
       
-      formData.append('type', props.type);
+      formData.append('type', props.uploadTypes ? selectedUploadType.value : props.type);
       if (props.enrollmentId) {
         formData.append('enrollmentId', props.enrollmentId);
       }
@@ -283,6 +316,9 @@ export default {
       uploadFile,
       deleteFile,
       baseURL,
+      availableUploadTypes,
+      selectedUploadType,
+      typeLabel,
     };
   },
 };
@@ -369,6 +405,19 @@ export default {
 
 .document-link:hover {
   text-decoration: underline;
+}
+
+.type-select {
+  margin-right: 0.5rem;
+  padding: 0.25rem;
+}
+
+.doc-type-badge {
+  margin-left: 0.5rem;
+  padding: 0 0.4rem;
+  border-radius: 4px;
+  background: #eef2f7;
+  font-size: 0.8rem;
 }
 
 .uploaded-by {
