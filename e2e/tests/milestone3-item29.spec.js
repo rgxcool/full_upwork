@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { EVIDENCE_DIR } from './evidenceDir.js';
 
 // Item 29 — Lesson content + per-module assignment submissions + teacher
 // feedback + per-course progress (MVP). Backend: /api/learning/instances/:id/
@@ -25,7 +26,8 @@ import { fileURLToPath } from 'url';
 // Run with the backend up (API_RATE_LIMIT_MAX=1000) and the seeded e2e DB.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SHOT_DIR = path.join(__dirname, '..', 'verification-screenshots');
+// Evidence goes to test-results unless UPDATE_EVIDENCE=1 (see evidenceDir.js).
+const SHOT_DIR = EVIDENCE_DIR;
 const AUTH_DIR = path.join(__dirname, '..', '.auth');
 const studentState = path.join(AUTH_DIR, 'student.json');
 const teacherState = path.join(AUTH_DIR, 'teacher.json');
