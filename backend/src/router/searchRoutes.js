@@ -771,21 +771,6 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
     }
 });
 
-router.put("/update-student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
-    try {
-        const allowedStudentFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses', 'education'];
-        const updates = {};
-        for (const field of allowedStudentFields) {
-            if (req.body[field] !== undefined) updates[field] = req.body[field];
-        }
-        const updatedStudent = await Student.findByIdAndUpdate(req.params.id, updates, { returnDocument: 'after' });
-        res.json(updatedStudent);
-    } catch (error) {
-        logger.error({ err: error }, "Error updating student")
-        res.status(500).json({ message: "Kunde inte uppdatera studenten" });
-    }
-});
-
 router.put("/update-user/:id", authenticateUser, hasRole(["admin", "systemadmin"]), canFeature(PERMISSION_FEATURES.MANAGE_USERS_PERMISSIONS), async (req, res) => {
     try {
         const VALID_USER_ROLES = [
