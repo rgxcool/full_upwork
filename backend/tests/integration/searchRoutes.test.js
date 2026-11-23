@@ -1042,38 +1042,23 @@ describe("Search Routes", () => {
         });
     });
 
-    describe("PUT /api/update-student/:id", () => {
-        it("updates a student record", async () => {
+    describe("PUT /api/update-student/:id (removed)", () => {
+        // It let any staff role, teachers included, edit any student with no
+        // per-student check, and nothing called it (student edits go through
+        // PUT /student/:id). Removed rather than patched.
+        it("no longer exists and leaves the student unchanged", async () => {
             const student = await Student.create({
-                name: "Update Student",
-                personalNumber: "131313-1313",
-                email: "update-student@example.com",
+                name: "Test Elev",
+                personalNumber: "19000101-0000",
+                email: "update-student@example.se",
             });
 
-            const response = await request(searchApp)
+            await request(searchApp)
                 .put(`/api/update-student/${student._id}`)
-                .send({ name: "Updated Student" })
-                .expect(200);
+                .send({ name: "Changed" })
+                .expect(404);
 
-            expect(response.body).toMatchObject({
-                _id: student._id.toString(),
-                name: "Updated Student",
-            });
-        });
-
-        it("returns 500 when student update fails", async () => {
-            vi.spyOn(Student, "findByIdAndUpdate").mockRejectedValue(
-                new Error("boom")
-            );
-
-            const response = await request(searchApp)
-                .put(`/api/update-student/${new mongoose.Types.ObjectId()}`)
-                .send({ name: "Updated Student" })
-                .expect(500);
-
-            expect(response.body).toEqual({
-                message: "Kunde inte uppdatera studenten",
-            });
+            expect((await Student.findById(student._id).lean()).name).toBe("Test Elev");
         });
     });
 

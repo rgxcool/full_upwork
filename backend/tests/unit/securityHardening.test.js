@@ -39,12 +39,10 @@ describe('JWT_SECRET strength validation', () => {
 })
 
 describe('Mass-assignment protection', () => {
-  it('searchRoutes update-student uses allowlist', async () => {
+  it('searchRoutes no longer has the unscoped update-student route', async () => {
     const fs = await import('fs')
     const content = fs.readFileSync(new URL('../../src/router/searchRoutes.js', import.meta.url), 'utf-8')
-    expect(content).toContain('allowedStudentFields')
-    expect(content).toContain('findByIdAndUpdate')
-    expect(content).not.toMatch(/findByIdAndUpdate\(req\.params\.id,\s*req\.body\)/)
+    expect(content).not.toContain('/update-student/')
   })
 
   it('searchRoutes update-user uses allowlist', async () => {
