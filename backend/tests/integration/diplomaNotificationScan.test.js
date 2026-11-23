@@ -8,9 +8,9 @@ import Notification from "../../src/models/Notification.js";
 import CompletionEvent from "../../src/models/CompletionEvent.js";
 import AssignmentSubmission from "../../src/models/AssignmentSubmission.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import NOTIFICATION_TYPES from "../../src/controllers/notificationTypes.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 vi.mock("../../src/utils/logger.js", () => ({
     __esModule: true,
@@ -59,7 +59,6 @@ describe("Completion scan (course + package + diploma trigger)", () => {
             CompletionEvent.deleteMany({}),
             AssignmentSubmission.deleteMany({}),
             User.deleteMany({}),
-            Teacher.deleteMany({}),
         ]);
 
         teacherUser = await User.create({
@@ -69,10 +68,7 @@ describe("Completion scan (course + package + diploma trigger)", () => {
             password: "x",
             roles: ["teacher"],
         });
-        teacher = await Teacher.create({
-            userId: teacherUser._id,
-            subject: "Matematik",
-        });
+        teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
         studentUser = await User.create({
             email: "ebba@elev.se",
             name: "Ebba Lindgren",

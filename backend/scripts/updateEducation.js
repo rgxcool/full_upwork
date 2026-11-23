@@ -1,13 +1,26 @@
-// src/utils/integratedEducationParser.js
+// Imports the education catalog (programs, courses, course packages) from an Excel workbook.
+// Replaces the old scripts/educationParser.js. Upserts only, so it is safe to re-run.
+// Usage (from backend/): node scripts/updateEducation.js [path/to/workbook.xlsx]
+import path from "path";
+import dotenv from "dotenv";
 import ExcelJS from "exceljs";
 import mongoose from "mongoose";
-import Program from "../src/models//Program.js";
+import Program from "../src/models/Program.js";
 import CoursePackage from "../src/models/CoursePackage.js";
 import Course from "../src/models/Course.js";
 
+// launch.sh sources the env file itself; a plain run reads .env.development.
+// An exported MONGODB_URI still wins (dotenv never overrides it).
+dotenv.config({ path: path.resolve(import.meta.dirname, "../.env.development"), quiet: true });
+
 async function parseEducation(filePath) {
-    console.log("🔗 Connecting to MongoDB...");
     const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) {
+        console.error("❌ MONGODB_URI is not set (looked in backend/.env.development).");
+        process.exitCode = 1;
+        return;
+    }
+    console.log("🔗 Connecting to MongoDB...");
     await mongoose.connect(mongoUri);
 
   const workbook = new ExcelJS.Workbook();
@@ -113,6 +126,7 @@ async function parseEducation(filePath) {
     console.log('🎉 Education data processed successfully.');
   } catch (error) {
     console.error('❌ Error:', error);
+    process.exitCode = 1;
   } finally {
     await mongoose.disconnect();
     console.log('🔌 Disconnected from MongoDB.');
@@ -121,5 +135,7 @@ async function parseEducation(filePath) {
 
 export default parseEducation;
 
-// Usage example
-parseEducation(process.argv[2] || "./test.xlsx");
+// Usage (from backend/): node scripts/updateEducation.js [path/to/workbook.xlsx]
+// Default: data/Kurser och kurspaket GY25.xlsx (the workbook launch.sh imports on an empty database).
+const DEFAULT_WORKBOOK = new URL("../../data/Kurser och kurspaket GY25.xlsx", import.meta.url).pathname;
+parseEducation(process.argv[2] || decodeURIComponent(DEFAULT_WORKBOOK));

@@ -1,7 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import Student from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
+import User from "../models/User.js";
 import Exam from "../models/Provning.js";
 import CalendarEvent from "../models/Event.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
@@ -12,6 +12,7 @@ import { asyncHandler } from "../utils/errorHandler.js";
 import { createGlobalNotification } from "../controllers/notificationController.js"; // Lägg till högst upp
 import Notification from "../models/Notification.js";
 import logger from "../utils/logger.js";
+import { TEACHER_POPULATE_FIELDS, findTeacherUser, teacherColor, teacherDisplayName } from "../utils/teacherProfile.js";
 
 const router = express.Router();
 
@@ -243,13 +244,7 @@ router.get("/exam-rooms", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
 // GET all exams (Admin)
 router.get("/admin/exams", isAuthenticated, hasRole(['admin', 'systemadmin']), async (req, res) => {
     try {
-        const exams = await Exam.find({}).populate({
-            path: "teacherId",
-            populate: {
-                path: "userId",
-                select: "username",
-            },
-        });
+        const exams = await Exam.find({}).populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS });
         res.json(exams);
     } catch (err) {
         logger.error({ err }, "Error fetching exams for admin");
@@ -264,7 +259,7 @@ router.get("/exams", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
         // If user is a teacher, filter exams by their teacherId
         if (req.user.role === "teacher") {
             // Find the teacher record for this user
-            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
 
             if (!teacher) {
                 return res
@@ -277,13 +272,7 @@ router.get("/exams", isAuthenticated, CALENDAR_STAFF, async (req, res) => {
             logger.debug({ teacherId: teacher._id }, "Teacher fetching their exams");
         }
 
-        const exams = await Exam.find(query).populate({
-            path: "teacherId",
-            populate: {
-                path: "userId",
-                select: "username",
-            },
-        });
+        const exams = await Exam.find(query).populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS });
         // 🔔 Skapa notiser för kommande prövningar (3-4 veckor före månadsslut)
         const now = new Date();
         const currentYear = now.getFullYear();
@@ -350,7 +339,7 @@ router.get("/calendar-events", isAuthenticated, CALENDAR_STAFF, async (req, res)
         // If user is a teacher, filter events by their teacherId
         if (req.user.role === "teacher") {
             // Find the teacher record for this user
-            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
 
             if (!teacher) {
                 return res
@@ -448,17 +437,8 @@ router.put(
             let isResponsibleTeacher = false;
 
             if (userRoles.includes("teacher")) {
-                const teacherQuery = Teacher.findOne({
-                    userId: req.user.userId,
-                });
-                if (useTransaction && session) {
-                    teacherQuery.session(session);
-                }
-                const teacher = await teacherQuery;
-                if (
-                    teacher &&
-                    teacher._id.toString() === teacherId.toString()
-                ) {
+                // teacherId is the teacher's User id (#102).
+                if (String(req.user.userId) === String(teacherId)) {
                     isResponsibleTeacher = true;
                 }
             }
@@ -1001,7 +981,7 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
         // Lärare: filtrera på deras elever
         let teacherFilter = null;
         if (req.user.role === "teacher") {
-            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
             if (!teacher) {
                 return res
                     .status(403)
@@ -1016,10 +996,7 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
 
         // Manuellda slutprov (studenter med finalExamDate)
         const studentsWithFinalExam = await Student.find(studentQuery).populate(
-            {
-                path: "teacherId",
-                populate: { path: "userId", select: "username" },
-            }
+            { path: "teacherId", select: TEACHER_POPULATE_FIELDS }
         );
         await Student.populate(studentsWithFinalExam, {
             path: "education.refId",
@@ -1035,23 +1012,14 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
         )
             .populate({
                 path: "studentId",
-                populate: {
-                    path: "teacherId",
-                    populate: { path: "userId", select: "username" },
-                },
+                populate: { path: "teacherId", select: TEACHER_POPULATE_FIELDS },
             })
             .populate("mainCourseId")
             .populate({
                 path: "courseInstanceId",
-                populate: {
-                    path: "responsibleTeacher",
-                    populate: { path: "userId", select: "username" },
-                },
+                populate: { path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS },
             })
-            .populate({
-                path: "teacherId",
-                populate: { path: "userId", select: "username" },
-            });
+            .populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS });
         
         // Filter enrollments for teachers: include if teacherId matches OR courseInstance.responsibleTeacher matches
         let enrollmentsToProcess = allEnrollmentsWithSlutprov;
@@ -1078,7 +1046,7 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
         
         logger.debug({ count: enrollmentsWithSlutprov.length, totalFiltered: allEnrollmentsWithSlutprov.length }, "Enrollments with slutprovDate after filtering dropouts");
         enrollmentsWithSlutprov.forEach((e) => {
-            logger.debug({ student: e.studentId?.name, course: e.mainCourseId?.courseName, date: e.slutprovDate, teacher: e.teacherId?.userId?.username || e.studentId?.teacherId?.userId?.username || "None" }, "Enrollment with slutprovDate");
+            logger.debug({ enrollmentId: e._id, course: e.mainCourseId?.courseName, date: e.slutprovDate, teacherId: e.teacherId?._id || e.studentId?.teacherId?._id || null }, "Enrollment with slutprovDate");
         });
 
         const grouped = {};
@@ -1298,11 +1266,11 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
                      
                     grouped[key] = {
                         id: teacherId ? `${teacherId}_${dateKey}` : `no_teacher_${dateKey}`,
-                        title: student.teacherId?.userId?.username || "Okänd lärare",
+                        title: teacherDisplayName(student.teacherId) || "Okänd lärare",
                         start: dateKey + "T12:00:00.000Z",
-                        color: student.teacherId?.colorCode || "#999999",
+                        color: student.teacherId?.teacherProfile?.colorCode || "#999999",
                         extendedProps: {
-                            teacher: student.teacherId?.userId?.username || "Okänd lärare",
+                            teacher: teacherDisplayName(student.teacherId) || "Okänd lärare",
                             teacherId: student.teacherId?._id || null,
                             type: "slutprov",
                             examMunicipality: eventExamMunicipality,
@@ -1387,37 +1355,33 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
                 // This ensures students in the same course instance are grouped together
                 let teacherId = null;
                 let teacherUsername = "Unknown";
-                let teacherColor = "#999999";
+                let teacherColorCode = "#999999";
 
                 // Priority: courseInstance.responsibleTeacher > enrollment.teacherId > student.teacherId
                 if (enrollment.courseInstanceId?.responsibleTeacher) {
                     const responsibleTeacher = enrollment.courseInstanceId.responsibleTeacher;
                     teacherId = responsibleTeacher;
-                    // Check if userId is populated (it should be from the populate chain above)
-                    if (responsibleTeacher.userId) {
-                        teacherUsername = responsibleTeacher.userId.username || "Unknown";
-                        teacherColor = responsibleTeacher.colorCode || "#999999";
-                    } else {
-                        // If not populated, fetch it
-                        const { default: Teacher } = await import("../models/Teacher.js");
-                        const fullTeacher = await Teacher.findById(responsibleTeacher._id || responsibleTeacher)
-                            .populate("userId", "username");
-                        if (fullTeacher && fullTeacher.userId) {
-                            teacherUsername = fullTeacher.userId.username || "Unknown";
-                            teacherColor = fullTeacher.colorCode || "#999999";
-                        }
+                    // Populated User (#102); fetch it when the populate missed.
+                    const teacherUser = responsibleTeacher.username
+                        ? responsibleTeacher
+                        : await User.findById(responsibleTeacher._id || responsibleTeacher)
+                              .select("username name email teacherProfile.colorCode")
+                              .lean();
+                    if (teacherUser) {
+                        teacherUsername = teacherDisplayName(teacherUser) || "Unknown";
+                        teacherColorCode = teacherColor(teacherUser, "#999999");
                     }
                 } else if (enrollment.teacherId) {
                     teacherId = enrollment.teacherId;
-                    if (enrollment.teacherId.userId) {
-                        teacherUsername = enrollment.teacherId.userId.username || "Unknown";
-                        teacherColor = enrollment.teacherId.colorCode || "#999999";
+                    if (teacherDisplayName(enrollment.teacherId)) {
+                        teacherUsername = teacherDisplayName(enrollment.teacherId);
+                        teacherColorCode = teacherColor(enrollment.teacherId, "#999999");
                     }
                 } else if (student.teacherId) {
                     teacherId = student.teacherId;
-                    if (student.teacherId.userId) {
-                        teacherUsername = student.teacherId.userId.username || "Unknown";
-                        teacherColor = student.teacherId.colorCode || "#999999";
+                    if (teacherDisplayName(student.teacherId)) {
+                        teacherUsername = teacherDisplayName(student.teacherId);
+                        teacherColorCode = teacherColor(student.teacherId, "#999999");
                     }
                 }
                 
@@ -1533,7 +1497,7 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
                         id: `${teacherId._id}_${dateKey}`,
                         title: teacherUsername,
                         start: dateKey + "T12:00:00.000Z",
-                        color: teacherColor,
+                        color: teacherColorCode,
                         extendedProps: {
                             teacher: teacherUsername,
                             teacherId: teacherId._id,
@@ -2068,8 +2032,6 @@ router.post("/calendar-events/fix-titles", isAuthenticated, hasRole(["systemadmi
             return res.status(403).json({ error: "Only admins can fix event titles" });
         }
 
-        // CalendarEvent is already imported at the top, but we need Teacher
-        const { default: Teacher } = await import("../models/Teacher.js");
 
         // Find all calendar events with "slutprov" type
         const events = await CalendarEvent.find({
@@ -2129,11 +2091,11 @@ router.post("/calendar-events/fix-titles", isAuthenticated, hasRole(["systemadmi
                 if (baseEvent.extendedProps?.teacher) {
                     baseEvent.title = baseEvent.extendedProps.teacher;
                 } else {
-                    // Try to get teacher name from Teacher model
-                    const teacher = await Teacher.findById(baseEvent.extendedProps?.teacherId).populate("userId", "username");
-                    if (teacher && teacher.userId) {
-                        baseEvent.title = teacher.userId.username;
-                        baseEvent.extendedProps.teacher = teacher.userId.username;
+                    // extendedProps.teacherId is the teacher's User id (#102).
+                    const teacher = await findTeacherUser(baseEvent.extendedProps?.teacherId, { select: "username name email", lean: true });
+                    if (teacher) {
+                        baseEvent.title = teacherDisplayName(teacher);
+                        baseEvent.extendedProps.teacher = teacherDisplayName(teacher);
                     }
                 }
                 
@@ -2153,11 +2115,11 @@ router.post("/calendar-events/fix-titles", isAuthenticated, hasRole(["systemadmi
                 if (event.extendedProps?.teacher) {
                     event.title = event.extendedProps.teacher;
                 } else {
-                    // Try to get teacher name from Teacher model
-                    const teacher = await Teacher.findById(event.extendedProps?.teacherId).populate("userId", "username");
-                    if (teacher && teacher.userId) {
-                        event.title = teacher.userId.username;
-                        event.extendedProps.teacher = teacher.userId.username;
+                    // extendedProps.teacherId is the teacher's User id (#102).
+                    const teacher = await findTeacherUser(event.extendedProps?.teacherId, { select: "username name email", lean: true });
+                    if (teacher) {
+                        event.title = teacherDisplayName(teacher);
+                        event.extendedProps.teacher = teacherDisplayName(teacher);
                     }
                 }
                 
@@ -2805,7 +2767,7 @@ router.put("/exams/:id/decision", isAuthenticated, hasRole(['admin', 'systemadmi
 
         // Lärare får bara besluta om sina egna prövningar
         if (req.user.role === "teacher") {
-            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
             if (!teacher) {
                 return res.status(403).json({ error: "Teacher profile not found" });
             }
@@ -2991,7 +2953,7 @@ router.post(
                 // Find teacher if provided
                 let teacherId = null;
                 if (teacher_id) {
-                    const teacher = await Teacher.findById(teacher_id);
+                    const teacher = await findTeacherUser(teacher_id, { select: "_id", lean: true });
                     if (teacher) teacherId = teacher._id;
                 }
 
@@ -3046,8 +3008,7 @@ router.get("/exams/student/:studentId", isAuthenticated, CALENDAR_STAFF, async (
         );
 
         const records = await ExamAttendance.find({ studentId })
-            .populate("teacherId", "userId colorCode")
-            .populate({ path: "teacherId.userId", select: "username" })
+            .populate("teacherId", TEACHER_POPULATE_FIELDS)
             .populate("courseId", "courseName")
             .sort({ examDate: -1 })
             .lean();
@@ -3060,7 +3021,7 @@ router.get("/exams/student/:studentId", isAuthenticated, CALENDAR_STAFF, async (
             examTime: r.examTime || "",
             examMunicipality: r.examMunicipality || "",
             examLocation: r.examLocation || "",
-            teacher: r.teacherId?.userId?.username || "Okänd lärare",
+            teacher: teacherDisplayName(r.teacherId) || "Okänd lärare",
         }));
 
         res.json(items);

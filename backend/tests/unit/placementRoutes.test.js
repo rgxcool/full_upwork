@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
     studentModel: { findById: vi.fn() },
     courseModel: { findById: vi.fn() },
     packageModel: { findById: vi.fn() },
-    teacherModel: { findById: vi.fn() },
+    userModel: { findById: vi.fn() },
     enrollmentModel: { findById: vi.fn() },
     documentModel: { findById: vi.fn(), findOne: vi.fn() },
     calculateSlutprovDate: vi.fn(),
@@ -30,7 +30,7 @@ const h = vi.hoisted(() => ({
 vi.mock("../../src/models/Student.js", () => ({ default: h.studentModel }));
 vi.mock("../../src/models/Course.js", () => ({ default: h.courseModel }));
 vi.mock("../../src/models/CoursePackage.js", () => ({ default: h.packageModel }));
-vi.mock("../../src/models/Teacher.js", () => ({ default: h.teacherModel }));
+vi.mock("../../src/models/User.js", () => ({ default: h.userModel }));
 vi.mock("../../src/models/StudentEnrollment.js", () => ({ default: h.enrollmentModel }));
 vi.mock("../../src/models/Document.js", () => ({ default: h.documentModel }));
 vi.mock("../../src/utils/slutprovDateCalculator.js", () => ({
@@ -150,6 +150,23 @@ describe("placementRoutes", () => {
             expect(res.body.totalWeeks).toBe(5);
         });
 
+        // 2026-09-20 is a Sunday → the course starts Monday 2026-09-21.
+        it("falls back to Wednesday of week 4 at normal pace (UTC, timezone-proof)", async () => {
+            const res = await request(app).post("/placement/preview").send(payload);
+            expect(res.body.courses[0].startDate).toBe("2026-09-21T00:00:00.000Z");
+            expect(res.body.courses[0].slutprovDate).toBe("2026-10-14T00:00:00.000Z");
+        });
+
+        it("puts the fallback slutprov before the end when the course is stretched (10 v = 50 %)", async () => {
+            const res = await request(app)
+                .post("/placement/preview")
+                .send({ ...payload, durationWeeks: 10 });
+            const [course] = res.body.courses;
+            expect(course.endDate).toBe("2026-11-30T00:00:00.000Z");
+            // Wednesday before Monday 30 Nov, not week 4 (14 Oct).
+            expect(course.slutprovDate).toBe("2026-11-25T00:00:00.000Z");
+        });
+
         it("uses the teacher-based slutprov date when available", async () => {
             h.studentModel.findById.mockResolvedValue({
                 _id: "s1",
@@ -157,9 +174,10 @@ describe("placementRoutes", () => {
                 teacherId: "t1",
                 municipality: { type: "" },
             });
-            h.teacherModel.findById.mockReturnValue({
-                populate: vi.fn().mockResolvedValue({
-                    userId: { username: "karin.larsson" },
+            // Student.teacherId is the teacher's User id (#102).
+            h.userModel.findById.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue({ username: "karin.larsson" }),
                 }),
             });
             h.calculateSlutprovDate.mockResolvedValue(new Date("2026-11-04"));

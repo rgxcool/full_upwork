@@ -1,3 +1,5 @@
+// Upserts the chatbot FAQ categories and questions (safe to re-run). launch.sh runs it when the FAQ is empty.
+// Usage (from backend/): node scripts/seedMindfulFaq.js
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";

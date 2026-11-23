@@ -276,14 +276,11 @@ async function canUploadForStudent(user, studentId) {
   }
 
   if (roles.has("teacher")) {
-    const Teacher = mongoose.model("Teacher");
-    const teacher = await Teacher.findOne({ userId: user.userId }).select(
-      "_id",
-    );
+    // Student.teacherId is the teacher's User id (#102).
     return Boolean(
-      teacher &&
+      user.userId &&
       student.teacherId &&
-      String(student.teacherId) === String(teacher._id),
+      String(student.teacherId) === String(user.userId),
     );
   }
 

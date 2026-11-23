@@ -10,9 +10,9 @@ import {
 } from "vitest";
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
-import Teacher from "../../src/models/Teacher.js";
 import User from "../../src/models/User.js";
 import { createOrFindTeacher } from "../../src/utils/teacherService.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 import {
     connectTestDatabase,
     disconnectTestDatabase,
@@ -81,36 +81,41 @@ describe("teacherService", () => {
         logger.error.mockClear();
         logger.info.mockClear();
         logger.warn.mockClear();
-        await Teacher.deleteMany({});
         await User.deleteMany({});
     });
 
     afterEach(async () => {
-        await Teacher.deleteMany({});
         await User.deleteMany({});
         vi.restoreAllMocks();
     });
 
-    it("returns an existing teacher when the username matches", async () => {
+    const teacherCount = () => User.countDocuments({ teacherProfile: { $type: "object" } });
+
+    it("returns an existing teacher when the username matches (case-insensitive)", async () => {
         const user = await User.create(
-            buildUser({
-                username: "Alice Teacher",
-                email: "alice.teacher@example.com",
-            })
+            buildUser({ username: "Alice Teacher", email: "alice.teacher@example.com" })
         );
-        const teacher = await Teacher.create({
-            userId: user._id,
-            colorCode: "#123456",
-            subject: "Math",
-        });
+        await giveTeacherProfile(user, { colorCode: "#123456", subject: "Math" });
 
         const result = await createOrFindTeacher("alice teacher");
 
         expect(result.wasCreated).toBe(false);
         expect(result.password).toBeNull();
-        expect(result.teacher._id.toString()).toBe(teacher._id.toString());
+        // One id per person (#102): the teacher is the User.
+        expect(result.teacher._id.toString()).toBe(user._id.toString());
         expect(await User.countDocuments()).toBe(1);
-        expect(await Teacher.countDocuments()).toBe(1);
+    });
+
+    it("treats regex characters in the name literally", async () => {
+        const user = await User.create(buildUser({ username: "A.B (vik)", email: "ab@example.com" }));
+        await giveTeacherProfile(user);
+        vi.spyOn(bcrypt, "hash").mockResolvedValue("hashed-value");
+
+        const found = await createOrFindTeacher("a.b (vik)");
+        const other = await createOrFindTeacher("AxB (vik)");
+
+        expect(found.wasCreated).toBe(false);
+        expect(other.wasCreated).toBe(true);
     });
 
     it("deduplicates concurrent lookups for the same new teacher", async () => {
@@ -119,31 +124,18 @@ describe("teacherService", () => {
             createOrFindTeacher("Concurrent Teacher"),
         ]);
 
-        expect(first.teacher._id.toString()).toBe(
-            second.teacher._id.toString()
-        );
-        expect(
-            await User.countDocuments({ username: "Concurrent Teacher" })
-        ).toBe(1);
-        expect(await Teacher.countDocuments()).toBe(1);
+        expect(first.teacher._id.toString()).toBe(second.teacher._id.toString());
+        expect(await User.countDocuments({ username: "Concurrent Teacher" })).toBe(1);
+        expect(await teacherCount()).toBe(1);
     });
 
     it("creates a teacher with a strong password and the next available color", async () => {
         const existingUser = await User.create(
-            buildUser({
-                username: "Existing Teacher",
-                email: "existing.teacher@example.com",
-            })
+            buildUser({ username: "Existing Teacher", email: "existing.teacher@example.com" })
         );
-        await Teacher.create({
-            userId: existingUser._id,
-            colorCode: TEACHER_COLORS[0],
-            subject: "History",
-        });
+        await giveTeacherProfile(existingUser, { colorCode: TEACHER_COLORS[0], subject: "History" });
 
-        const hashSpy = vi
-            .spyOn(bcrypt, "hash")
-            .mockResolvedValue("hashed-value");
+        const hashSpy = vi.spyOn(bcrypt, "hash").mockResolvedValue("hashed-value");
 
         const result = await createOrFindTeacher("  New Teacher  ", null, "");
 
@@ -152,59 +144,35 @@ describe("teacherService", () => {
         expect(result.password).toMatch(/[A-Z]/);
         expect(result.password).toMatch(/[a-z]/);
         expect(result.password).toMatch(/[0-9]/);
-        expect(result.password).toMatch(
-            /[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/
-        );
+        expect(result.password).toMatch(/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/);
         expect(hashSpy).toHaveBeenCalledWith(result.password, 12);
 
         const newUser = await User.findOne({ username: "New Teacher" });
         expect(newUser.email).toBe("new.teacher@mindful.se");
         expect(newUser.role).toBe("teacher");
-
-        const newTeacher = await Teacher.findOne({ userId: newUser._id });
-        expect(newTeacher.colorCode).toBe(TEACHER_COLORS[1]);
-        expect(newTeacher.subject).toBe("Övrigt");
+        expect(newUser.teacherProfile.colorCode).toBe(TEACHER_COLORS[1]);
+        expect(newUser.teacherProfile.subject).toBe("Övrigt");
+        expect(String(result.teacher._id)).toBe(String(newUser._id));
     });
 
-    it("warns on teachers without usernames and still creates a new teacher", async () => {
-        const userWithoutUsername = await User.create(
-            buildUser({
-                username: undefined,
-                email: "no.username@example.com",
-            })
-        );
-        await Teacher.create({
-            userId: userWithoutUsername._id,
-            colorCode: TEACHER_COLORS[0],
-            subject: "Math",
-        });
-
+    it("does not treat a same-named user without a teacher profile as the teacher", async () => {
+        await User.create(buildUser({ username: "Fresh Teacher", email: "fresh.other@example.com", roles: ["admin"] }));
         vi.spyOn(bcrypt, "hash").mockResolvedValue("hashed-value");
 
         const result = await createOrFindTeacher("Fresh Teacher", null, "Science");
 
         expect(result.wasCreated).toBe(true);
-        expect(logger.warn).toHaveBeenCalled();
-
-        const createdTeacher = await Teacher.findOne({
-            _id: result.teacher._id,
-        });
-        expect(createdTeacher.subject).toBe("Science");
+        const created = await User.findById(result.teacher._id);
+        expect(created.teacherProfile.subject).toBe("Science");
+        expect(created.email).toBe("fresh.teacher@mindful.se");
     });
 
     it("cycles colors when all are already used", async () => {
         for (let index = 0; index < TEACHER_COLORS.length; index += 1) {
             const user = await User.create(
-                buildUser({
-                    username: `Teacher ${index}`,
-                    email: `teacher.${index}@example.com`,
-                })
+                buildUser({ username: `Teacher ${index}`, email: `teacher.${index}@example.com` })
             );
-            await Teacher.create({
-                userId: user._id,
-                colorCode: TEACHER_COLORS[index],
-                subject: "Subject",
-            });
+            await giveTeacherProfile(user, { colorCode: TEACHER_COLORS[index], subject: "Subject" });
         }
 
         vi.spyOn(bcrypt, "hash").mockResolvedValue("hashed-value");
@@ -212,42 +180,29 @@ describe("teacherService", () => {
         const result = await createOrFindTeacher("Extra Teacher");
 
         expect(result.wasCreated).toBe(true);
-        expect(result.teacher.colorCode).toBe(TEACHER_COLORS[0]);
+        expect(result.teacher.teacherProfile.colorCode).toBe(TEACHER_COLORS[0]);
     });
 
     it("falls back to the first color when color lookup fails", async () => {
-        const findSpy = vi.spyOn(Teacher, "find").mockImplementation(
-            (query, projection) => {
-                if (projection === "colorCode") {
-                    return Promise.reject(new Error("Color lookup failed"));
-                }
-                return {
-                    populate: () => Promise.resolve([]),
-                };
-            }
-        );
-
+        const findSpy = vi.spyOn(User, "find").mockImplementationOnce(() => {
+            throw new Error("Color lookup failed");
+        });
         vi.spyOn(bcrypt, "hash").mockResolvedValue("hashed-value");
 
         const result = await createOrFindTeacher("Fallback Teacher");
 
         expect(findSpy).toHaveBeenCalled();
         expect(result.wasCreated).toBe(true);
-        expect(result.teacher.colorCode).toBe(TEACHER_COLORS[0]);
+        expect(result.teacher.teacherProfile.colorCode).toBe(TEACHER_COLORS[0]);
     });
 
     it("rethrows errors during teacher creation", async () => {
         vi.spyOn(bcrypt, "hash").mockResolvedValue("hashed-value");
         const error = new Error("User save failed");
-        vi.spyOn(User.prototype, "save").mockRejectedValueOnce(error);
+        vi.spyOn(User, "create").mockRejectedValueOnce(error);
 
-        await expect(
-            createOrFindTeacher("Broken Teacher", null, "Math")
-        ).rejects.toThrow("User save failed");
+        await expect(createOrFindTeacher("Broken Teacher", null, "Math")).rejects.toThrow("User save failed");
 
-        expect(logger.error).toHaveBeenCalledWith(
-            { err: error },
-            "Error creating or finding teacher"
-        );
+        expect(logger.error).toHaveBeenCalledWith({ err: error }, "Error creating or finding teacher");
     });
 });

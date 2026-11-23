@@ -2,7 +2,7 @@
    
  **Purpose:** single consolidated source of truth, merging:  
 - MILESTONE-3-SECURITY-COMMERCIAL-CHECKLIST.md (original task checklist, P1–P16/P18)  
-- AUDIT-MILESTONE3-COMMERCIAL-README_REPORT.md (Etapp 1 + Etapp 2 feature-by-feature audit, items 1–67a)  
+- AUDIT-MILESTONE3-COMMERCIAL-README.REPORT.md (Etapp 1 + Etapp 2 feature-by-feature audit, items 1–67a)  
 - MILESTONE-3-SECURITY-COMMERCIAL-FINAL-REPORT.md (final readiness pass, A–J)  
 - E2E_FEATURE_REPORT.md (Playwright 75/75 pass + real bugs found/fixed)  
 - ARCHITECTURE-NOTES.md (SMS feasibility note)  
@@ -67,6 +67,12 @@
  | P1-07 | Coverage gates (issue #43) | ✅ GATE MET + RAISED (2026-11-22) | Backend 2240/2240, lines 82.58 % ≥ 78.5 %. Frontend 601/601: statements 70.93 / branches 62.34 / functions **60.07** / lines 72.99 (was functions 47.97 %). Frontend gate raised 50/40/50/50 → **67/59/57/70** (≈3 points headroom). New tests: CourseCardBuilder save path, Student PermissionsTab, certificates API, GeneralTab actions, DocumentSection, APLFileArchive, ChangeActionPlan, ActionPlanQuestions, CourseCardDiscussions. |  
    
  | — | Hamburger menu in alphabetical order + "Alla kurskort" → "Kurskort" (#99) | 🟡 IN REVIEW (2026-11-22, branch `feat/99-nav-menu-alphabetical`) | `NavBar.vue` pins "Översikt" (`/dashboard`) on top and sorts the rest with `localeCompare(…, 'sv')` (Å/Ä/Ö after Z). Menu entry for `/course-cards/overview` renamed "Kurskort"; the overview page heading and its back button say "Kurskort" too. Student "Prövningar" (`/examform`) is back in the menu: it was hidden in July 2025 by being listed in `secretMenuNames` (11f7f75), even though the student dashboard links to it. Test: `NavBarMenuOrder.test.js` (5 cases, all fail on `main`). Kurskort overview: the "Redigera innehåll" button is now "Redigera" so it fits inside the card (tooltip still says "Redigera kursinnehållet"); test in `CourseCardsOverview.test.js`. |  
+   
+ | — | Repo hygiene, part 1: `backend/scripts` (#48) | 🟡 IN REVIEW (2026-11-22, branch `chore/48-backend-scripts`) | New `createTeacher.js` (local teacher login, re-runnable, `DRY_RUN=1`, local-DB guard; 4 tests). Removed 36 scripts and 4 old workbooks: broken (MongoDB driver 7 rejects `useNewUrlParser`, wrong `mindful` DB fallback, missing required `Teacher.subject`), already-run one-off migrations, inspect scratch files, the old Excel importer, and scripts with real staff names/emails. `createUser.js` no longer loads `.env.production` by default; `updateEducation.js` defaults to the GY25 workbook. Index in `backend/scripts/README.md`. **launch.sh / launch_win.ps1 no longer delete anything**: new `ensureBaseData.js` imports catalog/FAQ only when empty and creates admin/systemadmin/syv/specped accounts only for roles without one (4 tests); teachers and students are added at runtime. Demo reset moved to `backend/scripts/resetDemo.sh --yes` (DEMO_RUNBOOK updated). Seed default kommun Stockholm → Sollentuna (Stockholm 0 kr came from the seed, #33). **GDPR:** `data/test_mindful.xlsx` and `backend/docs/test_mindful.xlsx` (committed, 34 real students) replaced with a dummy copy made by new `anonymizeStudentWorkbook.js` (2 tests); `parseStudentExcel.test.js` no longer hard-codes a real student. Real data remains in git history (owner decision: no history rewrite before the demo). Root-level scratch scripts (rest of #48) not done yet. |  
+   
+ | — | Merge Teacher into User — one id per person (#102, tech debt, not billable) | 🟡 IN REVIEW (2026-11-23, branch `chore/102-teacher-into-user`, stacked on `chore/48-backend-scripts`) | Every teacher reference (CourseInstance.responsibleTeacher/assistantTeacher, Student/StudentEnrollment/Grade/Provning/GradeCatalog teacherId, Notification.teacher, calendar payloads) now holds the teacher's **User id**; the profile lives in `User.teacherProfile`. `Teacher` model and every `ref: "Teacher"` removed; ~60 Teacher↔User translations replaced by `utils/teacherProfile.js`. **Migration** `backend/scripts/migrateTeacherIntoUser.js` (`DRY_RUN=1`, idempotent; keeps the `teachers` collection): run on a DB seeded by the old code (`mindfullearning_b`) — 3 teachers, 97 references rewritten, second run 0 changes, 0 dangling references. **Must run on every environment before deploying.** Frontend: populated teacher refs are Users, so names/colours now go through `utils/teacherName.js` (fixes teachers losing edit rights on their own kurskort and grey kurskort colours). Also: `updateEducation.js` loads `.env.development` itself (replacement for the removed `educationParser.js`); `API_PROXY_TARGET` / `E2E_BASE_URL` env overrides for a second local stack. Tests: backend 2291/2291, lines 82.67 %; frontend 625/625; Playwright 77/82 — the 5 failures were checked against the pre-#102 code on the same seed (74/82, same 4 failures + 4 others) and a solo rerun (Inaktiva elever passes), so none are #102 regressions. |  
+   
+ | — | Demo-prep fixes found while scripting DEMOKING.md (Bugg/Garanti) | 🟡 IN REVIEW (2026-11-22, branch `chore/48-backend-scripts`) | (1) Betyg listed placed students twice (enrollment + legacy `education` row) and could resurface dropped enrollments: legacy rows covered by an enrollment are skipped (`gradeRoutes.js`, `studentsToGrade.test.js`). (2) "Skapa ny instans" mall dropdown was always empty (`templates` not returned from setup) and now only lists mallar for the chosen huvudkurs. (3) Placing a student on a shared kurskort overwrote its responsible teacher and wiped a manual slutprov — **behaviour change**: an existing responsible teacher is kept (`courseMatchingService.findOrCreateCourseInstance`, `sharedInstanceTeacher.test.js`). (4) Wizard preview proposed slutprov in week 4 for 10/20-week courses and used local time: now Wednesday before the end when stretched, UTC. (5) Wizard kommun list came from the pricing table, so KCNO (real students) was missing: shared `SELECTABLE_MUNICIPALITIES`. (6) Teachers got 403 on their own staff profile (Filarkiv) — own profile allowed, Teacher id resolved; new "Mitt filarkiv" in Min profil; `/me/teacher` uses `roles[]`. Pricing still missing for KCNO/Göteborg/Stockholm (#33). |  
    
  | — | CourseCardBuilder save unhid hidden modules (BUG-01 follow-up) | ✅ FIXED (2026-11-22) | Loading a kurskort into the builder copied only the module title from `content`, so "Spara kurskort" sent `isHiddenFromStudent: false` and wiped teacher instructions. The load now keeps both and `cardContent` stores the flag. Test: `CourseCardBuilder.saveCard.test.js`. Also fixed: `sentryScrub.js` sent `id: "undefined"` for users without an id (lint autofix regression in `04b424c`). |  
    
@@ -150,7 +156,7 @@
    
  | 10 | Add-course wizard | ✅ DONE | — |  
    
- | 11 | Alvis data import / auto-placement | 🔴 NOT DONE | No Alvis API client exists anywhere — Excel bulk import only. Nice-to-have per audit Part 5 #16. |  
+ | 11 | Alvis data import / auto-placement | ⛔ OUT OF SCOPE (decided 2026-11-23) | Not part of Etapp 1 in Etapperna_lista; Excel bulk import is the delivered path. Parked as issue #61 (quote separately). |  
    
  | 12 | Kurs vs kurspaket branching | ✅ DONE | — |  
    
@@ -231,7 +237,7 @@
    
  | 34 | Admin/systemadmin unlock | ✅ DONE | — |  
    
- | 35 | Scrive digital signing of grade catalogs | 🟡 PARTIAL | Manual per-PDF upload/send works; no automated catalog generation from grade data. Nice-to-have per audit Part 5 #19. |  
+ | 35 | Scrive digital signing of grade catalogs | ⛔ OUT OF SCOPE (decided 2026-11-23) | Manual per-PDF upload/send is the delivered behaviour. Automated catalog generation is not in Etapp 1; parked as issue #60 (quote separately). |  
    
     
  **Handlingsplan (action plan)**  
@@ -261,7 +267,7 @@
    
  | 37 | Dedicated searchable page | ✅ DONE | — |  
    
- | 38 | Students book & pay via school website | 🔴 NOT DONE | Form is login-gated, POST is admin-only, no payment gateway anywhere. Nice-to-have per audit Part 5 #18 — needs a real product decision on payment provider before building. |  
+ | 38 | Students book & pay via school website | ⛔ OUT OF SCOPE (decided 2026-11-23) | Login-gated form with admin-only POST is the delivered behaviour. Public booking + payment is not in Etapp 1; parked as issue #59 (quote separately). |  
    
  | 39 | Intake list — all required fields | ✅ DONE | Address v-text-field added to the prövning form; whole currentExam object is submitted so the field persists on create/update. |  
    
@@ -476,9 +482,8 @@ Use this as the actual to-do queue; everything above marked ✅ DONE needs no fu
 - Exam room list reconciled to spec (7 vs 9) — item 48 persistence itself is DONE; only the count needs a product call  
 - Noticeboard vs activity-feed distinction (item 58) — feed currently doubles as noticeboard  
 - SMS gateway vendor selection (Section E — out of scope until decided)  
-- Prövning payment gateway + public booking flow (item 38)  
-- Scrive automated catalog generation (item 35)  
-- Alvis API integration (item 11)  
+
+**Decided out of scope (2026-11-23), parked for separate quotes:** prövning payment + public booking (item 38, #59), Scrive catalog automation (item 35, #60), Alvis API integration (item 11, #61).  
 
 **CI/process:**  
 - `.github/workflows/ci.yml` exists (lint + test + docker jobs) — kept as-is this pass; coverage gate stays honest (not enforced/lowered).

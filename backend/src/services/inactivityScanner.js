@@ -22,7 +22,6 @@
 import logger from "../utils/logger.js";
 import Student from "../models/Student.js";
 import User from "../models/User.js";
-import Teacher from "../models/Teacher.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
@@ -101,7 +100,7 @@ async function evaluateActiveStudents(today, thresholds) {
     const enrollmentIds = enrollments.map((e) => e._id);
     const enrollmentTeacherIds = uniq(enrollments.map((e) => e.teacherId));
 
-    const [students, courseInstances, submissions, teachers] = await Promise.all([
+    const [students, courseInstances, submissions, teacherUsers] = await Promise.all([
         Student.find({ _id: { $in: studentIds } })
             .select("name email changeHistory lastLearningActivityAt")
             .lean(),
@@ -111,19 +110,13 @@ async function evaluateActiveStudents(today, thresholds) {
         AssignmentSubmission.find({ enrollmentId: { $in: enrollmentIds } })
             .select("studentId submittedAt feedback revisionDecision")
             .lean(),
+        // enrollment.teacherId is the teacher's User id (#102).
         enrollmentTeacherIds.length
-            ? Teacher.find({ _id: { $in: enrollmentTeacherIds } })
-                  .select("userId")
+            ? User.find({ _id: { $in: enrollmentTeacherIds } })
+                  .select("name email")
                   .lean()
             : Promise.resolve([]),
     ]);
-
-    const teacherUserIds = uniq(teachers.map((t) => t.userId));
-    const teacherUsers = teacherUserIds.length
-        ? await User.find({ _id: { $in: teacherUserIds } })
-              .select("name email")
-              .lean()
-        : [];
 
     const emails = uniq(students.map((s) => s.email));
     const users = emails.length
@@ -134,9 +127,6 @@ async function evaluateActiveStudents(today, thresholds) {
     const usersByEmail = new Map(users.map((u) => [String(u.email).toLowerCase(), u]));
     const teacherUserByName = new Map(
         teacherUsers.map((u) => [u._id.toString(), u.name || u.email || ""])
-    );
-    const teacherIdToUser = new Map(
-        teachers.map((t) => [t._id.toString(), t.userId?.toString()])
     );
     const instanceById = new Map(
         courseInstances.map((c) => [
@@ -198,10 +188,9 @@ async function evaluateActiveStudents(today, thresholds) {
         let teacherUserId = null;
         let teacherName = "";
         for (const enrollment of studentEnrollments) {
-            const teacherRecordId = enrollment.teacherId?.toString();
-            const userId = teacherIdToUser.get(teacherRecordId);
-            if (userId) {
-                teacherId = teacherRecordId;
+            const userId = enrollment.teacherId?.toString();
+            if (userId && teacherUserByName.has(userId)) {
+                teacherId = userId;
                 teacherUserId = userId;
                 teacherName = teacherUserByName.get(userId) || "";
                 break;

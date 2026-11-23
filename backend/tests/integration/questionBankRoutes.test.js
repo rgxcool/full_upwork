@@ -6,7 +6,6 @@ import Question from "../../src/models/Question.js";
 import ExamAttempt from "../../src/models/ExamAttempt.js";
 import Course from "../../src/models/Course.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
-import Teacher from "../../src/models/Teacher.js";
 import User from "../../src/models/User.js";
 import app from "../../index.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
@@ -37,7 +36,6 @@ describe("Question Bank Routes", () => {
             Question.deleteMany({}),
             ExamAttempt.deleteMany({}),
             StudentEnrollment.deleteMany({}),
-            Teacher.deleteMany({}),
             User.deleteMany({}),
         ]);
     }, 60000);
@@ -48,7 +46,6 @@ describe("Question Bank Routes", () => {
             Question.deleteMany({}),
             ExamAttempt.deleteMany({}),
             StudentEnrollment.deleteMany({}),
-            Teacher.deleteMany({}),
             User.deleteMany({}),
         ]);
     });

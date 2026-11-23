@@ -4,11 +4,11 @@ import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import Notification from "../../src/models/Notification.js";
 import NOTIFICATION_TYPES from "../../src/controllers/notificationTypes.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
 import { runGradingReminderScan } from "../../src/services/gradingReminderScan.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const dayMs = 24 * 60 * 60 * 1000;
 const daysAgo = (days) => new Date(Date.now() - days * dayMs);
@@ -35,7 +35,6 @@ describe("Grading Reminder Scan", () => {
             CourseInstance.deleteMany({}),
             StudentEnrollment.deleteMany({}),
             User.deleteMany({}),
-            Teacher.deleteMany({}),
             Notification.deleteMany({}),
         ]);
 
@@ -45,10 +44,7 @@ describe("Grading Reminder Scan", () => {
             roles: ["teacher"],
         });
 
-        teacherRecord = await Teacher.create({
-            userId: teacherUser._id,
-            subject: "Matematik",
-        });
+        teacherRecord = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
 
         student = await Student.create({
             name: "Anna Svensson",
@@ -103,7 +99,7 @@ describe("Grading Reminder Scan", () => {
             expect(notification.meta.studentId.toString()).toBe(student._id.toString());
             expect(notification.meta.courseId.toString()).toBe(instance._id.toString());
             expect(notification.meta.teacherId.toString()).toBe(
-                teacherRecord.userId.toString()
+                teacherRecord._id.toString()
             );
             expect(notification.message).toContain("Anna Svensson");
             expect(notification.resolved).toBe(false);

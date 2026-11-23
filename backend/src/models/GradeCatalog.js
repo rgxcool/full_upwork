@@ -29,7 +29,7 @@ const gradeCatalogSchema = new mongoose.Schema(
     courseName: { type: String },
     enrollmentId: { type: mongoose.Schema.Types.ObjectId, ref: "StudentEnrollment" },
 
-    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "Teacher" },
+    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     teacherName: { type: String },
     teacherEmail: { type: String },
 

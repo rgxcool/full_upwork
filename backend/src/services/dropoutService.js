@@ -23,7 +23,6 @@
  */
 import mongoose from "mongoose";
 import Student from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import ExamAttendance from "../models/ExamAttendance.js";
@@ -37,6 +36,7 @@ import {
     safeInactivitySideEffect,
     summarizeInactivitySignal,
 } from "./inactivityDiscussionService.js";
+import { TEACHER_POPULATE_FIELDS } from "../utils/teacherProfile.js";
 
 /** Enrollment statuses that must be cascaded to "dropped" on avbrott. */
 export const CASCADE_DROPOUT_STATUSES = [
@@ -57,25 +57,19 @@ async function resolveResponsibleTeacherForDropout(student) {
     let teacherRecord = null;
     let teacherUserId = null;
 
+    // Student.teacherId is the teacher's User id (#102), so the record and the
+    // user are the same document.
     if (student.teacherId) {
-        if (student.teacherId._id) {
-            // Populated teacherId.
-            teacherRecord = student.teacherId;
-        } else {
-            teacherRecord = await Teacher.findById(student.teacherId);
-        }
-        if (teacherRecord) {
-            if (teacherRecord.userId) {
-                teacherUserId = teacherRecord.userId._id || teacherRecord.userId;
-            } else {
-                const populated = await Teacher.findById(teacherRecord._id).populate("userId");
-                teacherUserId = populated?.userId?._id || populated?.userId || null;
-            }
-        }
+        teacherRecord = student.teacherId._id
+            ? student.teacherId // populated
+            : await User.findById(student.teacherId).select("_id").lean();
+        teacherUserId = teacherRecord?._id || null;
     } else if (typeof student.teacher === "string" && student.teacher.trim() !== "") {
-        const teacherUser = await User.findOne({ name: student.teacher });
+        const teacherUser = await User.findOne({ name: student.teacher, teacherProfile: { $type: "object" } })
+            .select("_id")
+            .lean();
         if (teacherUser) {
-            teacherRecord = await Teacher.findOne({ userId: teacherUser._id });
+            teacherRecord = teacherUser;
             teacherUserId = teacherUser._id;
         }
     }
@@ -126,7 +120,7 @@ async function ensureDropoutStudentNotification(student, actorUserId) {
  */
 async function ensureDropoutNotification(student, teacherRecordId, teacherUserId, adminUserId) {
     if (!teacherRecordId) {
-        logger.warn({ name: student.name }, "No teacher found for student, skipping dropout notification");
+        logger.warn({ studentId: student._id }, "No teacher found for student, skipping dropout notification");
         return null;
     }
 
@@ -172,10 +166,7 @@ async function ensureDropoutNotification(student, teacherRecordId, teacherUserId
  * @returns {Promise<{success: boolean, student: Object, conversationId: string|null, deletedExamAttendance: number, deletedProvning: number, deletedEmptyExams: number, removedFromEvents: number, deletedEmptyEvents: number, droppedEnrollments: number, wasAlreadyDropout: boolean}>}
  */
 export const performStudentDropout = async ({ studentId, userId, role, reason }) => {
-    const student = await Student.findById(studentId).populate({
-        path: "teacherId",
-        populate: { path: "userId", select: "_id username email" },
-    });
+    const student = await Student.findById(studentId).populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS });
     if (!student) {
         const error = new Error("Student not found");
         error.statusCode = 404;

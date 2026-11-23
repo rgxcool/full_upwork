@@ -4,7 +4,7 @@ import { PLAN_LENGTHS, resolveSectionOffsets } from "../utils/datePlan.js";
 const TeacherScheduleParametersSchema = new mongoose.Schema({
     teacherId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Teacher",
+        ref: "User",
         required: true,
     },
     courseId: {

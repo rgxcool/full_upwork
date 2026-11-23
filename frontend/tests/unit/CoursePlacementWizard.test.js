@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CoursePlacementWizard from '../../src/views/Student/CoursePlacementWizard.vue';
+import { SELECTABLE_MUNICIPALITIES } from '@/constants/municipalities.js';
 
 vi.mock('@/api/client.js', () => ({
     default: {
@@ -202,6 +203,20 @@ describe('CoursePlacementWizard.vue - individual course placement', () => {
         wrapper.vm.closeWizard();
         expect(wrapper.emitted('close')).toHaveLength(1);
         expect(wrapper.emitted('placed')).toBeUndefined();
+    });
+});
+
+describe('CoursePlacementWizard.vue - exam kommun list', () => {
+    it('offers every selectable kommun, including KCNO which has no price row', async () => {
+        client.get.mockResolvedValue({ data: [] });
+        const wrapper = mount(CoursePlacementWizard, {
+            props: { student },
+            global: { stubs: { FileUploaderDownloader: true } },
+        });
+        await flush(wrapper);
+        expect(wrapper.vm.municipalities).toContain('KCNO');
+        expect(wrapper.vm.municipalities).toEqual([...SELECTABLE_MUNICIPALITIES]);
+        wrapper.unmount();
     });
 });
 

@@ -1,14 +1,13 @@
 /**
  * Student Controller
  * Handles student data, normalization, municipality matching, and related utilities.
- * Uses Student, Program, Course, User, Teacher, and CoursePackage models.
+ * Uses Student, Program, Course, User and CoursePackage models.
  */
 import mongoose from "mongoose";
 import Student from "../models/Student.js";
 import Program from "../models/Program.js";
 import Course from "../models/Course.js";
 import User from "../models/User.js";
-import Teacher from "../models/Teacher.js";
 import CoursePackage from "../models/CoursePackage.js";
 import {
     parseStudentExcel,
@@ -511,9 +510,8 @@ async function uploadXlsx(req, res) {
                         username: new RegExp(`^${firstName}`, "i"),
                     });
                     if (user) {
-                        teacherDoc = await Teacher.findOne({
-                            userId: user._id,
-                        });
+                        // The teacher is the User itself when it has a teacher profile (#102).
+                        teacherDoc = user.teacherProfile ? user : null;
                         if (!user.username) {
                             logger.warn({ user }, "User found without username");
                         }

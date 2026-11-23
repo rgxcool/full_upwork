@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import Student from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
+import { findTeacherUser } from "../utils/teacherProfile.js";
 import User from "../models/User.js";
 import Course from "../models/Course.js";
 import CourseInstance from "../models/CourseInstance.js";
@@ -32,7 +32,8 @@ const getStudentForUser = async (user) => {
 const getTeacherForUser = async (user) => {
     if (!isTeacherUser(user) && !isStaffUser(user)) return null;
     if (isStaffUser(user)) return null;
-    return Teacher.findOne({ userId: user?.userId });
+    // The teacher is the User itself; its _id is what responsibleTeacher holds (#102).
+    return findTeacherUser(user?.userId, { select: "_id", lean: true });
 };
 
 const teacherOwnsInstance = (teacher, instance) => {
@@ -669,29 +670,20 @@ export const getCourseInstanceParticipants = async (req, res) => {
         // Staff participants: responsible + assistant teachers on the instance.
         const teacherIds = [instance.responsibleTeacher, instance.assistantTeacher].filter(Boolean);
         if (teacherIds.length > 0) {
-            const staffTeachers = await Teacher.find({ _id: { $in: teacherIds } })
-                .select("userId subject")
+            // responsible/assistantTeacher are User ids (#102).
+            const staffUsers = await User.find({ _id: { $in: teacherIds } })
+                .select("name username email lastLoginAt active teacherProfile.subject")
                 .lean();
-            const staffUserIds = staffTeachers
-                .map((t) => t.userId)
-                .filter(Boolean);
-            const usersByUser = new Map(
-                (
-                    await User.find({ _id: { $in: staffUserIds } })
-                        .select("name email lastLoginAt")
-                        .lean()
-                ).map((u) => [u._id.toString(), u])
-            );
 
-            for (const teacher of staffTeachers) {
-                const user = usersByUser.get(String(teacher.userId)) || {};
+            for (const user of staffUsers) {
+                const subject = user.teacherProfile?.subject;
                 participants.push({
-                    participantId: teacher._id,
-                    userId: teacher.userId || null,
-                    name: user.name || "Lärare",
+                    participantId: user._id,
+                    userId: user._id,
+                    name: user.name || user.username || "Lärare",
                     email: user.email || null,
                     role: "staff",
-                    staffRole: teacher.subject ? `Lärare (${teacher.subject})` : "Lärare",
+                    staffRole: subject ? `Lärare (${subject})` : "Lärare",
                     status: user.active === false ? "inactive" : "active",
                     lastActivity: user.lastLoginAt ? { type: "login", at: user.lastLoginAt } : null,
                 });

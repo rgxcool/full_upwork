@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Student from "../models/Student.js";
 import Course from "../models/Course.js";
-import Teacher from "../models/Teacher.js";
+import { listTeacherUsers } from "../utils/teacherProfile.js";
 import { gradeToRevenue } from "../utils/municipalityPricing.js";
 
 const DROPOUT_STATUSES = ["dropped", "suspended"];
@@ -297,19 +297,11 @@ export const getStudentReport = async (filters) => {
 
     if (groupBy === "teacher") {
         pipeline.push(
-            {
-                $lookup: {
-                    from: "teachers",
-                    localField: "teacherId",
-                    foreignField: "_id",
-                    as: "teacher",
-                },
-            },
-            { $unwind: { path: "$teacher", preserveNullAndEmptyArrays: true } },
+            // teacherId is the teacher's User id (#102).
             {
                 $lookup: {
                     from: "users",
-                    localField: "teacher.userId",
+                    localField: "teacherId",
                     foreignField: "_id",
                     as: "teacherUser",
                 },
@@ -322,7 +314,7 @@ export const getStudentReport = async (filters) => {
             },
             {
                 $group: {
-                    _id: { $ifNull: ["$teacherUser.name", "Ej tilldelad"] },
+                    _id: { $ifNull: ["$teacherUser.name", { $ifNull: ["$teacherUser.username", "Ej tilldelad"] }] },
                     studentCount: { $sum: 1 },
                     uniqueStudents: { $addToSet: "$studentId" },
                     active: {
@@ -535,19 +527,11 @@ export const getGradeDistribution = async (filters) => {
     const teacherPipeline = [
         ...buildBasePipeline(filters, "gradeDate"),
         { $match: { grade: { $nin: [null, ""] } } },
-        {
-            $lookup: {
-                from: "teachers",
-                localField: "teacherId",
-                foreignField: "_id",
-                as: "teacher",
-            },
-        },
-        { $unwind: { path: "$teacher", preserveNullAndEmptyArrays: true } },
+        // teacherId is the teacher's User id (#102).
         {
             $lookup: {
                 from: "users",
-                localField: "teacher.userId",
+                localField: "teacherId",
                 foreignField: "_id",
                 as: "teacherUser",
             },
@@ -556,7 +540,7 @@ export const getGradeDistribution = async (filters) => {
         {
             $group: {
                 _id: {
-                    teacher: { $ifNull: ["$teacherUser.name", "Ej tilldelad"] },
+                    teacher: { $ifNull: ["$teacherUser.name", { $ifNull: ["$teacherUser.username", "Ej tilldelad"] }] },
                     grade: "$grade",
                 },
                 count: { $sum: 1 },
@@ -793,9 +777,7 @@ export const getFilterOptions = async () => {
         Course.find({}, { courseName: 1, courseCode: 1 })
             .sort({ courseName: 1 })
             .lean(),
-        Teacher.find({}, { subject: 1, userId: 1 })
-            .populate({ path: "userId", select: "name username email" })
-            .lean(),
+        listTeacherUsers({}, { select: "name username email teacherProfile.subject" }),
     ]);
 
     return {
@@ -805,12 +787,10 @@ export const getFilterOptions = async () => {
             name: c.courseName,
             code: c.courseCode,
         })),
-        teachers: teachers
-            .filter((t) => t.userId)
-            .map((t) => ({
-                id: t._id,
-                name: t.userId?.name || t.userId?.username || "Okänd lärare",
-                subject: t.subject,
-            })),
+        teachers: teachers.map((t) => ({
+            id: t._id,
+            name: t.name || t.username || "Okänd lärare",
+            subject: t.teacherProfile?.subject,
+        })),
     };
 };
