@@ -2,7 +2,7 @@
    
  **Purpose:** single consolidated source of truth, merging:  
 - MILESTONE-3-SECURITY-COMMERCIAL-CHECKLIST.md (original task checklist, P1–P16/P18)  
-- AUDIT-MILESTONE3-COMMERCIAL-README_REPORT.md (Etapp 1 + Etapp 2 feature-by-feature audit, items 1–67a)  
+- AUDIT-MILESTONE3-COMMERCIAL-README.REPORT.md (Etapp 1 + Etapp 2 feature-by-feature audit, items 1–67a)  
 - MILESTONE-3-SECURITY-COMMERCIAL-FINAL-REPORT.md (final readiness pass, A–J)  
 - E2E_FEATURE_REPORT.md (Playwright 75/75 pass + real bugs found/fixed)  
 - ARCHITECTURE-NOTES.md (SMS feasibility note)  
@@ -154,7 +154,7 @@
    
  | 10 | Add-course wizard | ✅ DONE | — |  
    
- | 11 | Alvis data import / auto-placement | 🔴 NOT DONE | No Alvis API client exists anywhere — Excel bulk import only. Nice-to-have per audit Part 5 #16. |  
+ | 11 | Alvis data import / auto-placement | ⛔ OUT OF SCOPE (decided 2026-11-23) | Not part of Etapp 1 in Etapperna_lista; Excel bulk import is the delivered path. Parked as issue #61 (quote separately). |  
    
  | 12 | Kurs vs kurspaket branching | ✅ DONE | — |  
    
@@ -235,7 +235,7 @@
    
  | 34 | Admin/systemadmin unlock | ✅ DONE | — |  
    
- | 35 | Scrive digital signing of grade catalogs | 🟡 PARTIAL | Manual per-PDF upload/send works; no automated catalog generation from grade data. Nice-to-have per audit Part 5 #19. |  
+ | 35 | Scrive digital signing of grade catalogs | ⛔ OUT OF SCOPE (decided 2026-11-23) | Manual per-PDF upload/send is the delivered behaviour. Automated catalog generation is not in Etapp 1; parked as issue #60 (quote separately). |  
    
     
  **Handlingsplan (action plan)**  
@@ -265,7 +265,7 @@
    
  | 37 | Dedicated searchable page | ✅ DONE | — |  
    
- | 38 | Students book & pay via school website | 🔴 NOT DONE | Form is login-gated, POST is admin-only, no payment gateway anywhere. Nice-to-have per audit Part 5 #18 — needs a real product decision on payment provider before building. |  
+ | 38 | Students book & pay via school website | ⛔ OUT OF SCOPE (decided 2026-11-23) | Login-gated form with admin-only POST is the delivered behaviour. Public booking + payment is not in Etapp 1; parked as issue #59 (quote separately). |  
    
  | 39 | Intake list — all required fields | ✅ DONE | Address v-text-field added to the prövning form; whole currentExam object is submitted so the field persists on create/update. |  
    
@@ -480,9 +480,8 @@ Use this as the actual to-do queue; everything above marked ✅ DONE needs no fu
 - Exam room list reconciled to spec (7 vs 9) — item 48 persistence itself is DONE; only the count needs a product call  
 - Noticeboard vs activity-feed distinction (item 58) — feed currently doubles as noticeboard  
 - SMS gateway vendor selection (Section E — out of scope until decided)  
-- Prövning payment gateway + public booking flow (item 38)  
-- Scrive automated catalog generation (item 35)  
-- Alvis API integration (item 11)  
+
+**Decided out of scope (2026-11-23), parked for separate quotes:** prövning payment + public booking (item 38, #59), Scrive catalog automation (item 35, #60), Alvis API integration (item 11, #61).  
 
 **CI/process:**  
 - `.github/workflows/ci.yml` exists (lint + test + docker jobs) — kept as-is this pass; coverage gate stays honest (not enforced/lowered).
