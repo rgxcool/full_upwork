@@ -14,6 +14,8 @@ import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
+import CourseInstance from "../../src/models/CourseInstance.js";
+import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import Notification from "../../src/models/Notification.js";
 import ActionPlan from "../../src/models/ActionPlan.js";
 import FormQuestions from "../../src/models/ActionPlanQuestions.js";
@@ -48,6 +50,8 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
     beforeEach(async () => {
         await Student.deleteMany({});
         await Course.deleteMany({});
+        await CourseInstance.deleteMany({});
+        await StudentEnrollment.deleteMany({});
         await Notification.deleteMany({});
         await ActionPlan.deleteMany({});
         await FormQuestions.deleteMany({});
@@ -58,6 +62,8 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
         vi.restoreAllMocks();
         await Student.deleteMany({});
         await Course.deleteMany({});
+        await CourseInstance.deleteMany({});
+        await StudentEnrollment.deleteMany({});
         await Notification.deleteMany({});
         await ActionPlan.deleteMany({});
         await FormQuestions.deleteMany({});
@@ -70,12 +76,12 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
         const teacherToken = signToken({
             userId: teacherUserId.toString(),
             role: "teacher",
-            name: "Sven Svensson",
-            email: "sven@skola.se",
+            name: "Test Lärare",
+            email: "test.larare@example.se",
         });
 
-        const teacher = await giveTeacherProfile(teacherUserId, { name: "Sven Svensson",
-            email: "sven@skola.se",
+        const teacher = await giveTeacherProfile(teacherUserId, { name: "Test Lärare",
+            email: "test.larare@example.se",
             subject: "Svenska" });
 
         const course = await Course.create({
@@ -85,19 +91,27 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
         });
 
         const student = await Student.create({
-            name: "Karin Karlsson",
-            personalNumber: "20010101-9988",
-            email: "karin@elev.se",
+            name: "Test Elev",
+            personalNumber: "19000101-0000",
+            email: "test.elev@example.se",
             teacherId: teacher._id,
-            education: [
-                {
-                    type: "Course",
-                    refId: course._id,
-                    name: "Svenska som andraspråk 1",
-                    grade: "",
-                    locked: false,
-                },
-            ],
+        });
+        // #103: grades live on the student's enrollment in the course.
+        const instance = await CourseInstance.create({
+            mainCourseId: course._id,
+            courseName: course.courseName,
+            courseCode: "SVASVE01-1",
+            startDate: new Date("2026-01-12"),
+            endDate: new Date("2026-03-20"),
+            responsibleTeacher: teacher._id,
+        });
+        await StudentEnrollment.create({
+            studentId: student._id,
+            courseInstanceId: instance._id,
+            mainCourseId: course._id,
+            teacherId: teacher._id,
+            startDate: instance.startDate,
+            endDate: instance.endDate,
         });
 
         // 2. Teacher attempts to set F grade without motivation -> rejected 400
@@ -139,7 +153,7 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
 
         expect(actionPlanNote).not.toBeNull();
         expect(actionPlanNote.resolved).toBe(false);
-        expect(actionPlanNote.message).toContain("Karin Karlsson");
+        expect(actionPlanNote.message).toContain("Test Elev");
         expect(actionPlanNote.teacher.toString()).toBe(teacher._id.toString());
         expect(actionPlanNote.meta.url).toBe(
             `/student/${student._id}?showActionPlan=true`
@@ -233,7 +247,7 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
             studentId: student._id.toString(),
             educationId: course._id.toString(),
             courseId: course._id.toString(),
-            teacherName: "Sven Svensson",
+            teacherName: "Test Lärare",
             date: "2026-08-18",
             reason: "Ej uppnått godkänt betyg i delmoment läsförståelse.",
             schoolEfforts: ["Extra handledning och stöd"],
@@ -255,7 +269,7 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
         // 8. Verify the ActionPlan record was created and stored with PDF in MongoDB
         const storedPlan = await ActionPlan.findOne({ studentId: student._id });
         expect(storedPlan).not.toBeNull();
-        expect(storedPlan.teacherName).toBe("Sven Svensson");
+        expect(storedPlan.teacherName).toBe("Test Lärare");
         expect(storedPlan.reason).toContain("Ej uppnått godkänt betyg");
         expect(storedPlan.pdf).toBeDefined();
         expect(Buffer.isBuffer(storedPlan.pdf)).toBe(true);
@@ -282,9 +296,9 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
 
         const pdfContent = pdfRes.body.toString("latin1");
         expect(pdfContent.startsWith("%PDF-1.4")).toBe(true);
-        expect(pdfContent).toContain("Karin Karlsson");
+        expect(pdfContent).toContain("Test Elev");
         expect(pdfContent).toContain("Handlingsplan");
-        expect(pdfContent).toContain("Sven Svensson");
+        expect(pdfContent).toContain("Test Lärare");
         expect(pdfContent).toContain("Extra handledning och stöd");
         expect(pdfContent).toContain("Specialpedagogiskt");
 

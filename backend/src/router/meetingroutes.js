@@ -169,7 +169,7 @@ router.post('/meetings', authenticateUser, async (req, res) => {
             createdAt: new Date()
         }).save();
 
-        logger.info({ _id: saved._id, bookedBy: saved.bookedBy, studentName: saved.student.name }, "Meeting created")
+        logger.info({ _id: saved._id, bookedBy: saved.bookedBy }, "Meeting created")
 
         res.status(201).json(saved);
     } catch (err) {

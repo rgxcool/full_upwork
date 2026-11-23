@@ -1,7 +1,5 @@
 import Student from "../models/Student.js";
 import Course from "../models/Course.js";
-import CoursePackage from "../models/CoursePackage.js";
-import Program from "../models/Program.js";
 import User from "../models/User.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Deviation from "../models/Deviation.js";
@@ -10,6 +8,7 @@ import logger from "../utils/logger.js";
 import { municipalityInScope } from "../utils/tenantScope.js";
 import { projectStudentForViewer } from "../utils/studentSerializer.js";
 import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
+import { educationFromEnrollments } from "../utils/enrollmentEducation.js";
 import {
     performStudentDropout,
     removeStudentDropoutRecord,
@@ -52,78 +51,31 @@ export const getStudentDetails = async (req, res) => {
 
         const user = await User.findOne({ email: student.email });
 
-        // Manually populate education references (if present as array)
         const populatedStudent = student.toObject();
         populatedStudent.user = user ? user.toObject() : null;
-        
-        const existingEducation = Array.isArray(populatedStudent.education)
-            ? populatedStudent.education
-            : [];
 
-        for (const edu of existingEducation) {
-            if (!edu?.refId) continue;
-
-            try {
-                let populatedRef = null;
-
-                if (edu.type === "Course") {
-                    populatedRef = await Course.findById(edu.refId).select(
-                        "courseName courseCode coursePoints courseExtent"
-                    );
-                } else if (edu.type === "CoursePackage") {
-                    populatedRef = await CoursePackage.findById(
-                        edu.refId
-                    ).select("coursePackageName coursePackageCode");
-                } else if (edu.type === "Program") {
-                    populatedRef = await Program.findById(edu.refId).select(
-                        "programName"
-                    );
-                }
-
-                if (populatedRef) {
-                    edu.refId = populatedRef;
-                }
-            } catch (populateError) {
-                logger.error({ err: populateError, type: edu.type }, "Error populating education ref");
-                edu.refId = null;
-            }
-        }
-
-        // Fetch enrollments from the new course versioning system
+        // The study plan comes from enrollments only (#103); Student.education is retired.
         const enrollments = await StudentEnrollment.find({ studentId: id })
             .populate("courseInstanceId")
             .populate("mainCourseId")
+            .populate("coursePackageId", "coursePackageName coursePackageCode")
+            .populate("programId", "programName")
             .populate("teacherId", "name email")
             .sort({ startDate: -1 });
 
-        // Convert enrollments to education format for display
-        const enrollmentEducation = enrollments.map((enrollment) => ({
-            _id: enrollment._id,
-            type: "Course",
-            refId: enrollment.mainCourseId,
-            name: enrollment.mainCourseId?.courseName,
-            startDate: enrollment.startDate,
-            endDate: enrollment.endDate,
-            status: enrollment.status,
-            grade: enrollment.grade,
-            comments: enrollment.notes,
-            enrollmentId: enrollment._id,
-            courseInstanceId: enrollment.courseInstanceId?._id,
-            courseInstance: enrollment.courseInstanceId,
-            teacherId: enrollment.teacherId, // Include teacherId for display
-            addedAt: enrollment.createdAt,
-            addedBy: enrollment.teacherId?.name || "System",
-            completedAt: enrollment.completedAt,
-            completionCertificate: enrollment.completionCertificate,
-            isEnrollment: true, // Flag to identify this came from enrollment system
-        }));
-
-        // Merge enrollment data with existing CoursePackage entries
-        // CoursePackages are not enrollments but should still be shown
-        const coursePackages = existingEducation.filter(edu => edu.type === 'CoursePackage');
-        
-        // Combine CoursePackages with enrollment data
-        populatedStudent.education = [...coursePackages, ...enrollmentEducation];
+        const byEnrollmentId = new Map(enrollments.map((e) => [String(e._id), e]));
+        populatedStudent.education = educationFromEnrollments(enrollments).map((entry) => {
+            const enrollment = entry.enrollmentId && byEnrollmentId.get(String(entry.enrollmentId));
+            if (!enrollment) return entry;
+            return {
+                ...entry,
+                courseInstanceId: enrollment.courseInstanceId?._id,
+                courseInstance: enrollment.courseInstanceId,
+                addedBy: enrollment.teacherId?.name || "System",
+                completedAt: enrollment.completedAt,
+                completionCertificate: enrollment.completionCertificate,
+            };
+        });
         populatedStudent.enrollments = enrollments;
 
         // Add enrollment statistics

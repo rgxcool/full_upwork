@@ -69,10 +69,8 @@ describe("searchRoutes handlers", () => {
             expect(res.body).toEqual([
                 { _id: courseId.toString(), name: "Alpha" },
             ]);
-            expect(Student.find).toHaveBeenCalledWith({
-                "education.type": "Course",
-                "education.refId": { $exists: true },
-            });
+            // #103: no filter on the legacy Student.education array any more.
+            expect(Student.find).toHaveBeenCalledWith({});
         });
 
         it("returns 403 when teacher profile is missing", async () => {
@@ -107,11 +105,7 @@ describe("searchRoutes handlers", () => {
 
             await handler(req, res);
 
-            expect(Student.find).toHaveBeenCalledWith({
-                "education.type": "Course",
-                "education.refId": { $exists: true },
-                teacherId,
-            });
+            expect(Student.find).toHaveBeenCalledWith({ teacherId });
             expect(res.statusCode).toBe(200);
         });
     });
@@ -123,10 +117,25 @@ describe("searchRoutes handlers", () => {
                 _id: studentId,
                 name: "Test",
                 email: "test@example.com",
-                education: [],
+                // #103: a drifted legacy array must not be returned.
+                education: [{ type: "Course", name: "Gammal kurs" }],
                 startDate: "2021-01-01",
                 endDate: "2021-06-01",
             });
+            const chain = {
+                populate: () => chain,
+                sort: () => chain,
+                lean: () => Promise.resolve([
+                    {
+                        _id: new mongoose.Types.ObjectId(),
+                        studentId,
+                        mainCourseId: { _id: new mongoose.Types.ObjectId(), courseName: "Svenska 1" },
+                        startDate: new Date("2021-01-11"),
+                        endDate: new Date("2021-03-19"),
+                    },
+                ]),
+            };
+            vi.spyOn(StudentEnrollment, "find").mockReturnValueOnce(chain);
 
             const handler = getRouteHandler("/details/:type/:id");
             const req = { params: { type: "Elev", id: studentId.toString() } };
@@ -139,6 +148,7 @@ describe("searchRoutes handlers", () => {
                 _id: studentId,
                 name: "Test",
             });
+            expect(res.body.education.map((e) => e.name)).toEqual(["Svenska 1"]);
         });
 
         it("returns 400 for unknown type", async () => {

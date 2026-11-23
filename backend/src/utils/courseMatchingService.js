@@ -398,24 +398,24 @@ class CourseMatchingService {
         // education entries is active again. Clear the dropout flag and reset
         // the inactivity warning markers so the new period starts fresh and the
         // student reappears on active lists. See dropoutService.reactivateStudent.
-        try {
-            const { default: Student } = await import("../models/Student.js");
-            const { reactivateStudent } = await import(
-                "../services/dropoutService.js"
-            );
-            const studentDoc = await Student.findById(studentId);
-            if (studentDoc) {
-                await reactivateStudent({
-                    studentDoc,
-                    userId,
-                    role: userId ? "system" : "system",
-                });
+        // options.replay (the #103 backfill re-creating enrollments for old
+        // entries) skips this: it must not revive dropouts or clear warnings.
+        if (!options.replay) {
+            try {
+                const { default: Student } = await import("../models/Student.js");
+                const { reactivateStudent } = await import(
+                    "../services/dropoutService.js"
+                );
+                const studentDoc = await Student.findById(studentId);
+                if (studentDoc) {
+                    await reactivateStudent({ studentDoc, userId, role: "system" });
+                }
+            } catch (reactivateError) {
+                logger.error(
+                    { err: reactivateError, studentId },
+                    "Failed to reactivate student during education processing"
+                );
             }
-        } catch (reactivateError) {
-            logger.error(
-                { err: reactivateError, studentId },
-                "Failed to reactivate student during education processing"
-            );
         }
 
         logger.debug({ educationCount: educationEntries.length, studentId }, "Processing education entries for student");
@@ -572,8 +572,7 @@ class CourseMatchingService {
                     logger.debug({ studentId }, "Loading student document");
                     logger.debug({ exists: !!studentDocA }, "studentDocA exists");
                     if (studentDocA) {
-                        logger.debug({ studentName: studentDocA.name }, "Student name");
-                        logger.debug({ educationCount: studentDocA.education?.length || 0 }, "Current education entries");
+                        logger.debug({ studentId }, "Student found");
                     }
 
                     // Create enrollment
@@ -596,8 +595,9 @@ class CourseMatchingService {
 
                     await enrollment.save();
 
-    // Create learning kit (logbook entry) when student starts a course
-    try {
+    // Create learning kit (logbook entry) when student starts a course.
+    // Not when replaying old entries (options.replay, #103 backfill).
+    if (!options.replay) try {
         const { default: Student } = await import("../models/Student.js");
 
         const studentDoc = await Student.findById(studentId);
@@ -696,58 +696,10 @@ class CourseMatchingService {
                     // Calendar events are now handled by the deduplication system in /calendar-events/syncable
                     // Calendar events are automatically created via calendarEventSync utility
 
-                    // --- PATCH: Update student's education array for ALL types ---
-                    logger.debug({ studentId }, "About to update education array for student");
-                    logger.debug({ exists: !!studentDocA }, "studentDocA exists");
-                    if (studentDocA) {
-                        logger.debug({ studentName: studentDocA.name }, "Student name");
-                        logger.debug({ educationCount: studentDocA.education?.length || 0 }, "Current education entries");
-
-                        // Remove any existing education entry for this course and date range
-                        studentDocA.education = (
-                            studentDocA.education || []
-                        ).filter((e) => {
-                            if (e.type !== "Course") return true;
-                            if (!e.refId) return true;
-                            return (
-                                e.refId.toString() !==
-                                course._id.toString() ||
-                                new Date(e.startDate).getTime() !==
-                                courseStart.getTime() ||
-                                new Date(e.endDate).getTime() !==
-                                courseEnd.getTime()
-                            );
-                        });
-
-                        logger.debug({ count: studentDocA.education.length }, "After filtering, education entries");
-
-                        // Add the new education entry (always, regardless of type)
-                        const newEducationEntry = {
-                            type: "Course",
-                            refId: course._id,
-                            name: course.courseName,
-                            startDate: courseStart,
-                            endDate: courseEnd,
-                            grade: null,
-                            addedAt: new Date(),
-                            addedBy: userId,
-                            removedAt: null,
-                        };
-
-                        logger.debug({ newEducationEntry }, "Adding education entry");
-                        studentDocA.education.push(newEducationEntry);
-                        logger.debug({ count: studentDocA.education.length }, "After adding, education entries");
-
-                        logger.debug("Saving student document...");
-                        await studentDocA.save();
-                        logger.debug("Student document saved successfully");
-                    } else {
-                        logger.debug("studentDocA is null/undefined, cannot update education array");
-                    }
-                    // --- END PATCH ---
                 }
                 // --- PATCH: Handle CoursePackage and Program types as well ---
                 else if (entry.type === "CoursePackage" && entry.refId) {
+                    const enrollmentsBeforePackage = results.enrollments.length;
                     // Retrieve the course package and its courses (ordered)
                     const CoursePackageModel = (
                         await import("../models/CoursePackage.js")
@@ -972,48 +924,6 @@ class CourseMatchingService {
 
                         logger.debug({ studentId, courseName: course.courseName, slutprovDate: slutprovDate.toDateString() }, "Slutprov date set for student in course");
 
-                        // Add to education array
-                        let studentDocC;
-                        if (!global._StudentModel) {
-                            const studentDocImport = await import(
-                                "../models/Student.js"
-                            );
-                            global._StudentModel = studentDocImport.default;
-                        }
-                        studentDocC = await global._StudentModel.findById(
-                            studentId
-                        );
-
-                        if (studentDocC) {
-                            if (!Array.isArray(studentDocC.education)) {
-                                studentDocC.education = [];
-                            }
-                            const exists = (studentDocC.education || []).some(
-                                (e) =>
-                                    e.type === "Course" &&
-                                    e.refId &&
-                                    e.refId.toString() ===
-                                    course._id.toString() &&
-                                    new Date(e.startDate).getTime() ===
-                                    courseStart.getTime() &&
-                                    new Date(e.endDate).getTime() ===
-                                    courseEnd.getTime()
-                            );
-                            if (!exists) {
-                                studentDocC.education.push({
-                                    type: "Course",
-                                    refId: course._id,
-                                    name: course.courseName,
-                                    startDate: courseStart,
-                                    endDate: courseEnd,
-                                    grade: null,
-                                    addedAt: new Date(),
-                                    addedBy: userId,
-                                    removedAt: null,
-                                });
-                                await studentDocC.save();
-                            }
-                        }
 
                         // If we're grouping courses, process the next course as well
                         if (shouldGroup && nextCourse) {
@@ -1085,36 +995,6 @@ class CourseMatchingService {
                                         nextCourseInstance.courseName || "",
                                 });
 
-                                // Add to education array
-                                if (studentDocC) {
-                                    const nextExists = (
-                                        studentDocC.education || []
-                                    ).some(
-                                        (e) =>
-                                            e.type === "Course" &&
-                                            e.refId &&
-                                            e.refId.toString() ===
-                                            nextCourse._id.toString() &&
-                                            new Date(e.startDate).getTime() ===
-                                            courseStart.getTime() &&
-                                            new Date(e.endDate).getTime() ===
-                                            courseEnd.getTime()
-                                    );
-                                    if (!nextExists) {
-                                        studentDocC.education.push({
-                                            type: "Course",
-                                            refId: nextCourse._id,
-                                            name: nextCourse.courseName,
-                                            startDate: courseStart,
-                                            endDate: courseEnd,
-                                            grade: null,
-                                            addedAt: new Date(),
-                                            addedBy: userId,
-                                            removedAt: null,
-                                        });
-                                        await studentDocC.save();
-                                    }
-                                }
                             }
 
                             // Skip the next course in the next iteration since we've already processed it
@@ -1128,93 +1008,26 @@ class CourseMatchingService {
                         courseStart = this.getNextMonday(courseEnd);
                     }
 
-                    // Add CoursePackage entry to student's education array for APL filtering
-                    let studentDocD;
-                    if (!global._StudentModel) {
-                        const studentDocImport = await import(
-                            "../models/Student.js"
-                        );
-                        global._StudentModel = studentDocImport.default;
-                    }
-                    studentDocD = await global._StudentModel.findById(
-                        studentId
-                    );
-                    if (studentDocD) {
-                        if (!Array.isArray(studentDocD.education)) {
-                            studentDocD.education = [];
+                    // Tell the uploader the package was placed (#103: decided by the
+                    // enrollments this branch created, no longer by Student.education).
+                    if (results.enrollments.length > enrollmentsBeforePackage) {
+                        if (!global._StudentModel) {
+                            global._StudentModel = (await import("../models/Student.js")).default;
                         }
-                        const exists = (studentDocD.education || []).some(
-                            (e) =>
-                                e.type === "CoursePackage" &&
-                                e.refId &&
-                                e.refId.toString() ===
-                                packageDoc._id.toString() &&
-                                new Date(e.startDate).getTime() ===
-                                new Date(entry.startDate).getTime() &&
-                                new Date(e.endDate).getTime() ===
-                                new Date(entry.endDate).getTime()
-                        );
-                        if (!exists) {
-                            const packageStartDate = entry.startDate
-                                ? new Date(entry.startDate)
-                                : undefined;
-                            const packageEndDate = entry.endDate
-                                ? new Date(entry.endDate)
-                                : undefined;
-
-                            logger.debug({ packageName: packageDoc.coursePackageName, startDate: entry.startDate, parsedStartDate: packageStartDate, endDate: entry.endDate, parsedEndDate: packageEndDate }, "Creating CoursePackage education entry");
-
-                            studentDocD.education.push({
-                                type: "CoursePackage",
-                                refId: packageDoc._id,
-                                name: packageDoc.coursePackageName,
-                                startDate: packageStartDate,
-                                endDate: packageEndDate,
-                                grade: null,
-                                addedAt: new Date(),
-                                addedBy: userId,
-                                removedAt: null,
-                            });
-                            await studentDocD.save();
-                            // Surface a non-blocking note so the uploader can see that a package was added
-                            const studentName = studentDocD?.name || studentDocD?.email || "Okänd elev";
-                            const includedCount = packageCourses.length;
-                            const excludedCount = (packageDoc.coursePackageCourses?.length || 0) - includedCount;
-                            const revisionNote = excludedCount > 0 ? ` (${excludedCount} kurser borttagna via revidering)` : "";
-                            results.warnings.push({
-                                type: "package_added",
-                                packageName: packageDoc.coursePackageName,
-                                studentId,
-                                studentName,
-                                message: `Kurspaket "${packageDoc.coursePackageName}" har lagts till för elev ${studentName}. Paketet innehåller ${includedCount} kurser som kommer att skapas automatiskt${revisionNote}.`,
-                            });
-                            logger.info({ studentName: studentDocD.name || studentDocD.email, packageName: packageDoc.coursePackageName }, "Added CoursePackage education entry for student");
-                        }
+                        const noteStudent = await global._StudentModel.findById(studentId).select("name email").lean();
+                        const studentName = noteStudent?.name || noteStudent?.email || "Okänd elev";
+                        const includedCount = packageCourses.length;
+                        const excludedCount = (packageDoc.coursePackageCourses?.length || 0) - includedCount;
+                        const revisionNote = excludedCount > 0 ? ` (${excludedCount} kurser borttagna via revidering)` : "";
+                        results.warnings.push({
+                            type: "package_added",
+                            packageName: packageDoc.coursePackageName,
+                            studentId,
+                            studentName,
+                            message: `Kurspaket "${packageDoc.coursePackageName}" har lagts till för elev ${studentName}. Paketet innehåller ${includedCount} kurser som kommer att skapas automatiskt${revisionNote}.`,
+                        });
                     }
 
-                    // Skipping package-level StudentEnrollment creation because schema requires courseInstanceId.
-                    // APL visibility is handled by adding the CoursePackage to student.education and merging in /api/students.
-                    // Add to education array if not already present
-                    // if (studentDocD) {
-                    //     const exists = (studentDocD.education || []).some(e =>
-                    //         e.type === 'CoursePackage' &&
-                    //         e.refId && e.refId.toString() === entry.refId.toString()
-                    //     );
-                    //     if (!exists) {
-                    //         studentDocD.education.push({
-                    //             type: 'CoursePackage',
-                    //             refId: entry.refId,
-                    //             name: packageDoc.coursePackageName,
-                    //             startDate: entry.startDate ? new Date(entry.startDate) : undefined,
-                    //             endDate: entry.endDate ? new Date(entry.endDate) : undefined,
-                    //             grade: null,
-                    //             addedAt: new Date(),
-                    //             addedBy: userId,
-                    //             removedAt: null,
-                    //         });
-                    //         await studentDocD.save();
-                    //     }
-                    // }
                 } else if (entry.type === "Course" && entry.name) {
                     logger.debug({ entryName: entry.name }, "Processing individual course");
 
@@ -1387,36 +1200,8 @@ class CourseMatchingService {
                     // based on StudentEnrollment.slutprovDate, so we don't need to create them here
                     logger.debug({ studentId, courseName: course.courseName, slutprovDate: slutprovDate.toDateString() }, "Slutprov date set for student in individual course");
 
-                    // Add to education array if not already present
-                    if (studentDoc) {
-                        const exists = (studentDoc.education || []).some(
-                            (e) =>
-                                e.type === "Course" &&
-                                e.refId &&
-                                e.refId.toString() === course._id.toString() &&
-                                new Date(e.startDate).getTime() ===
-                                courseStart.getTime() &&
-                                new Date(e.endDate).getTime() ===
-                                courseEnd.getTime()
-                        );
-                        if (!exists) {
-                            studentDoc.education.push({
-                                type: "Course",
-                                refId: course._id,
-                                name: course.courseName,
-                                startDate: courseStart,
-                                endDate: courseEnd,
-                                grade: null,
-                                addedAt: new Date(),
-                                addedBy: userId,
-                                removedAt: null,
-                            });
-                            await studentDoc.save();
-                            logger.info({ studentName: studentDoc.name || studentDoc.email, courseName: course.courseName }, "Added individual course education entry for student");
-                        }
-                    }
                 } else if (entry.type === "Program" && entry.refId) {
-                    // Add to student's education array if not already present
+                    // The student, for the default exam mode and the result's e-mail.
                     let studentDocE;
                     if (!global._StudentModel) {
                         const studentDocImport = await import(
@@ -1449,33 +1234,6 @@ class CourseMatchingService {
                         studentEmail: studentDocE?.email || "",
                         courseInstanceName: undefined,
                     });
-                    // Add to education array if not already present
-                    if (studentDocE) {
-                        const exists = (studentDocE.education || []).some(
-                            (e) =>
-                                e.type === "Program" &&
-                                e.refId &&
-                                e.refId.toString() === entry.refId.toString()
-                        );
-                        if (!exists) {
-                            studentDocE.education.push({
-                                type: "Program",
-                                refId: entry.refId,
-                                name: entry.name,
-                                startDate: entry.startDate
-                                    ? new Date(entry.startDate)
-                                    : undefined,
-                                endDate: entry.endDate
-                                    ? new Date(entry.endDate)
-                                    : undefined,
-                                grade: null,
-                                addedAt: new Date(),
-                                addedBy: userId,
-                                removedAt: null,
-                            });
-                            await studentDocE.save();
-                        }
-                    }
                 }
             } catch (error) {
                 results.errors.push({

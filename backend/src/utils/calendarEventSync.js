@@ -132,23 +132,10 @@ export async function syncCalendarEventsForStudent(studentId) {
         const examDate = new Date(student.finalExamDate);
         const dateKey = examDate.toISOString().split("T")[0]; // YYYY-MM-DD
 
-        // Find course name from education
         let courseName = null;
-        if (Array.isArray(student.education)) {
-            const edu = student.education.find((e) => {
-                if (e.type !== "Course" || !e.startDate || !e.endDate) return false;
-                const start = new Date(e.startDate).setHours(0, 0, 0, 0);
-                const end = new Date(e.endDate).setHours(0, 0, 0, 0);
-                const exam = new Date(dateKey).setHours(0, 0, 0, 0);
-                return exam >= start && exam <= end && e.refId && typeof e.refId === "object" && e.refId.courseName;
-            });
-            if (edu && edu.refId && typeof edu.refId === "object" && edu.refId.courseName) {
-                courseName = edu.refId.courseName;
-            }
-        }
 
-        // If no course found, try to find from enrollments
-        if (!courseName) {
+        // Course name from the enrollment that covers the exam date (#103).
+        {
             const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
             const enrollment = await StudentEnrollment.findOne({
                 studentId: student._id,
@@ -200,9 +187,9 @@ export async function syncCalendarEventsForStudent(studentId) {
                 // Use teacher name as title, not course name - all events for same teacher/date should have same title
                 existingEvent.title = teacherName || "Okänd lärare";
                 await existingEvent.save();
-                logger.info({ studentName: student.name, dateKey }, "Added student to existing calendar event");
+                logger.info({ studentId: student._id, dateKey }, "Added student to existing calendar event");
             } else {
-                logger.debug({ studentName: student.name, dateKey }, "Student already in calendar event");
+                logger.debug({ studentId: student._id, dateKey }, "Student already in calendar event");
             }
         } else {
             // Create new event - use teacher name as title, not course name
@@ -222,7 +209,7 @@ export async function syncCalendarEventsForStudent(studentId) {
             });
 
             await newEvent.save();
-            logger.info({ studentName: student.name, dateKey }, "Created new calendar event");
+            logger.info({ studentId: student._id, dateKey }, "Created new calendar event");
         }
     } catch (error) {
         logger.error({ err: error, studentId }, "Error syncing calendar event for student");
@@ -383,9 +370,9 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
                 }
                 
                 await existingEvent.save();
-                logger.info({ studentName: student.name, dateKey }, "Added student to existing calendar event from enrollment");
+                logger.info({ studentId: student._id, dateKey }, "Added student to existing calendar event from enrollment");
             } else {
-                logger.debug({ studentName: student.name, dateKey }, "Student already in calendar event from enrollment");
+                logger.debug({ studentId: student._id, dateKey }, "Student already in calendar event from enrollment");
             }
         } else {
             // Create new event with courseInstanceId in extendedProps for linking
@@ -413,7 +400,7 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
             });
 
             await newEvent.save();
-            logger.info({ studentName: student.name, dateKey, courseInstanceId: courseInstanceId || "none" }, "Created new calendar event from enrollment");
+            logger.info({ studentId: student._id, dateKey, courseInstanceId: courseInstanceId || "none" }, "Created new calendar event from enrollment");
         }
     } catch (error) {
         logger.error({ err: error, enrollmentId }, "Error syncing calendar event for enrollment");

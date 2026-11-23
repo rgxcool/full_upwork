@@ -106,22 +106,29 @@ describe("calendarEventSync", () => {
             expect(CalendarEvent.findOne).not.toHaveBeenCalled();
         });
 
-        it("creates a new calendar event with the course name from education", async () => {
+        it("creates a new calendar event named after the enrollment covering the exam date", async () => {
             const student = baseStudent();
+            // #103: a drifted legacy Student.education entry must be ignored.
             student.education = [
                 {
                     type: "Course",
                     startDate: new Date("2026-01-01"),
                     endDate: new Date("2026-12-31"),
-                    refId: { courseName: "Matematik 1" },
+                    refId: { courseName: "Gammal kurs" },
                 },
             ];
             Student.findById.mockReturnValue(makeChain(student));
             CalendarEvent.findOne.mockResolvedValue(null);
+            StudentEnrollment.findOne.mockReturnValue(
+                makeChain({ mainCourseId: { courseName: "Matematik 1" } })
+            );
 
             await syncCalendarEventsForStudent("student-1");
 
             expect(CalendarEvent.findOne).toHaveBeenCalled();
+            expect(StudentEnrollment.findOne).toHaveBeenCalledWith(
+                expect.objectContaining({ studentId: student._id })
+            );
             const event = CalendarEvent.mock.instances.at(-1);
             expect(event.title).toBe("Läraren");
             expect(event.extendedProps.type).toBe("slutprov");
@@ -130,21 +137,16 @@ describe("calendarEventSync", () => {
             expect(event.save).toHaveBeenCalled();
         });
 
-        it("falls back to the enrollment course name when education has no match", async () => {
+        it("leaves the course name empty when no enrollment covers the exam date", async () => {
             const student = baseStudent();
-            student.education = [];
             Student.findById.mockReturnValue(makeChain(student));
             CalendarEvent.findOne.mockResolvedValue(null);
-            StudentEnrollment.findOne.mockReturnValue(
-                makeChain({
-                    mainCourseId: { courseName: "Engelska 5" },
-                })
-            );
+            StudentEnrollment.findOne.mockReturnValue(makeChain(null));
 
             await syncCalendarEventsForStudent("student-1");
 
             const event = CalendarEvent.mock.instances.at(-1);
-            expect(event.extendedProps.students[0].courseName).toBe("Engelska 5");
+            expect(event.extendedProps.students[0].courseName).toBe("Okänd kurs");
         });
 
         it("adds a new student to an existing event", async () => {

@@ -30,6 +30,8 @@ const OTHER_TEACHER_ID = "64b000000000000000000002";
 
 let studentFindResult = [];
 let enrollmentFindResult = [];
+// #103: the study-plan query (studentId: { $in }) — course names for exam events.
+let studyPlanFindResult = [];
 let examAttendanceFindResult = [];
 
 vi.mock("../../src/controllers/authController.js", () => ({
@@ -311,8 +313,18 @@ beforeEach(() => {
   Student.findById.mockResolvedValue(null);
   Student.findOneAndUpdate.mockResolvedValue(null);
   Student.updateMany.mockResolvedValue({ modifiedCount: 0 });
-  StudentEnrollment.find.mockImplementation(() =>
-    createQueryChain(enrollmentFindResult)
+  studyPlanFindResult = [
+    {
+      _id: "plan-physics",
+      studentId: "student-1",
+      mainCourseId: { _id: "course-physics", courseName: "Physics" },
+      startDate: "2025-01-01",
+      endDate: "2025-12-31",
+      status: "active",
+    },
+  ];
+  StudentEnrollment.find.mockImplementation((filter) =>
+    createQueryChain(filter?.studentId?.$in ? studyPlanFindResult : enrollmentFindResult)
   );
   StudentEnrollment.findOne.mockResolvedValue(null);
   StudentEnrollment.updateMany.mockResolvedValue({ modifiedCount: 0 });
@@ -469,9 +481,8 @@ describe("examRoutes", () => {
 
   it("falls back to enrollment when course name is missing", async () => {
     const student = createStudent();
-    student.education = [];
     studentFindResult = [student];
-    Student.populate.mockResolvedValueOnce([{ ...student, education: [] }]);
+    studyPlanFindResult = []; // no enrollment in the study plan covers the exam date
     StudentEnrollment.findOne.mockReturnValueOnce(
       createQueryChain({
         mainCourseId: { courseName: "Manual Course Fallback" },
@@ -488,39 +499,22 @@ describe("examRoutes", () => {
     ).toBe("Manual Course Fallback");
   });
 
-  it("appends course names when the same student appears twice", async () => {
+  it("does not repeat a course name when the same student appears twice", async () => {
     const student = createStudent();
-    const secondStudent = {
-      ...student,
-      education: [
-        {
-          type: "Course",
-          startDate: "2025-02-01",
-          endDate: "2025-05-01",
-          refId: { courseName: "Chemistry" },
-        },
-      ],
-    };
-    studentFindResult = [student, secondStudent];
+    studentFindResult = [student, { ...student }];
     const res = await request(app)
       .get("/api/calendar-events/syncable")
       .set("x-user-role", "teacher");
     expect(res.status).toBe(200);
-    const students =
-      res.body[0].extendedProps.students[0]?.courseName || "";
-    expect(students).toContain("Physics");
-    expect(students).toContain("Chemistry");
+    const students = res.body[0].extendedProps.students;
+    expect(students).toHaveLength(1);
+    expect(students[0].courseName).toBe("Physics");
   });
 
-  it("ignores invalid education entries while still falling back to enrollment data", async () => {
+  it("ignores study-plan entries that are not dated courses and falls back to enrollment data", async () => {
     const student = createStudent();
-    student.education = [
-      {
-        type: "Other",
-        startDate: null,
-        endDate: null,
-        refId: { courseName: "Broken" },
-      },
+    studyPlanFindResult = [
+      { _id: "plan-program", studentId: "student-1", programId: { programName: "Broken" }, startDate: null, endDate: null },
     ];
     studentFindResult = [student];
     StudentEnrollment.findOne.mockResolvedValueOnce({

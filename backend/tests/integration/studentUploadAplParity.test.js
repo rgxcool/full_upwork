@@ -20,10 +20,8 @@ import {
     disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
 
-// Request identity used by the upload path. Must be a real ObjectId because the
-// student education entries cast `addedBy` to ObjectId.
-const TEST_USER_ID = "64b7f9f9f9f9f9f9f9f9f9f9";
-
+// Request identity used by the upload path; a real ObjectId because ids the
+// placement path records (e.g. addedBy / changedBy) are cast to ObjectId.
 const mockAuthenticateUser = vi.hoisted(() => (req, _res, next) => {
     req.user = {
         role: "admin",
@@ -184,14 +182,20 @@ describe("Student upload parity — manual vs Excel file", () => {
         expect(manualPackage).toBeTruthy();
         expect(filePackage).toBeTruthy();
 
-        // Same package, same APL period → same place on the APL board.
+        // Same package, same APL period → same place on the APL board. Since #103
+        // the package period comes from the enrollments, which are stored at local
+        // midnight, so compare the calendar day the board shows (Stockholm time).
+        const stockholmDay = (value) =>
+            new Date(value).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" });
+        // The period is the span of the package's course enrollments: here one
+        // 5-week course, so it ends before the END_DATE typed at placement.
+        const [firstEnrollment] = await StudentEnrollment.find({
+            studentId: manualStudent._id,
+            coursePackageId: coursePackage._id,
+        }).sort({ endDate: -1 });
         for (const pkgEntry of [manualPackage, filePackage]) {
-            expect(new Date(pkgEntry.startDate).toISOString()).toBe(
-                new Date(`${START_DATE}T00:00:00.000Z`).toISOString()
-            );
-            expect(new Date(pkgEntry.endDate).toISOString()).toBe(
-                new Date(`${END_DATE}T00:00:00.000Z`).toISOString()
-            );
+            expect(stockholmDay(pkgEntry.startDate)).toBe(START_DATE);
+            expect(stockholmDay(pkgEntry.endDate)).toBe(stockholmDay(firstEnrollment.endDate));
         }
         expect(new Date(manualStudent.aplStartDate).toISOString()).toBe(
             new Date(fileStudent.aplStartDate).toISOString()
@@ -213,8 +217,5 @@ describe("Student upload parity — manual vs Excel file", () => {
         expect(manualEnrollments).toBeGreaterThan(0);
         expect(fileEnrollments).toBe(manualEnrollments);
 
-        // Regression for the bulkWrite CastError: the file path used to store
-        // the teacher's display name in `addedBy`, which Mongoose rejects.
-        expect(String(filePackage.addedBy)).toBe(TEST_USER_ID);
     });
 });

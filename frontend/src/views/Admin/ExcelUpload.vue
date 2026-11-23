@@ -817,18 +817,6 @@
         return display.replace(/\n/g, '<br />')
       },
 
-      async saveGrade(studentId, courseId, grade) {
-        try {
-          const response = await client.put(
-            `/student/${studentId}/education/${courseId}/grade`,
-            { grade }
-          )
-          console.log('�� Grade updated:', response.data)
-        } catch (error) {
-          console.error('❌ Error updating grade:', error)
-        }
-      },
-
       updateEducationSelection(val, index) {
         const current = this.editingStudent.education[index]
         this.editingStudent.education[index] = {

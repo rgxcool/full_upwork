@@ -1093,7 +1093,7 @@ export const addStudentsToInstance = async ({ instanceId, studentIds }) => {
             await enrollment.save();
             enrollments.push(enrollment);
 
-            logger.info({ studentName: student.name, courseName: instance.courseName }, "Created enrollment for student in course instance");
+            logger.info({ studentId: student._id, courseName: instance.courseName }, "Created enrollment for student in course instance");
 
             // Sync calendar event if enrollment has a slutprovDate
             if (enrollment.slutprovDate) {

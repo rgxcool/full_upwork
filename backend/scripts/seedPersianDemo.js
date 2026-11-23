@@ -374,17 +374,6 @@ export async function seedPersianDemo({ now = new Date(), uploadsDir = null } = 
                 status: "active",
                 enrollmentDate: inst.startDate,
             });
-            student.education.push({
-                type: "Course",
-                refId: inst.mainCourseId,
-                name: inst.courseName,
-                startDate: inst.startDate,
-                endDate: inst.endDate,
-                grade: null,
-                addedAt: inst.startDate,
-                addedBy: cyrusUser._id,
-                removedAt: null,
-            });
             counts.set(String(inst._id), (counts.get(String(inst._id)) || 0) + 1);
             summary.enrollments += 1;
         }

@@ -11,7 +11,10 @@
         "dev": "vite",
         "start": "electron .",
         "build": "vite build",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "test": "vitest run",
+        "test:changed": "vitest run --changed --coverage.enabled=false",
+        "test:related": "vitest related --run --coverage.enabled=false"
     },
     "dependencies": {
         "@fullcalendar/core": "^6.1.20",

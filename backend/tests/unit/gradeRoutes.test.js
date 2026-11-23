@@ -151,117 +151,24 @@ beforeEach(() => {
   CoursePackage.findById.mockResolvedValue({ lean: vi.fn().mockResolvedValue(null) });
 });
 
-describe("GET /grades/students/ungraded", () => {
-  it("returns enriched student list with course meta", async () => {
-    Student.find.mockReturnValueOnce(
-      createLeanResult([
-        {
-          _id: "stu1",
-          name: "Student",
-          email: "a@b",
-          personalNumber: "123",
-          education: [
-            { refId: "course1", type: "Course", grade: null, locked: false, removedAt: null },
-            {
-              refId: "course2",
-              type: "Course",
-              grade: "F",
-              locked: true,
-              removedAt: null,
-              redId: "course2",
-            },
-          ],
-        },
-      ])
-    );
-    Notification.findOne.mockResolvedValue({ _id: "not1" });
-    Course.findById.mockReturnValueOnce({ lean: vi.fn().mockResolvedValue({ courseName: "Math" }) });
-    Course.findById.mockReturnValueOnce({ lean: vi.fn().mockResolvedValue({ courseName: "Science" }) });
-    const res = await request(app).get("/grades/students/ungraded");
-
-    expect(NotificationController.evaluateGradingStatusAndNotify).toHaveBeenCalled();
-    expect(res.status).toBe(200);
-    expect(res.body[0].ungradedEducation).toHaveLength(2);
-    expect(res.body[0].ungradedEducation[0].displayName).toBe("Math");
-  });
-
-  it("includes program and course package metadata and handles pending plans", async () => {
-    Student.find.mockReturnValueOnce(
-      createLeanResult([
-        {
-          _id: "stu2",
-          name: "Multi",
-          email: "multi@b",
-          personalNumber: "456",
-          education: [
-            { refId: "prog1", type: "Program", grade: "", locked: false, removedAt: null },
-            { refId: "pkg1", type: "CoursePackage", grade: null, locked: false, removedAt: null },
-            {
-              refId: "course3",
-              type: "Course",
-              grade: "F",
-              locked: true,
-              removedAt: null,
-              redId: "course3",
-            },
-          ],
-        },
-      ])
-    );
-    Notification.findOne.mockResolvedValueOnce({ _id: "plan" });
-    Program.findById.mockReturnValueOnce({ lean: vi.fn().mockResolvedValue({ programName: "Program-X" }) });
-    CoursePackage.findById.mockReturnValueOnce({
-      lean: vi.fn().mockResolvedValue({ coursePackageName: "Package-X" }),
-    });
-    Course.findById.mockReturnValueOnce({
-      lean: vi.fn().mockResolvedValue({ courseName: "Physics" }),
-    });
-    Notification.findOne.mockResolvedValueOnce({ _id: "plan" });
-    const res = await request(app).get("/grades/students/ungraded");
-
-    expect(res.status).toBe(200);
-    expect(res.body[0].ungradedEducation).toHaveLength(3);
-    expect(res.body[0].ungradedEducation[1].displayName).toBe("Package-X");
-    expect(Program.findById).toHaveBeenCalledWith("prog1");
-    expect(CoursePackage.findById).toHaveBeenCalledWith("pkg1");
-  });
-
-  it("filters locked F grades without a pending plan", async () => {
-    Student.find.mockReturnValueOnce(
-      createLeanResult([
-        {
-          _id: "stu3",
-          name: "Filtered",
-          email: "skip@b",
-          personalNumber: "999",
-          education: [
-            {
-              refId: "courseX",
-              type: "Course",
-              grade: "F",
-              locked: true,
-              removedAt: null,
-              redId: "courseX",
-            },
-          ],
-        },
-      ])
-    );
-    Notification.findOne.mockResolvedValueOnce(null);
-    const res = await request(app).get("/grades/students/ungraded");
-
-    expect(res.status).toBe(200);
-    expect(res.body[0].ungradedEducation[0].redId).toBe("courseX");
-    expect(Notification.findOne).toHaveBeenCalledWith(
-      expect.objectContaining({ studentId: "stu3", courseId: "courseX" })
-    );
-  });
-
-  it("handles errors and returns 500", async () => {
-    Student.find.mockRejectedValueOnce(new Error("fail"));
-    const res = await request(app).get("/grades/students/ungraded");
-    expect(res.status).toBe(500);
-  });
+// #103: grades live on enrollments only. Real ObjectIds so the shared lookup runs.
+const STUDENT_ID = "6b0257e81f7384e36f6f23d8";
+const COURSE_ID = "6b0257e81f7384e36f6f23e1";
+const TEACHER_USER_ID = "64b000000000000000000123";
+const gradeEnrollment = (extra = {}) => ({
+  _id: "en-1",
+  isGradeLocked: false,
+  teacherId: TEACHER_USER_ID,
+  save: vi.fn().mockResolvedValue(true),
+  ...extra,
+});
+/** StudentEnrollment.findById(...).populate(...).populate(...).lean() for names. */
+const namesLookup = (studentName, courseName) => ({
+  populate: () => ({
+    populate: () => ({
+      lean: () => Promise.resolve({ studentId: { name: studentName }, mainCourseId: { courseName } }),
+    }),
+  }),
 });
 
 describe("PUT /grades/admin/unlock-grade", () => {
@@ -275,23 +182,26 @@ describe("PUT /grades/admin/unlock-grade", () => {
     expect(res.body.error).toContain("Endast admin");
   });
 
-  it("unlocks grade and creates notification", async () => {
-    Student.updateOne.mockResolvedValue({ matchedCount: 1 });
+  it("unlocks the student's enrollment in the course and creates a notification", async () => {
+    const enrollment = gradeEnrollment({ isGradeLocked: true });
+    StudentEnrollment.findOne.mockResolvedValueOnce(enrollment);
     const res = await request(app)
       .put("/grades/admin/unlock-grade")
       .set("x-user-role", "admin")
-      .send({ studentId: "s", courseId: "c" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID });
 
-    expect(Student.updateOne).toHaveBeenCalled();
     expect(res.status).toBe(200);
     expect(res.text).toContain("Betyg upplåst");
+    expect(enrollment.isGradeLocked).toBe(false);
+    expect(enrollment.save).toHaveBeenCalled();
+    expect(Student.updateOne).not.toHaveBeenCalled();
   });
 });
 
 
 
 describe("GET /grades/students-to-grade", () => {
-  it("returns combined enrollments and education results", async () => {
+  it("lists enrollment rows only, never legacy Student.education rows", async () => {
     const now = new Date();
     const enrollmentData = [
       {
@@ -307,26 +217,16 @@ describe("GET /grades/students-to-grade", () => {
       },
     ];
     StudentEnrollment.find.mockReturnValueOnce(createQueryChain(enrollmentData));
-    Student.find.mockReturnValueOnce(
-      createLeanResult([
-        {
-          _id: "stu2",
-          name: "Student2",
-          email: "b@b",
-          education: [
-            { _id: "ed1", name: "Logik", endDate: new Date(now.getTime() - 86400000), grade: null, removedAt: null, npScore: 55 },
-          ],
-        },
-      ])
-    );
 
     const res = await request(app)
       .get("/grades/students-to-grade")
       .set("x-user-role", "admin");
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
-    expect(res.body.find((row) => row.source === "enrollment").npScore).toBe(87);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].source).toBe("enrollment");
+    expect(res.body[0].npScore).toBe(87);
+    expect(res.body.some((row) => row.source === "student_education")).toBe(false);
   });
 
   it("maps batch fields (status, startDate, courseInstanceMeta) onto enrollment rows", async () => {
@@ -354,7 +254,6 @@ describe("GET /grades/students-to-grade", () => {
       },
     ];
     StudentEnrollment.find.mockReturnValueOnce(createQueryChain(enrollmentData));
-    Student.find.mockReturnValueOnce(createLeanResult([]));
 
     const res = await request(app)
       .get("/grades/students-to-grade")
@@ -372,29 +271,6 @@ describe("GET /grades/students-to-grade", () => {
     });
   });
 
-  it("passes through npScore for legacy education entries", async () => {
-    const now = new Date();
-    StudentEnrollment.find.mockReturnValueOnce(createQueryChain([]));
-    Student.find.mockReturnValueOnce(
-      createLeanResult([
-        {
-          _id: "stu2",
-          name: "Student2",
-          email: "b@b",
-          education: [
-            { _id: "ed1", name: "Logik", endDate: new Date(now.getTime() - 86400000), grade: null, removedAt: null, npScore: 55 },
-          ],
-        },
-      ])
-    );
-
-    const res = await request(app).get("/grades/students-to-grade");
-
-    expect(res.status).toBe(200);
-    expect(res.body[0].source).toBe("student_education");
-    expect(res.body[0].npScore).toBe(55);
-  });
-
   it("returns 500 when enrollment query fails", async () => {
     StudentEnrollment.find.mockRejectedValueOnce(new Error("boom"));
     const res = await request(app).get("/grades/students-to-grade");
@@ -404,29 +280,31 @@ describe("GET /grades/students-to-grade", () => {
 
 describe("POST /grades/teacher/save-grade", () => {
   it("creates action plan notification when grade is F", async () => {
-    Student.updateOne.mockResolvedValue({ matchedCount: 1 });
+    StudentEnrollment.findOne.mockResolvedValueOnce(gradeEnrollment());
     const res = await request(app)
       .post("/grades/teacher/save-grade")
-      .send({ studentId: "s", courseId: "c", grade: "F", reason: "fail" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID, grade: "F", reason: "fail" });
     expect(NotificationController.createNotification).toHaveBeenCalled();
     expect(res.status).toBe(200);
     expect(res.text).toContain("Betyg sparat");
   });
 
   it("resolves notification when grade is good", async () => {
-    Student.updateOne.mockResolvedValue({ matchedCount: 1 });
+    StudentEnrollment.findOne.mockResolvedValueOnce(gradeEnrollment());
     const res = await request(app)
       .post("/grades/teacher/save-grade")
-      .send({ studentId: "s", courseId: "c", grade: "A", reason: "utförligt" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID, grade: "A", reason: "utförligt" });
     expect(NotificationController.resolveNotification).toHaveBeenCalled();
     expect(res.status).toBe(200);
   });
 
   it("returns 500 when saving the grade fails", async () => {
-    Student.updateOne.mockRejectedValueOnce(new Error("boom"));
+    StudentEnrollment.findOne.mockResolvedValueOnce(
+      gradeEnrollment({ save: vi.fn().mockRejectedValue(new Error("boom")) })
+    );
     const res = await request(app)
       .post("/grades/teacher/save-grade")
-      .send({ studentId: "s", courseId: "c", grade: "B", reason: "motivering" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID, grade: "B", reason: "motivering" });
     expect(res.status).toBe(500);
   });
 
@@ -460,9 +338,8 @@ describe("POST /grades/teacher/save-grade", () => {
     expect(Student.updateOne).not.toHaveBeenCalled();
   });
 
-  it("returns 404 instead of a false 200 when nothing matched", async () => {
+  it("returns 404 instead of a false 200 when the student has no enrollment in the course", async () => {
     StudentEnrollment.findOne.mockResolvedValueOnce(null);
-    Student.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
     const res = await request(app)
       .post("/grades/teacher/save-grade")
       .set("x-user-role", "admin")
@@ -482,21 +359,18 @@ describe("POST /grades/teacher/save-grade", () => {
 });
 
 describe("POST /grades/teacher/lock-grade", () => {
-  it("locks grade when student and course exist", async () => {
-    const studentInstance = {
-      _id: "stu1",
-      name: "Student One",
-      education: [{ refId: "course1", name: "Matematik", locked: false }],
-      save: vi.fn().mockResolvedValue(true),
-    };
-    Student.findById.mockResolvedValue(studentInstance);
+  it("locks the student's enrollment in the course", async () => {
+    const enrollment = gradeEnrollment();
+    StudentEnrollment.findOne.mockResolvedValueOnce(enrollment);
+    StudentEnrollment.findById.mockReturnValueOnce(namesLookup("Test Elev", "Matematik"));
     const res = await request(app)
       .post("/grades/teacher/lock-grade")
       .set("x-user-role", "admin")
-      .send({ studentId: "stu1", courseId: "course1" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID });
     expect(res.status).toBe(200);
     expect(res.body.message).toBe("Grade locked");
-    expect(studentInstance.education[0].locked).toBe(true);
+    expect(enrollment.isGradeLocked).toBe(true);
+    expect(enrollment.save).toHaveBeenCalled();
     expect(Notification.create).toHaveBeenCalledTimes(1);
     expect(Notification.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -506,36 +380,22 @@ describe("POST /grades/teacher/lock-grade", () => {
     );
   });
 
-  it("returns 404 when student missing", async () => {
-    Student.findById.mockResolvedValue(null);
+  it("returns 404 when the student has no enrollment in the course", async () => {
+    StudentEnrollment.findOne.mockResolvedValueOnce(null);
     const res = await request(app)
       .post("/grades/teacher/lock-grade")
       .set("x-user-role", "admin")
-      .send({ studentId: "missing", courseId: "course1" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID });
     expect(res.status).toBe(404);
-  });
-
-  it("returns 404 when course is not part of the student's education", async () => {
-    Student.findById.mockResolvedValue({
-      _id: "stu50",
-      education: [{ refId: "anotherCourse", locked: false }],
-      save: vi.fn().mockResolvedValue(true),
-    });
-    const res = await request(app)
-      .post("/grades/teacher/lock-grade")
-      .set("x-user-role", "admin")
-      .send({ studentId: "stu50", courseId: "missingCourse" });
-
-    expect(res.status).toBe(404);
-    expect(res.body.error).toContain("Course not found");
+    expect(Notification.create).not.toHaveBeenCalled();
   });
 
   it("handles errors when locking a grade", async () => {
-    Student.findById.mockRejectedValueOnce(new Error("boom"));
+    StudentEnrollment.findOne.mockRejectedValueOnce(new Error("boom"));
     const res = await request(app)
       .post("/grades/teacher/lock-grade")
       .set("x-user-role", "admin")
-      .send({ studentId: "stu1", courseId: "course1" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID });
 
     expect(res.status).toBe(500);
   });
@@ -552,22 +412,22 @@ describe("POST /grades/teacher/lock-grade", () => {
   });
 });
 
-describe("PUT /grades/admin/unlock-grade (legacy)", () => {
-  it("returns 404 when no course matches", async () => {
-    Student.updateOne.mockResolvedValue({ matchedCount: 0 });
+describe("PUT /grades/admin/unlock-grade by student and course", () => {
+  it("returns 404 when the student has no enrollment in the course", async () => {
+    StudentEnrollment.findOne.mockResolvedValueOnce(null);
     const res = await request(app)
       .put("/grades/admin/unlock-grade")
       .set("x-user-role", "admin")
-      .send({ studentId: "s", courseId: "c" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID });
     expect(res.status).toBe(404);
   });
 
   it("handles unexpected errors", async () => {
-    Student.updateOne.mockRejectedValueOnce(new Error("boom"));
+    StudentEnrollment.findOne.mockRejectedValueOnce(new Error("boom"));
     const res = await request(app)
       .put("/grades/admin/unlock-grade")
       .set("x-user-role", "admin")
-      .send({ studentId: "s", courseId: "c" });
+      .send({ studentId: STUDENT_ID, courseId: COURSE_ID });
     expect(res.status).toBe(500);
   });
 });
@@ -1014,34 +874,40 @@ describe("Grading scales (/grades/grading-scale)", () => {
       expect(Notification.create.mock.calls[0][0].message).toContain("admin TestUser");
     });
 
-    it("locks a legacy student.education row and notifies with course context", async () => {
-      const studentInstance = {
-        _id: "stu-edu",
-        name: "Legacy Elev",
-        education: [{ refId: "course-9", name: "Engelska 5", locked: false }],
-        save: vi.fn().mockResolvedValue(true),
-      };
-      Student.findById.mockResolvedValue(studentInstance);
+    it("lets the enrollment's teacher lock by student and course and notifies with course context", async () => {
+      const enrollment = gradeEnrollment();
+      StudentEnrollment.findOne.mockResolvedValueOnce(enrollment);
+      StudentEnrollment.findById.mockReturnValueOnce(namesLookup("Test Elev", "Engelska 5"));
 
       const res = await request(app)
         .post("/grades/teacher/lock-grade")
         .set("x-user-role", "teacher")
-        .send({ studentId: "stu-edu", courseId: "course-9" });
+        .send({ studentId: STUDENT_ID, courseId: COURSE_ID });
 
       expect(res.status).toBe(200);
-      expect(studentInstance.education[0].locked).toBe(true);
+      expect(enrollment.isGradeLocked).toBe(true);
       expect(Notification.create).toHaveBeenCalledTimes(1);
       const [notification] = Notification.create.mock.calls[0];
       expect(notification.type).toBe("grade_locked");
-      expect(notification.message).toContain("Legacy Elev");
+      expect(notification.message).toContain("Test Elev");
       expect(notification.message).toContain("Engelska 5");
       expect(notification.meta).toEqual(
-        expect.objectContaining({
-          studentId: "stu-edu",
-          courseId: "course-9",
-          enrollmentId: null,
-        })
+        expect.objectContaining({ studentId: STUDENT_ID, courseId: COURSE_ID })
       );
+    });
+
+    it("refuses a teacher who is not on the enrollment", async () => {
+      const enrollment = gradeEnrollment({ teacherId: "64b0000000000000000009ff" });
+      StudentEnrollment.findOne.mockResolvedValueOnce(enrollment);
+
+      const res = await request(app)
+        .post("/grades/teacher/lock-grade")
+        .set("x-user-role", "teacher")
+        .send({ studentId: STUDENT_ID, courseId: COURSE_ID });
+
+      expect(res.status).toBe(403);
+      expect(enrollment.save).not.toHaveBeenCalled();
+      expect(Notification.create).not.toHaveBeenCalled();
     });
 
     it("returns 400 and does not notify when neither student nor enrollment is provided", async () => {

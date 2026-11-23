@@ -1,7 +1,6 @@
 // /routes/statsRoutes.js
 import express from "express";
-import Student from "../models/Student.js";
-import Course from "../models/Course.js";
+import StudentEnrollment from "../models/StudentEnrollment.js";
 import { authenticateUser } from "../controllers/authController.js";
 import logger from "../utils/logger.js";
 import { canFeature } from "../middleware/authorization.js";
@@ -13,38 +12,36 @@ const router = express.Router();
 // students and coordinators get 403 (audit E1-01).
 router.get("/courses-per-month", authenticateUser, canFeature(PERMISSION_FEATURES.STATISTICS), async (req, res) => {
   try {
-    const students = await Student.find().select({ municipality: 1, education: 1 });
+    // Registrations per month, course and grade, from enrollments (#103).
+    const enrollments = await StudentEnrollment.find({ mainCourseId: { $ne: null } })
+      .select("mainCourseId studentId grade enrollmentDate createdAt")
+      .populate("mainCourseId", "courseName")
+      .populate("studentId", "municipality")
+      .lean();
 
     const stats = {};
 
-    for (const student of students) {
-      const municipality = student.municipality?.type || "UNKNOWN";
+    for (const enrollment of enrollments) {
+      const course = enrollment.mainCourseId?.courseName;
+      const added = enrollment.enrollmentDate || enrollment.createdAt;
+      if (!course || !added) continue;
 
-      for (const edu of student.education || []) {
-        if (edu.type !== "Course" || !edu.addedAt || !edu.refId) continue;
+      const municipality = enrollment.studentId?.municipality?.type || "UNKNOWN";
+      const date = new Date(added);
+      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      const grade = (enrollment.grade || "UNKNOWN").toUpperCase();
 
-        const date = new Date(edu.addedAt);
-        const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      stats[month] ??= {};
+      stats[month][course] ??= {};
 
-        // Look up course name by ID
-        const courseDoc = await Course.findById(edu.refId);
-        if (!courseDoc?.courseName) continue;
+      // Add grade count
+      stats[month][course][grade] ??= 0;
+      stats[month][course][grade]++;
 
-        const course = courseDoc.courseName;
-        const grade = (edu.grade || "UNKNOWN").toUpperCase();
-
-        stats[month] ??= {};
-        stats[month][course] ??= {};
-
-        // Add grade count
-        stats[month][course][grade] ??= 0;
-        stats[month][course][grade]++;
-
-        // Add municipality info
-        stats[month][course]._municipality ??= [];
-        if (!stats[month][course]._municipality.includes(municipality)) {
-          stats[month][course]._municipality.push(municipality);
-        }
+      // Add municipality info
+      stats[month][course]._municipality ??= [];
+      if (!stats[month][course]._municipality.includes(municipality)) {
+        stats[month][course]._municipality.push(municipality);
       }
     }
 

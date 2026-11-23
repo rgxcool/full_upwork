@@ -1,6 +1,7 @@
 // utils/createFailingNotification.js
 import Notification from "../models/Notification.js";
 import Student from "../models/Student.js";
+import StudentEnrollment from "../models/StudentEnrollment.js";
 import logger from "./logger.js";
 
 export const createFailingStudentNotification = async (studentId, courseId) => {
@@ -9,12 +10,17 @@ export const createFailingStudentNotification = async (studentId, courseId) => {
 
     if (!student) return;
 
-    // Leta upp den aktuella kursen i education
-    const course = student.education.find(
-      (edu) => edu.refId.toString() === courseId && edu.type === "Course"
-    );
+    // Leta upp kursens betyg i elevens registreringar (#103)
+    const enrollment = await StudentEnrollment.findOne({
+      studentId,
+      mainCourseId: courseId,
+      grade: 'F',
+    })
+      .populate('mainCourseId', 'courseName')
+      .lean();
 
-    if (!course || course.grade !== 'F') return;
+    if (!enrollment) return;
+    const course = { name: enrollment.mainCourseId?.courseName };
 
     // Kontrollera att ingen dubblett redan finns
     const exists = await Notification.findOne({
