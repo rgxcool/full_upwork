@@ -294,7 +294,7 @@
           successMessage.value = 'Elev sparad!'
         } catch (e) {
           console.error('❌ Failed to save student', e)
-          errorMessage.value = 'Misslyckades att spara elev.'
+          errorMessage.value = e.response?.data?.error || 'Misslyckades att spara elev.'
         } finally {
           saving.value = false
         }
