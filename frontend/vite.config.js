@@ -3,7 +3,8 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import removeMissingSourceMapPlugin from './removeMissingSourceMapPlugin.js';
 
-const API_PROXY_TARGET = 'http://localhost:5010';
+// Override to run a second stack beside the usual one (e.g. API_PROXY_TARGET=http://localhost:5011).
+const API_PROXY_TARGET = process.env.API_PROXY_TARGET || 'http://localhost:5010';
 
 export default defineConfig({
     define: {

@@ -10,7 +10,7 @@ const notificationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Legacy field
   resolvedByUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // Array of user IDs who have resolved this notification
-  teacher: { type: mongoose.Schema.Types.ObjectId, ref: "Teacher" }, // Teacher record ID for filtering
+  teacher: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // teacher User id for filtering (#102)
   createdByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Admin who created this notification (for dropout notifications)
   examId: { type: mongoose.Schema.Types.ObjectId, ref: "Exam" }, // Prövning (exam) the notification refers to
     // Nytt fält för flexibel metadata

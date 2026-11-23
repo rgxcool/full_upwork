@@ -156,7 +156,7 @@ const studentEnrollmentSchema = new mongoose.Schema(
         // Metadata
         teacherId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Teacher",
+            ref: "User",
         },
 
         notes: String,

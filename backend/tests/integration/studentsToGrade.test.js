@@ -9,12 +9,12 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const DAY = 86400000;
 const now = Date.now();
@@ -71,7 +71,7 @@ describe("GET /api/students-to-grade — enrollment vs legacy education rows", (
             await mongoose.connection.collections[name].deleteMany({});
         }
         teacherUser = await User.create({ name: "Test Lärare", email: "larare@example.se", password: "x".repeat(20), roles: ["teacher"] });
-        teacher = await Teacher.create({ userId: teacherUser._id, subject: "Matematik" });
+        teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
         course = await Course.create({ courseName: "Matematik 1A", courseCode: "MATE1A00X", isActive: true });
         instance = await CourseInstance.create({
             mainCourseId: course._id,

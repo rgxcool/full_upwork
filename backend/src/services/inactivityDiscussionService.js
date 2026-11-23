@@ -13,7 +13,6 @@ import Message from "../models/Message.js";
 import Notification from "../models/Notification.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Student from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import logger from "../utils/logger.js";
@@ -145,10 +144,12 @@ export async function resolveResponsibleTeacher(studentId) {
         .lean();
     if (!enrollment?.teacherId) return null;
 
-    const teacher = await Teacher.findById(enrollment.teacherId).select("userId").lean();
-    if (!teacher?.userId) return null;
+    // enrollment.teacherId is the teacher's User id (#102); both fields kept
+    // for callers that still read `teacherId`.
+    const teacher = await User.findById(enrollment.teacherId).select("_id").lean();
+    if (!teacher) return null;
 
-    return { teacherId: teacher._id, userId: teacher.userId };
+    return { teacherId: teacher._id, userId: teacher._id };
 }
 
 /**

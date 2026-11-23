@@ -306,6 +306,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { teacherColor, teacherDisplayName } from '@/utils/teacherName.js'
 import client from '@/api/client.js'
 import store from '@/store/store.js'
 import CourseCardDiscussions from '@/components/CourseCardDiscussions.vue'
@@ -457,8 +458,7 @@ const updateCourseCardFilter = (value) => {
   }
 }
 
-const teacherName = (teacher) =>
-  teacher?.userId?.username || teacher?.name || teacher?.subject || ''
+const teacherName = (teacher) => teacherDisplayName(teacher) || teacher?.subject || ''
 
 const hasLinkedCourseCard = (card) =>
   Boolean(
@@ -474,16 +474,15 @@ const canEditContent = (card) => {
   if (role !== 'teacher') return false
 
   const currentUserId = String(store.state.user?.userId || store.state.user?._id || '')
-  const teacherUserId = String(
-    card.responsibleTeacher?.userId?._id || card.responsibleTeacher?.userId || ''
-  )
+  // responsibleTeacher is the teacher's User (populated) or its id (#102).
+  const teacherUserId = String(card.responsibleTeacher?._id || card.responsibleTeacher || '')
   return Boolean(currentUserId && currentUserId === teacherUserId)
 }
 
 const canUseCardAction = (card) => hasLinkedCourseCard(card) || canEditContent(card)
 
 const courseCardStyle = (card) => {
-  const color = card.responsibleTeacher?.colorCode
+  const color = teacherColor(card.responsibleTeacher)
   const safeColor =
     typeof color === 'string' && /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(color)
       ? color

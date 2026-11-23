@@ -18,7 +18,7 @@ import path from "path";
 dotenv.config({ path: path.resolve(process.cwd(), ".env.development") });
 
 import User from "../src/models/User.js";
-import Teacher from "../src/models/Teacher.js";
+import { HAS_TEACHER_PROFILE } from "../src/utils/teacherProfile.js";
 import Student from "../src/models/Student.js";
 import Course from "../src/models/Course.js";
 import CourseTemplate from "../src/models/CourseTemplate.js";
@@ -39,7 +39,8 @@ async function main() {
 
     const admin = await User.findOne({ email: "admin@mindful.se" });
     const teacherUser = await User.findOne({ email: "teacher@mindful.se" });
-    const teacher = await Teacher.findOne({ email: "teacher@mindful.se" }) || await Teacher.findOne();
+    // The teacher is a User with a teacher profile (#102).
+    const teacher = teacherUser?.teacherProfile ? teacherUser : await User.findOne(HAS_TEACHER_PROFILE);
     const svasve = await Course.findOne({ courseCode: "SVASVE01" });
     const mat = await Course.findOne({ courseCode: "MATMAT01a" });
     const svaTemplate = await CourseTemplate.findOne({ courseId: svasve?._id });

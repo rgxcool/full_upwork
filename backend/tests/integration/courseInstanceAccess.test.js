@@ -16,13 +16,13 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import express from "express";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import courseMatchingRoutes from "../../src/router/courseMatchingRoutes.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const SECRET = "test-secret";
 
@@ -95,7 +95,6 @@ describe("Kurskort access control (content + activity feed)", () => {
     beforeEach(async () => {
         await Promise.all([
             User.deleteMany({}),
-            Teacher.deleteMany({}),
             Student.deleteMany({}),
             Course.deleteMany({}),
             CourseInstance.deleteMany({}),
@@ -107,9 +106,9 @@ describe("Kurskort access control (content + activity feed)", () => {
         const assistUser = await makeUser("Test Assistent", "assistent@test.invalid", ["teacher"]);
         const otherTeacherUser = await makeUser("Test Annan", "annan@test.invalid", ["teacher"]);
         const coordinator = await makeUser("Test Koordinator", "koord@test.invalid", ["coordinator"]);
-        const resp = await Teacher.create({ userId: respUser._id, subject: "Svenska" });
-        const assist = await Teacher.create({ userId: assistUser._id, subject: "Svenska" });
-        await Teacher.create({ userId: otherTeacherUser._id, subject: "Matte" });
+        const resp = await giveTeacherProfile(respUser._id, { subject: "Svenska" });
+        const assist = await giveTeacherProfile(assistUser._id, { subject: "Svenska" });
+        await giveTeacherProfile(otherTeacherUser._id, { subject: "Matte" });
 
         const course = await Course.create({ courseName: "Svenska 1", courseCode: "SVESVE01" });
         const base = {

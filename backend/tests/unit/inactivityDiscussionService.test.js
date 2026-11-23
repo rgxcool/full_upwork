@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import Student from "../../src/models/Student.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import Course from "../../src/models/Course.js";
@@ -17,6 +16,7 @@ import {
     computeLiveInactivitySignal,
     summarizeInactivitySignal,
 } from "../../src/services/inactivityDiscussionService.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 describe("inactivityDiscussionService", () => {
     beforeAll(async () => {
@@ -37,7 +37,6 @@ describe("inactivityDiscussionService", () => {
     beforeEach(async () => {
         await Promise.all([
             User.deleteMany({}),
-            Teacher.deleteMany({}),
             Student.deleteMany({}),
             StudentEnrollment.deleteMany({}),
             Course.deleteMany({}),
@@ -52,10 +51,7 @@ describe("inactivityDiscussionService", () => {
             password: "hashed-placeholder",
             roles: ["teacher"],
         });
-        teacher = await Teacher.create({
-            userId: teacherUser._id,
-            subject: "Matematik",
-        });
+        teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
         adminUser = await User.create({
             email: "enhet-admin@mindful.se",
             password: "hashed-placeholder",
