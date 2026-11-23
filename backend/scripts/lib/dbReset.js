@@ -10,6 +10,9 @@
  * everything else. When you add a new catalog-like model that must survive a
  * flush, add its collection name to KEEP_COLLECTIONS.
  *
+ *   - scripts/resetProduction.js    → inventoryOwnCollections(), backupCollections(),
+ *                                      wipeOwnCollections() (#124)
+ *
  * Documents are deleted (deleteMany), collections are never dropped, so
  * indexes survive. Every function supports { dryRun: true }, which only
  * reports what would be deleted.
@@ -17,6 +20,8 @@
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
+import { BSON } from "mongodb";
+import mongoose from "mongoose";
 
 /** Education, content and configuration that a flush must not touch. */
 export const KEEP_COLLECTIONS = Object.freeze([
@@ -239,4 +244,118 @@ export function formatCounts(counts) {
     const rows = Object.entries(counts).filter(([, n]) => n > 0);
     if (!rows.length) return "  (nothing)";
     return rows.map(([name, n]) => `  ${name.padEnd(28)} ${n}`).join("\n");
+}
+
+// ─── Production reset (#124) ────────────────────────────────────────────────
+// The production MongoDB also holds another service's data. These functions
+// only ever touch collections that Mindful Learning owns.
+
+/** Collections Mindful Learning owns that have no Mongoose model. */
+export const EXTRA_OWN_COLLECTIONS = Object.freeze([
+    "fs.files", // GridFS (uploaded files, PDFs)
+    "fs.chunks",
+    "counters", // certificate numbering (services/certificateService.js)
+    "teachers", // legacy, merged into users by #102
+    "migrations", // migration ledger
+]);
+
+/**
+ * Names of every collection Mindful Learning owns: one per Mongoose model in
+ * src/models, plus EXTRA_OWN_COLLECTIONS.
+ * @param {string} modelsDir - absolute path of backend/src/models
+ * @returns {Promise<Set<string>>}
+ */
+export async function ownCollectionNames(modelsDir) {
+    const files = (await fs.readdir(modelsDir)).filter((f) => f.endsWith(".js"));
+    for (const file of files) await import(path.join(modelsDir, file));
+    const names = Object.values(mongoose.models).map((m) => m.collection.collectionName);
+    return new Set([...names, ...EXTRA_OWN_COLLECTIONS]);
+}
+
+/**
+ * Split the database's collections into ours and unknown, with counts.
+ * @returns {Promise<{ own: Record<string, number>, foreign: Record<string, number> }>}
+ */
+export async function inventoryOwnCollections(db, ownNames) {
+    const own = {};
+    const foreign = {};
+    for (const name of await userCollections(db)) {
+        const n = await db.collection(name).estimatedDocumentCount();
+        if (ownNames.has(name)) own[name] = n;
+        else foreign[name] = n;
+    }
+    return { own, foreign };
+}
+
+/**
+ * Export collections to <dir>/<name>.jsonl (canonical Extended JSON, one
+ * document per line), and copy uploadsDir to <dir>/uploads when it exists.
+ * Throws on any write error (e.g. a full disk), so callers can abort first.
+ * @returns {Promise<{ documents: Record<string, number>, bytes: number, uploads: boolean }>}
+ */
+export async function backupCollections(db, names, dir, { uploadsDir } = {}) {
+    await fs.mkdir(dir, { recursive: true });
+    const documents = {};
+    let bytes = 0;
+    for (const name of names) {
+        const file = path.join(dir, `${name}.jsonl`);
+        const handle = await fs.open(file, "w");
+        let n = 0;
+        try {
+            for await (const doc of db.collection(name).find({})) {
+                const line = BSON.EJSON.stringify(doc, { relaxed: false }) + "\n";
+                await handle.write(line);
+                bytes += Buffer.byteLength(line);
+                n++;
+            }
+        } finally {
+            await handle.close();
+        }
+        documents[name] = n;
+    }
+    let uploads = false;
+    if (uploadsDir && fsSync.existsSync(uploadsDir)) {
+        await fs.cp(uploadsDir, path.join(dir, "uploads"), { recursive: true });
+        uploads = true;
+    }
+    await fs.writeFile(
+        path.join(dir, "MANIFEST.json"),
+        JSON.stringify({ database: db.databaseName, createdAt: new Date().toISOString(), documents, uploads }, null, 2)
+    );
+    return { documents, bytes, uploads };
+}
+
+/**
+ * Empty only the collections Mindful Learning owns, after a backup.
+ * Unknown collections are never touched, and while any exist nothing is
+ * deleted unless allowForeign is set (someone has checked them).
+ * @param {object} db
+ * @param {object} opts
+ * @param {Set<string>} opts.ownNames - from ownCollectionNames()
+ * @param {string} [opts.backupDir] - required unless dryRun
+ * @param {string} [opts.uploadsDir] - backed up, then the disk files of Documents are deleted
+ * @param {boolean} [opts.allowForeign]
+ * @param {boolean} [opts.dryRun]
+ */
+export async function wipeOwnCollections(db, { ownNames, backupDir, uploadsDir, allowForeign = false, dryRun = false }) {
+    const { own, foreign } = await inventoryOwnCollections(db, ownNames);
+    const result = { own, foreign, deleted: {}, backup: null, uploadFiles: 0, refused: null };
+    if (Object.keys(foreign).length && !allowForeign) {
+        result.refused = "foreign";
+        return result;
+    }
+    if (dryRun) return result;
+    if (!backupDir) throw new Error("backupDir is required");
+
+    // Backup first. If it fails (e.g. disk full) nothing has been deleted.
+    result.backup = await backupCollections(db, Object.keys(own), backupDir, { uploadsDir });
+
+    const docs = own.documents !== undefined
+        ? await db.collection("documents").find({}, { projection: { filename: 1 } }).toArray()
+        : [];
+    result.uploadFiles = await deleteUploadFiles(docs, uploadsDir, { dryRun: false });
+    for (const name of Object.keys(own)) {
+        result.deleted[name] = (await db.collection(name).deleteMany({})).deletedCount;
+    }
+    return result;
 }
