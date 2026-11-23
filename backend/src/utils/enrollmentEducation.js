@@ -8,6 +8,10 @@
  * `Student.education` array.
  */
 import StudentEnrollment from "../models/StudentEnrollment.js";
+// Registered here so the populates below also work outside the app (scripts, jobs).
+import "../models/Course.js";
+import "../models/CoursePackage.js";
+import "../models/Program.js";
 import { computeAplPeriod } from "./aplAutoStatus.js";
 
 const idOf = (v) => (v && typeof v === "object" && v._id ? v._id : v);
