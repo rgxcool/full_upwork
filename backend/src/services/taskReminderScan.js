@@ -12,7 +12,8 @@
  */
 import Task from "../models/Task.js";
 import Notification from "../models/Notification.js";
-import Teacher from "../models/Teacher.js";
+import User from "../models/User.js";
+import { teacherUserFilter } from "../utils/teacherProfile.js";
 import mongoose from "mongoose";
 import logger from "../utils/logger.js";
 
@@ -110,7 +111,7 @@ export async function syncTaskReminderForUser(userId) {
 
         // Let students see it via the student query and teachers via query.teacher.
         const targetUser = mongoose.Types.ObjectId.isValid(userIdStr)
-            ? await Teacher.findOne({ userId: userIdStr }).lean()
+            ? await User.findOne(teacherUserFilter({ _id: userIdStr })).select("_id").lean()
             : null;
         const extra = {};
         if (mongoose.Types.ObjectId.isValid(userIdStr)) {

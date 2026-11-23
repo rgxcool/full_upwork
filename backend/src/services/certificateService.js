@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CoursePackage from "../models/CoursePackage.js";
 import { CertificateRecord, CertificateSettings } from "../models/certificateModel.js";
+import { TEACHER_POPULATE_FIELDS } from "../utils/teacherProfile.js";
 
 /**
  * Load the current certificate-identity configuration as a plain settings
@@ -48,10 +49,7 @@ export async function buildSnapshotData(enrollmentId) {
     const enrollment = await StudentEnrollment.findById(enrollmentId)
         .populate("mainCourseId", "courseName courseCode")
         .populate("coursePackageId", "coursePackageName coursePackageCode")
-        .populate({
-            path: "teacherId",
-            populate: { path: "userId", select: "username name" },
-        })
+        .populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS })
         .populate("studentId", "name personalNumber email")
         .lean();
 

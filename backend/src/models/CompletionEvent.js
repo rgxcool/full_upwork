@@ -52,7 +52,7 @@ const completionEventSchema = new mongoose.Schema(
         // Responsible teacher (denormalized).
         teacherId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Teacher",
+            ref: "User",
             default: null,
         },
         teacherName: { type: String, default: "" },

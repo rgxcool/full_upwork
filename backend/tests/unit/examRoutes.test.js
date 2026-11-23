@@ -25,6 +25,9 @@ const createSessionQuery = (value) => {
   return chain;
 };
 
+const TEACHER_ID = "64b000000000000000000001";
+const OTHER_TEACHER_ID = "64b000000000000000000002";
+
 let studentFindResult = [];
 let enrollmentFindResult = [];
 let examAttendanceFindResult = [];
@@ -38,7 +41,7 @@ vi.mock("../../src/controllers/authController.js", () => ({
     req.user = {
       role,
       roles: roles || (role ? [role] : []),
-      userId: req.headers["x-user-id"] || "user-id",
+      userId: req.headers["x-user-id"] || TEACHER_ID,
       _id: req.headers["x-user-objectid"] || "user-obj-id",
     };
     next();
@@ -58,7 +61,7 @@ vi.mock("../../src/middleware/auth.js", () => ({
     req.user = {
       role,
       roles: roles || (role ? [role] : []),
-      userId: req.headers["x-user-id"] || "user-id",
+      userId: req.headers["x-user-id"] || TEACHER_ID,
       _id: req.headers["x-user-objectid"] || "user-obj-id",
       permissions,
     };
@@ -120,7 +123,8 @@ vi.mock("../../src/models/Notification.js", () => ({
   },
 }));
 
-vi.mock("../../src/models/Teacher.js", () => ({
+// #102: a teacher is a User with teacherProfile; ids are User ids.
+vi.mock("../../src/models/User.js", () => ({
   __esModule: true,
   default: {
     findOne: vi.fn(),
@@ -191,9 +195,14 @@ vi.mock("../../src/models/StudentEnrollment.js", () => ({
   },
 }));
 
-vi.mock("mongoose", () => ({
+vi.mock("mongoose", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+  ...actual,
   __esModule: true,
   default: {
+    ...actual.default,
+    isValidObjectId: actual.default.isValidObjectId,
     startSession: vi.fn(() => ({
       startTransaction: vi.fn(),
       commitTransaction: vi.fn(),
@@ -201,7 +210,8 @@ vi.mock("mongoose", () => ({
       endSession: vi.fn(),
     })),
   },
-}));
+  };
+});
 
 import examRoutes, { normalizeMaterialReceived } from "../../src/router/examRoutes.js";
 import ExamAttendance, {
@@ -210,7 +220,7 @@ import ExamAttendance, {
 } from "../../src/models/ExamAttendance.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import Notification from "../../src/models/Notification.js";
-import Teacher from "../../src/models/Teacher.js";
+import User from "../../src/models/User.js";
 import CalendarEvent from "../../src/models/Event.js";
 import Exam from "../../src/models/Provning.js";
 import Student from "../../src/models/Student.js";
@@ -218,9 +228,9 @@ import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import { createGlobalNotification } from "../../src/controllers/notificationController.js";
 
 const teacherDoc = {
-  _id: "teacher-1",
-  userId: { username: "tutor" },
-  colorCode: "#abc",
+  _id: TEACHER_ID,
+  username: "tutor",
+  teacherProfile: { colorCode: "#abc" },
 };
 
 const createStudent = () => ({
@@ -280,7 +290,7 @@ beforeEach(() => {
   Exam.findById.mockReturnValue(createQueryChain(null));
   Exam.findByIdAndDelete.mockResolvedValue(null);
   Exam.findByIdAndUpdate.mockResolvedValue(null);
-  Teacher.findOne.mockReturnValue(createSessionQuery(teacherDoc));
+  User.findOne.mockReturnValue(createQueryChain(teacherDoc));
   CalendarEvent.find.mockResolvedValue([]);
   CalendarEvent.findById.mockResolvedValue(null);
   CalendarEvent.findByIdAndUpdate.mockResolvedValue(null);
@@ -309,7 +319,7 @@ beforeEach(() => {
   CourseInstance.find.mockReturnValue(createQueryChain([]));
   CourseInstance.findById.mockResolvedValue({
     _id: "ci-1",
-    responsibleTeacher: "teacher-1",
+    responsibleTeacher: TEACHER_ID,
     save: vi.fn().mockResolvedValue(true),
   });
   CourseInstance.updateMany.mockResolvedValue({ modifiedCount: 0 });
@@ -353,7 +363,7 @@ describe("examRoutes", () => {
   });
 
   it("returns 403 when teacher profile is missing for exam listing", async () => {
-    Teacher.findOne.mockReturnValueOnce(createSessionQuery(null));
+    User.findOne.mockReturnValueOnce(createQueryChain(null));
 
     const res = await request(app)
       .get("/api/exams")
@@ -669,7 +679,7 @@ describe("examRoutes", () => {
       .post("/api/calendar-events/mark-attendance")
       .send({
         date: "2025-04-15",
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         courseName: "Physics",
         students: [{ _id: "batch-student", attended: true }],
       });
@@ -685,7 +695,7 @@ describe("examRoutes", () => {
         .post("/api/calendar-events/mark-attendance")
         .send({
           date: "2025-04-15",
-          teacherId: "teacher-1",
+          teacherId: TEACHER_ID,
           courseName: "Physics",
           students: [{ _id: "batch-student", attended: true }],
         });
@@ -705,7 +715,7 @@ describe("examRoutes", () => {
       examHistory: [
         {
           examDate: new Date("2025-04-15T00:00:00.000Z"),
-          teacherId: "teacher-1",
+          teacherId: TEACHER_ID,
           attended: false,
         },
       ],
@@ -727,7 +737,7 @@ describe("examRoutes", () => {
       .post("/api/calendar-events/mark-attendance")
       .send({
         date: "2025-04-15",
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         courseName: "Physics",
         examTime: "10:00",
         examMunicipality: "Town",
@@ -765,7 +775,7 @@ describe("examRoutes", () => {
       .post("/api/calendar-events/mark-attendance")
       .send({
         date: "2025-04-15",
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         courseName: "Physics",
         examTime: "10:00",
         examMunicipality: "Metro",
@@ -795,7 +805,7 @@ describe("examRoutes", () => {
       .post("/api/calendar-events/mark-attendance")
       .send({
         date: "2025-04-15",
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         courseName: "Physics",
         students: [{ _id: "failure-student", attended: true }],
       });
@@ -902,7 +912,7 @@ describe("examRoutes", () => {
   });
 
   it("forbids a teacher without a profile from deciding", async () => {
-    Teacher.findOne.mockReturnValueOnce(createSessionQuery(null));
+    User.findOne.mockReturnValueOnce(createQueryChain(null));
     const examDoc = {
       _id: "decision-teacher-noprofile",
       name: "No Profile Exam",
@@ -1056,7 +1066,7 @@ describe("examRoutes", () => {
     expect(res.status).toBe(200);
     expect(Notification.updateMany).toHaveBeenCalledWith(
       { examId: "decision-resolve" },
-      { $addToSet: { resolvedByUsers: "user-id" } }
+      { $addToSet: { resolvedByUsers: TEACHER_ID } }
     );
   });
 
@@ -1080,7 +1090,7 @@ describe("examRoutes", () => {
     vi.useRealTimers();
     expect(res.status).toBe(200);
     expect(Notification.create).toHaveBeenCalledWith(
-      expect.objectContaining({ examId: "exam-moved", teacher: "teacher-1" })
+      expect.objectContaining({ examId: "exam-moved", teacher: TEACHER_ID })
     );
   });
 
@@ -1157,7 +1167,7 @@ describe("examRoutes", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual([{ _id: "event-1" }]);
 
-    Teacher.findOne.mockReturnValueOnce(createSessionQuery(null));
+    User.findOne.mockReturnValueOnce(createQueryChain(null));
     const failRes = await request(app)
       .get("/api/calendar-events")
       .set("x-user-role", "teacher");
@@ -1214,7 +1224,7 @@ describe("examRoutes", () => {
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "admin")
       .send({
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         fromDate: "2025-04-01",
         toDate: "2025-04-10",
       });
@@ -1246,9 +1256,9 @@ describe("examRoutes", () => {
     const res = await request(app)
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "teacher")
-      .set("x-user-id", "teacher-user-id")
+      .set("x-user-id", TEACHER_ID)
       .send({
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         fromDate: "2025-04-01",
         toDate: "2025-04-10",
       });
@@ -1267,7 +1277,7 @@ describe("examRoutes", () => {
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "admin")
       .send({
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         fromDate: "2025-04-01",
         toDate: "2025-04-10",
         courseInstanceIds: ["ci-1"],
@@ -1290,7 +1300,7 @@ describe("examRoutes", () => {
     const badPayload = await request(app)
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "admin")
-      .send({ teacherId: "teacher-1", fromDate: "2025-04-01" });
+      .send({ teacherId: TEACHER_ID, fromDate: "2025-04-01" });
     expect(badPayload.status).toBe(400);
   });
 
@@ -1302,7 +1312,7 @@ describe("examRoutes", () => {
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "admin")
       .send({
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         fromDate: "2025-04-01",
         toDate: "2025-04-10",
       });
@@ -1330,14 +1340,13 @@ describe("examRoutes", () => {
     mongooseModule.default.startSession.mockImplementationOnce(() => session);
 
     StudentEnrollment.updateMany.mockRejectedValueOnce(new Error("boom update"));
-    Teacher.findOne.mockReturnValueOnce(createSessionQuery(teacherDoc));
 
     const res = await request(app)
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "teacher")
-      .set("x-user-id", "teacher-user-id")
+      .set("x-user-id", TEACHER_ID)
       .send({
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         fromDate: "2025-04-01",
         toDate: "2025-04-10",
       });
@@ -1357,7 +1366,7 @@ describe("examRoutes", () => {
     CourseInstance.updateMany.mockResolvedValue({ modifiedCount: 0 });
 
     const validPayload = {
-      teacherId: "teacher-1",
+      teacherId: TEACHER_ID,
       fromDate: "2025-04-01",
       toDate: "2025-04-10",
       courseInstanceIds: [],
@@ -1412,41 +1421,27 @@ describe("examRoutes", () => {
     expect(systemAdminResponse.status).toBe(200);
 
     // Test 6: Teacher who is the responsible teacher should get 200 OK
-    const responsibleTeacher = {
-      _id: "teacher-1",
-      userId: "teacher-user-id",
-    };
-    Teacher.findOne.mockReturnValueOnce(
-      createSessionQuery(responsibleTeacher)
-    );
     StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
     Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
     CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
     const responsibleTeacherResponse = await request(app)
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "teacher")
-      .set("x-user-id", "teacher-user-id")
+      .set("x-user-id", TEACHER_ID)
       .send({
         ...validPayload,
-        teacherId: "teacher-1", // Same as the teacher's _id
+        teacherId: TEACHER_ID, // Same as the caller's user id (#102)
       });
     expect(responsibleTeacherResponse.status).toBe(200);
 
     // Test 7: Teacher who is NOT the responsible teacher should get 403 Forbidden
-    const nonResponsibleTeacher = {
-      _id: "teacher-2", // Different teacher
-      userId: "teacher-user-id",
-    };
-    Teacher.findOne.mockReturnValueOnce(
-      createSessionQuery(nonResponsibleTeacher)
-    );
     const nonResponsibleTeacherResponse = await request(app)
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "teacher")
-      .set("x-user-id", "teacher-user-id")
+      .set("x-user-id", OTHER_TEACHER_ID)
       .send({
         ...validPayload,
-        teacherId: "teacher-1", // Different from teacher's _id
+        teacherId: TEACHER_ID, // Different from the caller's user id
       });
     expect(nonResponsibleTeacherResponse.status).toBe(403);
     expect(nonResponsibleTeacherResponse.body.error).toBe(
@@ -1455,30 +1450,24 @@ describe("examRoutes", () => {
 
     // Test 7b: Teacher with an explicit per-user calendar_final_exam grant may
     // move the group even when they are not the responsible teacher (Angelina).
-    Teacher.findOne.mockReturnValueOnce(
-      createSessionQuery(nonResponsibleTeacher)
-    );
     StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
     Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
     CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
     const calendarOverrideResponse = await request(app)
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "teacher")
-      .set("x-user-id", "teacher-user-id")
+      .set("x-user-id", OTHER_TEACHER_ID)
       .set(
         "x-user-permissions",
         JSON.stringify({ calendar_final_exam: true })
       )
       .send({
         ...validPayload,
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
       });
     expect(calendarOverrideResponse.status).toBe(200);
 
     // Test 8: Teacher with roles array ['teacher'] who is responsible should get 200 OK
-    Teacher.findOne.mockReturnValueOnce(
-      createSessionQuery(responsibleTeacher)
-    );
     StudentEnrollment.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
     Student.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
     CourseInstance.updateMany.mockResolvedValueOnce({ modifiedCount: 0 });
@@ -1486,10 +1475,10 @@ describe("examRoutes", () => {
       .put("/api/calendar-events/move-group")
       .set("x-user-role", "user")
       .set("x-user-roles", JSON.stringify(["teacher"]))
-      .set("x-user-id", "teacher-user-id")
+      .set("x-user-id", TEACHER_ID)
       .send({
         ...validPayload,
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
       });
     expect(teacherRolesResponse.status).toBe(200);
   });
@@ -1518,7 +1507,7 @@ describe("examRoutes", () => {
   });
 
   it("rejects syncable events when teacher profile is missing", async () => {
-    Teacher.findOne.mockReturnValueOnce(createSessionQuery(null));
+    User.findOne.mockReturnValueOnce(createQueryChain(null));
     const res = await request(app)
       .get("/api/calendar-events/syncable")
       .set("x-user-role", "teacher");
@@ -1713,7 +1702,7 @@ describe("examRoutes", () => {
   it("rejects mark-attendance payloads with missing fields", async () => {
     const res = await request(app)
       .post("/api/calendar-events/mark-attendance")
-      .send({ teacherId: "teacher-1", students: [] });
+      .send({ teacherId: TEACHER_ID, students: [] });
     expect(res.status).toBe(400);
   });
 
@@ -1872,7 +1861,7 @@ describe("examRoutes", () => {
       .post("/api/calendar-events/mark-attendance")
       .send({
         date: "2025-04-15",
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         courseName: "Physics",
         examTime: "10:00",
         examMunicipality: "Sollentuna",
@@ -1898,7 +1887,7 @@ describe("examRoutes", () => {
       examHistory: [
         {
           examDate: new Date("2025-04-15T00:00:00.000Z"),
-          teacherId: "teacher-1",
+          teacherId: TEACHER_ID,
           attended: false,
           examRoom: "",
         },
@@ -1922,7 +1911,7 @@ describe("examRoutes", () => {
       .post("/api/calendar-events/mark-attendance")
       .send({
         date: "2025-04-15",
-        teacherId: "teacher-1",
+        teacherId: TEACHER_ID,
         courseName: "Physics",
         examTime: "10:00",
         examMunicipality: "Sollentuna",

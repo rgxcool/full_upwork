@@ -1,6 +1,5 @@
 import Student from "../models/Student.js";
 import User from "../models/User.js";
-import Teacher from "../models/Teacher.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
@@ -82,13 +81,13 @@ export const getInactivityReport = async (req, res) => {
 
     let teacherIds = null;
     if (isTeacherScope) {
-        const teacherRecords = await Teacher.find({ userId: req.user.userId })
-            .select("_id")
-            .lean();
-        teacherIds = teacherRecords.map((t) => t._id.toString());
-        if (teacherIds.length === 0) {
+        // StudentEnrollment.teacherId is the teacher's User id (#102).
+        // The refactor is the baseline: keep the direct User id, but retain
+        // our runtime thresholds in the empty-report response.
+        if (!req.user?.userId) {
             return res.status(200).json(buildReport(today, thresholds));
         }
+        teacherIds = [String(req.user.userId)];
     }
 
     const enrollmentQuery = {
@@ -112,7 +111,7 @@ export const getInactivityReport = async (req, res) => {
     const enrollmentIds = enrollments.map((e) => e._id);
     const enrollmentTeacherIds = uniq(enrollments.map((e) => e.teacherId));
 
-    const [students, courseInstances, submissions, teachers] = await Promise.all([
+    const [students, courseInstances, submissions, teacherNames] = await Promise.all([
         Student.find({ _id: { $in: studentIds } })
             .select("name personalNumber email municipality changeHistory lastLearningActivityAt")
             .lean(),
@@ -123,18 +122,9 @@ export const getInactivityReport = async (req, res) => {
             .select("studentId submittedAt feedback revisionDecision")
             .lean(),
         enrollmentTeacherIds.length
-            ? Teacher.find({ _id: { $in: enrollmentTeacherIds } }).select("userId").lean()
+            ? User.find({ _id: { $in: enrollmentTeacherIds } }).select("name email").lean()
             : Promise.resolve([]),
     ]);
-    const teacherUserIds = enrollmentTeacherIds.length
-        ? uniq(teachers.map((t) => t.userId))
-        : [];
-    let teacherNames = [];
-    if (teacherUserIds.length) {
-        teacherNames = await User.find({ _id: { $in: teacherUserIds } })
-            .select("name email")
-            .lean();
-    }
 
     const discussionThreads = await Conversation.find({ studentId: { $in: studentIds } })
         .select("studentId participants")
@@ -165,10 +155,9 @@ export const getInactivityReport = async (req, res) => {
     const teacherByName = new Map(
         teacherNames.map((u) => [u._id.toString(), u.name || u.email || ""])
     );
-    const teacherIdToUser = new Map(teachers.map((t) => [t._id.toString(), t.userId?.toString()]));
     const resolveTeacherForEnrollment = (enrollment) => {
-        const teacherUserId = teacherIdToUser.get(enrollment.teacherId?.toString());
-        if (!teacherUserId) return { teacherName: "", teacherUserId: null };
+        const teacherUserId = enrollment.teacherId?.toString();
+        if (!teacherUserId || !teacherByName.has(teacherUserId)) return { teacherName: "", teacherUserId: null };
         return {
             teacherName: teacherByName.get(teacherUserId) || "",
             teacherUserId,

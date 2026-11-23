@@ -17,7 +17,6 @@ import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import ExamAttendance from "../../src/models/ExamAttendance.js";
 import Provning from "../../src/models/Provning.js";
-import Teacher from "../../src/models/Teacher.js";
 import Notification from "../../src/models/Notification.js";
 import CalendarEvent from "../../src/models/Event.js";
 import {
@@ -111,7 +110,6 @@ describe("studentDetailsController", () => {
             CourseInstance.deleteMany({}),
             ExamAttendance.deleteMany({}),
             Provning.deleteMany({}),
-            Teacher.deleteMany({}),
             Notification.deleteMany({}),
             CalendarEvent.deleteMany({}),
         ]);

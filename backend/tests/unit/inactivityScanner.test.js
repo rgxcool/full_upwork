@@ -12,7 +12,6 @@ import {
 } from "../../src/services/inactivityScanner.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import Student from "../../src/models/Student.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import Course from "../../src/models/Course.js";
@@ -22,6 +21,7 @@ import ExamAttendance from "../../src/models/ExamAttendance.js";
 import Provning from "../../src/models/Provning.js";
 import Conversation from "../../src/models/Conversation.js";
 import Message from "../../src/models/Message.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 describe("inactivityScanner", () => {
     beforeAll(async () => {
@@ -50,7 +50,6 @@ describe("inactivityScanner", () => {
 
         await Promise.all([
             User.deleteMany({}),
-            Teacher.deleteMany({}),
             Student.deleteMany({}),
             StudentEnrollment.deleteMany({}),
             Course.deleteMany({}),
@@ -67,7 +66,7 @@ describe("inactivityScanner", () => {
             password: "hashed-placeholder",
             roles: ["teacher"],
         });
-        teacher = await Teacher.create({ userId: teacherUser._id, subject: "Matematik" });
+        teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
         const course = await Course.create({
             courseName: "Matematik 1",
             courseCode: "MAT101",

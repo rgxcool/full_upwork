@@ -58,3 +58,6 @@ repomix-output.xml
 frontend/dist.new
 frontend/dist.prev
 frontend/dist.failed
+
+# Playwright MCP browser snapshots/logs (local tooling output)
+.playwright-mcp/

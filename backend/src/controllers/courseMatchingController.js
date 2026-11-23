@@ -29,6 +29,7 @@ import { getCourseInstanceAccess } from "../utils/courseInstanceAccess.js";
  * Relies on CourseMatchingService and related models/utilities.
  */
 import CoursePackage from "../models/CoursePackage.js";
+import { TEACHER_POPULATE_FIELDS, findTeacherUser } from "../utils/teacherProfile.js";
 
 logger.debug("courseMatchingController.js loaded");
 
@@ -302,7 +303,7 @@ export const uploadStudentsForMatching = async (req, res) => {
             name: safeUsername,
             email: safeEmail,
             password: teacherResult.password,
-            subject: teacherResult.teacher?.subject || "Övrigt",
+            subject: teacherResult.teacher?.teacherProfile?.subject || "Övrigt",
           });
 
           logger.info({ username: safeUsername }, "Auto-created teacher");
@@ -1496,16 +1497,8 @@ export const getCourseInstances = async (req, res) => {
     const instances = await CourseInstance.find(query)
       .populate("mainCourseId")
       .populate("createdBy", "username email")
-      .populate({
-        path: "responsibleTeacher",
-        populate: { path: "userId", select: "username email" },
-        select: "userId subject",
-      })
-      .populate({
-        path: "assistantTeacher",
-        populate: { path: "userId", select: "username email" },
-        select: "userId subject",
-      })
+      .populate({ path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS })
+      .populate({ path: "assistantTeacher", select: TEACHER_POPULATE_FIELDS })
       .sort({ startDate: -1 });
 
     const merged = await mergeDuplicateCourseInstances(instances);
@@ -1513,16 +1506,8 @@ export const getCourseInstances = async (req, res) => {
       ? await CourseInstance.find(query)
           .populate("mainCourseId")
           .populate("createdBy", "username email")
-          .populate({
-            path: "responsibleTeacher",
-            populate: { path: "userId", select: "username email" },
-            select: "userId subject",
-          })
-          .populate({
-            path: "assistantTeacher",
-            populate: { path: "userId", select: "username email" },
-            select: "userId subject",
-          })
+          .populate({ path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS })
+          .populate({ path: "assistantTeacher", select: TEACHER_POPULATE_FIELDS })
           .sort({ startDate: -1 })
       : instances;
 
@@ -1599,9 +1584,8 @@ export const getMyCourseInstances = async (req, res) => {
     let query = {};
 
     if (userRole === "teacher") {
-      // Find the teacher document corresponding to the logged-in user
-      const Teacher = mongoose.model("Teacher");
-      const teacher = await Teacher.findOne({ userId: userId });
+      // responsibleTeacher holds the teacher's User id (#102).
+      const teacher = await findTeacherUser(userId, { select: "_id", lean: true });
 
       if (!teacher) {
         return res
@@ -1623,16 +1607,8 @@ export const getMyCourseInstances = async (req, res) => {
 
     const instances = await CourseInstance.find(query)
       .populate("mainCourseId")
-      .populate({
-        path: "responsibleTeacher",
-        populate: { path: "userId", select: "username email" },
-        select: "userId subject",
-      })
-      .populate({
-        path: "assistantTeacher",
-        populate: { path: "userId", select: "username email" },
-        select: "userId subject",
-      })
+      .populate({ path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS })
+      .populate({ path: "assistantTeacher", select: TEACHER_POPULATE_FIELDS })
       .sort({ startDate: -1 });
 
     // Debug: Log first instance to see population
@@ -1651,11 +1627,7 @@ export const getMyCourseInstances = async (req, res) => {
     const finalInstances = merged
       ? await CourseInstance.find(query)
           .populate("mainCourseId")
-          .populate({
-            path: "responsibleTeacher",
-            populate: { path: "userId", select: "username email" },
-            select: "userId subject",
-          })
+          .populate({ path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS })
           .sort({ startDate: -1 })
       : instances;
 
@@ -1670,23 +1642,6 @@ export const getMyCourseInstances = async (req, res) => {
         }).select("slutprovDate");
 
         const instanceObj = instance.toObject();
-
-        // Ensure responsibleTeacher is properly structured
-        if (
-          instanceObj.responsibleTeacher &&
-          typeof instanceObj.responsibleTeacher === "object"
-        ) {
-          // If userId is not populated, it might be just an ObjectId
-          if (
-            !instanceObj.responsibleTeacher.userId &&
-            instanceObj.responsibleTeacher._id
-          ) {
-            logger.debug(
-              "responsibleTeacher.userId not populated, attempting manual populate",
-            );
-            // This shouldn't happen if populate worked, but handle it gracefully
-          }
-        }
 
         return {
           ...instanceObj,
@@ -1738,16 +1693,8 @@ export const getAllCourseCards = async (req, res) => {
       .select(
         "courseName courseCode startDate endDate isActive coursePoints courseExtent courseTemplateId cardContent modules responsibleTeacher assistantTeacher",
       )
-      .populate({
-        path: "responsibleTeacher",
-        select: "subject userId colorCode",
-        populate: { path: "userId", select: "username" },
-      })
-      .populate({
-        path: "assistantTeacher",
-        select: "subject userId",
-        populate: { path: "userId", select: "username" },
-      })
+      .populate({ path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS })
+      .populate({ path: "assistantTeacher", select: TEACHER_POPULATE_FIELDS })
       .sort({ endDate: 1, _id: 1 });
 
     res.json({ success: true, cards });
@@ -1846,9 +1793,8 @@ export const getCourseInstanceEnrollments = async (req, res) => {
     const { status } = req.query;
 
     if (req.user?.role === "teacher") {
-      const Teacher = mongoose.model("Teacher");
       const CourseInstance = mongoose.model("CourseInstance");
-      const teacher = await Teacher.findOne({ userId: req.user.userId });
+      const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
       if (!teacher) {
         return res.status(403).json({ error: "Teacher profile not found" });
       }
@@ -3008,9 +2954,10 @@ export const postCourseInstanceActivityFeed = async (req, res) => {
       return res.status(404).json({ error: "Kursinstans hittades inte" });
     }
 
-    // #28: responsibleTeacher/assistantTeacher are Teacher ids; the shared
-    // helper resolves the caller's Teacher profile instead of comparing the
-    // Teacher id with the User id (which never matched).
+    // #28/#102: responsibleTeacher/assistantTeacher are the responsible
+    // teachers' User ids after the Teacher -> User refactor. The shared
+    // access helper resolves those ids against the caller's User/teacher
+    // profile; do not compare a removed Teacher document id here.
     const access = await getCourseInstanceAccess(user, instance);
     if (!access.canPost) {
       return res.status(403).json({

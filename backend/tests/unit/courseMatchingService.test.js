@@ -346,7 +346,7 @@ describe("CourseMatchingService.findOrCreateCourseInstance", () => {
         expect(existing.save).toHaveBeenCalled();
     });
 
-    it("updates responsibleTeacher when it differs from the provided teacher", async () => {
+    it("keeps a shared instance's responsibleTeacher when a student with another teacher joins", async () => {
         const existing = mockExisting({ responsibleTeacher: "teacher-old" });
         vi.spyOn(CourseInstance, "findOne").mockResolvedValue(existing);
 
@@ -359,7 +359,25 @@ describe("CourseMatchingService.findOrCreateCourseInstance", () => {
             null
         );
 
+        expect(existing.responsibleTeacher).toBe("teacher-old");
+        expect(existing.save).not.toHaveBeenCalled();
+    });
+
+    it("sets the provided teacher on an instance that has none and recalculates slutprov", async () => {
+        const existing = mockExisting({ responsibleTeacher: null, slutprovDate: new Date("2026-03-01") });
+        vi.spyOn(CourseInstance, "findOne").mockResolvedValue(existing);
+
+        await CourseMatchingService.findOrCreateCourseInstance(
+            "course1",
+            existing.startDate,
+            existing.endDate,
+            null,
+            "teacher-new",
+            null
+        );
+
         expect(existing.responsibleTeacher).toBe("teacher-new");
+        expect(existing.slutprovDate).toBeUndefined();
         expect(existing.save).toHaveBeenCalled();
     });
 
@@ -381,7 +399,7 @@ describe("CourseMatchingService.findOrCreateCourseInstance", () => {
         expect(existing.save).toHaveBeenCalled();
     });
 
-    it("clears slutprovDate when a teacher is set and no explicit date is given", async () => {
+    it("leaves an existing instance's slutprovDate alone when its teacher is unchanged", async () => {
         const existing = mockExisting({
             responsibleTeacher: "t1",
             slutprovDate: new Date("2026-03-01"),
@@ -396,8 +414,9 @@ describe("CourseMatchingService.findOrCreateCourseInstance", () => {
             "t1"
         );
 
-        expect(existing.slutprovDate).toBeUndefined();
-        expect(existing.save).toHaveBeenCalled();
+        // A manually set exam date must survive the next placement.
+        expect(existing.slutprovDate).toEqual(new Date("2026-03-01"));
+        expect(existing.save).not.toHaveBeenCalled();
     });
 
     it("throws when the main course does not exist", async () => {

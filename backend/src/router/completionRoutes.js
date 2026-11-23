@@ -3,6 +3,7 @@ import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import CompletionEvent from "../models/CompletionEvent.js";
+import { TEACHER_POPULATE_FIELDS } from "../utils/teacherProfile.js";
 
 const router = express.Router();
 
@@ -58,10 +59,7 @@ router.get(
             .skip(skip)
             .limit(limit)
             .populate("studentId", "name personalNumber")
-            .populate({
-                path: "teacherId",
-                populate: { path: "userId", select: "name username email" },
-            })
+            .populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS })
             .lean();
 
         const rows = events.map((e) => ({
@@ -83,8 +81,8 @@ router.get(
             teacherId: e.teacherId || null,
             teacherName:
                 e.teacherName ||
-                e.teacherId?.userId?.name ||
-                e.teacherId?.userId?.username ||
+                e.teacherId?.name ||
+                e.teacherId?.username ||
                 "",
             municipality: e.municipality || "",
             enrollmentIds: e.enrollmentIds || [],

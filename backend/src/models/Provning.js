@@ -11,7 +11,7 @@ const examSchema = new mongoose.Schema(
         municipality: String,
         teacherId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Teacher",
+            ref: "User",
             required: false,
             default: null,
         },

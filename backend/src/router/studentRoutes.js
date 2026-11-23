@@ -20,6 +20,9 @@ import { hasRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validation.js";
 import logger from "../utils/logger.js";
 import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
+import { applyEnrollmentDateSummary } from "../utils/studentDateSummary.js";
+import User from "../models/User.js";
+import { findTeacherUser, teacherUserFilter } from "../utils/teacherProfile.js";
 import { maybeSendLarteametEmail, getStudentMunicipality, SOLLENTUNA_MUNICIPALITY } from "../services/emailService.js";
 import {
     performStudentDropout,
@@ -54,8 +57,8 @@ router.get("/students/by-teacher/:teacherId", authenticateUser, hasRole(ALLOWED_
         const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
         const staffRoles = ["admin", "systemadmin", "coordinator", "syv", "specped", "tester"];
         if (userRoles.includes("teacher") && !userRoles.some((role) => staffRoles.includes(role))) {
-            const teacher = await (await import("../models/Teacher.js")).default.findOne({ userId: req.user.userId });
-            if (!teacher || teacher._id.toString() !== req.params.teacherId) {
+            // :teacherId is the teacher's User id (#102).
+            if (String(req.user.userId) !== String(req.params.teacherId)) {
                 return res.status(403).json({ error: "Teachers can only view their own students" });
             }
         }
@@ -157,8 +160,8 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
         const isTeacher = req.user.role === "teacher" || userRoles.includes("teacher");
 
         if (isTeacher && !hasCoordinatorRole) {
-            const Teacher = mongoose.model("Teacher");
-            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            // Student.teacherId is the teacher's User id (#102).
+            const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
 
             if (!teacher) {
                 return res
@@ -423,6 +426,10 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
             }
 
             student.education = mergedEducation;
+
+            // Elever list Startdatum / Slutdatum / Slutprov come from the
+            // enrollments; the stored student fields are only set by the import.
+            applyEnrollmentDateSummary(student, enrollments);
 
             // APL auto-status: derive the APL period from the merged education
             // entries and compute the effective (date-driven) status. When the
@@ -1415,12 +1422,13 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
         }
 
         if (!student.teacherId && student.teacher) {
-            const foundTeacher = await mongoose.model("Teacher").findOne({
-                name: student.teacher.trim(),
-            });
+            const teacherName = student.teacher.trim();
+            const foundTeacher = await User.findOne(
+                teacherUserFilter({ $or: [{ name: teacherName }, { username: teacherName }] })
+            ).select("_id").lean();
             if (foundTeacher) {
                 updates.teacherId = foundTeacher._id;
-                logger.info({ studentName: student.name, teacherId: foundTeacher._id }, "Linked student to TeacherId");
+                logger.info({ studentId: student._id, teacherId: foundTeacher._id }, "Linked student to teacher");
             } else {
                 logger.warn({ teacherName: student.teacher }, "No matching teacher found for name");
             }

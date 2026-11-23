@@ -17,7 +17,6 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import Document from "../../src/models/Document.js";
 import Student from "../../src/models/Student.js";
-import Teacher from "../../src/models/Teacher.js";
 import User from "../../src/models/User.js";
 import documentRoutes from "../../src/router/documentRoutes.js";
 import { AUTH_COOKIE_NAME } from "../../src/config/cookies.js";
@@ -25,6 +24,7 @@ import {
   connectTestDatabase,
   disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 let app;
 const userId = new mongoose.Types.ObjectId().toString();
@@ -73,11 +73,8 @@ const makeStudent = async (overrides = {}) =>
   });
 
 const makeTeacher = async (user, overrides = {}) =>
-  Teacher.create({
-    userId: user._id,
-    subject: "Syntetiskt ämne",
-    ...overrides,
-  });
+  giveTeacherProfile(user._id, { subject: "Syntetiskt ämne",
+    ...overrides });
 
 const writeUploadFile = (name, content = "synthetic document content") => {
   const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}-${name}`;

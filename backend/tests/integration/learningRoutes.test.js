@@ -19,6 +19,7 @@ import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import User from "../../src/models/User.js";
 import learningRoutes from "../../src/router/learningRoutes.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 // Standalone router mount: mock the JWT middleware so we never import the full
 // app graph (which currently cannot boot in tests due to messagingRoutes).
@@ -100,7 +101,6 @@ describe("Learning Route Permission Tests", () => {
             CourseInstance.deleteMany({}),
             StudentEnrollment.deleteMany({}),
             User.deleteMany({}),
-            mongoose.model("Teacher").deleteMany({}),
         ]);
 
         // Create a student
@@ -119,10 +119,7 @@ describe("Learning Route Permission Tests", () => {
             role: "teacher",
         });
 
-        const teacherProfile = await mongoose.model("Teacher").create({
-            userId: instructor._id,
-            subject: "Svenska",
-        });
+        const teacherProfile = await giveTeacherProfile(instructor._id, { subject: "Svenska" });
 
         instructorToken = buildAuthHeader("teacher", { userId: instructor._id.toString() });
 

@@ -1,13 +1,12 @@
 import CalendarEvent from "../models/Event.js";
 import Student from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
+import User from "../models/User.js";
 // Ensure Course schema is registered for populate lookups
 import "../models/Course.js";
 // Ensure CourseInstance schema is registered for populate lookups
 import "../models/CourseInstance.js";
-// Ensure User schema is registered for populate lookups (teacher.userId)
-import "../models/User.js";
 import logger from "./logger.js";
+import { TEACHER_POPULATE_FIELDS, teacherDisplayName } from "./teacherProfile.js";
 
 const ACTIVE_ENROLLMENT_STATUSES_EXCLUDED = ["completed", "dropped"];
 
@@ -117,10 +116,7 @@ export async function syncStudentAccommodationsToEvents(studentId, accommodation
 export async function syncCalendarEventsForStudent(studentId) {
     try {
         const student = await Student.findById(studentId)
-            .populate({
-                path: "teacherId",
-                populate: { path: "userId", select: "username" },
-            });
+            .populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS });
 
         if (!student || !student.finalExamDate) {
             logger.debug({ studentId }, "Student has no finalExamDate, skipping calendar sync");
@@ -170,9 +166,7 @@ export async function syncCalendarEventsForStudent(studentId) {
 
         if (student.teacherId) {
             teacherId = student.teacherId._id;
-            if (student.teacherId.userId) {
-                teacherName = student.teacherId.userId.username || teacherName;
-            }
+            teacherName = teacherDisplayName(student.teacherId) || teacherName;
         }
 
         // Find or create calendar event for this group
@@ -278,13 +272,10 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
         const enrollment = await StudentEnrollment.findById(enrollmentId)
             .populate("studentId")
             .populate("mainCourseId")
-            .populate({
-                path: "teacherId",
-                populate: { path: "userId", select: "username" },
-            })
+            .populate({ path: "teacherId", select: TEACHER_POPULATE_FIELDS })
             .populate({
                 path: "courseInstanceId",
-                populate: { path: "responsibleTeacher", populate: { path: "userId", select: "username" } },
+                populate: { path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS },
             });
 
         if (!enrollment || !enrollment.slutprovDate) {
@@ -333,23 +324,18 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
             // Course instance's responsible teacher takes priority
             const responsibleTeacher = enrollment.courseInstanceId.responsibleTeacher;
             teacherId = responsibleTeacher._id;
-            if (responsibleTeacher.userId) {
-                teacherName = responsibleTeacher.userId.username || teacherName;
-            }
+            teacherName = teacherDisplayName(responsibleTeacher) || teacherName;
         } else if (enrollment.teacherId) {
             // Fallback to enrollment's teacherId if no course instance
             teacherId = enrollment.teacherId._id;
-            if (enrollment.teacherId.userId) {
-                teacherName = enrollment.teacherId.userId.username || teacherName;
-            }
+            teacherName = teacherDisplayName(enrollment.teacherId) || teacherName;
         } else if (student.teacherId) {
             // Last resort: student's teacherId
-            const studentTeacher = await Teacher.findById(student.teacherId).populate("userId", "username");
+            // Student.teacherId is the teacher's User id (#102).
+            const studentTeacher = await User.findById(student.teacherId).select("username name email").lean();
             if (studentTeacher) {
                 teacherId = studentTeacher._id;
-                if (studentTeacher.userId) {
-                    teacherName = studentTeacher.userId.username || teacherName;
-                }
+                teacherName = teacherDisplayName(studentTeacher) || teacherName;
             }
         }
 

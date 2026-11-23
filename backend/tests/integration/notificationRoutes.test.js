@@ -13,12 +13,12 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import Notification from "../../src/models/Notification.js";
-import Teacher from "../../src/models/Teacher.js";
 import ActionPlan from "../../src/models/ActionPlan.js";
 import {
     connectTestDatabase,
     disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
+import { createTeacherUser } from "../helpers/teacherFixture.js";
 
 const signToken = (overrides = {}) => {
     const payload = {
@@ -43,13 +43,11 @@ describe("Notification Routes", () => {
 
     beforeEach(async () => {
         await Notification.deleteMany({});
-        await Teacher.deleteMany({});
     });
 
     afterEach(async () => {
         vi.restoreAllMocks();
         await Notification.deleteMany({});
-        await Teacher.deleteMany({});
     });
 
     describe("GET /api/notifications", () => {
@@ -136,11 +134,8 @@ describe("Notification Routes", () => {
         });
 
         it("executes teacher dropout debug loop when dropout notifications exist", async () => {
-            const userId = new mongoose.Types.ObjectId();
-            const teacher = await Teacher.create({
-                userId,
-                subject: "math",
-            });
+            const teacher = await createTeacherUser({ subject: "math" });
+            const userId = teacher._id;
 
             await Notification.create({
                 type: "dropout",
@@ -166,11 +161,8 @@ describe("Notification Routes", () => {
         });
 
         it("returns notifications for a teacher with a profile", async () => {
-            const userId = new mongoose.Types.ObjectId();
-            const teacher = await Teacher.create({
-                userId,
-                subject: "math",
-            });
+            const teacher = await createTeacherUser({ subject: "math" });
+            const userId = teacher._id;
             await Notification.collection.insertOne({
                 type: "custom",
                 message: "Teacher-specific note",
@@ -300,8 +292,8 @@ describe("Notification Routes", () => {
 
     describe("F-grade action plan reminders are locked", () => {
         const makeTeacherNote = async () => {
-            const userId = new mongoose.Types.ObjectId();
-            const teacher = await Teacher.create({ userId, subject: "Svenska" });
+            const teacher = await createTeacherUser({ subject: "Svenska" });
+            const userId = teacher._id;
             const studentId = new mongoose.Types.ObjectId();
             const note = await Notification.create({
                 type: "action_plan_required",
