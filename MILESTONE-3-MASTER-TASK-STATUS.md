@@ -378,6 +378,8 @@
  | 67 | Frågebank → generate new exams | ✅ DONE | ExamGeneration.vue is routed (router.js:407) and calls real endpoints (POST /question-bank/generate-exam + PUT /question-bank/exam-attempts/:id/questions — both exist). Fixed this pass: course v-select item-title/item-value, `selectedQuestions.length` on a ref({}) (always false) → computed `selectedCount`, undefined `filterQuestionsByCourse` handler → `loadQuestions`, `generate-exam` now honours the requested title (backend), and QuestionBank.vue create/form now requires a real course (was posting `course:""` → 400) with a working edit-vs-create path. questionBankRoutes.test.js 52/52, ExamGeneration.test.js 7/7. |
  
  | 67a | Frågebank kept separate from chatbot | ✅ DONE | Confirmed cleanly separated — no shared code/conflation. |
+
+  | 112 | Stegvis upplåsning (itslearning-lärsekvens): per-instance toggle, mark section done, assignment submitted unlocks next module, locked content stripped server-side | 🟡 MERGED, **awaiting client approval** (needs-decision) | Not run in cloud session: vitest/lint, Playwright, staging. Follow-ups: copy the setting from kursmall (after BUG-05), per-student progression in Rapporter. |
  
   
  ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANElEQVR4nO3OUQmAABBAsSeImMIAprwCtjSIFfwTYUuwZWaO6goAgL+412qrzq8nAAC8tj8teQNNLCV0wAAAAABJRU5ErkJggg==)

@@ -18,6 +18,8 @@ import {
     addCourseInstanceParticipant,
     removeCourseInstanceParticipant,
     getStudentLastAccess,
+    completeSection,
+    setProgressionSettings,
 } from "../controllers/learningController.js";
 
 const router = express.Router();
@@ -37,6 +39,22 @@ router.post(
     "/learning/instances/:instanceId/modules/:moduleNumber/submissions",
     isAuthenticated,
     asyncHandler(submitAssignment)
+);
+
+// Student marks one section as done (stegvis upplåsning, #112).
+// The controller checks enrollment and, when on, that the section is unlocked.
+router.post(
+    "/learning/instances/:instanceId/modules/:moduleNumber/sections/:sectionIndex/complete",
+    isAuthenticated,
+    asyncHandler(completeSection)
+);
+
+// Turn stegvis upplåsning on/off. Controller allows staff or the instance's own teacher.
+router.put(
+    "/learning/instances/:instanceId/progression",
+    isAuthenticated,
+    hasRole(STAFF_ROLES),
+    asyncHandler(setProgressionSettings)
 );
 
 // All submissions for one instance (teacher/staff)

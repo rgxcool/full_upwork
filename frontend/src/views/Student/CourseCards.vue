@@ -194,20 +194,39 @@
                   <span v-if="module.isCaseStudy" class="chip-tag">Case</span>
                 </span>
               </div>
+              <p v-if="card.sequentialUnlock" class="unlock-hint">
+                Kursen öppnas steg för steg. Markera varje avsnitt som klart för att låsa upp nästa.
+              </p>
               <details
-                 v-for="module in card.modules"
-                 :key="'d' + module.moduleNumber"
-                 class="module-details"
-                 :class="{ 'module-details-current': isCurrentModule(card, module) }"
-               >
+                v-for="module in card.modules"
+                :key="'d' + module.moduleNumber"
+                class="module-details"
+                :class="{
+                  'module-details-current': isCurrentModule(card, module),
+                  'module-locked': module.locked,
+                  'module-done': module.completed,
+                }"
+              >
                 <summary>
+                  <span v-if="module.locked" class="lock-icon" aria-label="Låst">🔒</span>
+                  <span v-else-if="module.completed" class="done-icon" aria-label="Klar">✓</span>
                   {{ module.title }}
                   <span v-if="isCurrentModule(card, module)" class="current-module-marker">Aktuell</span>
                 </summary>
+                <p v-if="module.locked" class="locked-note">Slutför föregående modul för att öppna den här.</p>
                 <p v-if="module.instructions" class="module-instructions">{{ module.instructions }}</p>
                 <ul class="section-list">
-                  <li v-for="(section, i) in module.sections || []" :key="i" class="section-item">
-                    <span class="section-title">{{ section.title || 'Sektion ' + (i + 1) }}</span>
+                  <li
+                    v-for="(section, i) in module.sections || []"
+                    :key="i"
+                    class="section-item"
+                    :class="{ 'section-locked': section.locked, 'section-done': section.completed }"
+                  >
+                    <span class="section-title">
+                      <span v-if="section.locked" class="lock-icon" aria-label="Låst">🔒</span>
+                      <span v-else-if="section.completed" class="done-icon" aria-label="Klar">✓</span>
+                      {{ section.title || 'Sektion ' + (i + 1) }}
+                    </span>
                     <span v-if="section.description" class="section-description">{{ section.description }}</span>
                     <span v-if="section.instructions" class="section-instructions">{{ section.instructions }}</span>
                     <div
@@ -235,6 +254,20 @@
                         />
                         <figcaption v-if="block.caption">{{ block.caption }}</figcaption>
                       </figure>
+                    </div>
+                    <div v-if="card.sequentialUnlock && !section.locked && !module.isHiddenFromStudent" class="section-progress">
+                      <span v-if="section.completed" class="section-done-label">Avsnittet är klart</span>
+                      <button
+                        v-else
+                        class="complete-btn"
+                        :disabled="!!completing[sectionKeyFor(card, module, i)]"
+                        @click="markSectionComplete(card, module, i)"
+                      >
+                        {{ completing[sectionKeyFor(card, module, i)] ? 'Sparar...' : 'Markera som klar' }}
+                      </button>
+                      <span v-if="completeError[sectionKeyFor(card, module, i)]" class="submit-error">
+                        {{ completeError[sectionKeyFor(card, module, i)] }}
+                      </span>
                     </div>
                   </li>
                 </ul>
@@ -312,7 +345,10 @@
                     </p>
                   </div>
 
-                  <div class="submission-form">
+                  <p v-if="module.assignmentLocked" class="locked-note">
+                    Slutför avsnitten ovan för att kunna lämna in uppgiften.
+                  </p>
+                  <div v-else class="submission-form">
                     <textarea
                       v-model="drafts[keyFor(card, module)].text"
                       class="submission-textarea"
@@ -386,6 +422,47 @@ const activityError = reactive({})
 const learningLoading = reactive({})
 const learningError = reactive({})
 const downloading = ref('')
+const completing = reactive({})
+const completeError = reactive({})
+
+const sectionKeyFor = (card, module, index) => `${card.courseInstanceId}-${module.moduleNumber}-${index}`
+
+// Stegvis upplåsning (#112): reload one card so newly unlocked steps (and their
+// content, which the server withholds while locked) appear.
+const refreshCard = async (card) => {
+  try {
+    const { data } = await client.get('/course-cards/mine')
+    const fresh = (data.cards || []).find((c) => String(c.courseInstanceId) === String(card.courseInstanceId))
+    if (!fresh) return
+    card.modules = fresh.modules
+    card.completedSections = fresh.completedSections
+    card.progress = fresh.progress
+    card.currentModule = fresh.currentModule
+    for (const module of card.modules || []) {
+      if (module.assignment && (module.assignment.title || module.assignment.description)) {
+        initDraft(card, module)
+      }
+    }
+  } catch (e) {
+    // Keep the current view; the next page load shows the new state.
+  }
+}
+
+const markSectionComplete = async (card, module, index) => {
+  const key = sectionKeyFor(card, module, index)
+  completing[key] = true
+  completeError[key] = ''
+  try {
+    await client.post(
+      `/learning/instances/${card.courseInstanceId}/modules/${module.moduleNumber}/sections/${index}/complete`
+    )
+    await refreshCard(card)
+  } catch (e) {
+    completeError[key] = e?.response?.data?.error || 'Kunde inte markera avsnittet som klart.'
+  } finally {
+    completing[key] = false
+  }
+}
 
 const activeCards = computed(() => cards.value.filter((c) => c.isCurrentlyActive).length)
 
@@ -527,6 +604,7 @@ const submitAssignment = async (card, module) => {
     const entry = learning.value[card.courseInstanceId]
     if (entry) entry.submissions[module.moduleNumber] = data.submission
     drafts[key] = { text: '', file: null, fileName: '' }
+    if (card.sequentialUnlock) await refreshCard(card)
   } catch (e) {
     submitError[key] = e?.response?.data?.error || 'Kunde inte skicka inlämningen.'
   } finally {
@@ -753,6 +831,55 @@ onMounted(loadCourseCards)
   font-weight: 600;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
+}
+
+.unlock-hint {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.module-locked > summary,
+.section-locked .section-title {
+  color: #888;
+}
+
+.locked-note {
+  margin: 0.5rem 0;
+  font-style: italic;
+  color: #777;
+}
+
+.lock-icon,
+.done-icon {
+  margin-right: 0.35rem;
+}
+
+.done-icon,
+.section-done-label {
+  color: #2e7d32;
+}
+
+.section-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.complete-btn {
+  padding: 0.35rem 0.9rem;
+  border: 1px solid #2e7d32;
+  border-radius: 6px;
+  background: #fff;
+  color: #2e7d32;
+  cursor: pointer;
+}
+
+.complete-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .course-card-modules {

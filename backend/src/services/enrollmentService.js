@@ -3,6 +3,7 @@ import logger from "../utils/logger.js";
 import { AppError } from "../utils/errorHandler.js";
 import CourseMatchingService from "../utils/courseMatchingService.js";
 import { buildVisibleModules } from "../utils/courseContentVisibility.js";
+import { applyProgression } from "../utils/courseProgression.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
@@ -164,6 +165,8 @@ export const buildCourseCards = async (studentId, { applyStudentVisibility = fal
                 modules: buildVisibleModules(instance?.modules, instance?.content, {
                     applyStudentVisibility,
                 }),
+                sequentialUnlock: !!instance?.sequentialUnlock,
+                completedSections: enrollment.completedSections || [],
             };
         });
 
@@ -182,6 +185,19 @@ export const buildCourseCards = async (studentId, { applyStudentVisibility = fal
             const list = submissionsByEnrollment.get(key) || [];
             list.push(submission);
             submissionsByEnrollment.set(key, list);
+        }
+    }
+
+    // Stegvis upplåsning (#112): strip locked content before it leaves the server.
+    if (applyStudentVisibility) {
+        for (const card of cards) {
+            if (!card.sequentialUnlock) continue;
+            card.modules = applyProgression(card.modules, {
+                completedSections: card.completedSections,
+                submittedModuleNumbers: (
+                    submissionsByEnrollment.get(String(card.enrollmentId)) || []
+                ).map((s) => s.moduleNumber),
+            });
         }
     }
 

@@ -93,6 +93,9 @@ const courseInstanceSchema = new mongoose.Schema(
 
     // Kopierade moduler från kursmall / kurskort
     modules: { type: [courseModuleSchema], default: [] },
+    // Stegvis upplåsning (#112): när på måste eleven slutföra varje sektion
+    // (och lämna in modulens uppgift) innan nästa steg öppnas.
+    sequentialUnlock: { type: Boolean, default: false },
     courseTemplateId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "CourseTemplate",

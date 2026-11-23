@@ -34,6 +34,27 @@
         </div>
       </v-card>
 
+      <!-- Stegvis upplåsning (#112) -->
+      <v-card v-if="selectedInstanceId" class="pa-5 mb-5">
+        <v-card-title class="text-h5 pa-0">Stegvis upplåsning</v-card-title>
+        <p class="text-body-2 text-grey mt-2 mb-2">
+          När detta är på måste eleven markera varje avsnitt som klart, och lämna in modulens uppgift,
+          innan nästa steg öppnas. Lägg introduktionen i modul 1 så öppnas resten av kursen först när den är klar.
+        </p>
+        <v-alert v-if="progressionError" type="error" variant="tonal" density="compact" class="mb-2">
+          {{ progressionError }}
+        </v-alert>
+        <v-switch
+          v-model="sequentialUnlock"
+          :loading="progressionLoading"
+          :disabled="progressionLoading"
+          color="primary"
+          hide-details
+          :label="sequentialUnlock ? 'På – innehållet låses upp steg för steg' : 'Av – allt innehåll är öppet'"
+          @update:model-value="saveProgression"
+        />
+      </v-card>
+
       <!-- Submissions -->
       <v-card v-if="selectedInstanceId" class="pa-5 mb-5">
         <div class="d-flex align-center justify-space-between">
@@ -247,6 +268,40 @@ const newParticipantId = ref('')
 const addingParticipant = ref(false)
 const removingId = ref(null)
 
+const sequentialUnlock = ref(false)
+const progressionLoading = ref(false)
+const progressionError = ref(null)
+
+const loadProgression = async () => {
+  if (!selectedInstanceId.value) return
+  progressionLoading.value = true
+  progressionError.value = null
+  try {
+    const { data } = await client.get(`/learning/instances/${selectedInstanceId.value}/modules`)
+    sequentialUnlock.value = !!data.instance?.sequentialUnlock
+  } catch (e) {
+    progressionError.value = e?.response?.data?.error || 'Kunde inte hämta inställningen.'
+  } finally {
+    progressionLoading.value = false
+  }
+}
+
+const saveProgression = async (value) => {
+  progressionLoading.value = true
+  progressionError.value = null
+  try {
+    await client.put(`/learning/instances/${selectedInstanceId.value}/progression`, {
+      sequentialUnlock: !!value,
+    })
+    toast.success(value ? 'Stegvis upplåsning är på' : 'Stegvis upplåsning är av')
+  } catch (e) {
+    sequentialUnlock.value = !value
+    progressionError.value = e?.response?.data?.error || 'Kunde inte spara inställningen.'
+  } finally {
+    progressionLoading.value = false
+  }
+}
+
 const report = ref(null)
 const reportLoading = ref(false)
 const reportError = ref(null)
@@ -370,6 +425,7 @@ const loadAll = () => {
   loadParticipants()
   loadReport()
   loadActivity()
+  loadProgression()
 }
 
 const addParticipant = async () => {
