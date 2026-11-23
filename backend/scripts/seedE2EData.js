@@ -1,3 +1,6 @@
+// Seeds the fixed E2E/demo accounts and data used by Playwright. WIPES ALL users (admins too),
+// students, courses, kurskort, enrollments, grades, notifications and GridFS files first. Run via scripts/resetDemo.sh, or by hand before Playwright.
+// Usage (from backend/): node scripts/seedE2EData.js
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -7,7 +10,6 @@ dotenv.config({ path: path.resolve(import.meta.dirname, "../.env.development") }
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import User from "../src/models/User.js";
-import Teacher from "../src/models/Teacher.js";
 import Student from "../src/models/Student.js";
 import Course from "../src/models/Course.js";
 import CourseTemplate from "../src/models/CourseTemplate.js";
@@ -38,7 +40,7 @@ const upsertUser = async ({ email, username, password, role, mustChangePassword 
     return user;
 };
 
-const upsertStudent = async ({ name, email, personalNumber, teacherId, aplStatus, municipality = "Stockholm", dropout = false, specialNeeds = "" }) => {
+const upsertStudent = async ({ name, email, personalNumber, teacherId, aplStatus, municipality = "Sollentuna", dropout = false, specialNeeds = "" }) => {
     await Student.deleteMany({ personalNumber });
     const student = new Student({
         name,
@@ -61,7 +63,7 @@ async function main() {
 
     // ── 1. Clean up everything ─────────────────────────────
     await User.deleteMany({});
-    await Teacher.deleteMany({});
+    await mongoose.connection.db.collection("teachers").deleteMany({}); // legacy, pre-#102
     await Student.deleteMany({});
     await Course.deleteMany({});
     await CourseTemplate.deleteMany({});
@@ -92,14 +94,10 @@ async function main() {
     const studentUserDoris = await upsertUser({ email: "student4@mindful.se", username: "Doris Dahl", password: "Student123!", role: "student" });
     const studentUserErik = await upsertUser({ email: "student5@mindful.se", username: "Erik Ek", password: "Student123!", role: "student" });
 
-    // ── 3. Teacher Profile ─────────────────────────────────
-    const teacher = new Teacher({
-        userId: teacherUser._id,
-        subject: "Matematik",
-        colorCode: "#1F77B4",
-        name: "Eva Nahi"
-    });
-    await teacher.save();
+    // ── 3. Teacher Profile (on the User since #102; teacherId = User id) ──
+    teacherUser.teacherProfile = { subject: "Matematik", colorCode: "#1F77B4" };
+    await teacherUser.save();
+    const teacher = teacherUser;
 
     // ── 4. Students ────────────────────────────────────────
     const anna = await upsertStudent({ name: "Anna Andersson", email: "student@mindful.se", personalNumber: "19900101-1234", teacherId: teacher._id, aplStatus: "YELLOW", specialNeeds: "Extra skrivtid" });

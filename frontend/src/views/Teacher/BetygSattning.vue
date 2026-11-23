@@ -832,6 +832,7 @@
 
 <script setup>
   import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+  import { teacherDisplayName } from '@/utils/teacherName.js'
   import * as vueRouter from 'vue-router'
   import { useStore } from 'vuex'
   import client from '@/api/client.js'
@@ -927,13 +928,11 @@
     if (row?.course?.teacherName && row.course.teacherName !== 'Ej tilldelad') {
       return row.course.teacherName
     }
-    if (row?.course?.responsibleTeacher?.userId?.username) {
-      return row.course.responsibleTeacher.userId.username
-    }
-    if (row?.student?.teacherId?.userId?.username) {
-      return row.student.teacherId.userId.username
-    }
-    return 'Lärare'
+    return (
+      teacherDisplayName(row?.course?.responsibleTeacher) ||
+      teacherDisplayName(row?.student?.teacherId) ||
+      'Lärare'
+    )
   }
 
   // Available Terms
@@ -1398,7 +1397,7 @@
             courseName: ci.courseName || mainCourse?.courseName || 'Okänd kurs',
             courseInstanceId: ci._id?.toString() || ci._id,
             responsibleTeacher: ci.responsibleTeacher,
-            teacherName: ci.responsibleTeacher?.userId?.username || 'Ej tilldelad',
+            teacherName: teacherDisplayName(ci.responsibleTeacher, 'Ej tilldelad'),
             grade: item.grade || '',
             reason: item.reason || '',
             comments: item.comments || '',
@@ -1508,7 +1507,7 @@
         gradeDate: item.gradeDate,
         gradeBy: item.gradeBy,
         status: item.status || null,
-        teacherName: ci?.responsibleTeacher?.userId?.username || 'Ej tilldelad',
+        teacherName: teacherDisplayName(ci?.responsibleTeacher, 'Ej tilldelad'),
         endDate: item.endDate,
       }
 

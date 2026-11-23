@@ -13,7 +13,6 @@ import mongoose from "mongoose";
 import express from "express";
 import User from "../../src/models/User.js";
 import Student from "../../src/models/Student.js";
-import Teacher from "../../src/models/Teacher.js";
 import Course from "../../src/models/Course.js";
 import CoursePackage from "../../src/models/CoursePackage.js";
 import Program from "../../src/models/Program.js";
@@ -24,6 +23,7 @@ import {
     connectTestDatabase,
     disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const mockAuthenticateUser = vi.hoisted(() => (req, _res, next) => {
     const roleHeader = req.headers["x-test-role"];
@@ -72,7 +72,6 @@ describe("Search Routes", () => {
         await Promise.all([
             User.deleteMany({}),
             Student.deleteMany({}),
-            Teacher.deleteMany({}),
             Course.deleteMany({}),
             CoursePackage.deleteMany({}),
             Program.deleteMany({}),
@@ -164,10 +163,7 @@ describe("Search Routes", () => {
             });
 
             const teacherUserId = new mongoose.Types.ObjectId();
-            const teacher = await Teacher.create({
-                userId: teacherUserId,
-                subject: "Math",
-            });
+            const teacher = await giveTeacherProfile(teacherUserId, { subject: "Math" });
 
             const teacherStudentId = new mongoose.Types.ObjectId();
             const otherStudentId = new mongoose.Types.ObjectId();
@@ -680,10 +676,7 @@ describe("Search Routes", () => {
 
         it("filters date searches for teacher-owned students", async () => {
             const teacherUserId = new mongoose.Types.ObjectId();
-            const teacher = await Teacher.create({
-                userId: teacherUserId,
-                subject: "Science",
-            });
+            const teacher = await giveTeacherProfile(teacherUserId, { subject: "Science" });
 
             const matchStudent = await Student.create({
                 name: "Teacher Match",
@@ -798,10 +791,7 @@ describe("Search Routes", () => {
                 password: "password",
                 roles: ["teacher"],
             });
-            const teacher = await Teacher.create({
-                userId: user._id,
-                subject: "Test Subject",
-            });
+            const teacher = await giveTeacherProfile(user._id, { subject: "Test Subject" });
 
             const course = await Course.create({
                 courseName: "Teacher Course",
@@ -903,10 +893,7 @@ describe("Search Routes", () => {
                 password: "password",
                 roles: ["teacher"],
             });
-            const teacherProfile = await Teacher.create({
-                userId: teacherUser._id,
-                subject: "math",
-            });
+            const teacherProfile = await giveTeacherProfile(teacherUser._id, { subject: "math" });
             await StudentEnrollment.create({
                 studentId: student._id,
                 courseInstanceId: new mongoose.Types.ObjectId(),
@@ -961,10 +948,7 @@ describe("Search Routes", () => {
                 password: "password",
                 roles: ["teacher"],
             });
-            const teacherProfile = await Teacher.create({
-                userId: teacherUser._id,
-                subject: "science",
-            });
+            const teacherProfile = await giveTeacherProfile(teacherUser._id, { subject: "science" });
             const courseInstance = await (
                 await import("../../src/models/CourseInstance.js")
             ).default.create({

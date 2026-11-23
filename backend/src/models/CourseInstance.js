@@ -82,11 +82,11 @@ const courseInstanceSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     responsibleTeacher: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Teacher",
+      ref: "User",
     },
     assistantTeacher: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Teacher",
+      ref: "User",
     },
     notes: { type: String },
     slutprovDate: { type: Date },

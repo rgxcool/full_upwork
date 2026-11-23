@@ -81,29 +81,45 @@ if [ ! -d "$ROOT/frontend/node_modules" ]; then
 fi
 log "Dependencies ready"
 
-# ── 3. Load education data ───────────────────────────
-log "Loading education data (dropEducation + updateEducation)..."
+# ── 3. First-run data (never deletes anything) ──────
+# Only fills what is missing: the course catalog and FAQ when they are empty, and
+# one admin / systemadmin / SYV / specped account for each role that has none.
+# Teachers and students are added at runtime (in the app, or with
+# backend/scripts/createTeacher.js and backend/scripts/importStudents.js).
+# To reset or seed the Playwright accounts, run the scripts by hand
+# (see backend/scripts/README.md).
+log "Checking base data (nothing is deleted)..."
 (
   set -a
   # shellcheck disable=SC1091
   source "$ENV_FILE"
   set +a
   cd "$ROOT/backend"
-  node scripts/dropEducation.js
-  node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
-  node scripts/seedE2EData.js
-  node scripts/seedMindfulFaq.js
-  if [ "${DEMO:-0}" = "1" ]; then
-    # Demo mode: restore the full GY25 catalog (seedE2EData wipes courses)
-    # and add current-dated kursinstanser with filled kurskort.
+  # Exit code: 0 = empty, 1 = has data, anything else = the check itself failed.
+  is_empty() {
+    local rc=0
+    node scripts/ensureBaseData.js --is-empty "$1" || rc=$?
+    if [ "$rc" -gt 1 ]; then err "Could not check $1 (exit $rc)"; exit 1; fi
+    return "$rc"
+  }
+  if is_empty catalog; then
+    log "Course catalog is empty, importing GY25..."
     node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
-    node scripts/seedDemoData.js
+  else
+    log "Course catalog already loaded, left as is"
   fi
+  if is_empty faq; then
+    log "FAQ is empty, seeding..."
+    node scripts/seedMindfulFaq.js
+  else
+    log "FAQ already loaded, left as is"
+  fi
+  node scripts/ensureBaseData.js
 ) || {
-  err "Failed to load education data. Check the script output above."
+  err "Failed to check base data. Check the script output above."
   exit 1
 }
-log "Education data loaded"
+log "Base data ready"
 
 # ── 4. Kill any existing processes on our ports ──────
 for port in $BACKEND_PORT $FRONTEND_PORT; do
@@ -161,14 +177,18 @@ echo -e "  Frontend:  ${GREEN}http://localhost:$FRONTEND_PORT${NC}"
 echo -e "  Backend:   ${GREEN}http://localhost:$BACKEND_PORT${NC}"
 echo -e "  MongoDB:   ${GREEN}localhost:$MONGO_PORT${NC}"
 echo ""
-echo -e "  ${YELLOW}Test Accounts:${NC}"
-echo -e "  ┌──────────────┬────────────────────┬──────────────┐"
-echo -e "  │ Role         │ Email              │ Password     │"
-echo -e "  ├──────────────┼────────────────────┼──────────────┤"
-echo -e "  │ Admin        │ admin@mindful.se   │ Admin123!    │"
-echo -e "  │ Teacher      │ teacher@mindful.se │ Teacher123!  │"
-echo -e "  │ Student      │ student@mindful.se │ Student123!  │"
-echo -e "  └──────────────┴────────────────────┴──────────────┘"
+echo -e "  ${YELLOW}Base accounts${NC} (created only if that role had no account):"
+echo -e "  ┌──────────────┬────────────────────────┬─────────────────┐"
+echo -e "  │ Role         │ Email                  │ Password        │"
+echo -e "  ├──────────────┼────────────────────────┼─────────────────┤"
+echo -e "  │ Systemadmin  │ systemadmin@example.se │ Systemadmin123! │"
+echo -e "  │ Admin        │ admin@example.se       │ Admin123!       │"
+echo -e "  │ SYV          │ syv@example.se         │ Syv123!         │"
+echo -e "  │ Specped      │ specped@example.se     │ Specped123!     │"
+echo -e "  └──────────────┴────────────────────────┴─────────────────┘"
+echo -e "  Teacher login:  cd backend && node scripts/createTeacher.js"
+echo -e "  Students:       import in the app, or node scripts/importStudents.js <file.xlsx>"
+echo -e "  Playwright:     node scripts/seedE2EData.js first (it WIPES users and course data)"
 echo ""
 echo -e "  Logs:      $ROOT/backend.log"
 echo -e "             $ROOT/frontend.log"

@@ -82,12 +82,8 @@ export async function canAccessStudentDocuments(user, studentId) {
     }
 
     if (roles.has("teacher")) {
-        const Teacher = getModel("Teacher");
-        const teacher = await selectIfSupported(
-            Teacher.findOne({ userId: user.userId }),
-            "_id"
-        );
-        return Boolean(teacher && sameId(student.teacherId, teacher));
+        // Student.teacherId is the teacher's User id (#102).
+        return Boolean(user.userId && sameId(student.teacherId, user.userId));
     }
 
     if (roles.has("student")) {
