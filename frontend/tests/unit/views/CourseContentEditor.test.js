@@ -109,10 +109,59 @@ describe('CourseContentEditor', () => {
     expect(wrapper.vm.modules[0].avsnitt).toHaveLength(1)
     expect(wrapper.vm.modules[0].sections[0].title).toBe('S1')
     expect(wrapper.vm.modules[1]).toMatchObject({
-      contentTitle: null,
+      title: 'Modul 2',
+      contentTitle: 'Modul 2',
       instructions: '',
       isHiddenFromStudent: false,
     })
+  })
+
+  it('edits the overlay title only, leaving the structural module title intact', async () => {
+    const wrapper = await loadEditor()
+
+    wrapper.vm.modules[0].contentTitle = 'Ny studenttitels'
+
+    await wrapper.vm.saveContent()
+
+    expect(client.put.mock.calls[0][1].content['1'].title).toBe('Ny studenttitels')
+    expect(wrapper.vm.modules[0].title).toBe('Modul 1')
+    wrapper.unmount()
+  })
+
+  it('seeds the overlay title from the structural title when it is empty', async () => {
+    client.get.mockImplementation((url) => {
+      if (url === '/course-instances') {
+        return Promise.resolve({ data: { success: true, instances: [instance] } })
+      }
+      if (url === '/course-instances/i1/content') {
+        return Promise.resolve({
+          data: { success: true, content: { '1': { title: '' } }, canEdit: true },
+        })
+      }
+      return Promise.resolve({ data: {} })
+    })
+    const wrapper = await loadEditor()
+
+    expect(wrapper.vm.modules[0].contentTitle).toBe('Modul 1')
+    expect(wrapper.vm.effectiveTitle(wrapper.vm.modules[0])).toBe('Modul 1')
+    wrapper.unmount()
+  })
+
+  it('shows the effective overlay title in the panel header and field', async () => {
+    const wrapper = mount(CourseContentEditor)
+    await flushPromises()
+    wrapper.vm.selectedInstanceId = 'i1'
+    await wrapper.vm.loadContent()
+    wrapper.vm.openPanels = [0]
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Modul 1 — Startmodul')
+    const titleField = wrapper
+      .findAllComponents({ name: 'VTextField' })
+      .find((field) => field.props('label') === 'Modultitel')
+    expect(titleField).toBeDefined()
+    expect(titleField.props('modelValue')).toBe('Startmodul')
+    wrapper.unmount()
   })
 
   it('keeps Avsnitt visible to staff even when the module is hidden', async () => {
@@ -164,7 +213,7 @@ describe('CourseContentEditor', () => {
     const wrapper = await loadEditor()
 
     expect(wrapper.vm.modules[0].isHiddenFromStudent).toBe(false)
-    expect(wrapper.vm.modules[0].contentTitle).toBe(null)
+    expect(wrapper.vm.modules[0].contentTitle).toBe('Modul 1')
   })
 
   it('renders the Avsnitt chips, titles, links and durations in an open panel', async () => {
