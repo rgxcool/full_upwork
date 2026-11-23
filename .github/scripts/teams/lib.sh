@@ -10,7 +10,7 @@
 # read and written through the contents API, so no checkout is needed. Commits made with the
 # workflow's GITHUB_TOKEN do not trigger other workflows.
 
-REPO=${REPO:-Cyrus-Malekani/mindful-new}
+REPO=${REPO:-Cyrus-Malekani/Mindfullearning}
 PROJECT_OWNER=${PROJECT_OWNER:-Cyrus-Malekani}
 PROJECT_NUMBER=${PROJECT_NUMBER:-1}
 # Owner as passed to `gh project`. "@me" (the token's owner) skips gh's user/organization lookup,

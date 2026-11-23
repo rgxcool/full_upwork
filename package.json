@@ -22,19 +22,19 @@
     "checkJs": true,
     "moduleResolution": "node"
   },
-  "name": "mindful-new",
+  "name": "mindfullearning",
   "version": "1.0.0",
   "description": "",
   "main": "generate-docs.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Cyrus-Malekani/mindful-new.git"
+    "url": "git+https://github.com/Cyrus-Malekani/Mindfullearning.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/Cyrus-Malekani/mindful-new/issues"
+    "url": "https://github.com/Cyrus-Malekani/Mindfullearning/issues"
   },
-  "homepage": "https://github.com/Cyrus-Malekani/mindful-new"
+  "homepage": "https://github.com/Cyrus-Malekani/Mindfullearning"
 }

@@ -50,7 +50,7 @@ A comprehensive Node.js/Express backend for the Mindful Learning platform with e
 
     ```bash
     git clone <repository-url>
-    cd mindful-new/backend
+    cd Mindfullearning/backend
     ```
 
 2. **Install dependencies**

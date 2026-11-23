@@ -2,7 +2,7 @@
 set -euo pipefail
 
 OWNER="Cyrus-Malekani"
-REPO="mindful-new"
+REPO="Mindfullearning"
 SLUG="$OWNER/$REPO"
 PROJECT_NUMBER=1
 

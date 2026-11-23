@@ -7,7 +7,7 @@
 #   FORCE=1          deploy even if CI for the target commit is not green (logged loudly)
 #   PM2_INSTANCES=N  number of pm2 cluster workers (default 2)
 #   DEPLOY_GH_TOKEN_FILE  file holding a read-only GitHub token (default ~/.config/mindful-deploy/gh_token)
-#   DEPLOY_REPO      owner/repo used for the CI check (default Cyrus-Malekani/mindful-new)
+#   DEPLOY_REPO      owner/repo used for the CI check (default Cyrus-Malekani/Mindfullearning)
 #   PORT             backend port for health checks (default 5010)
 #
 # Flow: lock → preflight → PREV_SHA → CI gate → fetch → (re-run with the target's deploy.sh if it
@@ -28,7 +28,7 @@ REPO_ROOT=$(pwd)
 DRY_RUN=${DRY_RUN:-0}
 FORCE=${FORCE:-0}
 export PM2_INSTANCES=${PM2_INSTANCES:-2}
-DEPLOY_REPO=${DEPLOY_REPO:-Cyrus-Malekani/mindful-new}
+DEPLOY_REPO=${DEPLOY_REPO:-Cyrus-Malekani/Mindfullearning}
 DEPLOY_GH_TOKEN_FILE=${DEPLOY_GH_TOKEN_FILE:-$HOME/.config/mindful-deploy/gh_token}
 BACKEND_PORT=${PORT:-5010}
 PM2_APP=ML-Backend
@@ -222,8 +222,10 @@ else
 fi
 REMOTE_URL=$(git remote get-url "$DEPLOY_REMOTE")
 say "📡 Remote: $DEPLOY_REMOTE"
-if [[ "$DEPLOY_REMOTE" == "mindful" && "$REMOTE_URL" != *"Cyrus-Malekani/mindful-new"* ]]; then
-  warn "mindful remote URL doesn't match Cyrus-Malekani/mindful-new"
+# The repo was renamed mindful-new → Mindfullearning (2026-11-23); GitHub redirects the old URL.
+REMOTE_URL_LC=$(printf '%s' "$REMOTE_URL" | tr '[:upper:]' '[:lower:]')
+if [[ "$DEPLOY_REMOTE" == "mindful" && "$REMOTE_URL_LC" != *"cyrus-malekani/mindfullearning"* && "$REMOTE_URL_LC" != *"cyrus-malekani/mindful-new"* ]]; then
+  warn "mindful remote URL doesn't match Cyrus-Malekani/Mindfullearning"
 fi
 
 for tool in node pnpm pm2 curl flock; do

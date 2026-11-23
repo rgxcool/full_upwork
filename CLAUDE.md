@@ -1,4 +1,4 @@
-# CLAUDE.md — Mindful Learning (`mindful-new`)
+# CLAUDE.md — Mindful Learning (GitHub `Cyrus-Malekani/Mindfullearning`, formerly `mindful-new`)
 
 @AGENTS.md
 

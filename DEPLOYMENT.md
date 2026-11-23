@@ -185,7 +185,7 @@ What it does, in order:
 | `FORCE` | `0` | `1` = deploy even if CI is not green (logged) |
 | `PM2_INSTANCES` | `2` | Cluster worker count. Also read by `backend/ecosystem.config.cjs`; set it in the shell profile on the host if you want a different value. Nightly jobs run on worker 0 only, whatever the count. |
 | `DEPLOY_GH_TOKEN_FILE` | `~/.config/mindful-deploy/gh_token` | Read-only GitHub token for the CI gate (see below) |
-| `DEPLOY_REPO` | `Cyrus-Malekani/mindful-new` | Repo whose CI runs are checked |
+| `DEPLOY_REPO` | `Cyrus-Malekani/Mindfullearning` | Repo whose CI runs are checked |
 | `PORT` | `5010` | Backend port for the health checks |
 
 **CI gate credentials.** The repository is private, so the host needs read access to Actions:
