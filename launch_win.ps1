@@ -82,7 +82,10 @@ if (-not (Test-Path "$Root\frontend\node_modules")) {
     Pop-Location
 }
 Write-Log "Dependencies ready"
-Write-Log "Loading education data (dropEducation + updateEducation)..."
+# First-run data, never deletes anything (same as launch.sh): import the catalog / FAQ only
+# when empty, and create admin/systemadmin/syv/specped accounts only for roles that have none.
+# Teachers and students are added at runtime. Demo reset: backend/scripts/resetDemo.sh --yes
+Write-Log "Checking base data (nothing is deleted)..."
 try {
     Push-Location "$Root\backend"
     if (Test-Path $EnvFile) {
@@ -92,12 +95,16 @@ try {
             }
         }
     }
-    node scripts/dropEducation.js
-    node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx"
-    node scripts/seedE2EData.js
-    node scripts/seedMindfulFaq.js
+    node scripts/ensureBaseData.js --is-empty catalog
+    if ($LASTEXITCODE -gt 1) { throw "Could not check the course catalog" }
+    if ($LASTEXITCODE -eq 0) { node scripts/updateEducation.js "../data/Kurser och kurspaket GY25.xlsx" }
+    node scripts/ensureBaseData.js --is-empty faq
+    if ($LASTEXITCODE -gt 1) { throw "Could not check the FAQ" }
+    if ($LASTEXITCODE -eq 0) { node scripts/seedMindfulFaq.js }
+    node scripts/ensureBaseData.js
+    if ($LASTEXITCODE -ne 0) { throw "ensureBaseData failed" }
     Pop-Location
-    Write-Log "Education data loaded"
+    Write-Log "Base data ready"
 } catch {
     Pop-Location
     Write-Err "Failed to load education data. Check the script output above."

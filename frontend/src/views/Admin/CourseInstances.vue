@@ -255,7 +255,7 @@
                         class="form-control"
                       >
                         <option value="">Ingen mall</option>
-                        <option v-for="template in templates" :key="template._id" :value="template._id">
+                        <option v-for="template in templatesForCourse" :key="template._id" :value="template._id">
                           {{ template.templateName }}
                           <template v-if="template.courseId?.courseName">
                             ({{ template.courseId.courseName }})
@@ -979,6 +979,22 @@
         }
       }
 
+      // Only offer mallar for the chosen huvudkurs (plus course-less ones), so a new
+      // instance can't copy another course's modules by mistake.
+      const templateCourseId = (template) => template.courseId?._id || template.courseId || null
+      const templatesForCourse = computed(() => {
+        const courseId = instanceForm.value.mainCourseId
+        if (!courseId) return templates.value
+        return templates.value.filter((t) => {
+          const tc = templateCourseId(t)
+          return !tc || String(tc) === String(courseId)
+        })
+      })
+      watch(templatesForCourse, (list) => {
+        const chosen = instanceForm.value.templateId
+        if (chosen && !list.some((t) => t._id === chosen)) instanceForm.value.templateId = ''
+      })
+
       const loadTemplates = async () => {
         try {
           const response = await client.get('/course-templates')
@@ -1336,6 +1352,8 @@
         instances,
         courses,
         teachers,
+        templates,
+        templatesForCourse,
         enrollments,
         selectedInstance,
         showCreateModal,

@@ -172,18 +172,18 @@ describe("parseStudentExcel utilities", () => {
         expect(fallback.teacher).toBe("Fallback Teacher");
     });
 
-    it("parses the real Excel sample and trims its fields", async () => {
+    it("parses the (anonymised) Excel sample and trims its fields", async () => {
         const buffer = await readFile(testWorkbookPath);
         const students = await parseStudentExcel(buffer, "Fallback Teacher");
 
         expect(students).toHaveLength(34);
         const [first] = students;
         expect(first).toMatchObject({
-            name: "Al Bakour, Siba",
-            personalNumber: "20020101-5385",
+            name: "Testsson, Anna",
+            personalNumber: "19000101-0001",
             municipality: { type: "Botkyrka" },
-            phone: "073-907 20 21",
-            email: "siba.albakour@gmail.com",
+            phone: "070-000 00 01",
+            email: "elev01@example.se",
             teacher: "Allan",
             dropout: false,
         });

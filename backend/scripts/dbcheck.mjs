@@ -1,3 +1,5 @@
+// Prints document counts for the main collections in the local dev database (read-only).
+// Usage (from backend/): node scripts/dbcheck.mjs
 import dotenv from "dotenv";
 import path from "path";
 dotenv.config({ path: path.resolve(import.meta.dirname, "../.env.development") });

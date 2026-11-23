@@ -569,6 +569,25 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
     // So we'll fetch all matching students and filter after
     const studentsWithPastEducation = await Student.find(studentEducationQuery).lean();
 
+    // Placement writes BOTH a StudentEnrollment and a Student.education entry for the
+    // same course. Where an enrollment exists (in any status) it is the source of
+    // truth, so its legacy education twin must not become a second grading row —
+    // and a dropped enrollment must not resurface through its education entry.
+    const enrolledPairs = new Set();
+    if (studentsWithPastEducation.length > 0) {
+      const covering = await StudentEnrollment.find({
+        studentId: { $in: studentsWithPastEducation.map((s) => s._id) },
+      })
+        .select("studentId mainCourseId coursePackageId")
+        .lean();
+      for (const e of covering) {
+        if (e.mainCourseId) enrolledPairs.add(`${e.studentId}-${e.mainCourseId}`);
+        if (e.coursePackageId) enrolledPairs.add(`${e.studentId}-${e.coursePackageId}`);
+      }
+    }
+    const coveredByEnrollment = (studentId, edu) =>
+      Boolean(edu?.refId) && enrolledPairs.has(`${studentId}-${edu.refId}`);
+
     const studentsFromEducation = [];
     
     // Batch check for course instances and exams if teacher
@@ -633,6 +652,7 @@ router.get('/students-to-grade', authenticateUser, async (req, res) => {
         if (!edu || edu.removedAt) continue;
         if (!edu.endDate || edu.endDate >= now) continue;
         if (edu.grade && edu.grade !== "") continue;
+        if (coveredByEnrollment(s._id, edu)) continue;
 
         // For teacher filtering
         if (!isAdmin && teacherFilter) {

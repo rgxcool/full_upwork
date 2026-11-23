@@ -1,5 +1,5 @@
 /**
- * Demo data layered on top of seedE2EData.js (run via `DEMO=1 bash launch.sh`).
+ * Demo data layered on top of seedE2EData.js (run via `bash backend/scripts/resetDemo.sh --yes`).
  *
  * - Gives every kurskort without content the default 5-module structure, so
  *   every card in "Alla kurskort" can be opened.

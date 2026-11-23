@@ -15,6 +15,7 @@
  * reports what would be deleted.
  */
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 
 /** Education, content and configuration that a flush must not touch. */
@@ -69,6 +70,23 @@ export function assertLocalMongoUri(uri, { allowRemote = false } = {}) {
     if (remote.length) {
         throw new Error(`Refusing to run against non-local host(s): ${remote.join(", ")}. Set ALLOW_REMOTE_DB=1 to override.`);
     }
+}
+
+/**
+ * Dev-only scripts (fixed test passwords) must never run on the production host,
+ * where MongoDB is ALSO on localhost, so assertLocalMongoUri alone cannot tell.
+ * Requires NODE_ENV != production and an existing backend/.env.development.
+ * @returns {string} path of the env file to load
+ */
+export function assertDevEnvironment(backendDir) {
+    if (process.env.NODE_ENV === "production") {
+        throw new Error("Refusing to run a dev script with NODE_ENV=production.");
+    }
+    const envFile = path.join(backendDir, process.env.NODE_ENV === "test" ? ".env.test" : ".env.development");
+    if (!fsSync.existsSync(envFile)) {
+        throw new Error(`${path.basename(envFile)} not found. Dev scripts only run on a development machine.`);
+    }
+    return envFile;
 }
 
 const userCollections = async (db) =>
