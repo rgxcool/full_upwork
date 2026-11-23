@@ -174,6 +174,20 @@ const studentEnrollmentSchema = new mongoose.Schema(
             default: new Map(),
         },
 
+        // Sections the student has marked as done (stegvis upplåsning, #112).
+        // sectionIndex is the position inside the module's `sections` array.
+        completedSections: {
+            type: [
+                {
+                    moduleNumber: { type: Number, required: true },
+                    sectionIndex: { type: Number, required: true, min: 0 },
+                    completedAt: { type: Date, default: Date.now },
+                    _id: false,
+                },
+            ],
+            default: [],
+        },
+
         // Dropout information
         dropoutReason: String,
         dropoutDate: { type: Date, default: null },

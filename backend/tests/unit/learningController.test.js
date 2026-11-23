@@ -159,7 +159,7 @@ describe("learningController", () => {
             expect(res.json).toHaveBeenCalledWith(
                 expect.objectContaining({
                     success: true,
-                    instance: { _id: INSTANCE_ID, courseName: "Svenska 1", courseCode: "SVASVE01" },
+                    instance: { _id: INSTANCE_ID, courseName: "Svenska 1", courseCode: "SVASVE01", sequentialUnlock: false },
                     modules: [moduleWithAssignment, moduleWithoutAssignment],
                     enrollmentId: ENROLLMENT_ID,
                 })

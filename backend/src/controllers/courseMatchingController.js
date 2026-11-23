@@ -22,6 +22,9 @@ import { recordStudentLearningActivity } from "../utils/learningActivity.js";
 import { recordResourceVisit } from "../services/resourceVisitService.js";
 import { recordAudit } from "../utils/auditLog.js";
 import { getCourseInstanceAccess } from "../utils/courseInstanceAccess.js";
+import { buildVisibleModules } from "../utils/courseContentVisibility.js";
+import { lockedModuleNumbers, LOCKED_SECTION_TEXT } from "../utils/courseProgression.js";
+import AssignmentSubmission from "../models/AssignmentSubmission.js";
 
 /**
  * Course Matching Controller
@@ -2667,6 +2670,29 @@ export const getCourseInstanceContent = async (req, res) => {
     }
 
     const canEdit = access.canEdit;
+
+    // Stegvis upplåsning (#112): students do not get content of modules
+    // they have not reached yet.
+    let lockedModules = new Set();
+    if (access.relation === "student" && instance.sequentialUnlock) {
+      const student = await Student.findOne({ email: req.user.email }).select("_id").lean();
+      const enrollment = student
+        ? await StudentEnrollment.findOne({ studentId: student._id, courseInstanceId: instance._id })
+            .select("completedSections")
+            .lean()
+        : null;
+      const submissions = enrollment
+        ? await AssignmentSubmission.find({ enrollmentId: enrollment._id }, { moduleNumber: 1 }).lean()
+        : [];
+      lockedModules = lockedModuleNumbers(
+        buildVisibleModules(instance.modules, instance.content, { applyStudentVisibility: true }),
+        {
+          completedSections: enrollment?.completedSections || [],
+          submittedModuleNumbers: submissions.map((sub) => sub.moduleNumber),
+        },
+      );
+    }
+
     const rawContent = instance.content;
     const entries =
       rawContent instanceof Map
@@ -2685,6 +2711,13 @@ export const getCourseInstanceContent = async (req, res) => {
           title: "Innehåll dolt",
           instructions: "Detta innehåll döljs för studenter.",
           isHiddenFromStudent: true,
+        };
+      } else if (lockedModules.has(Number(key))) {
+        visibleContent[key] = {
+          title: moduleContent?.title || `Modul ${key}`,
+          instructions: LOCKED_SECTION_TEXT,
+          isHiddenFromStudent: isHidden,
+          locked: true,
         };
       } else {
         visibleContent[key] = {

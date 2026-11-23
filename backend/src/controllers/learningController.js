@@ -8,6 +8,11 @@ import StudentEnrollment from "../models/StudentEnrollment.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
 import logger from "../utils/logger.js";
 import { buildVisibleModules } from "../utils/courseContentVisibility.js";
+import {
+    applyProgression,
+    isAssignmentUnlocked,
+    isSectionUnlocked,
+} from "../utils/courseProgression.js";
 import { recordStudentLearningActivity } from "../utils/learningActivity.js";
 import { recordResourceVisit } from "../services/resourceVisitService.js";
 import {
@@ -40,6 +45,18 @@ const teacherOwnsInstance = (teacher, instance) => {
     if (!teacher || !instance) return false;
     const own = (id) => id && String(id) === String(teacher._id);
     return own(instance.responsibleTeacher) || own(instance.assistantTeacher);
+};
+
+// Progress used for stegvis upplåsning: marked sections + submitted modules.
+const getStudentProgress = async (enrollment) => {
+    const submissions = await AssignmentSubmission.find(
+        { enrollmentId: enrollment._id },
+        { moduleNumber: 1 }
+    ).lean();
+    return {
+        completedSections: enrollment.completedSections || [],
+        submittedModuleNumbers: submissions.map((s) => s.moduleNumber),
+    };
 };
 
 // Return the most recent of named activity timestamps as { type, at }, or null.
@@ -136,6 +153,7 @@ export const getInstanceModules = async (req, res) => {
                 _id: instance._id,
                 courseName: instance.courseName,
                 courseCode: instance.courseCode,
+                sequentialUnlock: !!instance.sequentialUnlock,
             },
             modules: isSelfViewingStudent
                 ? buildVisibleModules(instance.modules, instance.content, {
@@ -180,6 +198,14 @@ export const getInstanceModules = async (req, res) => {
             }
             payload.submissions = byModule;
             payload.enrollmentId = enrollment._id;
+            payload.completedSections = enrollment.completedSections || [];
+
+            if (instance.sequentialUnlock) {
+                payload.modules = applyProgression(payload.modules, {
+                    completedSections: enrollment.completedSections,
+                    submittedModuleNumbers: Object.keys(byModule),
+                });
+            }
         } else if (isTeacher && !isStaff) {
             const teacher = await getTeacherForUser(user);
             if (!teacher || !teacherOwnsInstance(teacher, instance)) {
@@ -239,6 +265,16 @@ export const submitAssignment = async (req, res) => {
         }
         if (!module.assignment?.title && !module.assignment?.description) {
             return res.status(400).json({ error: "Den här modulen har ingen inlämningsuppgift" });
+        }
+
+        if (instance.sequentialUnlock) {
+            const progress = await getStudentProgress(enrollment);
+            const visibleModules = buildVisibleModules(instance.modules, instance.content, {
+                applyStudentVisibility: true,
+            });
+            if (!isAssignmentUnlocked(visibleModules, moduleNumberInt, progress)) {
+                return res.status(403).json({ error: "Slutför föregående steg innan du lämnar in uppgiften" });
+            }
         }
 
         const text = String(submittedText || "").trim();
@@ -1092,3 +1128,125 @@ export const addSubmissionComment = async (req, res) => {
 };
 
 
+
+/**
+ * POST /learning/instances/:instanceId/modules/:moduleNumber/sections/:sectionIndex/complete
+ * The student marks one section as done (stegvis upplåsning, #112).
+ * Idempotent. With sequentialUnlock on, a locked section cannot be marked.
+ */
+export const completeSection = async (req, res) => {
+    try {
+        const { instanceId, moduleNumber, sectionIndex } = req.params;
+        const moduleNumberInt = Number(moduleNumber);
+        const sectionIndexInt = Number(sectionIndex);
+        if (
+            !mongoose.isValidObjectId(instanceId) ||
+            !Number.isInteger(moduleNumberInt) ||
+            !Number.isInteger(sectionIndexInt) ||
+            sectionIndexInt < 0
+        ) {
+            return res.status(400).json({ error: "Ogiltig kurs, modul eller sektion" });
+        }
+
+        const user = req.user;
+        if (!isStudentUser(user) || isStaffUser(user)) {
+            return res.status(403).json({ error: "Endast elever kan markera avsnitt som klara" });
+        }
+        const student = await getStudentForUser(user);
+        if (!student) {
+            return res.status(403).json({ error: "Ingen elevprofil hittades för kontot" });
+        }
+        const enrollment = await StudentEnrollment.findOne({
+            studentId: student._id,
+            courseInstanceId: instanceId,
+            status: { $in: SUBMITTABLE_STATUSES },
+        });
+        if (!enrollment) {
+            return res.status(403).json({ error: "Du är inte inskriven på den här kursen" });
+        }
+
+        const instance = await CourseInstance.findById(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Course instance not found" });
+        }
+        const visibleModules = buildVisibleModules(instance.modules, instance.content, {
+            applyStudentVisibility: true,
+        });
+        const module = visibleModules.find((m) => Number(m.moduleNumber) === moduleNumberInt);
+        if (!module || module.isHiddenFromStudent || !(module.sections || [])[sectionIndexInt]) {
+            return res.status(404).json({ error: "Avsnittet finns inte på kursen" });
+        }
+
+        if (instance.sequentialUnlock) {
+            const progress = await getStudentProgress(enrollment);
+            if (!isSectionUnlocked(visibleModules, moduleNumberInt, sectionIndexInt, progress)) {
+                return res.status(403).json({ error: "Slutför föregående steg först" });
+            }
+        }
+
+        // Atomic and idempotent: only push when this section is not already marked.
+        await StudentEnrollment.updateOne(
+            {
+                _id: enrollment._id,
+                completedSections: {
+                    $not: { $elemMatch: { moduleNumber: moduleNumberInt, sectionIndex: sectionIndexInt } },
+                },
+            },
+            {
+                $push: {
+                    completedSections: {
+                        moduleNumber: moduleNumberInt,
+                        sectionIndex: sectionIndexInt,
+                        completedAt: new Date(),
+                    },
+                },
+            }
+        );
+
+        await recordStudentLearningActivity(student._id).catch(() => {});
+
+        const updated = await StudentEnrollment.findById(enrollment._id, { completedSections: 1 }).lean();
+        res.json({ success: true, completedSections: updated?.completedSections || [] });
+    } catch (error) {
+        logger.error({ err: error }, "Error marking section as complete");
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+/**
+ * PUT /learning/instances/:instanceId/progression
+ * Turn stegvis upplåsning on or off for one course instance.
+ * Body: { sequentialUnlock: boolean }. Staff, or the instance's own teacher.
+ */
+export const setProgressionSettings = async (req, res) => {
+    try {
+        const { instanceId } = req.params;
+        if (!mongoose.isValidObjectId(instanceId)) {
+            return res.status(400).json({ error: "Invalid course instance id" });
+        }
+        const { sequentialUnlock } = req.body || {};
+        if (typeof sequentialUnlock !== "boolean") {
+            return res.status(400).json({ error: "sequentialUnlock måste vara true eller false" });
+        }
+
+        const instance = await CourseInstance.findById(instanceId);
+        if (!instance) {
+            return res.status(404).json({ error: "Course instance not found" });
+        }
+
+        const user = req.user;
+        if (!isStaffUser(user)) {
+            const teacher = isTeacherUser(user) ? await getTeacherForUser(user) : null;
+            if (!teacher || !teacherOwnsInstance(teacher, instance)) {
+                return res.status(403).json({ error: "Du ansvarar inte för den här kursen" });
+            }
+        }
+
+        await CourseInstance.updateOne({ _id: instance._id }, { $set: { sequentialUnlock } });
+        logger.info({ instanceId: instance._id, sequentialUnlock }, "Course progression setting updated");
+        res.json({ success: true, sequentialUnlock });
+    } catch (error) {
+        logger.error({ err: error }, "Error updating course progression setting");
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
