@@ -823,21 +823,22 @@ describe("studentRoutes router", () => {
         const studentDoc = {
             _id: "student-auto-red",
             aplStatus: "GRAY",
-            education: [
-                {
-                    _id: "pkg-edu-soon",
-                    type: "CoursePackage",
-                    refId: "pkg-soon",
-                    name: "APL Package",
-                    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-                    endDate: soon,
-                },
-            ],
         };
         Student.find.mockReturnValue({
             lean: vi.fn().mockResolvedValue([studentDoc]),
         });
-        StudentEnrollmentQuery.lean.mockResolvedValue([]);
+        // #103: the APL period is the span of the package's course enrollments.
+        StudentEnrollmentQuery.lean.mockResolvedValue([
+            {
+                _id: "enr-pkg-soon",
+                studentId: "student-auto-red",
+                mainCourseId: { _id: "course-pkg-soon", courseName: "APL-kurs" },
+                coursePackageId: "pkg-soon",
+                startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+                endDate: soon,
+                status: "active",
+            },
+        ]);
 
         const res = createRes();
         await handler({ user: { role: "teacher", userId: TEACHER_USER_ID } }, res);
@@ -858,21 +859,22 @@ describe("studentRoutes router", () => {
         const studentDoc = {
             _id: "student-not-red",
             aplStatus: "YELLOW",
-            education: [
-                {
-                    _id: "pkg-edu-far",
-                    type: "CoursePackage",
-                    refId: "pkg-far",
-                    name: "APL Package",
-                    startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                    endDate: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
-                },
-            ],
         };
         Student.find.mockReturnValue({
             lean: vi.fn().mockResolvedValue([studentDoc]),
         });
-        StudentEnrollmentQuery.lean.mockResolvedValue([]);
+        // #103: the APL period is the span of the package's course enrollments.
+        StudentEnrollmentQuery.lean.mockResolvedValue([
+            {
+                _id: "enr-pkg-far",
+                studentId: "student-not-red",
+                mainCourseId: { _id: "course-pkg-far", courseName: "APL-kurs" },
+                coursePackageId: "pkg-far",
+                startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                endDate: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
+                status: "active",
+            },
+        ]);
 
         const res = createRes();
         await handler({ user: { role: "teacher", userId: TEACHER_USER_ID } }, res);

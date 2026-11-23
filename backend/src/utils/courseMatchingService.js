@@ -398,24 +398,24 @@ class CourseMatchingService {
         // education entries is active again. Clear the dropout flag and reset
         // the inactivity warning markers so the new period starts fresh and the
         // student reappears on active lists. See dropoutService.reactivateStudent.
-        try {
-            const { default: Student } = await import("../models/Student.js");
-            const { reactivateStudent } = await import(
-                "../services/dropoutService.js"
-            );
-            const studentDoc = await Student.findById(studentId);
-            if (studentDoc) {
-                await reactivateStudent({
-                    studentDoc,
-                    userId,
-                    role: userId ? "system" : "system",
-                });
+        // options.replay (the #103 backfill re-creating enrollments for old
+        // entries) skips this: it must not revive dropouts or clear warnings.
+        if (!options.replay) {
+            try {
+                const { default: Student } = await import("../models/Student.js");
+                const { reactivateStudent } = await import(
+                    "../services/dropoutService.js"
+                );
+                const studentDoc = await Student.findById(studentId);
+                if (studentDoc) {
+                    await reactivateStudent({ studentDoc, userId, role: "system" });
+                }
+            } catch (reactivateError) {
+                logger.error(
+                    { err: reactivateError, studentId },
+                    "Failed to reactivate student during education processing"
+                );
             }
-        } catch (reactivateError) {
-            logger.error(
-                { err: reactivateError, studentId },
-                "Failed to reactivate student during education processing"
-            );
         }
 
         logger.debug({ educationCount: educationEntries.length, studentId }, "Processing education entries for student");
@@ -596,8 +596,9 @@ class CourseMatchingService {
 
                     await enrollment.save();
 
-    // Create learning kit (logbook entry) when student starts a course
-    try {
+    // Create learning kit (logbook entry) when student starts a course.
+    // Not when replaying old entries (options.replay, #103 backfill).
+    if (!options.replay) try {
         const { default: Student } = await import("../models/Student.js");
 
         const studentDoc = await Student.findById(studentId);

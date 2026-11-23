@@ -139,230 +139,90 @@ describe("studentDetailsController", () => {
             expect(res.body).toEqual({ error: "Student not found" });
         });
 
-        it("populates education references and enrollment stats", async () => {
-            const courseId = new mongoose.Types.ObjectId();
-            const packageId = new mongoose.Types.ObjectId();
-            const programId = new mongoose.Types.ObjectId();
-
-            const studentDoc = {
-                toObject: () => ({
-                    _id: new mongoose.Types.ObjectId(),
-                    education: [
-                        { type: "Course", refId: courseId },
-                        { type: "CoursePackage", refId: packageId },
-                        { type: "Program", refId: programId },
-                        { type: "Unknown", refId: new mongoose.Types.ObjectId() },
-                        { type: "Course", refId: null },
-                    ],
-                }),
-            };
-
-            const select = vi.fn().mockResolvedValue(studentDoc);
-            const populate = vi.fn().mockReturnValue({ select });
-            vi.spyOn(Student, "findById").mockReturnValue({ populate });
-
-            const courseQuery = {
-                select: vi.fn().mockResolvedValue({
-                    _id: courseId,
-                    courseName: "Course One",
-                    courseCode: "C-1",
-                    coursePoints: "10",
-                    courseExtent: "100",
-                }),
-            };
-            const packageQuery = {
-                select: vi.fn().mockResolvedValue({
-                    _id: packageId,
-                    coursePackageName: "Package One",
-                    coursePackageCode: "P-1",
-                }),
-            };
-            const programQuery = {
-                select: vi.fn().mockResolvedValue({
-                    _id: programId,
-                    programName: "Program One",
-                }),
-            };
-            const courseSpy = vi
-                .spyOn(Course, "findById")
-                .mockReturnValue(courseQuery);
-            const packageSpy = vi
-                .spyOn(CoursePackage, "findById")
-                .mockReturnValue(packageQuery);
-            const programSpy = vi
-                .spyOn(Program, "findById")
-                .mockReturnValue(programQuery);
-
-            const enrollmentBase = {
-                mainCourseId: { _id: courseId, courseName: "Course One" },
-                courseInstanceId: { _id: new mongoose.Types.ObjectId() },
-                teacherId: { name: "Teacher Name" },
-                startDate: new Date("2024-01-01"),
-                endDate: new Date("2024-06-01"),
-                createdAt: new Date("2023-12-01"),
-            };
-            const enrollments = [
-                {
-                    ...enrollmentBase,
-                    _id: new mongoose.Types.ObjectId(),
-                    status: "enrolled",
-                },
-                {
-                    ...enrollmentBase,
-                    _id: new mongoose.Types.ObjectId(),
-                    status: "active",
-                },
-                {
-                    ...enrollmentBase,
-                    _id: new mongoose.Types.ObjectId(),
-                    status: "completed",
-                },
-                {
-                    ...enrollmentBase,
-                    _id: new mongoose.Types.ObjectId(),
-                    status: "dropped",
-                },
-            ];
-
-            const sort = vi.fn().mockResolvedValue(enrollments);
-            const populateTeacher = vi.fn().mockReturnValue({ sort });
-            const populateMain = vi.fn().mockReturnValue({
-                populate: populateTeacher,
+        // #103: the study plan comes from StudentEnrollment only.
+        const DAY = 24 * 60 * 60 * 1000;
+        const makeCourse = (code, name) =>
+            Course.create({ courseName: name, courseCode: code, coursePoints: "100", courseExtent: "10" });
+        const makePackage = () =>
+            CoursePackage.create({
+                coursePackageName: "APL-paket",
+                coursePackageCode: "APLPKG",
+                coursePackagePoints: "200",
+                coursePackageExtent: "20",
             });
-            const populateCourseInstance = vi.fn().mockReturnValue({
-                populate: populateMain,
+        let instanceSeq = 0;
+        const enroll = async (student, course, startDate, endDate, extra = {}) => {
+            // One instance per course + dates (unique index), shared like in production.
+            instanceSeq++;
+            const instance =
+                (await CourseInstance.findOne({ mainCourseId: course._id, startDate, endDate })) ||
+                (await CourseInstance.create({
+                    mainCourseId: course._id,
+                    courseName: course.courseName,
+                    courseCode: `${course.courseCode}-${instanceSeq}`,
+                    startDate,
+                    endDate,
+                }));
+            return StudentEnrollment.create({
+                studentId: student._id,
+                courseInstanceId: instance._id,
+                mainCourseId: course._id,
+                startDate,
+                endDate,
+                ...extra,
             });
-            vi.spyOn(StudentEnrollment, "find").mockReturnValue({
-                populate: populateCourseInstance,
-            });
+        };
 
-            const req = buildReq({
-                params: { id: new mongoose.Types.ObjectId().toString() },
-            });
+        it("builds the study plan and enrollment stats from enrollments only", async () => {
+            const student = await createStudent();
+            const svenska = await makeCourse("SVESVE01", "Svenska 1");
+            const matte = await makeCourse("MATMAT01a", "Matematik 1a");
+            const pkg = await makePackage();
+            const start = new Date("2024-01-08");
+            const end = new Date("2024-06-07");
+            await enroll(student, svenska, start, end, { status: "enrolled", coursePackageId: pkg._id });
+            await enroll(student, svenska, start, end, { status: "active" });
+            await enroll(student, matte, start, end, { status: "completed", grade: "C" });
+            await enroll(student, matte, start, end, { status: "dropped" });
+            // Drifted legacy data must not show up any more.
+            await Student.collection.updateOne(
+                { _id: student._id },
+                { $set: { education: [{ type: "Course", refId: new mongoose.Types.ObjectId(), name: "Gammal kurs" }] } }
+            );
+
             const res = buildRes();
-
-            await getStudentDetails(req, res);
+            await getStudentDetails(buildReq({ params: { id: String(student._id) } }), res);
 
             expect(res.statusCode).toBe(200);
-            expect(res.body.education).toHaveLength(5);
+            const names = res.body.education.map((e) => e.name);
+            expect(names).not.toContain("Gammal kurs");
+            expect(res.body.education.filter((e) => e.type === "Course")).toHaveLength(4);
             expect(res.body.education).toEqual(
                 expect.arrayContaining([
-                    expect.objectContaining({
-                        type: "Course",
-                        name: "Course One",
-                        addedBy: "Teacher Name",
-                        isEnrollment: true,
-                    }),
-                    expect.objectContaining({
-                        type: "CoursePackage",
-                        refId: expect.objectContaining({
-                            coursePackageName: "Package One",
-                        }),
-                    }),
+                    expect.objectContaining({ type: "Course", name: "Matematik 1a", grade: "C", isEnrollment: true }),
+                    expect.objectContaining({ type: "CoursePackage", name: "APL-paket", isEnrollment: false }),
                 ])
             );
+            const course = res.body.education.find((e) => e.type === "Course");
+            expect(course.addedBy).toBe("System");
+            expect(course.courseInstance).toBeTruthy();
             expect(res.body.enrollmentStats).toEqual({
                 totalEnrollments: 4,
                 activeEnrollments: 2,
                 completedEnrollments: 1,
                 droppedEnrollments: 1,
             });
-
-            expect(courseSpy).toHaveBeenCalledWith(courseId);
-            expect(packageSpy).toHaveBeenCalledWith(packageId);
-            expect(programSpy).toHaveBeenCalledWith(programId);
         });
 
-        it("falls back to empty education and system addedBy", async () => {
-            const studentDoc = {
-                toObject: () => ({
-                    _id: new mongoose.Types.ObjectId(),
-                    education: "not-an-array",
-                }),
-            };
+        it("returns an empty study plan for a student without enrollments", async () => {
+            const student = await createStudent();
 
-            const select = vi.fn().mockResolvedValue(studentDoc);
-            const populate = vi.fn().mockReturnValue({ select });
-            vi.spyOn(Student, "findById").mockReturnValue({ populate });
-
-            const enrollments = [
-                {
-                    _id: new mongoose.Types.ObjectId(),
-                    status: "enrolled",
-                    mainCourseId: null,
-                    courseInstanceId: null,
-                    startDate: new Date("2024-01-01"),
-                    endDate: new Date("2024-06-01"),
-                    createdAt: new Date("2023-12-01"),
-                },
-            ];
-
-            const sort = vi.fn().mockResolvedValue(enrollments);
-            const populateTeacher = vi.fn().mockReturnValue({ sort });
-            const populateMain = vi.fn().mockReturnValue({
-                populate: populateTeacher,
-            });
-            const populateCourseInstance = vi.fn().mockReturnValue({
-                populate: populateMain,
-            });
-            vi.spyOn(StudentEnrollment, "find").mockReturnValue({
-                populate: populateCourseInstance,
-            });
-
-            const req = buildReq({
-                params: { id: new mongoose.Types.ObjectId().toString() },
-            });
             const res = buildRes();
-
-            await getStudentDetails(req, res);
-
-            expect(res.statusCode).toBe(200);
-            expect(res.body.education).toHaveLength(1);
-            expect(res.body.education[0]).toMatchObject({
-                addedBy: "System",
-                courseInstanceId: undefined,
-                name: undefined,
-            });
-        });
-
-        it("handles education populate errors gracefully", async () => {
-            const courseId = new mongoose.Types.ObjectId();
-            const studentDoc = {
-                toObject: () => ({
-                    _id: new mongoose.Types.ObjectId(),
-                    education: [{ type: "Course", refId: courseId }],
-                }),
-            };
-
-            const select = vi.fn().mockResolvedValue(studentDoc);
-            const populate = vi.fn().mockReturnValue({ select });
-            vi.spyOn(Student, "findById").mockReturnValue({ populate });
-            vi.spyOn(Course, "findById").mockRejectedValueOnce(
-                new Error("populate error")
-            );
-
-            const sort = vi.fn().mockResolvedValue([]);
-            const populateTeacher = vi.fn().mockReturnValue({ sort });
-            const populateMain = vi.fn().mockReturnValue({
-                populate: populateTeacher,
-            });
-            const populateCourseInstance = vi.fn().mockReturnValue({
-                populate: populateMain,
-            });
-            vi.spyOn(StudentEnrollment, "find").mockReturnValue({
-                populate: populateCourseInstance,
-            });
-
-            const req = buildReq({
-                params: { id: new mongoose.Types.ObjectId().toString() },
-            });
-            const res = buildRes();
-
-            await getStudentDetails(req, res);
+            await getStudentDetails(buildReq({ params: { id: String(student._id) } }), res);
 
             expect(res.statusCode).toBe(200);
             expect(res.body.education).toEqual([]);
-            expect(logger.error).toHaveBeenCalled();
+            expect(res.body.enrollmentStats.totalEnrollments).toBe(0);
         });
 
         it("returns 500 when fetching details fails", async () => {
@@ -382,48 +242,15 @@ describe("studentDetailsController", () => {
         });
 
         it("derives an effective auto-RED status from the APL end date", async () => {
-            const soon = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
-            const studentDoc = {
-                toObject: () => ({
-                    _id: new mongoose.Types.ObjectId(),
-                    aplStatus: "GRAY",
-                    education: [
-                        {
-                            _id: new mongoose.Types.ObjectId(),
-                            type: "CoursePackage",
-                            refId: new mongoose.Types.ObjectId(),
-                            name: "APL Package",
-                            startDate: new Date(
-                                Date.now() - 20 * 24 * 60 * 60 * 1000
-                            ),
-                            endDate: soon,
-                        },
-                    ],
-                }),
-            };
+            const soon = new Date(Date.now() + 10 * DAY);
+            const student = await createStudent();
+            await Student.updateOne({ _id: student._id }, { $set: { aplStatus: "GRAY" } });
+            const pkg = await makePackage();
+            const course = await makeCourse("APL100", "APL-kurs");
+            await enroll(student, course, new Date(Date.now() - 20 * DAY), soon, { coursePackageId: pkg._id });
 
-            const select = vi.fn().mockResolvedValue(studentDoc);
-            const populate = vi.fn().mockReturnValue({ select });
-            vi.spyOn(Student, "findById").mockReturnValue({ populate });
-
-            const sort = vi.fn().mockResolvedValue([]);
-            const populateTeacher = vi.fn().mockReturnValue({ sort });
-            const populateMain = vi.fn().mockReturnValue({
-                populate: populateTeacher,
-            });
-            const populateCourseInstance = vi.fn().mockReturnValue({
-                populate: populateMain,
-            });
-            vi.spyOn(StudentEnrollment, "find").mockReturnValue({
-                populate: populateCourseInstance,
-            });
-
-            const req = buildReq({
-                params: { id: new mongoose.Types.ObjectId().toString() },
-            });
             const res = buildRes();
-
-            await getStudentDetails(req, res);
+            await getStudentDetails(buildReq({ params: { id: String(student._id) } }), res);
 
             expect(res.statusCode).toBe(200);
             expect(res.body.aplStatus).toBe("RED");
@@ -434,49 +261,16 @@ describe("studentDetailsController", () => {
         });
 
         it("keeps the stored APL status when the APL end date is far away", async () => {
-            const studentDoc = {
-                toObject: () => ({
-                    _id: new mongoose.Types.ObjectId(),
-                    aplStatus: "YELLOW",
-                    education: [
-                        {
-                            _id: new mongoose.Types.ObjectId(),
-                            type: "CoursePackage",
-                            refId: new mongoose.Types.ObjectId(),
-                            name: "APL Package",
-                            startDate: new Date(
-                                Date.now() + 30 * 24 * 60 * 60 * 1000
-                            ),
-                            endDate: new Date(
-                                Date.now() + 200 * 24 * 60 * 60 * 1000
-                            ),
-                        },
-                    ],
-                }),
-            };
-
-            const select = vi.fn().mockResolvedValue(studentDoc);
-            const populate = vi.fn().mockReturnValue({ select });
-            vi.spyOn(Student, "findById").mockReturnValue({ populate });
-
-            const sort = vi.fn().mockResolvedValue([]);
-            const populateTeacher = vi.fn().mockReturnValue({ sort });
-            const populateMain = vi.fn().mockReturnValue({
-                populate: populateTeacher,
-            });
-            const populateCourseInstance = vi.fn().mockReturnValue({
-                populate: populateMain,
-            });
-            vi.spyOn(StudentEnrollment, "find").mockReturnValue({
-                populate: populateCourseInstance,
+            const student = await createStudent();
+            await Student.updateOne({ _id: student._id }, { $set: { aplStatus: "YELLOW" } });
+            const pkg = await makePackage();
+            const course = await makeCourse("APL200", "APL-kurs 2");
+            await enroll(student, course, new Date(Date.now() + 30 * DAY), new Date(Date.now() + 200 * DAY), {
+                coursePackageId: pkg._id,
             });
 
-            const req = buildReq({
-                params: { id: new mongoose.Types.ObjectId().toString() },
-            });
             const res = buildRes();
-
-            await getStudentDetails(req, res);
+            await getStudentDetails(buildReq({ params: { id: String(student._id) } }), res);
 
             expect(res.statusCode).toBe(200);
             expect(res.body.aplStatus).toBe("YELLOW");

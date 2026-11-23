@@ -21,6 +21,7 @@ import { validate } from "../middleware/validation.js";
 import logger from "../utils/logger.js";
 import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
 import { applyEnrollmentDateSummary } from "../utils/studentDateSummary.js";
+import { educationFromEnrollments } from "../utils/enrollmentEducation.js";
 import User from "../models/User.js";
 import { findTeacherUser, teacherUserFilter } from "../utils/teacherProfile.js";
 import { maybeSendLarteametEmail, getStudentMunicipality, SOLLENTUNA_MUNICIPALITY } from "../services/emailService.js";
@@ -278,154 +279,8 @@ router.get("/students", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (r
         for (const student of students) {
             const enrollments = enrollmentsByStudent.get(student._id.toString()) || [];
 
-            const enrollmentEducation = enrollments
-                .map((enrollment) => {
-                    if (enrollment.mainCourseId) {
-                        return {
-                            _id: enrollment._id,
-                            type: "Course",
-                            refId: enrollment.mainCourseId,
-                            name: enrollment.mainCourseId.courseName,
-                            startDate: enrollment.startDate,
-                            endDate: enrollment.endDate,
-                            finalExamDate: enrollment.slutprovDate,
-                            status: enrollment.status,
-                            grade: enrollment.grade,
-                            comments: enrollment.notes,
-                            enrollmentId: enrollment._id,
-                            courseInstanceId: enrollment.courseInstanceId,
-                            addedAt: enrollment.createdAt,
-                            addedBy: enrollment.teacherId || "System",
-                            isEnrollment: true,
-                        };
-                    } else if (enrollment.coursePackageId) {
-                        return {
-                            _id: enrollment._id,
-                            type: "CoursePackage",
-                            refId: enrollment.coursePackageId,
-                            name: enrollment.coursePackageId.coursePackageName || enrollment.coursePackageId.packageName,
-                            startDate: enrollment.startDate,
-                            endDate: enrollment.endDate,
-                            finalExamDate: enrollment.slutprovDate,
-                            status: enrollment.status,
-                            grade: enrollment.grade,
-                            comments: enrollment.notes,
-                            enrollmentId: enrollment._id,
-                            courseInstanceId: enrollment.courseInstanceId,
-                            addedAt: enrollment.createdAt,
-                            addedBy: enrollment.teacherId || "System",
-                            isEnrollment: true,
-                        };
-                    } else if (enrollment.programId) {
-                        return {
-                            _id: enrollment._id,
-                            type: "Program",
-                            refId: enrollment.programId,
-                            name: enrollment.programId.programName,
-                            startDate: enrollment.startDate,
-                            endDate: enrollment.endDate,
-                            finalExamDate: enrollment.slutprovDate,
-                            status: enrollment.status,
-                            grade: enrollment.grade,
-                            comments: enrollment.notes,
-                            enrollmentId: enrollment._id,
-                            courseInstanceId: enrollment.courseInstanceId,
-                            addedAt: enrollment.createdAt,
-                            addedBy: enrollment.teacherId || "System",
-                            isEnrollment: true,
-                        };
-                    }
-                    return null;
-                })
-                .filter(Boolean);
-
-            const originalEducation = Array.isArray(student.education)
-                ? student.education
-                : [];
-            const packageEntries = originalEducation
-                .filter((e) => e && e.type === "CoursePackage" && e.refId)
-                .map((e) => ({
-                    _id: e._id,
-                    type: "CoursePackage",
-                    refId: e.refId,
-                    name: e.name,
-                    startDate: e.startDate,
-                    endDate: e.endDate,
-                    finalExamDate: e.finalExamDate,
-                    status: e.status,
-                    grade: e.grade,
-                    comments: e.comments,
-                    enrollmentId: e.enrollmentId,
-                    courseInstanceId: e.courseInstanceId,
-                    addedAt: e.addedAt,
-                    addedBy: e.addedBy,
-                    isEnrollment: false,
-                }));
-
-            const mergedEducation = [...enrollmentEducation];
-            // Dedicated APL rule: CoursePackage entries are always derived from the
-            // student's current enrollments (single source of truth). Stored legacy
-            // CoursePackage entries must not be merged when a package enrollment
-            // already exists, otherwise stale start/end dates (e.g. after a study
-            // plan revision) would inflate the APL period shown in the APL board.
-            for (const pkg of packageEntries) {
-                const exists = mergedEducation.some(
-                    (x) =>
-                        x.type === "CoursePackage" &&
-                        String(x.refId?._id || x.refId) === String(pkg.refId)
-                );
-                if (!exists) mergedEducation.push(pkg);
-            }
-
-            const enrollmentsWithPackage = enrollments.filter(
-                (enr) => !!enr.coursePackageId
-            );
-            if (
-                enrollmentsWithPackage.length > 0 &&
-                !mergedEducation.some((e) => e.type === "CoursePackage")
-            ) {
-                const byPkg = new Map();
-                for (const enr of enrollmentsWithPackage) {
-                    const key = String(
-                        enr.coursePackageId._id || enr.coursePackageId
-                    );
-                    if (!byPkg.has(key)) byPkg.set(key, []);
-                    byPkg.get(key).push(enr);
-                }
-                for (const [pkgId, arr] of byPkg.entries()) {
-                    const startMs = Math.min(
-                        ...arr
-                            .map((e) => new Date(e.startDate || 0).getTime())
-                            .filter((n) => !isNaN(n))
-                    );
-                    const endMs = Math.max(
-                        ...arr
-                            .map((e) => new Date(e.endDate || 0).getTime())
-                            .filter((n) => !isNaN(n))
-                    );
-                    const pkgDoc = packageMap.get(pkgId);
-                    mergedEducation.push({
-                        _id: undefined,
-                        type: "CoursePackage",
-                        refId: pkgDoc || pkgId,
-                        name: pkgDoc?.coursePackageName || pkgDoc?.packageName,
-                        startDate: isFinite(startMs)
-                            ? new Date(startMs)
-                            : undefined,
-                        endDate: isFinite(endMs) ? new Date(endMs) : undefined,
-                        status: arr[0]?.status,
-                        grade: null,
-                        comments: undefined,
-                        enrollmentId: undefined,
-                        courseInstanceId: undefined,
-                        addedAt: undefined,
-                        addedBy: undefined,
-                        isEnrollment: false,
-                    });
-                }
-            }
-
-            student.education = mergedEducation;
+            // Study plan from enrollments only (#103); Student.education is retired.
+            student.education = educationFromEnrollments(enrollments, packageMap);
 
             // Elever list Startdatum / Slutdatum / Slutprov come from the
             // enrollments; the stored student fields are only set by the import.

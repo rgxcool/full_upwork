@@ -473,7 +473,7 @@ export const reactivateStudent = async ({ studentDoc, userId, role }) => {
         });
         await studentDoc.save();
         logger.info(
-            { studentId: studentDoc._id, name: studentDoc.name },
+            { studentId: studentDoc._id },
             "Reactivated previously dropout student via re-registration"
         );
     }
