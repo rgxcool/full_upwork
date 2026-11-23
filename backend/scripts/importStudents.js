@@ -1,3 +1,5 @@
+// Imports students from an Excel workbook into the local dev database.
+// Usage (from backend/): node scripts/importStudents.js <workbook.xlsx>
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -15,7 +17,8 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.resolve(__dirname, "../.env.development") });
 
-const filePath = process.argv[2] || "../docs/test_mindful.xlsx";
+// Default: the dummy sample workbook (no real people).
+const filePath = process.argv[2] || path.resolve(__dirname, "../../data/test_mindful.xlsx");
 
 const MUNI_MAP = {
     "Uppl Väsby": "Upplands Väsby",

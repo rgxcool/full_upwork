@@ -1,13 +1,17 @@
 # Demo runbook — kurskort, kursinstanser, inskrivning
 
+> For the Persian-court demo (Professor Cyrus, Magister Xerxes, 26 kings) see **DEMOKING.md**.
+> This runbook covers the older e2e demo data (Eva Nahi, Anna, Berta…).
+
 ## 0. Before the demo (≈5 min before)
 
 ```bash
-DEMO=1 bash launch.sh
+bash backend/scripts/resetDemo.sh --yes   # wipes the local DB, seeds demo data
+bash launch.sh                            # starts the app (never deletes anything)
 ```
 
-Re-run this right before the demo: it **resets the database** to a clean demo state
-(any placements made during rehearsal are wiped). All dates are relative to today.
+Re-run `resetDemo.sh` right before the demo: it **resets the database** to a clean demo
+state (any placements made during rehearsal are wiped). All dates are relative to today.
 
 | Role    | Email              | Password    |
 |---------|--------------------|-------------|
@@ -17,8 +21,9 @@ Re-run this right before the demo: it **resets the database** to a clean demo st
 
 Use separate browser profiles / incognito windows per role so you can switch instantly.
 
-> ⚠️ Do **not** demo with `data/test_mindful.xlsx` — it contains real people's
-> names, personnummer and contact details.
+> `data/test_mindful.xlsx` now holds **dummy** students (names like "Testsson, Anna",
+> personnummer `1900…`), so it is safe to show an import. Never demo with
+> `data/test_mindful_CLEAN.xlsx` — that one has real people's data and is git-ignored.
 
 ## What the demo data contains
 

@@ -9,7 +9,7 @@
               v-for="item in menuItems"
               :key="item.key"
               :class="{ active: activeSection === item.key }"
-              @click="activeSection = item.key"
+              @click="selectMenuItem(item)"
             >
               <span class="sidebar-icon" v-html="item.icon"></span>
               {{ item.label }}
@@ -235,13 +235,31 @@
         return (role && ROLE_LABELS[role]) || role || 'Ej angivet'
       })
 
-      const menuItems = [
+      const isTeacher = computed(() => (store.getters.userRoles || []).includes('teacher'))
+      const menuItems = computed(() => [
         { key: 'info', label: 'Min profil', icon: '👤' },
         { key: 'password', label: 'Byt lösenord', icon: '🔒' },
         { key: 'shared', label: 'Delade dokument', icon: '📁' },
+        // A teacher's own Filarkiv (upload + "Dela") lives on their staff profile,
+        // which search cannot find for teachers themselves.
+        ...(isTeacher.value ? [{ key: 'files', label: 'Mitt filarkiv', icon: '🗂️' }] : []),
         { key: 'tasks', label: 'Att göra', icon: '📋' },
-      ]
+      ])
       const activeSection = ref('info')
+
+      const openOwnFileArchive = async () => {
+        try {
+          const { data } = await client.get('/me/teacher')
+          router.push({ path: `/teacher/${data._id}`, query: { tab: 'Filarkiv' } })
+        } catch (error) {
+          toast.error('Kunde inte öppna ditt filarkiv. Försök igen.')
+        }
+      }
+
+      const selectMenuItem = (item) => {
+        if (item.key === 'files') return openOwnFileArchive()
+        activeSection.value = item.key
+      }
 
       // Documents other staff members have explicitly shared with this user
       // (e.g. a grading-support document shared between two teachers).
@@ -395,6 +413,7 @@
         user,
         roleLabel,
         menuItems,
+        selectMenuItem,
         activeSection,
         currentPassword,
         newPassword,

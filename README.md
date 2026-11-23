@@ -32,6 +32,14 @@ Works **with or without Docker**:
 `launch.sh` also copies `backend/.env.example` → `backend/.env.development` if
 missing and auto-generates `JWT_SECRET` when the placeholder is still present.
 
+`launch.sh` **never deletes data.** On a fresh database it imports the GY25 course
+catalog and the FAQ, and it creates one account per base role that has none yet
+(`systemadmin@example.se`, `admin@example.se`, `syv@example.se`, `specped@example.se`;
+passwords are printed at startup). Teachers and students are added at runtime: in
+the app, or with `backend/scripts/createTeacher.js` and `importStudents.js`. To get
+the demo data or the Playwright accounts, run `bash backend/scripts/resetDemo.sh --yes`
+(this wipes the local database). See `backend/scripts/README.md`.
+
 When it finishes:
 
 | Service   | URL                  | Logs            |
@@ -113,11 +121,10 @@ node dropEducation.js     # wipe Programs, Courses, CoursePackages
 node updateEducation.js   # import them from the Excel workbook
 ```
 
-`updateEducation.js` imports from the workbook path hardcoded at the bottom of
-the script (`backend/scripts/updateEducation.js:118`, default `./test.xlsx`), so
-run it from `backend/scripts/` — or change that path to point at e.g.
-`backend/scripts/EducationData.xlsx`. Run `dropEducation.js` first to start from a
-clean catalog.
+`updateEducation.js` imports `data/Kurser och kurspaket GY25.xlsx` by default
+(the same workbook `launch.sh` uses); pass another path as the first argument to
+import a different workbook. Run `dropEducation.js` first to start from a clean
+catalog. See `backend/scripts/README.md` for every script.
 
 ### Resetting the local database
 

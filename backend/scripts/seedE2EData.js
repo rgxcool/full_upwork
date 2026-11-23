@@ -1,3 +1,6 @@
+// Seeds the fixed E2E/demo accounts and data used by Playwright. WIPES ALL users (admins too),
+// students, courses, kurskort, enrollments, grades, notifications and GridFS files first. Run via scripts/resetDemo.sh, or by hand before Playwright.
+// Usage (from backend/): node scripts/seedE2EData.js
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -38,7 +41,7 @@ const upsertUser = async ({ email, username, password, role, mustChangePassword 
     return user;
 };
 
-const upsertStudent = async ({ name, email, personalNumber, teacherId, aplStatus, municipality = "Stockholm", dropout = false, specialNeeds = "" }) => {
+const upsertStudent = async ({ name, email, personalNumber, teacherId, aplStatus, municipality = "Sollentuna", dropout = false, specialNeeds = "" }) => {
     await Student.deleteMany({ personalNumber });
     const student = new Student({
         name,
