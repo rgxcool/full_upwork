@@ -78,6 +78,12 @@ lint:
 	cd backend && npx eslint src/ --max-warnings 50
 	cd frontend && npx eslint src/ --max-warnings 780
 
+# Only the tests affected by your uncommitted changes, without coverage: the
+# default while developing (see AGENTS.md "Testing while developing").
+test-changed:
+	cd backend && NODE_ENV=test npx vitest run --mode test --changed --coverage.enabled=false
+	cd frontend && npx vitest run --changed --coverage.enabled=false
+
 test-backend:
 	cd backend && NODE_ENV=test npx vitest run --mode test --reporter=$(CITEST_REPORTER)
 

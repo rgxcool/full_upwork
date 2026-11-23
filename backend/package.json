@@ -9,6 +9,8 @@
         "test:unit": "vitest run tests/unit",
         "test:integration": "vitest run tests/integration",
         "test:coverage": "vitest run --coverage",
+        "test:changed": "NODE_ENV=test vitest run --mode test --changed --coverage.enabled=false",
+        "test:related": "NODE_ENV=test vitest related --run --mode test --coverage.enabled=false",
         "test:watch": "vitest",
         "dev": "nodemon --exec \"node --import ./instrument.js\" index.js",
         "start": "node index.js",

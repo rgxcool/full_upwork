@@ -124,8 +124,9 @@ use the checkout's own root instead.
 ```bash
 pnpm install                 # make init
 make dev                     # docker compose: backend :5010 + mongo :27017
-make test                    # backend + frontend vitest (backend runs with NODE_ENV=test --mode test)
-cd backend && NODE_ENV=test pnpm test:unit   # faster backend loop
+make test-changed            # WHILE DEVELOPING: only tests affected by your changes (no coverage)
+cd backend && pnpm test:related src/x.js   # tests that import a given file
+make test                    # full backend + frontend vitest — once, right before commit/PR
 cd backend && pnpm test:coverage   # gate: lines 78.5 % — never lower thresholds
 make lint                    # backend max 50 warnings, frontend max 780
 cd e2e && pnpm test          # Playwright (needs make dev running)
@@ -140,8 +141,9 @@ In a cloud session there is no local Mongo and Docker may be unavailable: run Vi
 
 ## 7. Definition of done
 
-- Relevant tests run and pass — report the exact commands and counts you ran; never claim a check
-  you did not run.
+- While developing, run only the affected tests (`make test-changed` / `pnpm test:related`), never
+  the full suite in a loop. Run the full suite once before committing (see AGENTS.md "Testing while
+  developing"). Report the exact commands and counts you ran; never claim a check you did not run.
 - Lint clean at the thresholds above.
 - PR description: linked issue (`Closes #N`), billing bucket, what was tested, screenshots for UI.
 - Update the matching row in `MILESTONE-3-MASTER-TASK-STATUS.md` (it is the single status source).
