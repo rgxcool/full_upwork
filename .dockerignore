@@ -32,7 +32,7 @@ Thumbs.db
 *.md
 !backend/README.md
 !frontend/README.md
-SECURITY-HARDENING.md
+docs/
 DEPLOYMENT.md
 DOCKER-OPTIMIZATION.md
 jsdoc.json

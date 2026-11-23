@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 
-const FILE = process.argv[2] || 'PHASE1-HARDENING-TEST-PLAN.md';
+const FILE = process.argv[2] || 'docs/reports/PHASE1-HARDENING-TEST-PLAN.md';
 const src = fs.readFileSync(FILE, 'utf8');
 const lines = src.split('\n');
 let bad = 0;

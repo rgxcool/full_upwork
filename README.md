@@ -254,7 +254,7 @@ The backend enforces security hardening at startup and runtime:
   skip the forced change, pass your own password: `SYSTEM_ADMIN_PASSWORD="<strong-password>"
   node backend/scripts/createSystemAdmin.js`
 
-See `SECURITY-HARDENING.md` for the full report.
+See `docs/SECURITY-HARDENING.md` for the full report.
 
 ## Docker (full stack)
 

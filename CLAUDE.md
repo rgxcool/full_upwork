@@ -1,4 +1,4 @@
-# CLAUDE.md — Mindful Learning (`mindful-new`)
+# CLAUDE.md — Mindful Learning (GitHub `Cyrus-Malekani/Mindfullearning`, formerly `mindful-new`)
 
 @AGENTS.md
 
@@ -112,8 +112,8 @@ Columns (Status field), in order:
   `ecosystem.config.cjs`, the Docker production stage or the production build.
 - Log errors as `logger.error({ err }, "…")` and never put student data in log messages.
 - No new scratch scripts in the repo root. Put one-off scripts in `backend/scripts/` with a comment
-  saying what they do, or delete them. The existing root `*.cjs`/`*.sh` scripts (`fix_b4_v4.cjs`,
-  `test_filter5.cjs`, …) are legacy: do not run, copy or extend them.
+  saying what they do, or delete them. The old root scratch scripts were removed in #127; reports and
+  design notes live in `docs/` (`docs/reports/`, `docs/archive/`).
 - JS style: never add polyfills for tests; mock only external dependencies, never module-internal code.
 
 ## 6. Commands

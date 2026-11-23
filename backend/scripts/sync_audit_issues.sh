@@ -20,7 +20,7 @@
 set -euo pipefail
 
 DRY_RUN=${DRY_RUN:-1}
-REPO=${REPO:-Cyrus-Malekani/mindful-new}
+REPO=${REPO:-Cyrus-Malekani/Mindfullearning}
 PROJECT_OWNER=${PROJECT_OWNER:-Cyrus-Malekani}
 PROJECT_NUMBER=${PROJECT_NUMBER:-1}
 TODAY=2026-11-22

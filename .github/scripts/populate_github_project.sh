@@ -4,7 +4,7 @@
 # Usage (WSL2 / Linux / macOS):
 #   gh auth login                      # once
 #   gh auth refresh -s project         # once: Projects v2 needs the "project" scope
-#   OWNER=my-org REPO=mindful-new PROJECT_NUMBER=3 ./populate_github_project.sh
+#   OWNER=my-org REPO=mindful-new PROJECT_NUMBER=3 .github/scripts/populate_github_project.sh
 #
 # Options (env vars):
 #   OWNER            repo owner (user or org)                       [required]
