@@ -39,13 +39,19 @@
           <v-expansion-panels v-model="openPanels" multiple>
             <v-expansion-panel v-for="(mod, mi) in modules" :key="mi">
               <v-expansion-panel-title>
-                Modul {{ mod.moduleNumber }} — {{ mod.title || 'Utan titel' }}
+                Modul {{ mod.moduleNumber }} — {{ effectiveTitle(mod) }}
                 <v-chip v-if="mod.isPartialExam" size="x-small" color="warning" class="ml-2">Deltenta</v-chip>
                 <v-chip v-if="mod.isCaseStudy" size="x-small" color="info" class="ml-2">Fallstudie</v-chip>
                 <v-chip v-if="mod.isHiddenFromStudent" size="x-small" color="grey" class="ml-2">Dold för elever</v-chip>
               </v-expansion-panel-title>
               <v-expansion-panel-text>
-                <v-text-field v-model="mod.title" label="Modultitel" variant="outlined" density="compact" class="mb-2" />
+                <v-text-field
+                  v-model="mod.contentTitle"
+                  label="Modultitel"
+                  variant="outlined"
+                  density="compact"
+                  class="mb-2"
+                />
                 <div class="d-flex gap-2 mb-3">
                   <v-checkbox v-model="mod.isPartialExam" label="Deltenta" density="compact" hide-details />
                   <v-checkbox v-model="mod.isCaseStudy" label="Fallstudie" density="compact" hide-details />
@@ -169,6 +175,12 @@ const instanceOptions = computed(() =>
 const avsnittFor = (mod) =>
   sortedAvsnitt(mod).filter((av) => visibleContentItems(av).length > 0)
 
+// Slice 3 follow-up: the editor's Modultitel field controls the student-facing
+// overlay. The structural module title stays on `mod.title` and is never
+// written from this form. Empty overlay titles fall back to the structural
+// title, matching buildVisibleModules() and student views.
+const effectiveTitle = (mod) => mod.contentTitle || mod.title || 'Utan titel'
+
 const normalizeModules = (rawModules, content) => {
   if (!Array.isArray(rawModules)) return []
   const contentByModule =
@@ -198,8 +210,9 @@ const normalizeModules = (rawModules, content) => {
         title: m.assignment?.title ?? '',
         description: m.assignment?.description ?? '',
       },
-      // Kept separately so saving never overwrites a custom student-facing title.
-      contentTitle: overlay.title ?? null,
+      // Effective student-facing title, seeded from the structural title when
+      // no overlay exists (D4). Saving writes only the content overlay.
+      contentTitle: overlay.title || m.title || '',
       instructions: overlay.instructions ?? '',
       isHiddenFromStudent: !!overlay.isHiddenFromStudent,
     }
