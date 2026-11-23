@@ -37,8 +37,9 @@ Status per item lives in `MILESTONE-3-MASTER-TASK-STATUS.md`, Section B (items 1
    import/export; month calendar, rooms, attendance, accommodations (37, 39–48). SYV/Specped (49–50).
 8. **Ekonomi & rapporter** — statistics, revenue per kommun/course, forecast, grade-curve export (51–51d).
 
-Spec items **11 (Alvis), 35 (Scrive catalog automation) and 38 (prövning web payment)** are not part of
-Etapp 1 in the agreed list: they are unquoted (see above), even though the spec mentions them.
+Spec items **11 (Alvis), 35 (Scrive catalog automation) and 38 (prövning web payment)** are out of
+scope (decided 2026-11-23) even though the spec mentions them. They are parked for separate quotes as
+issues #61, #60 and #59 — do not build them as part of Etapp 1 work or bug fixes.
 
 If a request touches one of these (or anything not in the two lists above):
 1. Say so in one line ("this is unquoted Phase 2 scope").
