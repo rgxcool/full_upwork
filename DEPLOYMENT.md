@@ -251,6 +251,7 @@ set -a; . ./.env.production; set +a           # 6. seed against the production d
 SYSTEM_ADMIN_EMAIL=<email> SYSTEM_ADMIN_PASSWORD='<strong password>' node scripts/createSystemAdmin.js
 node scripts/updateEducation.js               #    GY25 course catalog
 node scripts/seedMindfulFaq.js                #    chatbot FAQ
+NODE_ENV=production node scripts/migrate.js   #    migration ledger (#126): records the current state
 pm2 start ML-Backend                          # 7. start, log in, check the health endpoint
 ```
 
@@ -260,6 +261,24 @@ pm2 start ML-Backend                          # 7. start, log in, check the heal
   deleted. Delete the backup when you no longer need it: it contains personal data.
 - **Always set `SYSTEM_ADMIN_PASSWORD`.** Without it `createSystemAdmin.js` uses a weak default.
 - Collections are emptied, not dropped, so indexes stay.
+
+## Database migrations (#126)
+
+`deploy.sh` runs `pnpm --dir backend run migrate` after the frontend build and before going live.
+Pending migrations in `backend/migrations/` run in order, and each database records what has run on
+it in its `migrations` collection, so an environment that is several releases behind simply catches
+up. If a migration fails, the deploy stops: the live version keeps running, the code is reset to the
+previous commit, and `logs/deploy.log` records `migrate-failed`. Fix the migration and deploy again;
+the failed one was not recorded, so it is retried.
+
+Check a database by hand (from `backend/`, on the server with `NODE_ENV=production`):
+
+```bash
+NODE_ENV=production node scripts/migrate.js status
+```
+
+The backend also logs `Pending database migrations` at startup when it is behind (e.g. after a manual
+`git pull`). How to write a migration: `backend/migrations/README.md`.
 
 ## Rollback Procedure
 

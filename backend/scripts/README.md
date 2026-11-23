@@ -9,6 +9,12 @@ use `backend/.env.development` (the local database `mongodb://localhost:27017/mi
 |---|---|
 | `ensureBaseData.js` | Creates one admin, systemadmin, SYV and specped account for each role that has none (`<role>@example.se`). `--is-empty catalog\|faq` tells `launch.sh` whether to import the catalog / FAQ. `DRY_RUN=1`. |
 
+## Migrations (#126)
+
+| Script | What it does |
+|---|---|
+| `migrate.js` | Applies pending migrations from `backend/migrations/` and records them in the `migrations` collection; `status` lists applied/pending; `DRY_RUN=1`. `deploy.sh` runs it on every deploy. |
+
 ## Accounts
 
 | Script | What it does |

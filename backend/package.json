@@ -12,6 +12,7 @@
         "test:changed": "NODE_ENV=test vitest run --mode test --changed --coverage.enabled=false",
         "test:related": "NODE_ENV=test vitest related --run --mode test --coverage.enabled=false",
         "test:watch": "vitest",
+        "migrate": "node scripts/migrate.js",
         "dev": "nodemon --exec \"node --import ./instrument.js\" index.js",
         "start": "node index.js",
         "lint": "eslint src/",

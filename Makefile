@@ -89,6 +89,11 @@ test-changed:
 fresh:
 	bash backend/scripts/resetDemo.sh --yes
 	cd backend && node scripts/seedPersianDemo.js
+	cd backend && node scripts/migrate.js
+
+# Apply pending database migrations to the local database (backend/migrations, #126).
+migrate:
+	cd backend && node scripts/migrate.js
 
 test-backend:
 	cd backend && NODE_ENV=test npx vitest run --mode test --reporter=$(CITEST_REPORTER)
