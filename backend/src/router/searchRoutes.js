@@ -15,6 +15,7 @@ import { escapeRegExp } from '../utils/escapeRegExp.js';
 import { studentScopeFilter } from "../utils/tenantScope.js";
 import { getDateOnlyRange, parseSearchDate } from "../utils/dateSearch.js";
 import { TEACHER_POPULATE_FIELDS, findTeacherUser } from "../utils/teacherProfile.js";
+import { loadEducationByStudent } from "../utils/enrollmentEducation.js";
 
 const router = express.Router();
 
@@ -106,10 +107,9 @@ const buildUserNameQuery = (q) => {
 
 router.get("/course-enrollments", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_USERS), async (req, res) => {
     try {
-        let query = {
-            "education.type": "Course",
-            "education.refId": { $exists: true },
-        };
+        // Every student's enrolled courses (#103: the old filter on the legacy
+        // Student.education array left out students added without it).
+        let query = {};
 
         // If user is a teacher, filter students by their teacherId
         if (req.user.role === "teacher") {
@@ -171,7 +171,7 @@ router.get("/course-enrollments", authenticateUser, canFeature(PERMISSION_FEATUR
         const uniqueCourses = Array.from(uniqueCoursesMap.values());
         res.json(uniqueCourses);
     } catch (error) {
-        logger.error({ err: error }, "Error fetching courses from education[]")
+        logger.error({ err: error }, "Error fetching enrolled courses")
         res.status(500).json({ message: "Serverfel vid hämtning av kurser" });
     }
 });
@@ -417,7 +417,8 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                     _id: student._id,
                     name: student.name,
                     email: student.email,
-                    education: student.education || [],
+                    // Study plan from enrollments (#103).
+                    education: (await loadEducationByStudent([student._id])).get(String(student._id)) || [],
                     startDate: student.startDate,
                     endDate: student.endDate,
                     teacherId: student.teacherId
@@ -773,7 +774,7 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
 
 router.put("/update-student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
     try {
-        const allowedStudentFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses', 'education'];
+        const allowedStudentFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses'];
         const updates = {};
         for (const field of allowedStudentFields) {
             if (req.body[field] !== undefined) updates[field] = req.body[field];

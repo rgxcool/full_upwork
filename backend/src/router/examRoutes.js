@@ -13,6 +13,7 @@ import { createGlobalNotification } from "../controllers/notificationController.
 import Notification from "../models/Notification.js";
 import logger from "../utils/logger.js";
 import { TEACHER_POPULATE_FIELDS, findTeacherUser, teacherColor, teacherDisplayName } from "../utils/teacherProfile.js";
+import { loadEducationByStudent } from "../utils/enrollmentEducation.js";
 
 const router = express.Router();
 
@@ -998,11 +999,8 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
         const studentsWithFinalExam = await Student.find(studentQuery).populate(
             { path: "teacherId", select: TEACHER_POPULATE_FIELDS }
         );
-        await Student.populate(studentsWithFinalExam, {
-            path: "education.refId",
-            model: "Course",
-            select: "courseName courseCode",
-        });
+        // Study plans from enrollments (#103), to name the course of each exam.
+        const educationByStudent = await loadEducationByStudent(studentsWithFinalExam.map((st) => st._id));
         logger.debug({ count: studentsWithFinalExam.length }, "Students with finalExamDate");
 
         // Automatiska kurs-slutprov (från enrollments)
@@ -1060,8 +1058,8 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
                 }
                 
                 // Allow students without teacherId - they'll be grouped separately
-                if (!student.teacherId || !student.teacherId.userId) {
-                    logger.warn({ student: student.name }, "Student has no teacherId, will group by date only");
+                if (!student.teacherId) {
+                    logger.warn({ studentId: student._id }, "Student has no teacherId, will group by date only");
                 }
 
                 const dateKey = localDateKey(student.finalExamDate);
@@ -1071,8 +1069,9 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
 
                 // Hitta kursnamn
                 let courseName = null;
-                if (Array.isArray(student.education)) {
-                    const edu = student.education.find((e) => {
+                const studyPlan = educationByStudent.get(String(student._id)) || [];
+                {
+                    const edu = studyPlan.find((e) => {
                         if (e.type !== "Course" || !e.startDate || !e.endDate)
                             return false;
                         const start = new Date(e.startDate).setHours(

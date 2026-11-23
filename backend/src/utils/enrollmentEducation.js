@@ -124,7 +124,7 @@ export async function loadEducationByStudent(studentIds = [], { statuses } = {})
         .lean();
     const byStudent = new Map(studentIds.map((id) => [String(id), []]));
     for (const enr of enrollments) {
-        const key = String(enr.studentId);
+        const key = String(idOf(enr.studentId));
         if (!byStudent.has(key)) byStudent.set(key, []);
         byStudent.get(key).push(enr);
     }

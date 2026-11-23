@@ -132,23 +132,10 @@ export async function syncCalendarEventsForStudent(studentId) {
         const examDate = new Date(student.finalExamDate);
         const dateKey = examDate.toISOString().split("T")[0]; // YYYY-MM-DD
 
-        // Find course name from education
         let courseName = null;
-        if (Array.isArray(student.education)) {
-            const edu = student.education.find((e) => {
-                if (e.type !== "Course" || !e.startDate || !e.endDate) return false;
-                const start = new Date(e.startDate).setHours(0, 0, 0, 0);
-                const end = new Date(e.endDate).setHours(0, 0, 0, 0);
-                const exam = new Date(dateKey).setHours(0, 0, 0, 0);
-                return exam >= start && exam <= end && e.refId && typeof e.refId === "object" && e.refId.courseName;
-            });
-            if (edu && edu.refId && typeof edu.refId === "object" && edu.refId.courseName) {
-                courseName = edu.refId.courseName;
-            }
-        }
 
-        // If no course found, try to find from enrollments
-        if (!courseName) {
+        // Course name from the enrollment that covers the exam date (#103).
+        {
             const { default: StudentEnrollment } = await import("../models/StudentEnrollment.js");
             const enrollment = await StudentEnrollment.findOne({
                 studentId: student._id,
