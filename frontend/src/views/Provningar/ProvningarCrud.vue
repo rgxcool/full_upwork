@@ -337,6 +337,7 @@
 <script setup>
   import { ref, computed, onMounted } from 'vue'
   import client from '@/api/client.js'
+  import { teacherDisplayName } from '@/utils/teacherName.js'
   import { useToast } from '@/composables/useToast.js'
   import ConfirmDialog from '@/components/base/ConfirmDialog.vue'
   import { exportToCSV } from '@/utils/exportUtils.js'
@@ -404,7 +405,7 @@
 
   const teacherOptions = computed(() =>
     teachers.value.map((teacher) => ({
-      title: teacher.userId?.username || teacher.userId?.email || 'Namnlös lärare',
+      title: teacherDisplayName(teacher, 'Namnlös lärare'),
       value: teacher._id,
     }))
   )
@@ -530,7 +531,7 @@
       exam.course || '',
       exam.requestedMonth || '',
       exam.municipality || '',
-      exam.teacherId?.userId?.username || exam.teacherName || '',
+      teacherDisplayName(exam.teacherId) || exam.teacherName || '',
       exam.paymentDate ? new Date(exam.paymentDate).toLocaleDateString('sv-SE') : '',
       exam.materialReceived?.level1?.status ? 'Ja' : 'Nej',
       exam.materialReceived?.level3?.status ? 'Ja' : 'Nej',

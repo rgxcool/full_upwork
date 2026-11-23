@@ -154,7 +154,7 @@
                 </span>
               </td>
               <td>{{ instance.createdBy?.username || 'System' }}</td>
-              <td>{{ instance.responsibleTeacher?.userId?.username || '-' }}</td>
+              <td>{{ teacherDisplayName(instance.responsibleTeacher, '-') }}</td>
               <td class="actions-cell">
                 <div class="actions-buttons">
                   <button
@@ -652,6 +652,7 @@
 <script>
   import { ref, onMounted, computed, watch } from 'vue'
   import { useStore } from 'vuex'
+  import { teacherDisplayName } from '@/utils/teacherName.js'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
 
@@ -768,8 +769,8 @@
             aVal = a.createdBy?.username || ''
             bVal = b.createdBy?.username || ''
           } else if (sortKey.value === 'responsibleTeacher') {
-            aVal = a.responsibleTeacher?.userId?.username || ''
-            bVal = b.responsibleTeacher?.userId?.username || ''
+            aVal = teacherDisplayName(a.responsibleTeacher)
+            bVal = teacherDisplayName(b.responsibleTeacher)
           } else if (sortKey.value === 'enrollmentCount') {
             aVal = a.enrollmentCount || 0
             bVal = b.enrollmentCount || 0
@@ -1349,6 +1350,7 @@
       })
 
       return {
+        teacherDisplayName,
         instances,
         courses,
         teachers,

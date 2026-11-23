@@ -84,7 +84,7 @@
                 <td>{{ grade.mainCourseId?.courseName || grade.courseInstanceId?.courseName || '–' }}</td>
                 <td>{{ grade.courseInstanceId?.courseCode || '–' }}</td>
                 <td>{{ grade.grade || '–' }}</td>
-                <td>{{ grade.teacherId?.userId?.username || '–' }}</td>
+                <td>{{ teacherDisplayName(grade.teacherId, '–') }}</td>
                 <td>{{ grade.gradeBy?.username || grade.gradeBy?.email || '–' }}</td>
                 <td>{{ formatDate(grade.gradeDate) }}</td>
                 <td>{{ grade.motivation || '–' }}</td>
@@ -137,7 +137,7 @@
                 <td>{{ grade.mainCourseId?.courseName || grade.courseInstanceId?.courseName || '–' }}</td>
                 <td>{{ grade.courseInstanceId?.courseCode || '–' }}</td>
                 <td>{{ grade.grade || '–' }}</td>
-                <td>{{ grade.teacherId?.userId?.username || '–' }}</td>
+                <td>{{ teacherDisplayName(grade.teacherId, '–') }}</td>
                 <td>{{ formatDate(grade.gradeDate) }}</td>
               </tr>
               <tr v-if="selectedInstanceId && instanceGrades.length === 0">
@@ -157,6 +157,7 @@
 <script setup>
   import { ref, computed, onMounted } from 'vue'
   import client from '@/api/client.js'
+  import { teacherDisplayName } from '@/utils/teacherName.js'
   import { useToast } from '@/composables/useToast.js'
 
   const toast = useToast()
