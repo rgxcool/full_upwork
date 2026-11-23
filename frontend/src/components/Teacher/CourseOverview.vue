@@ -57,75 +57,173 @@
               </div>
             </v-card-text>
             <v-card-text v-else>
-              <div v-if="courseDetails.isCourseInstance" class="course-instance-info mb-4">
-                <div class="info-item">
-                  <strong>Kurskod:</strong> {{ courseDetails.courseCode }}
-                </div>
-                <div v-if="courseDetails.startDate && courseDetails.endDate" class="info-item">
-                  <strong>Period:</strong> {{ formatDate(courseDetails.startDate) }} - {{ formatDate(courseDetails.endDate) }}
-                </div>
-                <div v-if="courseDetails.slutprovDate" class="info-item">
-                  <strong>Slutprovsdatum:</strong> {{ formatDate(courseDetails.slutprovDate) }}
-                </div>
-                <div v-if="courseDetails.mainCourseId" class="info-item">
-                  <strong>Huvudkurs:</strong> {{ courseDetails.mainCourseId?.courseName || 'Okänd' }}
-                </div>
-              </div>
+              <v-tabs
+                v-model="detailsTab"
+                color="primary"
+                density="compact"
+                class="mb-4"
+                @update:model-value="onDetailsTabChange"
+              >
+                <v-tab value="students">Elever</v-tab>
+                <v-tab value="modules">Moduler</v-tab>
+              </v-tabs>
 
-              <div class="teacher-info mb-4">
-                <div v-if="courseDetails.teacher && courseDetails.teacher._id">
-                  <strong>Ansvarig lärare:</strong>
-                  <a href="#" class="teacher-link" @click.prevent="viewTeacher(courseDetails.teacher._id)">
-                    {{ courseDetails.teacher.username }}
-                  </a>
-                </div>
-                <div v-else-if="courseDetails.teachers && courseDetails.teachers.length > 0">
-                  <strong>Lärare:</strong>
-                  <span v-for="(teacher, index) in courseDetails.teachers" :key="teacher._id">
-                    <a href="#" class="teacher-link" @click.prevent="viewTeacher(teacher._id)">
-                      {{ teacher.username }}
-                    </a>
-                    <span v-if="index < courseDetails.teachers.length - 1">, </span>
-                  </span>
-                </div>
-                <div v-else>
-                  <strong>Lärare:</strong> Ingen ansvarig lärare tilldelad
-                </div>
-              </div>
-
-              <h3 class="mb-3">Elever ({{ courseDetails.students?.length || 0 }})</h3>
-              <div v-if="courseDetails.students && courseDetails.students.length > 0" class="students-list">
-                <div
-                  v-for="student in courseDetails.students"
-                  :key="student._id"
-                  class="student-item p-3 mb-2 rounded border bg-light"
-                >
-                  <div class="d-flex justify-space-between align-center mb-1">
-                    <div>
-                      <a href="#" class="student-link font-weight-bold" @click.prevent="viewStudent(student._id)">
-                        {{ student.name }}
-                      </a>
-                      <span v-if="student.personalNumber" class="text-caption text-grey ml-2">({{ student.personalNumber }})</span>
+              <v-window v-model="detailsTab">
+                <v-window-item value="students">
+                  <div v-if="courseDetails.isCourseInstance" class="course-instance-info mb-4">
+                    <div class="info-item">
+                      <strong>Kurskod:</strong> {{ courseDetails.courseCode }}
                     </div>
-                    <v-chip
-                      size="x-small"
-                      :color="student.attended ? 'success' : 'grey'"
-                      variant="flat"
+                    <div v-if="courseDetails.startDate && courseDetails.endDate" class="info-item">
+                      <strong>Period:</strong> {{ formatDate(courseDetails.startDate) }} - {{ formatDate(courseDetails.endDate) }}
+                    </div>
+                    <div v-if="courseDetails.slutprovDate" class="info-item">
+                      <strong>Slutprovsdatum:</strong> {{ formatDate(courseDetails.slutprovDate) }}
+                    </div>
+                    <div v-if="courseDetails.mainCourseId" class="info-item">
+                      <strong>Huvudkurs:</strong> {{ courseDetails.mainCourseId?.courseName || 'Okänd' }}
+                    </div>
+                  </div>
+
+                  <div class="teacher-info mb-4">
+                    <div v-if="courseDetails.teacher && courseDetails.teacher._id">
+                      <strong>Ansvarig lärare:</strong>
+                      <a href="#" class="teacher-link" @click.prevent="viewTeacher(courseDetails.teacher._id)">
+                        {{ courseDetails.teacher.username }}
+                      </a>
+                    </div>
+                    <div v-else-if="courseDetails.teachers && courseDetails.teachers.length > 0">
+                      <strong>Lärare:</strong>
+                      <span v-for="(teacher, index) in courseDetails.teachers" :key="teacher._id">
+                        <a href="#" class="teacher-link" @click.prevent="viewTeacher(teacher._id)">
+                          {{ teacher.username }}
+                        </a>
+                        <span v-if="index < courseDetails.teachers.length - 1">, </span>
+                      </span>
+                    </div>
+                    <div v-else>
+                      <strong>Lärare:</strong> Ingen ansvarig lärare tilldelad
+                    </div>
+                  </div>
+
+                  <h3 class="mb-3">Elever ({{ courseDetails.students?.length || 0 }})</h3>
+                  <div v-if="courseDetails.students && courseDetails.students.length > 0" class="students-list">
+                    <div
+                      v-for="student in courseDetails.students"
+                      :key="student._id"
+                      class="student-item p-3 mb-2 rounded border bg-light"
                     >
-                      {{ student.attended ? 'Deltog vid slutprov' : 'Ej registrerad' }}
-                    </v-chip>
+                      <div class="d-flex justify-space-between align-center mb-1">
+                        <div>
+                          <a href="#" class="student-link font-weight-bold" @click.prevent="viewStudent(student._id)">
+                            {{ student.name }}
+                          </a>
+                          <span v-if="student.personalNumber" class="text-caption text-grey ml-2">({{ student.personalNumber }})</span>
+                        </div>
+                        <v-chip
+                          size="x-small"
+                          :color="student.attended ? 'success' : 'grey'"
+                          variant="flat"
+                        >
+                          {{ student.attended ? 'Deltog vid slutprov' : 'Ej registrerad' }}
+                        </v-chip>
+                      </div>
+                      <div class="student-exam-meta d-flex flex-wrap gap-3 text-caption text-grey-darken-1 mt-1">
+                        <span v-if="student.email"><strong>E-post:</strong> {{ student.email }}</span>
+                        <span><strong>Tid:</strong> {{ student.examTime || 'Enligt schema' }}</span>
+                        <span><strong>Kommun:</strong> {{ student.examMunicipality || 'Ej angiven' }}</span>
+                        <span><strong>Plats:</strong> {{ student.examLocation || 'Ej angiven' }}<span v-if="student.examRoom"> (Sal: {{ student.examRoom }})</span></span>
+                      </div>
+                    </div>
                   </div>
-                  <div class="student-exam-meta d-flex flex-wrap gap-3 text-caption text-grey-darken-1 mt-1">
-                    <span v-if="student.email"><strong>E-post:</strong> {{ student.email }}</span>
-                    <span><strong>Tid:</strong> {{ student.examTime || 'Enligt schema' }}</span>
-                    <span><strong>Kommun:</strong> {{ student.examMunicipality || 'Ej angiven' }}</span>
-                    <span><strong>Plats:</strong> {{ student.examLocation || 'Ej angiven' }}<span v-if="student.examRoom"> (Sal: {{ student.examRoom }})</span></span>
+                  <div v-else class="no-students">
+                    Inga elever inskrivna i denna kurs
                   </div>
-                </div>
-              </div>
-              <div v-else class="no-students">
-                Inga elever inskrivna i denna kurs
-              </div>
+                </v-window-item>
+
+                <v-window-item value="modules">
+                  <v-alert
+                    v-if="moduleStatusError"
+                    type="warning"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-3"
+                  >
+                    {{ moduleStatusError }}
+                  </v-alert>
+                  <v-progress-linear
+                    v-if="moduleStatusLoading"
+                    indeterminate
+                    color="primary"
+                    class="mb-3"
+                  />
+                  <v-table v-else dense class="module-status-table">
+                    <thead>
+                      <tr>
+                        <th class="text-left">Modul</th>
+                        <th class="text-left">Planerat datum</th>
+                        <th class="text-left">Avsnitt</th>
+                        <th class="text-left">Elever</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in moduleRows" :key="row.moduleNumber">
+                        <td>
+                          <div class="font-weight-medium">
+                            Modul {{ row.moduleNumber }} · {{ row.title || 'Utan titel' }}
+                          </div>
+                          <div class="d-flex flex-wrap ga-1 mt-1">
+                            <v-chip v-if="row.isHiddenFromStudent" size="x-small" color="grey" variant="tonal">
+                              Dold för elever
+                            </v-chip>
+                            <v-chip v-if="row.isPartialExam" size="x-small" color="warning" variant="tonal">
+                              Deltenta
+                            </v-chip>
+                            <v-chip v-if="row.isCaseStudy" size="x-small" color="info" variant="tonal">
+                              Fallstudie
+                            </v-chip>
+                          </div>
+                        </td>
+                        <td>{{ row.plannedDate || '–' }}</td>
+                        <td>
+                          <div v-if="row.avsnitt.length" class="avsnitt-summary">
+                            <div
+                              v-for="av in row.avsnitt"
+                              :key="av.avsnittId || av.order"
+                              class="avsnitt-summary-row"
+                            >
+                              <strong>{{ avsnittLabel(av) }}</strong>
+                              <span class="text-caption">{{ PLANNED_DATE_LABEL }}: {{ av.plannedDate || '–' }}</span>
+                            </div>
+                          </div>
+                          <span v-else class="text-caption text-grey">–</span>
+                        </td>
+                        <td>
+                          <div v-if="row.students.length" class="d-flex flex-wrap ga-1">
+                            <v-chip
+                              v-for="student in row.students"
+                              :key="student.studentId"
+                              size="x-small"
+                              :color="moduleStatusTone(student)"
+                              variant="tonal"
+                              :title="studentTooltip(student)"
+                            >
+                              {{ student.name }} · {{ moduleStatusLabel(student) }}
+                            </v-chip>
+                          </div>
+                          <span v-else class="text-caption text-grey">–</span>
+                          <div v-if="row.completedCount || row.behindCount" class="text-caption text-grey mt-1">
+                            {{ row.completedCount }} klara · {{ row.behindCount }} bakom
+                          </div>
+                        </td>
+                      </tr>
+                      <tr v-if="moduleRows.length === 0">
+                        <td colspan="4" class="text-center text-grey">Inga moduler registrerade.</td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </v-window-item>
+              </v-window>
             </v-card-text>
             <v-card-actions>
               <v-spacer></v-spacer>
@@ -141,6 +239,7 @@
 <script>
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
+  import { PLANNED_DATE_LABEL, formatPlannedDate, sortedAvsnitt } from '@/utils/courseContent.js'
 
   export default {
     name: 'CourseOverview',
@@ -159,6 +258,12 @@
         showModal: false,
         loadingDetails: false,
         courseDetails: {},
+        detailsTab: 'students',
+        activityResults: [],
+        moduleStatusLoading: false,
+        moduleStatusLoaded: false,
+        moduleStatusError: '',
+        PLANNED_DATE_LABEL,
         headers: [
           { title: 'Kursnamn', key: 'courseName', sortable: true, align: 'start' },
           { title: 'Kurskod', key: 'courseCode', sortable: true, align: 'start' },
@@ -206,6 +311,83 @@
           }
           return true;
         });
+      },
+      moduleRows() {
+        const modules = Array.isArray(this.courseDetails.modules)
+          ? this.courseDetails.modules
+          : [];
+        const students = Array.isArray(this.courseDetails.students)
+          ? this.courseDetails.students
+          : [];
+        const content =
+          this.courseDetails.content instanceof Map
+            ? Object.fromEntries(this.courseDetails.content)
+            : this.courseDetails.content || {};
+        const resultsByStudent = new Map(
+          this.activityResults
+            .filter((result) => result && result.studentId)
+            .map((result) => [String(result.studentId), result])
+        );
+
+        return [...modules]
+          .sort(
+            (a, b) =>
+              (Number(a.moduleNumber) || 0) - (Number(b.moduleNumber) || 0)
+          )
+          .map((mod) => {
+            const moduleNumber = Number(mod.moduleNumber) || 0;
+            const overlay = content[String(moduleNumber)] || {};
+            const statusByStudent = new Map();
+            for (const result of resultsByStudent.values()) {
+              const statuses = Array.isArray(result.moduleStatuses)
+                ? result.moduleStatuses
+                : [];
+              const status = statuses.find(
+                (entry) => Number(entry.moduleNumber) === moduleNumber
+              );
+              if (status) {
+                statusByStudent.set(String(result.studentId), {
+                  status,
+                  result,
+                });
+              }
+            }
+
+            const studentRows = students.map((student) => {
+              const studentId = String(student._id || student.studentId || '');
+              const entry = statusByStudent.get(studentId);
+              return {
+                studentId,
+                name: student.name || 'Elev',
+                hasStatus: Boolean(entry),
+                completed: Boolean(entry?.status?.completed),
+                behind: Boolean(entry?.status?.behind),
+                overallStatus: entry?.result?.overallStatus || null,
+              };
+            });
+
+            return {
+              moduleNumber,
+              title: overlay.title || mod.title || '',
+              // D5: planned dates come from the details payload only. The batch
+              // service's sectionDate is deliberately not used here.
+              plannedDate: formatPlannedDate(mod.startDate),
+              isPartialExam: Boolean(mod.isPartialExam),
+              isCaseStudy: Boolean(mod.isCaseStudy),
+              isHiddenFromStudent: Boolean(overlay.isHiddenFromStudent),
+              avsnitt: sortedAvsnitt(mod).map((av) => ({
+                avsnittId: av.avsnittId || null,
+                title: av.title || '',
+                order: Number.isFinite(Number(av.order))
+                  ? Number(av.order)
+                  : null,
+                plannedDate: formatPlannedDate(av.plannedDate),
+              })),
+              students: studentRows,
+              completedCount: studentRows.filter((s) => s.completed).length,
+              behindCount: studentRows.filter((s) => s.behind).length,
+            };
+          });
       },
     },
     async created() {
@@ -290,6 +472,11 @@
         this.showModal = true;
         this.loadingDetails = true;
         this.courseDetails = {};
+        this.detailsTab = 'students';
+        this.activityResults = [];
+        this.moduleStatusLoading = false;
+        this.moduleStatusLoaded = false;
+        this.moduleStatusError = '';
         
         try {
           const response = await client.get(`/details/Kursinstans/${instanceId}`);
@@ -305,6 +492,63 @@
       closeModal() {
         this.showModal = false;
         this.courseDetails = {};
+        this.detailsTab = 'students';
+        this.activityResults = [];
+        this.moduleStatusLoading = false;
+        this.moduleStatusLoaded = false;
+        this.moduleStatusError = '';
+      },
+      async onDetailsTabChange(tab) {
+        if (tab === 'modules' && !this.moduleStatusLoaded) {
+          await this.loadModuleStatus();
+        }
+      },
+      async loadModuleStatus() {
+        const instanceId = this.courseDetails?._id;
+        if (!instanceId || this.moduleStatusLoading || this.moduleStatusLoaded) return;
+
+        this.moduleStatusLoading = true;
+        this.moduleStatusError = '';
+        try {
+          const { data } = await client.post(
+            `/learning/instances/${instanceId}/activity-status/batch`,
+            {}
+          );
+          if (data?.error) throw new Error(data.error);
+          this.activityResults = Array.isArray(data?.activityResults)
+            ? data.activityResults
+            : [];
+          this.moduleStatusLoaded = true;
+        } catch (error) {
+          console.error('Error fetching module status:', error);
+          this.moduleStatusError =
+            'Kunde inte hämta modulstatus. Planeringsdatum visas ändå.';
+          this.activityResults = [];
+        } finally {
+          this.moduleStatusLoading = false;
+        }
+      },
+      avsnittLabel(av) {
+        return av.title || `Avsnitt ${av.order || ''}`;
+      },
+      moduleStatusLabel(student) {
+        if (!student.hasStatus) return '–';
+        if (student.completed) return 'Klar';
+        if (student.behind) return 'Bakom';
+        return 'På gång';
+      },
+      moduleStatusTone(student) {
+        if (!student.hasStatus) return undefined;
+        if (student.completed) return 'success';
+        if (student.behind) return 'warning';
+        return 'info';
+      },
+      studentTooltip(student) {
+        const status = this.moduleStatusLabel(student);
+        const overall = student.overallStatus
+          ? ` (${student.overallStatus})`
+          : '';
+        return `${student.name}: ${status}${overall}`;
       },
       viewStudent(studentId) {
         this.$router.push(`/student/${studentId}`);
@@ -460,5 +704,17 @@
   font-style: italic;
   padding: 20px;
   text-align: center;
+}
+
+.module-status-table th {
+  white-space: nowrap;
+}
+
+.avsnitt-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+  padding: 0.1rem 0;
 }
 </style>
