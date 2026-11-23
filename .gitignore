@@ -61,3 +61,16 @@ frontend/dist.failed
 
 # Playwright MCP browser snapshots/logs (local tooling output)
 .playwright-mcp/
+
+# Spreadsheets: never commit real student data (#105). Only vetted files are
+# allowed; CI checks them with .github/scripts/check_spreadsheets.py.
+*.xlsx
+*.xls
+*.ods
+*.csv
+!data/Kurser och kurspaket*.xlsx
+!backend/docs/Kurser och kurspaket*.xlsx
+!data/test_mindful.xlsx
+!backend/docs/test_mindful.xlsx
+!frontend/public/excel-upload-template.xlsx
+!frontend/docs/Jan 25 Test*.xlsx

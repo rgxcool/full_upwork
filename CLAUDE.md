@@ -80,8 +80,9 @@ Columns (Status field), in order:
 - Never use a MongoDB Atlas MCP or any other remote-database connector against project data, even if
   one is attached to the session. Never copy Sentry event payloads into issues, PRs or commits.
 - `data/` holds the client's spec documents and course lists — read them, but never add student data there.
-- **Known real personal data in the repo** (removal tracked separately): `data/test_mindful.xlsx`,
-  `backend/docs/test_mindful.xlsx` (used by `parseStudentExcel.test.js`) and `public/demo-template.xlsx`.
+- Spreadsheets are git-ignored except a vetted allow-list (`.github/spreadsheet-allowlist.txt`); CI runs
+  `.github/scripts/check_spreadsheets.py` and fails on unlisted files or real-looking personnummer. Make test
+  workbooks with `backend/scripts/anonymizeStudentWorkbook.js` (real data was purged from history in #105).
   Never open, print, copy, demo with or build fixtures from these; use `frontend/public/excel-upload-template.xlsx`
   or generate fake rows instead.
 - Do not add third-party services that receive student data (AI providers, SMS, error tracking)
