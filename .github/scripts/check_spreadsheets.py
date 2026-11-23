@@ -4,13 +4,16 @@
 Fails when
   1. a tracked spreadsheet (.xlsx/.xls/.ods/.csv) is not in
      .github/spreadsheet-allowlist.txt, or
-  2. any tracked spreadsheet contains a personnummer that is not an obvious
-     fake: born 1900 (backend/scripts/anonymizeStudentWorkbook.js) or a 01-01
-     placeholder date such as 20000101-1234.
+  2. any tracked spreadsheet contains a number that could be a real
+     personnummer: a valid date (samordningsnummer: day + 60) AND a correct
+     Luhn check digit. Numbers born 1900 are allowed: they are the fakes made
+     by backend/scripts/anonymizeStudentWorkbook.js. Placeholders such as
+     20000101-1234 and phone numbers fail the checksum and pass.
 
 Prints file names, counts and reasons only — never cell contents.
 Standard library only. Usage (repo root): python3 .github/scripts/check_spreadsheets.py
 """
+import datetime
 import fnmatch
 import re
 import subprocess
@@ -48,11 +51,40 @@ def text_of(path: Path) -> str:
     return ""  # legacy .xls: allow-list only
 
 
-def is_obvious_fake(value: str) -> bool:
+def luhn_ok(ten_digits: str) -> bool:
+    """Luhn check on YYMMDDNNNC: weights 2,1,2,1,... on the first nine digits,
+    sum the digits of each product; C = (10 - sum % 10) % 10."""
+    total = 0
+    for i, ch in enumerate(ten_digits[:9]):
+        product = int(ch) * (2 if i % 2 == 0 else 1)
+        total += product // 10 + product % 10
+    return (10 - total % 10) % 10 == int(ten_digits[9])
+
+
+def date_ok(century: str, yymmdd: str) -> bool:
+    """Valid birth date; samordningsnummer add 60 to the day."""
+    year, month, day = int(century + yymmdd[:2]), int(yymmdd[2:4]), int(yymmdd[4:6])
+    if day > 60:
+        day -= 60
+    try:
+        datetime.date(year, month, day)
+        return True
+    except ValueError:
+        return False
+
+
+def could_be_real(value: str) -> bool:
+    """True when `value` passes the personnummer date and checksum rules and
+    is not a born-1900 fake."""
     digits = value.replace("-", "").replace("+", "")
-    if len(digits) == 10:  # YYMMDD-NNNN: assume 19xx for the check
-        digits = "19" + digits
-    return digits.startswith("1900") or digits[4:8] == "0101"
+    if len(digits) == 12:
+        if digits.startswith("1900"):
+            return False
+        centuries = [digits[:2]]
+        digits = digits[2:]
+    else:  # YYMMDD-NNNN: the century is unknown, so try both
+        centuries = ["19", "20"]
+    return luhn_ok(digits) and any(date_ok(c, digits[:6]) for c in centuries)
 
 
 def main() -> int:
@@ -62,9 +94,9 @@ def main() -> int:
         if not any(fnmatch.fnmatch(rel, p) for p in patterns):
             problems.append(f"{rel}: not in .github/spreadsheet-allowlist.txt")
             continue
-        real_looking = [v for v in PERSONNUMMER.findall(text_of(ROOT / rel)) if not is_obvious_fake(v)]
+        real_looking = [v for v in PERSONNUMMER.findall(text_of(ROOT / rel)) if could_be_real(v)]
         if real_looking:
-            problems.append(f"{rel}: {len(real_looking)} personnummer that are not obvious fakes (born 1900 or 01-01)")
+            problems.append(f"{rel}: {len(real_looking)} numbers that could be real personnummer (valid date and check digit)")
     if problems:
         print("Spreadsheet guard failed (#105 — never commit real personal data):")
         for p in problems:
