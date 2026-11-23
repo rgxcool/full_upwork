@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 import { GridFSBucket } from "mongodb";
 import logger from "../utils/logger.js";
+import { captureException } from "../utils/monitoring.js";
+
+const MAX_REPORTED_FAILURES = 20;
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import {
     CertificateRecord,
@@ -209,6 +212,8 @@ export async function runAutomaticDiplomaScan({ now = new Date() } = {}) {
         skipped: 0,
         skippedNoSignature: 0,
         failed: 0,
+        // ids only (no names): which student/package diplomas failed (#83)
+        failures: [],
     };
 
     try {
@@ -278,6 +283,19 @@ export async function runAutomaticDiplomaScan({ now = new Date() } = {}) {
                 }
             } catch (error) {
                 summary.failed++;
+                // #83: a failed diploma (e.g. Chrome cannot start for the PDF)
+                // must show up in monitoring and the job summary, not only the log.
+                if (summary.failures.length < MAX_REPORTED_FAILURES) {
+                    summary.failures.push({
+                        studentId: String(studentId),
+                        coursePackageId: String(coursePackageId),
+                        error: error?.name || "Error",
+                    });
+                }
+                captureException(error, {
+                    tags: { job: "nightly-automatic-diploma-scan" },
+                    extra: { studentId: String(studentId), coursePackageId: String(coursePackageId) },
+                });
                 logger.error(
                     { err: error, studentId, coursePackageId },
                     "Automatic diploma generation failed"
@@ -286,6 +304,7 @@ export async function runAutomaticDiplomaScan({ now = new Date() } = {}) {
         }
     } catch (error) {
         summary.failed++;
+        captureException(error, { tags: { job: "nightly-automatic-diploma-scan" } });
         logger.error({ err: error }, "Automatic diploma scan failed");
     }
 
