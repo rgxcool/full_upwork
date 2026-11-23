@@ -348,7 +348,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
-import { municipalityPricing } from '@/utils/municipalityPricing.js';
+import { SELECTABLE_MUNICIPALITIES } from '@/constants/municipalities.js';
 import { addWeeks, getNextMonday } from '@/utils/dateOnly.js';
 
 export default {
@@ -413,7 +413,7 @@ export default {
     const submitError = ref('');
     const submitSuccess = ref(false);
 
-    const municipalities = computed(() => Object.keys(municipalityPricing));
+    const municipalities = computed(() => [...SELECTABLE_MUNICIPALITIES]);
 
     const filteredCourses = computed(() => {
       const q = courseSearchQuery.value.toLowerCase().trim();

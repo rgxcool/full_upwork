@@ -132,6 +132,7 @@
 <script setup>
   import { ref, computed, onMounted } from 'vue'
   import client from '@/api/client.js'
+  import { teacherDisplayName } from '@/utils/teacherName.js'
   import { useToast } from '@/composables/useToast.js'
 
   const toast = useToast()
@@ -151,7 +152,7 @@
 
   const teacherOptions = computed(() =>
     teachers.value.map((teacher) => ({
-      title: teacher.userId?.username || teacher.name || teacher._id,
+      title: teacherDisplayName(teacher) || teacher._id,
       value: teacher._id,
     }))
   )

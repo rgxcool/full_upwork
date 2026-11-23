@@ -46,7 +46,7 @@ router.post(
         const { default: Student } = await import("../models/Student.js");
         const { default: Course } = await import("../models/Course.js");
         const { default: CoursePackage } = await import("../models/CoursePackage.js");
-        const { default: Teacher } = await import("../models/Teacher.js");
+        const { default: User } = await import("../models/User.js");
         const { calculateSlutprovDate } = await import("../utils/slutprovDateCalculator.js");
         const { default: CourseMatchingService } = await import("../utils/courseMatchingService.js");
 
@@ -82,12 +82,30 @@ router.post(
             return date;
         };
 
+        // Fallback slutprov when the teacher has no rule — same rule as
+        // CourseMatchingService (what the real placement uses): Wednesday of
+        // week 4 at normal pace, the Wednesday before the course end when the
+        // course is stretched (50 % / 25 % pace). UTC, like the helpers above.
+        const fallbackSlutprov = (courseStart, courseEnd, stretched) => {
+            const date = new Date(stretched ? courseEnd : courseStart);
+            if (stretched) {
+                let back = (date.getUTCDay() - 3 + 7) % 7;
+                if (back === 0) back = 7;
+                date.setUTCDate(date.getUTCDate() - back);
+            } else {
+                date.setUTCDate(date.getUTCDate() + 3 * 7 + ((3 - date.getUTCDay() + 7) % 7));
+            }
+            date.setUTCHours(0, 0, 0, 0);
+            return date;
+        };
+
         // Helper: resolve teacher name for slutprov calculation
         const getTeacherName = async (teacherId) => {
             if (!teacherId) return null;
             try {
-                const teacher = await Teacher.findById(teacherId).populate("userId", "username");
-                return teacher?.userId?.username || null;
+                // teacherId is the teacher's User id (#102).
+                const teacher = await User.findById(teacherId).select("username").lean();
+                return teacher?.username || null;
             } catch {
                 return null;
             }
@@ -109,7 +127,8 @@ router.post(
                 return res.status(404).json({ error: "Course not found" });
             }
 
-            const weeks = Number(durationWeeks) || Number(course.courseExtent) || 5;
+            const baseWeeks = parseFloat(course.courseExtent) || 5;
+            const weeks = Number(durationWeeks) || baseWeeks;
             const courseStart = getNextMonday(new Date(startDate));
             const courseEnd = addWeeks(courseStart, weeks);
 
@@ -122,11 +141,9 @@ router.post(
                     courseEnd
                 );
             }
-            // Fallback: Wednesday week 4
             if (!slutprovDate) {
-                slutprovDate = new Date(courseStart);
-                slutprovDate.setDate(slutprovDate.getDate() + 3 * 7 + ((3 - slutprovDate.getDay() + 7) % 7));
-                slutprovDate.setHours(0, 0, 0, 0);
+                // "10 veckor (50%)" on a 5-week course is a stretched course.
+                slutprovDate = fallbackSlutprov(courseStart, courseEnd, weeks > baseWeeks);
             }
 
             results.push({
@@ -186,9 +203,7 @@ router.post(
                     );
                 }
                 if (!slutprovDate) {
-                    slutprovDate = new Date(courseStart);
-                    slutprovDate.setUTCDate(slutprovDate.getUTCDate() + 3 * 7 + ((3 - slutprovDate.getUTCDay() + 7) % 7));
-                    slutprovDate.setUTCHours(0, 0, 0, 0);
+                    slutprovDate = fallbackSlutprov(courseStart, courseEnd, paceFactor > 1);
                 }
 
                 results.push({

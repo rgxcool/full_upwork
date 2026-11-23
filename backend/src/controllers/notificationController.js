@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import Notification from "../models/Notification.js";
 import Student from "../models/Student.js";
 import User from "../models/User.js";
-import Teacher from "../models/Teacher.js";
 import Course from "../models/Course.js";
 import { sendEmail, getEmailSignature } from "../services/emailService.js";
 import logger from "../utils/logger.js";
@@ -367,8 +366,9 @@ export async function sendStudyplanChangedNotification({ doc, changeType, change
                 let teacherEmail = null;
                 try {
                     if (doc.teacherId) {
-                        const teacher = await Teacher.findById(doc.teacherId).populate('userId', 'email');
-                        teacherEmail = teacher?.userId?.email || null;
+                        // doc.teacherId is the teacher's User id (#102).
+                        const teacher = await User.findById(doc.teacherId).select('email').lean();
+                        teacherEmail = teacher?.email || null;
                     }
                 } catch (e) {
                     logger.error({ err: e }, "Error resolving teacher email for study plan notification");

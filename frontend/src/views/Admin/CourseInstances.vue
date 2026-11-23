@@ -154,7 +154,7 @@
                 </span>
               </td>
               <td>{{ instance.createdBy?.username || 'System' }}</td>
-              <td>{{ instance.responsibleTeacher?.userId?.username || '-' }}</td>
+              <td>{{ teacherDisplayName(instance.responsibleTeacher, '-') }}</td>
               <td class="actions-cell">
                 <div class="actions-buttons">
                   <button
@@ -255,7 +255,7 @@
                         class="form-control"
                       >
                         <option value="">Ingen mall</option>
-                        <option v-for="template in templates" :key="template._id" :value="template._id">
+                        <option v-for="template in templatesForCourse" :key="template._id" :value="template._id">
                           {{ template.templateName }}
                           <template v-if="template.courseId?.courseName">
                             ({{ template.courseId.courseName }})
@@ -652,6 +652,7 @@
 <script>
   import { ref, onMounted, computed, watch } from 'vue'
   import { useStore } from 'vuex'
+  import { teacherDisplayName } from '@/utils/teacherName.js'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
 
@@ -768,8 +769,8 @@
             aVal = a.createdBy?.username || ''
             bVal = b.createdBy?.username || ''
           } else if (sortKey.value === 'responsibleTeacher') {
-            aVal = a.responsibleTeacher?.userId?.username || ''
-            bVal = b.responsibleTeacher?.userId?.username || ''
+            aVal = teacherDisplayName(a.responsibleTeacher)
+            bVal = teacherDisplayName(b.responsibleTeacher)
           } else if (sortKey.value === 'enrollmentCount') {
             aVal = a.enrollmentCount || 0
             bVal = b.enrollmentCount || 0
@@ -978,6 +979,22 @@
           teachers.value = []
         }
       }
+
+      // Only offer mallar for the chosen huvudkurs (plus course-less ones), so a new
+      // instance can't copy another course's modules by mistake.
+      const templateCourseId = (template) => template.courseId?._id || template.courseId || null
+      const templatesForCourse = computed(() => {
+        const courseId = instanceForm.value.mainCourseId
+        if (!courseId) return templates.value
+        return templates.value.filter((t) => {
+          const tc = templateCourseId(t)
+          return !tc || String(tc) === String(courseId)
+        })
+      })
+      watch(templatesForCourse, (list) => {
+        const chosen = instanceForm.value.templateId
+        if (chosen && !list.some((t) => t._id === chosen)) instanceForm.value.templateId = ''
+      })
 
       const loadTemplates = async () => {
         try {
@@ -1333,9 +1350,12 @@
       })
 
       return {
+        teacherDisplayName,
         instances,
         courses,
         teachers,
+        templates,
+        templatesForCourse,
         enrollments,
         selectedInstance,
         showCreateModal,

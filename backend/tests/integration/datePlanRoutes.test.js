@@ -13,9 +13,9 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import TeacherScheduleParameters from "../../src/models/TeacherScheduleParameters.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 import { buildDefaultModules } from "../../src/models/courseModuleSchema.js";
 import {
     connectTestDatabase,
@@ -54,7 +54,6 @@ describe("datePlanRoutes", () => {
             CourseInstance.deleteMany({}),
             TeacherScheduleParameters.deleteMany({}),
             User.deleteMany({}),
-            Teacher.deleteMany({}),
         ]);
 
         const admin = await User.create({
@@ -69,11 +68,9 @@ describe("datePlanRoutes", () => {
             password: "testPassword123!",
             roles: ["teacher"],
         });
-        const teacher = await Teacher.create({
-            userId: teacherUser._id,
-            subject: "Matematik",
-        });
-        teacherId = teacher._id;
+        // #102: the teacher id is the User id; Teacher model was removed.
+        await giveTeacherProfile(teacherUser, { subject: "Matematik" });
+        teacherId = teacherUser._id;
         mainCourseId = new mongoose.Types.ObjectId();
 
         adminCookie = `token=${makeToken(admin, "admin")}`;

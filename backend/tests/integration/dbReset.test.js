@@ -15,6 +15,7 @@ import {
     flushAllButAdmins,
     wipeEverything,
 } from "../../scripts/lib/dbReset.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const modelsDir = path.resolve(import.meta.dirname, "../../src/models");
 
@@ -25,7 +26,6 @@ const count = (name) => db.collection(name).countDocuments({});
 
 async function seed() {
     const User = mongoose.model("User");
-    const Teacher = mongoose.model("Teacher");
     const Student = mongoose.model("Student");
     const Course = mongoose.model("Course");
     const CourseInstance = mongoose.model("CourseInstance");
@@ -40,8 +40,14 @@ async function seed() {
     // Legacy shape: role string only.
     await db.collection("users").insertOne({ name: "Legacy Sys", email: "legacy@test.invalid", role: "systemadmin" });
 
-    const keptTeacher = await Teacher.create({ userId: adminTeacherUser._id, subject: "Svenska" });
-    const goneTeacher = await Teacher.create({ userId: teacherUser._id, subject: "Matte" });
+    const keptTeacher = await giveTeacherProfile(adminTeacherUser._id, { subject: "Svenska" });
+    const goneTeacher = await giveTeacherProfile(teacherUser._id, { subject: "Matte" });
+    // Legacy Teacher rows, as on a database the #102 migration has not run on yet.
+    const legacyKept = new mongoose.Types.ObjectId();
+    await db.collection("teachers").insertMany([
+        { _id: legacyKept, userId: adminTeacherUser._id, subject: "Svenska" },
+        { userId: teacherUser._id, subject: "Matte" },
+    ]);
     await db.collection("teacherscheduleparameters").insertMany([
         { teacherId: keptTeacher._id, courseId: new mongoose.Types.ObjectId(), lengthWeeks: 5 },
         { teacherId: goneTeacher._id, courseId: new mongoose.Types.ObjectId(), lengthWeeks: 10 },
@@ -91,7 +97,7 @@ async function seed() {
     fs.writeFileSync(path.join(uploadsDir, "123-elev.pdf"), "pdf");
     await Document.create({ student: student._id, filename: "123-elev.pdf", originalName: "elev.pdf", type: "GENERAL" });
 
-    return { admin, sysadmin, adminTeacherUser, keptTeacher, logoId };
+    return { admin, sysadmin, adminTeacherUser, keptTeacher, legacyKept, logoId };
 }
 
 describe("dev reset scripts (dbReset)", () => {
@@ -124,7 +130,7 @@ describe("dev reset scripts (dbReset)", () => {
 
     describe("flushAllButAdmins", () => {
         it("keeps admins, their teacher profiles, the catalog and config files; clears the rest", async () => {
-            const { keptTeacher, logoId } = await seed();
+            const { keptTeacher, legacyKept, logoId } = await seed();
 
             await flushAllButAdmins(db, { uploadsDir });
 
@@ -132,8 +138,10 @@ describe("dev reset scripts (dbReset)", () => {
             expect(users.map((u) => u.email).sort()).toEqual(
                 ["admin@test.invalid", "al@test.invalid", "legacy@test.invalid", "sys@test.invalid"]
             );
+            const kept = users.find((u) => String(u._id) === String(keptTeacher._id));
+            expect(kept.teacherProfile.subject).toBe("Svenska");
             const teachers = await db.collection("teachers").find({}).toArray();
-            expect(teachers.map((t) => String(t._id))).toEqual([String(keptTeacher._id)]);
+            expect(teachers.map((t) => String(t._id))).toEqual([String(legacyKept)]);
             expect(await count("teacherscheduleparameters")).toBe(1);
 
             for (const name of ["programs", "courses", "coursepackages", "courseTemplates", "faqs", "counters", "certificatesettings"]) {

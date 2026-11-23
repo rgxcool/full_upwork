@@ -1,3 +1,5 @@
+// Imports students from an Excel workbook into the local dev database.
+// Usage (from backend/): node scripts/importStudents.js <workbook.xlsx>
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -7,7 +9,7 @@ import Student from "../src/models/Student.js";
 import Course from "../src/models/Course.js";
 import CourseInstance from "../src/models/CourseInstance.js";
 import StudentEnrollment from "../src/models/StudentEnrollment.js";
-import Teacher from "../src/models/Teacher.js";
+import { HAS_TEACHER_PROFILE } from "../src/utils/teacherProfile.js";
 import User from "../src/models/User.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,7 +17,8 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.resolve(__dirname, "../.env.development") });
 
-const filePath = process.argv[2] || "../docs/test_mindful.xlsx";
+// Default: the dummy sample workbook (no real people).
+const filePath = process.argv[2] || path.resolve(__dirname, "../../data/test_mindful.xlsx");
 
 const MUNI_MAP = {
     "Uppl Väsby": "Upplands Väsby",
@@ -61,11 +64,11 @@ async function importStudents() {
         if (c.courseCode) coursesByCode[c.courseCode.toUpperCase()] = c;
     }
 
-    // Index teachers by name (from userId.name or teacher name)
-    const teachers = await Teacher.find({}).populate("userId", "name").lean();
+    // Index teachers (users with a teacher profile, #102) by name
+    const teachers = await User.find(HAS_TEACHER_PROFILE).select("name username").lean();
     const teachersByName = {};
     for (const t of teachers) {
-        const name = (t.userId?.name || "").trim().toLowerCase();
+        const name = (t.name || t.username || "").trim().toLowerCase();
         if (name) teachersByName[name] = t;
     }
 

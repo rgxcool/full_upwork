@@ -14,7 +14,6 @@ import jwt from "jsonwebtoken";
 import app from "../../index.js";
 import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
-import Teacher from "../../src/models/Teacher.js";
 import Notification from "../../src/models/Notification.js";
 import ActionPlan from "../../src/models/ActionPlan.js";
 import FormQuestions from "../../src/models/ActionPlanQuestions.js";
@@ -24,6 +23,7 @@ import {
     connectTestDatabase,
     disconnectTestDatabase,
 } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const signToken = (payload = {}) => {
     const fullPayload = {
@@ -48,7 +48,6 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
     beforeEach(async () => {
         await Student.deleteMany({});
         await Course.deleteMany({});
-        await Teacher.deleteMany({});
         await Notification.deleteMany({});
         await ActionPlan.deleteMany({});
         await FormQuestions.deleteMany({});
@@ -59,7 +58,6 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
         vi.restoreAllMocks();
         await Student.deleteMany({});
         await Course.deleteMany({});
-        await Teacher.deleteMany({});
         await Notification.deleteMany({});
         await ActionPlan.deleteMany({});
         await FormQuestions.deleteMany({});
@@ -76,12 +74,9 @@ describe("Sub-Phase 7: F-grade -> Notification -> Questionnaire -> Submit -> PDF
             email: "sven@skola.se",
         });
 
-        const teacher = await Teacher.create({
-            userId: teacherUserId,
-            name: "Sven Svensson",
+        const teacher = await giveTeacherProfile(teacherUserId, { name: "Sven Svensson",
             email: "sven@skola.se",
-            subject: "Svenska",
-        });
+            subject: "Svenska" });
 
         const course = await Course.create({
             courseCode: "SVASVE01",

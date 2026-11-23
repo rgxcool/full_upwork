@@ -4,56 +4,21 @@
 import logger from "./logger.js";
 
 /**
- * Get the teacher's username from a Teacher document (populated or not)
- * @param {Object} teacher - Teacher document (may be populated with userId)
+ * The teacher's username. `teacher` is a User id (#102) or a populated User.
+ * @param {Object|string} teacher - User id, ObjectId or (lean/hydrated) User
  * @returns {Promise<string|null>} - Teacher's username or null if not found
  */
 async function getTeacherUsername(teacher) {
     if (!teacher) return null;
-
-    // If teacher is already populated with userId and has username
-    if (
-        teacher.userId &&
-        typeof teacher.userId === "object" &&
-        teacher.userId.username
-    ) {
-        return teacher.userId.username;
+    if (typeof teacher === "object" && typeof teacher.username === "string" && teacher.username) {
+        return teacher.username;
     }
-
-    // If teacher is a Teacher document (with _id) but userId is not populated
-    if (
-        teacher._id ||
-        (teacher.userId &&
-            typeof teacher.userId === "object" &&
-            !teacher.userId.username)
-    ) {
-        const { default: Teacher } = await import("../models/Teacher.js");
-        const teacherId = teacher._id || teacher;
-        const teacherDoc = await Teacher.findById(teacherId).populate(
-            "userId",
-            "username"
-        );
-        if (teacherDoc && teacherDoc.userId && teacherDoc.userId.username) {
-            return teacherDoc.userId.username;
-        }
-    }
-
-    // If teacher is just an ObjectId (string or mongoose ObjectId)
-    if (
-        typeof teacher === "string" ||
-        (teacher && !teacher._id && !teacher.userId)
-    ) {
-        const { default: Teacher } = await import("../models/Teacher.js");
-        const teacherDoc = await Teacher.findById(teacher).populate(
-            "userId",
-            "username"
-        );
-        if (teacherDoc && teacherDoc.userId && teacherDoc.userId.username) {
-            return teacherDoc.userId.username;
-        }
-    }
-
-    return null;
+    const id = teacher._id ?? teacher;
+    const { default: mongoose } = await import("mongoose");
+    if (!mongoose.isValidObjectId(String(id))) return null;
+    const { default: User } = await import("../models/User.js");
+    const user = await User.findById(id).select("username").lean();
+    return user?.username || null;
 }
 
 /**

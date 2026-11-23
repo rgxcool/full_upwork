@@ -15,7 +15,6 @@ import completionRoutes from "../../src/router/completionRoutes.js";
 import CompletionEvent from "../../src/models/CompletionEvent.js";
 import User from "../../src/models/User.js";
 import Student from "../../src/models/Student.js";
-import Teacher from "../../src/models/Teacher.js";
 import {
     connectTestDatabase,
     disconnectTestDatabase,

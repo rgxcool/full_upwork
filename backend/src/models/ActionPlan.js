@@ -6,7 +6,7 @@ const schema = new mongoose.Schema({
   courseId: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
   studentName: { type: String },
   courseName: { type: String },
-  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "Teacher" },
+  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   teacherName: { type: String },
   date: { type: String },
   reason: { type: String },
