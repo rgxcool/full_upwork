@@ -287,19 +287,32 @@ export async function inventoryOwnCollections(db, ownNames) {
     return { own, foreign };
 }
 
+/** chmod a copied tree: directories 0700, files 0600. */
+async function restrictTree(dir) {
+    await fs.chmod(dir, 0o700);
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) await restrictTree(full);
+        else await fs.chmod(full, 0o600);
+    }
+}
+
 /**
  * Export collections to <dir>/<name>.jsonl (canonical Extended JSON, one
  * document per line), and copy uploadsDir to <dir>/uploads when it exists.
  * Throws on any write error (e.g. a full disk), so callers can abort first.
+ * The backup holds personal data: the directory is owner-only (0700) and every
+ * file in it is 0600.
  * @returns {Promise<{ documents: Record<string, number>, bytes: number, uploads: boolean }>}
  */
 export async function backupCollections(db, names, dir, { uploadsDir } = {}) {
-    await fs.mkdir(dir, { recursive: true });
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    await fs.chmod(dir, 0o700);
     const documents = {};
     let bytes = 0;
     for (const name of names) {
         const file = path.join(dir, `${name}.jsonl`);
-        const handle = await fs.open(file, "w");
+        const handle = await fs.open(file, "w", 0o600);
         let n = 0;
         try {
             for await (const doc of db.collection(name).find({})) {
@@ -316,11 +329,13 @@ export async function backupCollections(db, names, dir, { uploadsDir } = {}) {
     let uploads = false;
     if (uploadsDir && fsSync.existsSync(uploadsDir)) {
         await fs.cp(uploadsDir, path.join(dir, "uploads"), { recursive: true });
+        await restrictTree(path.join(dir, "uploads"));
         uploads = true;
     }
     await fs.writeFile(
         path.join(dir, "MANIFEST.json"),
-        JSON.stringify({ database: db.databaseName, createdAt: new Date().toISOString(), documents, uploads }, null, 2)
+        JSON.stringify({ database: db.databaseName, createdAt: new Date().toISOString(), documents, uploads }, null, 2),
+        { mode: 0o600 }
     );
     return { documents, bytes, uploads };
 }

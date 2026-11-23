@@ -33,6 +33,8 @@ const argValue = (name) => {
 };
 
 export async function main() {
+    // Anything this process writes (the backup holds personal data) is owner-only.
+    process.umask(0o077);
     const envFile = process.env.NODE_ENV === "test" ? ".env.test" : process.env.ENV_FILE || ".env.production";
     dotenv.config({ path: path.join(BACKEND_DIR, envFile), quiet: true });
     const uri = process.env.MONGODB_URI;

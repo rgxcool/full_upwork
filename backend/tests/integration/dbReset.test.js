@@ -270,6 +270,13 @@ describe("dev reset scripts (dbReset)", () => {
             expect(fs.existsSync(path.join(backupDir, "uploads", "123-elev.pdf"))).toBe(true);
             expect(JSON.parse(fs.readFileSync(path.join(backupDir, "MANIFEST.json"), "utf8")).documents.students).toBe(1);
             expect(fs.existsSync(path.join(backupDir, "other_site_pages.jsonl"))).toBe(false);
+            // Personal data: owner-only directory and files.
+            const mode = (p) => fs.statSync(p).mode & 0o777;
+            expect(mode(backupDir)).toBe(0o700);
+            expect(mode(path.join(backupDir, "students.jsonl"))).toBe(0o600);
+            expect(mode(path.join(backupDir, "MANIFEST.json"))).toBe(0o600);
+            expect(mode(path.join(backupDir, "uploads"))).toBe(0o700);
+            expect(mode(path.join(backupDir, "uploads", "123-elev.pdf"))).toBe(0o600);
             // Upload files on disk are gone after the backup.
             expect(fs.existsSync(path.join(uploadsDir, "123-elev.pdf"))).toBe(false);
             expect(result.uploadFiles).toBe(1);
