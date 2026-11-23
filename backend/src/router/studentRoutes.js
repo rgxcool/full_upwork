@@ -454,12 +454,12 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
                 existingStudent.dropout = false;
             }
             savedStudent = await existingStudent.save();
-            logger.info({ id: savedStudent._id, name: savedStudent.name }, "Re-registered existing student with auto-filled details");
+            logger.info({ id: savedStudent._id }, "Re-registered existing student with auto-filled details");
         } else {
             const student = new Student(studentData);
             savedStudent = await student.save();
 
-            logger.info({ id: savedStudent._id, name: savedStudent.name, email: savedStudent.email, aplStatus: savedStudent.aplStatus, educationCount: savedStudent.education?.length || 0 }, "Student saved");
+            logger.info({ id: savedStudent._id, aplStatus: savedStudent.aplStatus }, "Student saved");
         }
 
         if (req.body.education && req.body.education.length > 0) {
@@ -480,7 +480,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
                         }
                     );
 
-                logger.info({ count: enrollmentResult?.enrollments?.length || 0, studentName: savedStudent.name }, "Created enrollments for student");
+                logger.info({ count: enrollmentResult?.enrollments?.length || 0, studentId: savedStudent._id }, "Created enrollments for student");
             } catch (enrollmentError) {
                 logger.error({ err: enrollmentError }, "Error creating enrollments");
             }

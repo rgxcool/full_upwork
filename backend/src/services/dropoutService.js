@@ -321,7 +321,7 @@ export const performStudentDropout = async ({ studentId, userId, role, reason })
             })).deletedCount || 0;
         }
     } catch (eventError) {
-        logger.error({ err: eventError, name: student.name }, "Error cleaning up calendar events for dropout student");
+        logger.error({ err: eventError, studentId: student._id }, "Error cleaning up calendar events for dropout student");
     }
 
     // ── Teacher notification + discussion thread (non-fatal).
@@ -424,7 +424,7 @@ export const removeStudentDropoutRecord = async ({ studentId, userId, role }) =>
                 await syncCalendarEventsForStudent(student._id);
             }
         } catch (syncError) {
-            logger.error({ err: syncError, name: student.name }, "Error re-syncing calendar events after dropout removal");
+            logger.error({ err: syncError, studentId: student._id }, "Error re-syncing calendar events after dropout removal");
         }
     }
 

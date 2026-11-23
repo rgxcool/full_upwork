@@ -187,9 +187,9 @@ export async function syncCalendarEventsForStudent(studentId) {
                 // Use teacher name as title, not course name - all events for same teacher/date should have same title
                 existingEvent.title = teacherName || "Okänd lärare";
                 await existingEvent.save();
-                logger.info({ studentName: student.name, dateKey }, "Added student to existing calendar event");
+                logger.info({ studentId: student._id, dateKey }, "Added student to existing calendar event");
             } else {
-                logger.debug({ studentName: student.name, dateKey }, "Student already in calendar event");
+                logger.debug({ studentId: student._id, dateKey }, "Student already in calendar event");
             }
         } else {
             // Create new event - use teacher name as title, not course name
@@ -209,7 +209,7 @@ export async function syncCalendarEventsForStudent(studentId) {
             });
 
             await newEvent.save();
-            logger.info({ studentName: student.name, dateKey }, "Created new calendar event");
+            logger.info({ studentId: student._id, dateKey }, "Created new calendar event");
         }
     } catch (error) {
         logger.error({ err: error, studentId }, "Error syncing calendar event for student");
@@ -370,9 +370,9 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
                 }
                 
                 await existingEvent.save();
-                logger.info({ studentName: student.name, dateKey }, "Added student to existing calendar event from enrollment");
+                logger.info({ studentId: student._id, dateKey }, "Added student to existing calendar event from enrollment");
             } else {
-                logger.debug({ studentName: student.name, dateKey }, "Student already in calendar event from enrollment");
+                logger.debug({ studentId: student._id, dateKey }, "Student already in calendar event from enrollment");
             }
         } else {
             // Create new event with courseInstanceId in extendedProps for linking
@@ -400,7 +400,7 @@ export async function syncCalendarEventFromEnrollment(enrollmentId) {
             });
 
             await newEvent.save();
-            logger.info({ studentName: student.name, dateKey, courseInstanceId: courseInstanceId || "none" }, "Created new calendar event from enrollment");
+            logger.info({ studentId: student._id, dateKey, courseInstanceId: courseInstanceId || "none" }, "Created new calendar event from enrollment");
         }
     } catch (error) {
         logger.error({ err: error, enrollmentId }, "Error syncing calendar event for enrollment");

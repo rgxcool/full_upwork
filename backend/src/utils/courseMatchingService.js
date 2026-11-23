@@ -572,7 +572,7 @@ class CourseMatchingService {
                     logger.debug({ studentId }, "Loading student document");
                     logger.debug({ exists: !!studentDocA }, "studentDocA exists");
                     if (studentDocA) {
-                        logger.debug({ studentName: studentDocA.name }, "Student name");
+                        logger.debug({ studentId }, "Student found");
                         logger.debug({ educationCount: studentDocA.education?.length || 0 }, "Current education entries");
                     }
 
@@ -701,7 +701,7 @@ class CourseMatchingService {
                     logger.debug({ studentId }, "About to update education array for student");
                     logger.debug({ exists: !!studentDocA }, "studentDocA exists");
                     if (studentDocA) {
-                        logger.debug({ studentName: studentDocA.name }, "Student name");
+                        logger.debug({ studentId }, "Student found");
                         logger.debug({ educationCount: studentDocA.education?.length || 0 }, "Current education entries");
 
                         // Remove any existing education entry for this course and date range

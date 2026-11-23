@@ -1053,7 +1053,7 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
         for (const student of studentsWithFinalExam) {
             try {
                 if (!student.finalExamDate) {
-                    logger.warn({ student: student.name }, "skip, missing finalExamDate");
+                    logger.warn({ studentId: student._id }, "skip, missing finalExamDate");
                     continue;
                 }
                 
@@ -1326,7 +1326,7 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
                     if (finalExamRoom) existingStudent.examRoom = finalExamRoom;
                 }
 
-                logger.debug({ student: student.name, finalExamDate: student.finalExamDate }, "Manual - Added student");
+                logger.debug({ studentId: student._id, finalExamDate: student.finalExamDate }, "Manual - Added student");
             } catch (err) {
                 logger.warn(
                   { err, studentId: student._id, studentName: student.name },
@@ -1386,7 +1386,7 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
                 
                 // If still no teacher found, skip this enrollment
                 if (!teacherId) {
-                    logger.warn({ student: student.name, course: course.courseName }, "No teacher found for student in course");
+                    logger.warn({ studentId: student._id, course: course.courseName }, "No teacher found for student in course");
                     continue;
                 }
 
@@ -1577,7 +1577,7 @@ router.get("/calendar-events/syncable", isAuthenticated, CALENDAR_STAFF, async (
                     }
                 }
 
-                logger.debug({ student: student.name, slutprovDate: enrollment.slutprovDate }, "Auto - Added student");
+                logger.debug({ studentId: student._id, slutprovDate: enrollment.slutprovDate }, "Auto - Added student");
             } catch (err) {
                 logger.warn({ err, enrollment }, "Error in enrollmentsWithSlutprov loop");
             }
@@ -2269,7 +2269,7 @@ router.put("/mark-attendance/:personalNumber", isAuthenticated, CALENDAR_STAFF, 
         student.attendedExam = req.body.attended;
         await student.save();
 
-        logger.info({ student: student.name, studentId: student._id }, "Attendance marked");
+        logger.info({ studentId: student._id }, "Attendance marked");
         res.json({ message: "Attendance marked", student });
     } catch (error) {
         logger.error({ err: error }, "Error marking attendance");
@@ -2509,7 +2509,7 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, CALENDAR_STAFF,
                 logger.debug("About to save attendance record");
                 await attendanceRecord.save();
                 logger.debug({ recordId: attendanceRecord._id }, "Successfully saved attendance record");
-                logger.debug({ recordId: attendanceRecord._id, student: studentDoc.name, attended: attendanceRecord.attended }, "Saved attendance record");
+                logger.debug({ recordId: attendanceRecord._id, studentId: studentDoc._id, attended: attendanceRecord.attended }, "Saved attendance record");
                 logger.debug({ examDate: attendanceRecord.examDate }, "Saved examDate");
                 logger.debug({ teacherId: attendanceRecord.teacherId }, "Saved teacherId");
                 logger.debug({ studentId: attendanceRecord.studentId }, "Saved studentId");
@@ -2584,7 +2584,7 @@ router.post("/calendar-events/mark-attendance", isAuthenticated, CALENDAR_STAFF,
                     });
                 }
 
-                logger.info({ student: studentDoc.name, attended: student.attended }, "Updated attendance for student");
+                logger.info({ studentId: studentDoc._id, attended: student.attended }, "Updated attendance for student");
                 return {
                     success: true,
                     studentId: student._id,
