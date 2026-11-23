@@ -217,6 +217,69 @@ Results: `success`, `forced-success`, `noop`, `refused-ci-<status>`, `build-fail
 | 2 | Health checks failed → **automatic rollback succeeded** | Old version live and healthy |
 | 3 | Rollback itself failed or stayed unhealthy | **Needs a human now** — see the manual procedure |
 
+## Fresh start (#124): reset Mindful Learning's data on production
+
+One-time, while production has no users (owner decision 2026-11-23). It replaces the old manual
+migrations (`migrateTeacherIntoUser.js`, `backfillEnrollmentsFromEducation.js`, `migrateAvsnitt.js`):
+an empty database seeded by the current code is already in the current shape.
+
+**The production MongoDB also holds another service and site.** `backend/scripts/resetProduction.js`
+only ever touches Mindful Learning's own collections (one per model in `backend/src/models`, plus
+`fs.files`/`fs.chunks`, `counters`, the legacy `teachers` and `migrations`). Unknown collections are
+listed and never touched, and the script stops until someone has looked at them.
+
+On the production host, as `mindfulse`:
+
+```bash
+cd /srv/www/mindfullearning.se/current/mindful-new
+./deploy.sh                                   # 1. the latest main, so the script exists
+cd backend
+df -h ~                                       # 2. room for the backup (~/mindful-backups)?
+node scripts/resetProduction.js               # 3. INVENTORY ONLY: read both lists carefully
+```
+
+Step 3 changes nothing. It prints our collections with document counts, and any collections that
+aren't ours. If there are unknown collections, make sure they belong to the other service and that
+it doesn't also write to any of OUR collection names (e.g. `users`) in this database. If it does,
+**stop** and don't run step 5.
+
+```bash
+pm2 stop ML-Backend                           # 4. nothing writes while we reset
+node scripts/resetProduction.js --confirm=<database name>  [--unknown-collections-checked]
+                                              # 5. backup, then empty our collections
+set -a; . ./.env.production; set +a           # 6. seed against the production database
+SYSTEM_ADMIN_EMAIL=<email> SYSTEM_ADMIN_PASSWORD='<strong password>' node scripts/createSystemAdmin.js
+node scripts/updateEducation.js               #    GY25 course catalog
+node scripts/seedMindfulFaq.js                #    chatbot FAQ
+NODE_ENV=production node scripts/migrate.js   #    migration ledger (#126): records the current state
+pm2 start ML-Backend                          # 7. start, log in, check the health endpoint
+```
+
+- **Backup:** `~/mindful-backups/reset-<database>-<time>/`: one `.jsonl` per emptied collection
+  (canonical Extended JSON, restorable with `mongoimport --mode=insert`), `uploads/` and
+  `MANIFEST.json` with the counts. If writing the backup fails (e.g. a full disk), nothing is
+  deleted. Delete the backup when you no longer need it: it contains personal data.
+- **Always set `SYSTEM_ADMIN_PASSWORD`.** Without it `createSystemAdmin.js` uses a weak default.
+- Collections are emptied, not dropped, so indexes stay.
+
+## Database migrations (#126)
+
+`deploy.sh` runs `pnpm --dir backend run migrate` after the frontend build and before going live.
+Pending migrations in `backend/migrations/` run in order, and each database records what has run on
+it in its `migrations` collection, so an environment that is several releases behind simply catches
+up. If a migration fails, the deploy stops: the live version keeps running, the code is reset to the
+previous commit, and `logs/deploy.log` records `migrate-failed`. Fix the migration and deploy again;
+the failed one was not recorded, so it is retried.
+
+Check a database by hand (from `backend/`, on the server with `NODE_ENV=production`):
+
+```bash
+NODE_ENV=production node scripts/migrate.js status
+```
+
+The backend also logs `Pending database migrations` at startup when it is behind (e.g. after a manual
+`git pull`). How to write a migration: `backend/migrations/README.md`.
+
 ## Rollback Procedure
 
 ### Automatic

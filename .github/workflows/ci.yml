@@ -20,7 +20,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Spreadsheet guard (no real personal data, #105)
-        run: python3 .github/scripts/check_spreadsheets.py
+        run: |
+          python3 -m unittest discover -s .github/scripts -p "test_*.py"
+          python3 .github/scripts/check_spreadsheets.py
       - name: Lint backend
         working-directory: backend
         run: npx eslint src/ --max-warnings 50

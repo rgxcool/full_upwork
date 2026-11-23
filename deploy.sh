@@ -12,7 +12,7 @@
 #
 # Flow: lock → preflight → PREV_SHA → CI gate → fetch → (re-run with the target's deploy.sh if it
 # changed) → ff-merge main → pnpm install → vite build into
-# frontend/dist.new → swap dist.new→dist (old kept as dist.prev) → pm2 reload + scale → health checks.
+# frontend/dist.new → database migrations (#126) → swap dist.new→dist (old kept as dist.prev) → pm2 reload + scale → health checks.
 # A failure after the merge resets code + deps to PREV_SHA. A failed health check also restores
 # dist.prev and reloads pm2 (automatic rollback). Every run appends a line to logs/deploy.log.
 #
@@ -313,6 +313,18 @@ VITE_API_URL="" NODE_OPTIONS="--max-old-space-size=4096" \
   run pnpm --filter frontend exec vite build --outDir dist.new --emptyOutDir
 if [ "$DRY_RUN" != "1" ] && [ ! -f "$FRONTEND/dist.new/index.html" ]; then
   die "Build produced no frontend/dist.new/index.html"
+fi
+
+# Database migrations (#126): pending ones run in order and are recorded in the `migrations`
+# collection. A failure stops here: the live version keeps running and the code is restored
+# (migrations are additive, so the old code still reads the data).
+say "🗄️  Running database migrations..."
+if ! NODE_ENV=production run pnpm --dir backend run migrate; then
+  echo "❌ A database migration failed — the live version keeps running. See the output above." >&2
+  set +e
+  if restore_code_and_deps; then log_result "migrate-failed"; else log_result "rollback-failed"; FINISHED=1; exit 3; fi
+  FINISHED=1
+  exit 1
 fi
 
 # --- Go live -----------------------------------------------------------------------------------

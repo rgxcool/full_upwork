@@ -9,6 +9,12 @@ use `backend/.env.development` (the local database `mongodb://localhost:27017/mi
 |---|---|
 | `ensureBaseData.js` | Creates one admin, systemadmin, SYV and specped account for each role that has none (`<role>@example.se`). `--is-empty catalog\|faq` tells `launch.sh` whether to import the catalog / FAQ. `DRY_RUN=1`. |
 
+## Migrations (#126)
+
+| Script | What it does |
+|---|---|
+| `migrate.js` | Applies pending migrations from `backend/migrations/` and records them in the `migrations` collection; `status` lists applied/pending; `DRY_RUN=1`. `deploy.sh` runs it on every deploy. |
+
 ## Accounts
 
 | Script | What it does |
@@ -42,6 +48,12 @@ All three refuse non-local databases, support `DRY_RUN=1`, and are tested in `te
 | `flushAllButAdmins.js --yes` | Clears people and activity data; keeps admins and the education catalog. |
 | `dropData.js --yes` | Wipes everything, admins included. |
 | `dropEducation.js` | Clears programs, courses and course packages before a re-import. |
+
+## Production fresh start (#124)
+
+| Script | What it does |
+|---|---|
+| `resetProduction.js` | **Production host only.** Inventory by default (read-only). `--confirm=<database>` backs up, then empties only Mindful Learning's collections; collections it doesn't know are never touched and stop the run until checked (`--unknown-collections-checked`). Runbook: `DEPLOYMENT.md`, "Fresh start (#124)". |
 
 ## Other
 

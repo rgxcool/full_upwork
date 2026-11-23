@@ -29,6 +29,9 @@ case "$*" in
   *install*)
     [ "${STUB_INSTALL_FAIL:-0}" = "1" ] && [ "$(git rev-parse HEAD)" = "$TARGET" ] && exit 1
     exit 0 ;;
+  *"run migrate"*)
+    [ "${STUB_MIGRATE_FAIL:-0}" = "1" ] && { echo "Migration failed: boom" >&2; exit 1; }
+    exit 0 ;;
   *"vite build"*)
     [ "${STUB_BUILD_FAIL:-0}" = "1" ] && { echo "vite: build error" >&2; exit 1; }
     mkdir -p frontend/dist.new && git rev-parse HEAD > frontend/dist.new/index.html ;;
@@ -108,7 +111,7 @@ setup() {
   : > "$STUB_LOG"; : > "$STUB_CURL_LOG"
   export DEPLOY_GH_TOKEN_FILE="$d/token" DEPLOY_REPO="test/repo"
   ci_json success
-  unset STUB_HEALTH STUB_BUILD_FAIL STUB_INSTALL_FAIL STUB_PM2_RUNNING DRY_RUN FORCE PM2_INSTANCES
+  unset STUB_HEALTH STUB_BUILD_FAIL STUB_INSTALL_FAIL STUB_MIGRATE_FAIL STUB_PM2_RUNNING DRY_RUN FORCE PM2_INSTANCES
 }
 
 ci_json() {  # ci_json success|failure|pending|none
@@ -190,6 +193,30 @@ case_build_failure_keeps_live_version() {
   hasnt "$STUB_LOG" "pm2"
   eq "pnpm install calls (deploy + restore)" "$(count "$STUB_LOG" "pnpm install --frozen-lockfile")" 2
   last_log build-failed
+}
+
+case_migrations_run_before_going_live() {
+  setup migrate; deploy
+  eq "exit" "$CODE" 0
+  has "$STUB_LOG" "pnpm --dir backend run migrate"
+  # Order: build → migrate → pm2 reload.
+  local build migrate reload
+  build=$(grep -nF "vite build" "$STUB_LOG" | head -1 | cut -d: -f1)
+  migrate=$(grep -nF "run migrate" "$STUB_LOG" | head -1 | cut -d: -f1)
+  reload=$(grep -nF "pm2 startOrReload" "$STUB_LOG" | head -1 | cut -d: -f1)
+  [ -n "$migrate" ] && [ "$build" -lt "$migrate" ] && [ "$migrate" -lt "$reload" ] && ok || bad "expected build < migrate < reload, got $build/$migrate/$reload"
+  last_log success
+}
+
+case_migration_failure_keeps_live_version() {
+  setup migrate-fail; export STUB_MIGRATE_FAIL=1; deploy
+  eq "exit" "$CODE" 1
+  head_is "$PREV"; dist_is "$PREV"
+  [ ! -e "$SERVER/frontend/dist.prev" ] && ok || bad "dist.prev should not exist (no swap happened)"
+  hasnt "$STUB_LOG" "pm2"
+  eq "pnpm install calls (deploy + restore)" "$(count "$STUB_LOG" "pnpm install --frozen-lockfile")" 2
+  out_has "A database migration failed — the live version keeps running"
+  last_log migrate-failed
 }
 
 case_install_failure_resets_code() {

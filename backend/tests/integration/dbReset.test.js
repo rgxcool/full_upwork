@@ -7,13 +7,16 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import mongoose from "mongoose";
+import { BSON } from "mongodb";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
 import {
     KEEP_COLLECTIONS,
     assertLocalMongoUri,
     dropEducationCatalog,
     flushAllButAdmins,
+    ownCollectionNames,
     wipeEverything,
+    wipeOwnCollections,
 } from "../../scripts/lib/dbReset.js";
 import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
@@ -200,6 +203,100 @@ describe("dev reset scripts (dbReset)", () => {
             expect(await count("courseTemplates")).toBe(1);
             expect(await count("users")).toBe(6);
             expect(await count("students")).toBe(1);
+        });
+    });
+
+    describe("wipeOwnCollections (production reset, #124)", () => {
+        // Another service's data in the same database must never be touched.
+        const insertForeign = () => db.collection("other_site_pages").insertOne({ slug: "hem" });
+        let backupDir;
+        beforeEach(() => {
+            backupDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "dbreset-backup-")), "backup");
+        });
+
+        it("knows every model collection plus GridFS, counters, teachers and the ledger", async () => {
+            const own = await ownCollectionNames(modelsDir);
+            for (const name of ["students", "users", "studentEnrollments", "fs.files", "fs.chunks", "counters", "teachers", "migrations"]) {
+                expect(own.has(name)).toBe(true);
+            }
+            expect(own.has("other_site_pages")).toBe(false);
+        });
+
+        it("stops while unknown collections exist, and changes nothing", async () => {
+            await seed();
+            await insertForeign();
+            const before = await count("students");
+
+            const result = await wipeOwnCollections(db, { ownNames: await ownCollectionNames(modelsDir), backupDir, uploadsDir });
+
+            expect(result.refused).toBe("foreign");
+            expect(Object.keys(result.foreign).sort()).toEqual(["brand_new_feature_data", "other_site_pages"]);
+            expect(await count("students")).toBe(before);
+            expect(fs.existsSync(backupDir)).toBe(false);
+        });
+
+        it("a dry run changes nothing", async () => {
+            await seed();
+            const result = await wipeOwnCollections(db, {
+                ownNames: await ownCollectionNames(modelsDir), backupDir, uploadsDir, allowForeign: true, dryRun: true,
+            });
+            expect(result.own.students).toBe(1);
+            expect(await count("students")).toBe(1);
+            expect(fs.existsSync(backupDir)).toBe(false);
+        });
+
+        it("backs up, then empties only our collections; unknown ones survive", async () => {
+            await seed();
+            await insertForeign();
+            const studentId = (await db.collection("students").findOne({}))._id;
+
+            const result = await wipeOwnCollections(db, {
+                ownNames: await ownCollectionNames(modelsDir), backupDir, uploadsDir, allowForeign: true,
+            });
+
+            // Ours are empty (indexes kept), theirs untouched.
+            for (const name of ["students", "users", "studentEnrollments", "fs.files", "fs.chunks", "counters", "teachers", "documents"]) {
+                expect({ name, n: await count(name) }).toEqual({ name, n: 0 });
+            }
+            expect(await count("other_site_pages")).toBe(1);
+            expect(await count("brand_new_feature_data")).toBe(1);
+            // Emptied, not dropped: the collections (and their indexes) remain.
+            expect(await db.listCollections({ name: "students" }).toArray()).toHaveLength(1);
+
+            // The backup holds the deleted data, with types intact (Extended JSON).
+            const lines = fs.readFileSync(path.join(backupDir, "students.jsonl"), "utf8").trim().split("\n");
+            expect(lines).toHaveLength(1);
+            expect(BSON.EJSON.parse(lines[0], { relaxed: false })._id.equals(studentId)).toBe(true);
+            expect(fs.existsSync(path.join(backupDir, "uploads", "123-elev.pdf"))).toBe(true);
+            expect(JSON.parse(fs.readFileSync(path.join(backupDir, "MANIFEST.json"), "utf8")).documents.students).toBe(1);
+            expect(fs.existsSync(path.join(backupDir, "other_site_pages.jsonl"))).toBe(false);
+            // Personal data: owner-only directory and files.
+            const mode = (p) => fs.statSync(p).mode & 0o777;
+            expect(mode(backupDir)).toBe(0o700);
+            expect(mode(path.join(backupDir, "students.jsonl"))).toBe(0o600);
+            expect(mode(path.join(backupDir, "MANIFEST.json"))).toBe(0o600);
+            expect(mode(path.join(backupDir, "uploads"))).toBe(0o700);
+            expect(mode(path.join(backupDir, "uploads", "123-elev.pdf"))).toBe(0o600);
+            // Upload files on disk are gone after the backup.
+            expect(fs.existsSync(path.join(uploadsDir, "123-elev.pdf"))).toBe(false);
+            expect(result.uploadFiles).toBe(1);
+        });
+
+        it("deletes nothing when the backup cannot be written", async () => {
+            await seed();
+            const blocked = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "dbreset-blocked-")), "file");
+            fs.writeFileSync(blocked, "not a directory");
+
+            await expect(
+                wipeOwnCollections(db, {
+                    ownNames: await ownCollectionNames(modelsDir),
+                    backupDir: path.join(blocked, "backup"),
+                    uploadsDir,
+                    allowForeign: true,
+                })
+            ).rejects.toThrow();
+            expect(await count("students")).toBe(1);
+            expect(fs.existsSync(path.join(uploadsDir, "123-elev.pdf"))).toBe(true);
         });
     });
 

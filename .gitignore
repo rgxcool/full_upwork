@@ -74,3 +74,7 @@ frontend/dist.failed
 !backend/docs/test_mindful.xlsx
 !frontend/public/excel-upload-template.xlsx
 !frontend/docs/Jan 25 Test*.xlsx
+
+# Python bytecode
+__pycache__/
+*.pyc

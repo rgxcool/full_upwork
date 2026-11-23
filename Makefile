@@ -84,6 +84,17 @@ test-changed:
 	cd backend && NODE_ENV=test npx vitest run --mode test --changed --coverage.enabled=false
 	cd frontend && npx vitest run --changed --coverage.enabled=false
 
+# Wipe the LOCAL database and seed everything (e2e/demo accounts, GY25 catalog,
+# FAQ, demo kurskort, Persian demo cast). Refuses non-local databases. #124
+fresh:
+	bash backend/scripts/resetDemo.sh --yes
+	cd backend && node scripts/seedPersianDemo.js
+	cd backend && node scripts/migrate.js
+
+# Apply pending database migrations to the local database (backend/migrations, #126).
+migrate:
+	cd backend && node scripts/migrate.js
+
 test-backend:
 	cd backend && NODE_ENV=test npx vitest run --mode test --reporter=$(CITEST_REPORTER)
 
