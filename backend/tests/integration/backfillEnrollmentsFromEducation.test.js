@@ -21,15 +21,17 @@ async function createCourse(code) {
     return Course.create({ courseName: `Testkurs ${code}`, courseCode: code, coursePoints: "100", courseExtent: "10" });
 }
 
+// Legacy data: the schema no longer has `education`, so write it raw (#103).
 async function createStudent(education, extra = {}) {
     seq++;
-    return Student.create({
+    const student = await Student.create({
         name: "Test Elev",
         email: `test.elev.${seq}@example.se`,
         personalNumber: "19000101-0000",
-        education,
         ...extra,
     });
+    await Student.collection.updateOne({ _id: student._id }, { $set: { education } });
+    return student;
 }
 
 const courseEntry = (course, start, end, extra = {}) => ({

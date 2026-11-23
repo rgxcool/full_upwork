@@ -85,7 +85,6 @@ describe("scripts/seedPersianDemo", () => {
 
         for (const king of byState("none")) {
             const s = await Student.findOne({ email: kingEmail(king) });
-            expect(s.education).toHaveLength(0);
             expect(await StudentEnrollment.countDocuments({ studentId: s._id })).toBe(0);
         }
 

@@ -37,6 +37,9 @@ import AplRecord from "../models/AplRecord.js";
 
 const router = Router();
 
+// StudentEnrollment is registered on mongoose when its model file loads.
+const StudentEnrollmentModel = () => mongoose.model("StudentEnrollment");
+
 const ALLOWED_STAFF_ROLES = ["systemadmin", "admin", "teacher", "coordinator", "syv", "specped", "tester"];
 const ALLOWED_ADMIN_ROLES = ["systemadmin", "admin", "tester"];
 
@@ -90,7 +93,7 @@ router.get("/students/by-teacher/:teacherId", authenticateUser, hasRole(ALLOWED_
 
 /**
  * @route   PUT /students/:studentId/education/:educationId/status
- * @desc    Updates the status of a student's education entry. Sends a notification if status is 'Avbrott'.
+ * @desc    Updates the status of the student's enrollment in a course (#103). Sends a notification if status is 'Avbrott'.
  * @access  Protected (Staff only)
  */
 router.put(
@@ -101,20 +104,43 @@ router.put(
         const { studentId, educationId } = req.params;
         const { status } = req.body;
 
+        // #103: the status lives on the student's enrollment in that course.
+        const ENROLLMENT_STATUS = {
+            Antagen: "enrolled",
+            "Ej påbörjad": "enrolled",
+            Pågående: "active",
+            Betygsatt: "completed",
+            Avbrott: "dropped",
+            Reviderad: "reviderad",
+        };
+
         try {
             const student = await Student.findById(studentId);
             if (!student)
                 return res.status(404).json({ message: "Student not found" });
 
-            const education = student.education.find(
-                (e) => e.refId.toString() === educationId
-            );
-            if (!education)
+            const enrollmentStatus = ENROLLMENT_STATUS[status];
+            if (!enrollmentStatus)
+                return res.status(400).json({ message: "Invalid status" });
+
+            const enrollment = mongoose.isValidObjectId(educationId)
+                ? await StudentEnrollmentModel().findOne({
+                      studentId: student._id,
+                      $or: [{ mainCourseId: educationId }, { coursePackageId: educationId }],
+                  }).sort({ startDate: -1 })
+                : null;
+            if (!enrollment)
                 return res
                     .status(404)
                     .json({ message: "Education not found for student" });
 
-            education.status = status;
+            enrollment.status = enrollmentStatus;
+            await enrollment.save();
+            const education = {
+                _id: enrollment._id,
+                refId: enrollment.mainCourseId || enrollment.coursePackageId,
+                name: (await Course.findById(enrollment.mainCourseId).select("courseName").lean())?.courseName,
+            };
 
             if (status === "Avbrott") {
                 student.dropout = true;
@@ -389,7 +415,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        const allowedStudentCreateFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses', 'education', 'createdBy', 'specialNeeds', 'teacherId', 'aplStatus', 'exam', 'attendedExam', 'paidExamFee', 'priorAplCompleted', 'priorAplIntygDocId', 'pace'];
+        const allowedStudentCreateFields = ['name', 'email', 'personalNumber', 'phone', 'municipality', 'startDate', 'endDate', 'finalExamDate', 'teacher', 'dropout', 'additionalInfo', 'courses', 'createdBy', 'specialNeeds', 'teacherId', 'aplStatus', 'exam', 'attendedExam', 'paidExamFee', 'priorAplCompleted', 'priorAplIntygDocId', 'pace'];
         const studentData = {};
         for (const field of allowedStudentCreateFields) {
             if (req.body[field] !== undefined) studentData[field] = req.body[field];
@@ -536,7 +562,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
 
 /**
  * @route   POST /student/:studentId/addcourse
- * @desc    Adds a course to a student's education array.
+ * @desc    Places a student on a course (creates the enrollment, #103).
  * @access  Protected (Staff only)
  */
 router.post("/student/:studentId/addcourse", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
@@ -551,29 +577,34 @@ router.post("/student/:studentId/addcourse", authenticateUser, hasRole(ALLOWED_S
         const course = await Course.findById(courseId);
         if (!course) return res.status(404).json({ error: "Course not found" });
 
-        const alreadyExists = student.education.some(
-            (entry) =>
-                entry.type === "Course" && entry.refId.toString() === courseId
-        );
-
-        if (alreadyExists) {
+        // #103: adding a course = placing the student on it (an enrollment),
+        // from the given dates or from today for the course's extent.
+        const alreadyEnrolled = await StudentEnrollmentModel().exists({
+            studentId: student._id,
+            mainCourseId: course._id,
+            status: { $ne: "dropped" },
+        });
+        if (alreadyEnrolled) {
             return res.status(400).json({ error: "Course already exists" });
         }
 
-        student.education.push({
-            type: "Course",
-            refId: course._id,
-            grade: "",
-        });
+        const startDate = req.body.startDate ? new Date(req.body.startDate) : new Date(new Date().setHours(0, 0, 0, 0));
+        const weeks = parseFloat(course.courseExtent) || 5;
+        const endDate = req.body.endDate
+            ? new Date(req.body.endDate)
+            : new Date(startDate.getTime() + weeks * 7 * 24 * 60 * 60 * 1000);
+        const { default: CourseMatchingService } = await import("../utils/courseMatchingService.js");
+        const result = await CourseMatchingService.processStudentEducation(
+            student._id,
+            [{ type: "Course", refId: course._id, name: course.courseCode, startDate, endDate }],
+            req.user?.userId || null,
+            { pace: student.pace }
+        );
+        if (!result?.enrollments?.length) {
+            return res.status(422).json({ error: "Kunde inte registrera eleven på kursen", details: result?.errors || [] });
+        }
 
-        await student.save();
-
-        const updatedStudent = await Student.findById(studentId).populate({
-            path: "education.refId",
-            model: "Course",
-            select: "courseName courseCode coursePoints courseExtent",
-        });
-
+        const updatedStudent = { _id: student._id, enrollments: result.enrollments };
         res.status(200).json(updatedStudent);
     } catch (error) {
         logger.error({ err: error }, "Error adding course to student");
@@ -1032,7 +1063,6 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
         "examMunicipality",
         "examLocation",
         "examTime",
-        "education",
         "priorAplCompleted",
         "priorAplIntygDocId",
         "pace",
@@ -1216,8 +1246,14 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
                             existingEnrollment.courseInstanceId = instance._id;
                         }
 
-                        if (eduData.grade !== undefined)
-                            existingEnrollment.grade = eduData.grade;
+                        if (eduData.grade !== undefined && eduData.grade !== existingEnrollment.grade) {
+                            if (existingEnrollment.isGradeLocked) {
+                                // A locked grade only changes through unlock-grade.
+                                logger.warn({ enrollmentId: existingEnrollment._id }, "Ignored grade change on a locked enrollment");
+                            } else {
+                                existingEnrollment.grade = eduData.grade;
+                            }
+                        }
                         if (
                             eduData.status !== undefined &&
                             eduData.status !== ""
@@ -1273,7 +1309,8 @@ router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), valid
                 }
             }
 
-            updates.education = [];
+            // #103: the request's `education` only describes enrollments;
+            // the student's own legacy education array is no longer written.
         }
 
         if (!student.teacherId && student.teacher) {
@@ -1485,58 +1522,6 @@ router.post(
 );
 
 /**
- * @route   PATCH /student/:studentId/education/:educationId/grade
- * @desc    Updates a course grade in a student's education array.
- * @access  Protected (Staff only)
- */
-router.patch(
-    "/student/:studentId/education/:educationId/grade",
-    authenticateUser,
-    hasRole(ALLOWED_STAFF_ROLES),
-    async (req, res) => {
-        const { studentId, educationId } = req.params;
-        const { grade } = req.body;
-
-        if (!["A", "B", "C", "D", "E", "F"].includes(grade)) {
-            return res.status(400).json({ error: "Invalid grade." });
-        }
-
-        try {
-            const student = await Student.findById(studentId);
-            if (!student) {
-                return res.status(404).json({ error: "Student not found" });
-            }
-
-            const education = student.education.find(
-                (edu) => edu._id.toString() === educationId
-            );
-
-            if (!education) {
-                return res
-                    .status(404)
-                    .json({ error: "Education entry not found" });
-            }
-
-            if (education.type === "Course") {
-                education.grade = grade;
-            }
-
-            await student.save();
-
-            const updatedStudent = await Student.findById(studentId).populate(
-                "education.refId",
-                "courseName courseCode coursePackageName coursePackageCode programName"
-            );
-
-            res.status(200).json(updatedStudent);
-        } catch (error) {
-            logger.error({ err: error }, "Error updating grade");
-            res.status(500).json({ error: "Server error" });
-        }
-    }
-);
-
-/**
  * @route   GET /all-programs
  * @desc    Fetches all available programs.
  * @access  Protected (Staff only)
@@ -1578,43 +1563,6 @@ router.get("/all-courses", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async
     } catch (err) {
         logger.error({ err }, "Error fetching courses");
         res.status(500).json({ error: "Failed to fetch courses" });
-    }
-});
-
-/**
- * @route   PUT /student/:id/education/:courseId/grade
- * @desc    Updates the grade of a course in the student's education array.
- * @access  Protected (Staff only)
- */
-router.put("/student/:id/education/:courseId/grade", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
-    const { id, courseId } = req.params;
-    const { grade } = req.body;
-
-    try {
-        const student = await Student.findById(id);
-        if (!student) {
-            return res.status(404).json({ error: "Student not found" });
-        }
-
-        const courseIndex = student.education.findIndex(
-            (edu) => edu.refId.toString() === courseId
-        );
-
-        if (courseIndex === -1) {
-            return res
-                .status(404)
-                .json({ error: "Course not found in student's education" });
-        }
-
-        student.education[courseIndex].grade = grade;
-        student.updatedAt = new Date();
-
-        await student.save();
-
-        res.status(200).json(student);
-    } catch (err) {
-        logger.error({ err }, "Error updating grade");
-        res.status(500).json({ error: "Failed to update grade" });
     }
 });
 

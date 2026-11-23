@@ -321,19 +321,17 @@ async function uploadXlsx(req, res) {
 
         const warnings = [];
         const larteametCandidates = [];
-        // The education entries written on the student document must reference a
-        // real ObjectId (`addedBy`) or Mongoose rejects the whole bulkWrite.
+        // The uploader is recorded on the created enrollments (a real ObjectId or null).
         const uploaderId = mongoose.Types.ObjectId.isValid(req.user?.userId)
             ? req.user.userId
             : null;
-        // Keep the mapped entries (with refId/type/dates) per student so the
-        // enrollment step below processes exactly the same data as the manual
-        // POST /student flow.
+        // The mapped entries (refId/type/dates) per student: the enrollment step
+        // below processes exactly the same data as the manual POST /student flow.
+        // They are never stored on the student (#103).
         const educationByEmail = new Map();
         const bulkOps = await Promise.all(
             mergedStudents.map(async (student) => {
                 const existing = existingMap.get(student.email);
-                const existingEdu = existing?.education || [];
 
                 let rawMunicipality =
                     typeof student.municipality === "string"
@@ -483,23 +481,7 @@ async function uploadXlsx(req, res) {
                 // After processing this student, add their warnings to the global array
                 warnings.push(...studentWarnings);
 
-                // Merge new education with existing
-                const mergedEducation = [...existingEdu];
-                for (const e of newEducation) {
-                    const exists = mergedEducation.some(
-                        (old) =>
-                            old.refId?.toString() === e.refId?.toString() &&
-                            old.type === e.type &&
-                            new Date(old.startDate).getTime() ===
-                                new Date(e.startDate).getTime() &&
-                            new Date(old.endDate).getTime() ===
-                                new Date(e.endDate).getTime()
-                    );
-                    if (!exists) mergedEducation.push(e);
-                }
-
-                // Remember the resolved entries so the enrollment step uses the
-                // same refId/type/dates that were written above.
+                // The enrollment step below places exactly these entries.
                 educationByEmail.set(student.email, newEducation);
 
                 let teacherDoc = null;
@@ -526,10 +508,11 @@ async function uploadXlsx(req, res) {
                     }
                 }
 
+                // Parsed course rows become enrollments below, not a stored array.
+                const { education: _parsedEducation, ...studentFields } = student;
                 const studentDoc = {
-                    ...student,
+                    ...studentFields,
                     teacherId: teacherDoc?._id || null,
-                    education: mergedEducation,
                     municipality: { type: correctedMunicipality },
                     aplStatus: existing?.aplStatus || "GRAY",
                     createdAt: existing?.createdAt || now,
@@ -554,7 +537,7 @@ async function uploadXlsx(req, res) {
         // Persist the imported education through the same service used by
         // manual student creation (POST /student) so courses/packages are not
         // silently dropped and both upload methods produce equivalent
-        // enrollment/education records for APL. A single student's enrollment
+        // enrollments for APL (#103: enrollments are the only record). A single student's enrollment
         // failure must not abort the rest of the import.
         try {
             const savedStudents = await Student.find({
@@ -597,7 +580,7 @@ async function uploadXlsx(req, res) {
                         );
                     if (result?.errors?.length) {
                         logger.error(
-                            { errors: result.errors, email: student.email },
+                            { errors: result.errors, studentId: saved._id },
                             "Enrollment errors from Excel import"
                         );
                     }
@@ -609,7 +592,7 @@ async function uploadXlsx(req, res) {
                     }
                 } catch (enrollmentError) {
                     logger.error(
-                        { err: enrollmentError, email: student.email },
+                        { err: enrollmentError, studentId: saved._id },
                         "Failed to create enrollments from Excel import"
                     );
                 }
@@ -642,11 +625,6 @@ async function uploadXlsx(req, res) {
                 }
             })
         );
-
-        const sample = await Student.findOne({
-            email: mergedStudents[0].email,
-        });
-        logger.debug({ education: sample.education }, "Sample saved student education");
 
         res.status(200).json({
             message: "Upload successful",

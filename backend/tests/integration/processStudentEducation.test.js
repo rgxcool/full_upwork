@@ -370,14 +370,9 @@ describe("processStudentEducation — course package studietakt (pace)", () => {
         expect(enrollment).not.toBeNull();
         expect(enrollment.mainCourseId.toString()).toBe(course._id.toString());
 
-        const updatedStudent = await Student.findById(student._id);
-        expect(
-            updatedStudent.education.some(
-                (entry) =>
-                    entry.type === "Course" &&
-                    entry.refId?.toString() === course._id.toString()
-            )
-        ).toBe(true);
+        // #103: placement writes only the enrollment, never Student.education.
+        const raw = await Student.collection.findOne({ _id: student._id });
+        expect(raw.education ?? []).toEqual([]);
     });
 
     it("reports an error for an unknown course refId instead of silently skipping it", async () => {

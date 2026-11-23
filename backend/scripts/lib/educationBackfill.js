@@ -85,9 +85,11 @@ export async function backfillEnrollmentsFromEducation({ dryRun = true, userId =
         errors: [],
     };
 
-    const students = await Student.find({ "education.0": { $exists: true } })
-        .select("_id education dropout pace")
-        .lean();
+    // The schema no longer has `education` (#103), so read the legacy array
+    // straight from the collection.
+    const students = await Student.collection
+        .find({ "education.0": { $exists: true } }, { projection: { education: 1, dropout: 1, pace: 1 } })
+        .toArray();
 
     for (const student of students) {
         report.students++;

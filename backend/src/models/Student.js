@@ -5,26 +5,6 @@ import { ALL_MUNICIPALITIES } from "../config/municipalities.js";
 // placement, study plan tab and APL filtering). Kept in parallel with the
 // StudentEnrollment system so the student document carries a denormalized
 // plan snapshot.
-const EducationEntrySchema = new mongoose.Schema(
-    {
-        type: {
-            type: String,
-            enum: ["Course", "CoursePackage", "Program"],
-            required: true,
-        },
-        refId: { type: mongoose.Schema.Types.ObjectId },
-        name: { type: String },
-        startDate: { type: Date },
-        endDate: { type: Date },
-        grade: { type: String },
-        // Set by POST /teacher/lock-grade on legacy rows; honoured by save-grade.
-        locked: { type: Boolean, default: false },
-        addedAt: { type: Date },
-        addedBy: { type: mongoose.Schema.Types.ObjectId },
-        removedAt: { type: Date },
-    },
-    { _id: false }
-);
 
 const StudentSchema = new mongoose.Schema(
     {
@@ -39,7 +19,9 @@ const StudentSchema = new mongoose.Schema(
             default: 100,
         },
 
-        education: [EducationEntrySchema],
+        // `education` was retired in #103: a student's courses are their
+        // StudentEnrollment documents (scripts/backfillEnrollmentsFromEducation.js
+        // migrates the old array). Old documents may still carry the raw field.
 
         startDate: Date,
         endDate: Date,

@@ -103,14 +103,6 @@ describe('ExcelUpload.vue', () => {
         wrapper.vm.toggleComment(1);
         expect(wrapper.vm.expandedComments).not.toContain(1);
     });
-    it('saves grade for a course', async () => {
-        await wrapper.vm.saveGrade('student1', 'course1', 'A');
-        expect(client.put).toHaveBeenCalledWith(
-            '/student/student1/education/course1/grade',
-            { grade: 'A' }
-        );
-    });
-
     it('marks education entry for removal when confirmed', () => {
         const originalConfirm = globalThis.confirm;
         globalThis.confirm = vi.fn(() => true);
