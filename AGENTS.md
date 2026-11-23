@@ -9,13 +9,6 @@
 - Node.js 25.2.1 and pnpm 11.17.0 (pinned with Volta)
 - MongoDB, port 27017, `make dev`
 
-## Referring to issues and PRs
-Never write a bare number. Always put the title (or a short context) next to it,
-in chat, issues, PR text and commit messages:
-- ✅ `#103 "[Tech debt] Retire Student.education"`, `PR #106 (Merge Teacher into User)`
-- ❌ `#103`, `merge #101 → #106`
-The reader should never have to look a number up to know what it is.
-
 ## Running several agents at once
 Coverage is on for every `vitest run`, and runs in the same checkout delete each
 other's `coverage/.tmp` ("Something removed the coverage directory…"). Each
