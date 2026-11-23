@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireOwnStudentForTeacher } from "../middleware/teacherStudentAccess.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import {
     addModuleDiscussionMessage,
@@ -146,12 +147,14 @@ router.delete(
     "/students/:studentId/enrollments/:enrollmentId",
     isAuthenticated,
     hasRole(["admin", "systemadmin", "teacher"]),
+    requireOwnStudentForTeacher("studentId"),
     asyncHandler(deleteEnrollmentAndShift)
 );
 router.put(
     "/students/:studentId/studyplan-tempo",
     isAuthenticated,
     hasRole(["admin", "systemadmin", "teacher"]),
+    requireOwnStudentForTeacher("studentId"),
     asyncHandler(updateStudyplanTempo)
 );
 

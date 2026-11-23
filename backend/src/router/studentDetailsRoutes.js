@@ -1,5 +1,6 @@
 import express from "express";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireOwnStudentForTeacher } from "../middleware/teacherStudentAccess.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import {
     getStudentDetails,
@@ -40,18 +41,21 @@ router.post(
     "/student-details/:id/comments",
     isAuthenticated,
     hasRole(["teacher", "admin", "systemadmin"]),
+    requireOwnStudentForTeacher("id"),
     asyncHandler(addComment)
 );
 router.put(
     "/student-details/:id/comments/:commentId",
     isAuthenticated,
     hasRole(["teacher", "admin", "systemadmin"]),
+    requireOwnStudentForTeacher("id"),
     asyncHandler(editComment)
 );
 router.delete(
     "/student-details/:id/comments/:commentId",
     isAuthenticated,
     hasRole(["teacher", "admin", "systemadmin"]),
+    requireOwnStudentForTeacher("id"),
     asyncHandler(deleteComment)
 );
 router.put(
@@ -158,6 +162,7 @@ router.post(
     "/student-details/:id/deviations",
     isAuthenticated,
     hasRole(["teacher", "admin", "systemadmin"]),
+    requireOwnStudentForTeacher("id"),
     asyncHandler(createDeviation)
 );
 
