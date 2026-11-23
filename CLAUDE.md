@@ -19,6 +19,12 @@ Billing buckets — every issue/PR belongs to exactly one:
 personalised APL kits, automatic-diploma changes, question-bank v2, prövning web payment,
 Scrive catalog automation, Alvis integration.
 
+If a request touches one of these (or anything not in the Etapp 1 / Etapp 2 lists):
+1. Say so in one line ("this is unquoted Phase 2 scope").
+2. Do not write the code. Draft a `parking-lot` issue instead (template `parking_lot.yml`) and give the
+   `gh issue create` command.
+3. A bug fix may touch these modules only to fix delivered behaviour — no new capability.
+
 ### Etapp 1 scope (source: `data/Etapperna_lista.odt`, spec `data/Etapp 1.docx`)
 
 Status per item lives in `MILESTONE-3-MASTER-TASK-STATUS.md`, Section B (items 1–51d).
@@ -40,12 +46,6 @@ Status per item lives in `MILESTONE-3-MASTER-TASK-STATUS.md`, Section B (items 1
 Spec items **11 (Alvis), 35 (Scrive catalog automation) and 38 (prövning web payment)** are out of
 scope (decided 2026-11-23) even though the spec mentions them. They are parked for separate quotes as
 issues #61, #60 and #59 — do not build them as part of Etapp 1 work or bug fixes.
-
-If a request touches one of these (or anything not in the two lists above):
-1. Say so in one line ("this is unquoted Phase 2 scope").
-2. Do not write the code. Draft a `parking-lot` issue instead (template `parking_lot.yml`) and give the
-   `gh issue create` command.
-3. A bug fix may touch these modules only to fix delivered behaviour — no new capability.
 
 ## 2. Estimates
 
@@ -80,6 +80,10 @@ Columns (Status field), in order:
 - Never use a MongoDB Atlas MCP or any other remote-database connector against project data, even if
   one is attached to the session. Never copy Sentry event payloads into issues, PRs or commits.
 - `data/` holds the client's spec documents and course lists — read them, but never add student data there.
+- **Known real personal data in the repo** (removal tracked separately): `data/test_mindful.xlsx`,
+  `backend/docs/test_mindful.xlsx` (used by `parseStudentExcel.test.js`) and `public/demo-template.xlsx`.
+  Never open, print, copy, demo with or build fixtures from these; use `frontend/public/excel-upload-template.xlsx`
+  or generate fake rows instead.
 - Do not add third-party services that receive student data (AI providers, SMS, error tracking)
   without an issue that names the data-processing agreement / EU hosting.
 
