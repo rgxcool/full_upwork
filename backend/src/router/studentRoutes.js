@@ -18,6 +18,7 @@ import { hasCommentPermission } from "../utils/roles.js";
 import { sendDropoutNotification } from "../controllers/notificationController.js";
 import { hasRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validation.js";
+import { requireOwnStudentForTeacher } from "../middleware/teacherStudentAccess.js";
 import logger from "../utils/logger.js";
 import { computeAplPeriod, computeAplEffectiveStatus } from "../utils/aplAutoStatus.js";
 import { applyEnrollmentDateSummary } from "../utils/studentDateSummary.js";
@@ -565,7 +566,7 @@ router.post("/student", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate
  * @desc    Places a student on a course (creates the enrollment, #103).
  * @access  Protected (Staff only)
  */
-router.post("/student/:studentId/addcourse", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.post("/student/:studentId/addcourse", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), requireOwnStudentForTeacher("studentId"), async (req, res) => {
     const { studentId } = req.params;
     const { courseId } = req.body;
 
@@ -617,7 +618,7 @@ router.post("/student/:studentId/addcourse", authenticateUser, hasRole(ALLOWED_S
  * @desc    Assigns a program to a student.
  * @access  Protected (Staff only)
  */
-router.post("/student/:studentId/setprogram", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.post("/student/:studentId/setprogram", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), requireOwnStudentForTeacher("studentId"), async (req, res) => {
     const { studentId } = req.params;
     const { programId } = req.body;
 
@@ -641,7 +642,7 @@ router.post("/student/:studentId/setprogram", authenticateUser, hasRole(ALLOWED_
  * @desc    Adds a course package to a student.
  * @access  Protected (Staff only)
  */
-router.post("/student/:studentId/addcoursepackage", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.post("/student/:studentId/addcoursepackage", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), requireOwnStudentForTeacher("studentId"), async (req, res) => {
     const { studentId } = req.params;
     const { coursePackageId } = req.body;
 
@@ -666,7 +667,7 @@ router.post("/student/:studentId/addcoursepackage", authenticateUser, hasRole(AL
  * @desc    Removes a course from a student's courses array.
  * @access  Protected (Staff only)
  */
-router.delete("/student/:id/courses/:courseId", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.delete("/student/:id/courses/:courseId", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), requireOwnStudentForTeacher("id"), async (req, res) => {
     try {
         const student = await Student.findById(req.params.id);
         if (!student)
@@ -919,7 +920,7 @@ router.delete("/students", authenticateUser, hasRole(["systemadmin", "admin", "t
  * @desc    Updates APL status and tracks changes.
  * @access  Protected (Staff only)
  */
-router.patch("/students/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.patch("/students/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), requireOwnStudentForTeacher("id"), async (req, res) => {
     const { aplStatus } = req.body;
     const userId = req.user?.userId;
 
@@ -1042,7 +1043,7 @@ router.delete("/students/:id/comment", authenticateUser, hasRole(ALLOWED_ADMIN_R
  * @desc    Updates full student object (excluding Mongo ID).
  * @access  Protected (Staff only)
  */
-router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), validate(studentUpdateSchema), async (req, res) => {
+router.put("/student/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), requireOwnStudentForTeacher("id"), validate(studentUpdateSchema), async (req, res) => {
     logger.debug({ bodyKeys: req.body ? Object.keys(req.body) : [] }, "Received payload");
 
     const allowedFields = [
