@@ -69,6 +69,37 @@ const getModuleScheduledDate = (module, instance, modules) => {
     return sectionDate ? new Date(sectionDate) : null;
 };
 
+// Slice 4 / D9: report rows expose a nested, ordered Avsnitt list with the
+// generated planned submission date. Module-level scheduleDate/submissionDate
+// stay unchanged; there is no Avsnitt-level actual submission date yet.
+const toReportDateOnly = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString().split("T")[0];
+};
+
+const buildReportAvsnitt = (module) => {
+    const items = Array.isArray(module?.avsnitt) ? module.avsnitt : [];
+    return items
+        .map((avsnitt, index) => ({ avsnitt, index }))
+        .sort((a, b) => {
+            const aOrder = Number(a.avsnitt?.order);
+            const bOrder = Number(b.avsnitt?.order);
+            const aValid = Number.isFinite(aOrder);
+            const bValid = Number.isFinite(bOrder);
+            if (aValid && bValid) return aOrder - bOrder || a.index - b.index;
+            if (aValid) return -1;
+            if (bValid) return 1;
+            return a.index - b.index;
+        })
+        .map(({ avsnitt }) => ({
+            avsnittId: avsnitt?.avsnittId ?? null,
+            title: avsnitt?.title ?? "",
+            order: Number.isFinite(Number(avsnitt?.order)) ? Number(avsnitt.order) : null,
+            plannedDate: toReportDateOnly(avsnitt?.plannedDate),
+        }));
+};
+
 /**
  * GET /learning/instances/:instanceId/modules
  * Lesson content (module sections + instructions) and the optional assignment
@@ -550,6 +581,7 @@ export const getCourseInstanceReport = async (req, res) => {
                     scheduled: !!scheduledDate,
                     scheduleDate: scheduledDate ? scheduledDate.toISOString().split("T")[0] : null,
                     submissionDate: assignmentStatus[m.moduleNumber]?.submittedAt || null,
+                    avsnitt: buildReportAvsnitt(m),
                     assignment: assignmentStatus[m.moduleNumber],
                 };
             }),
