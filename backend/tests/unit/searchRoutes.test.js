@@ -2,11 +2,13 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import mongoose from "mongoose";
 import Student from "../../src/models/Student.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
-import Teacher from "../../src/models/Teacher.js";
 import User from "../../src/models/User.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import router from "../../src/router/searchRoutes.js";
+
+// #102: the teacher lookup is User.findOne({ _id, teacherProfile }).select().lean().
+const teacherLookup = (value) => ({ select: () => ({ lean: () => Promise.resolve(value) }) });
 
 const buildRes = () => {
     const res = {
@@ -74,7 +76,7 @@ describe("searchRoutes handlers", () => {
         });
 
         it("returns 403 when teacher profile is missing", async () => {
-            vi.spyOn(Teacher, "findOne").mockResolvedValueOnce(null);
+            vi.spyOn(User, "findOne").mockReturnValueOnce(teacherLookup(null));
             const handler = getRouteHandler("/course-enrollments");
             const req = { user: { role: "teacher", userId: "user-1" } };
             const res = buildRes();
@@ -87,9 +89,7 @@ describe("searchRoutes handlers", () => {
 
         it("filters students by teacher when profile exists", async () => {
             const teacherId = new mongoose.Types.ObjectId();
-            vi.spyOn(Teacher, "findOne").mockResolvedValueOnce({
-                _id: teacherId,
-            });
+            vi.spyOn(User, "findOne").mockReturnValueOnce(teacherLookup({ _id: teacherId }));
             vi.spyOn(Student, "find").mockResolvedValueOnce([{ _id: "s" }]);
 
             const enrollments = [
@@ -102,7 +102,7 @@ describe("searchRoutes handlers", () => {
             });
 
             const handler = getRouteHandler("/course-enrollments");
-            const req = { user: { role: "teacher", userId: "user-2" } };
+            const req = { user: { role: "teacher", userId: teacherId.toString() } };
             const res = buildRes();
 
             await handler(req, res);
@@ -168,12 +168,15 @@ describe("searchRoutes handlers", () => {
             const userId = new mongoose.Types.ObjectId();
 
             const userSelect = vi.fn().mockReturnValue({
-                lean: vi.fn().mockResolvedValue({ _id: userId, name: "Teacher User", email: "t@test.com", role: "teacher" }),
+                lean: vi.fn().mockResolvedValue({
+                    _id: userId,
+                    name: "Teacher User",
+                    email: "t@test.com",
+                    role: "teacher",
+                    teacherProfile: { subject: "Math" },
+                }),
             });
             vi.spyOn(User, "findById").mockReturnValue({ select: userSelect });
-            vi.spyOn(Teacher, "findOne").mockReturnValue({
-                lean: vi.fn().mockResolvedValue({ _id: new mongoose.Types.ObjectId(), userId: userId, subject: "Math" }),
-            });
             vi.spyOn(Student, "find").mockReturnValue({
                 select: vi.fn().mockReturnValue({
                     lean: vi.fn().mockResolvedValue([{ _id: "s1", name: "Student 1" }]),
@@ -245,7 +248,7 @@ describe("searchRoutes handlers", () => {
     describe("GET /search - teacher scoping", () => {
         it("teacher search is scoped to their students", async () => {
             const teacherId = new mongoose.Types.ObjectId();
-            vi.spyOn(Teacher, "findOne").mockResolvedValueOnce({ _id: teacherId });
+            vi.spyOn(User, "findOne").mockReturnValueOnce(teacherLookup({ _id: teacherId }));
             vi.spyOn(Student, "find").mockReturnValue({
                 select: vi.fn().mockReturnValue({
                     lean: vi.fn().mockResolvedValue([]),
@@ -257,7 +260,7 @@ describe("searchRoutes handlers", () => {
 
             const handler = getRouteHandler("/search");
             const req = {
-                user: { role: "teacher", userId: "user-123" },
+                user: { role: "teacher", userId: teacherId.toString() },
                 query: { q: "test", type: "Alla" },
             };
             const res = buildRes();
@@ -270,7 +273,7 @@ describe("searchRoutes handlers", () => {
         });
 
         it("teacher returns 403 when profile not found", async () => {
-            vi.spyOn(Teacher, "findOne").mockResolvedValueOnce(null);
+            vi.spyOn(User, "findOne").mockReturnValueOnce(teacherLookup(null));
 
             const handler = getRouteHandler("/search");
             const req = {

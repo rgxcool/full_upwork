@@ -7,9 +7,9 @@ import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
-import Teacher from "../../src/models/Teacher.js";
 import User from "../../src/models/User.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const buildAuthHeader = (role = "admin") => {
     const token = jwt.sign(
@@ -44,7 +44,6 @@ describe("Analytics Routes Integration Tests", () => {
             Course.deleteMany({}),
             CourseInstance.deleteMany({}),
             StudentEnrollment.deleteMany({}),
-            Teacher.deleteMany({}),
             User.deleteMany({}),
         ]);
 
@@ -116,10 +115,7 @@ describe("Analytics Routes Integration Tests", () => {
                 password: "test-password",
                 roles: ["teacher"],
             });
-            const teacher = await Teacher.create({
-                userId: user._id,
-                subject: "Matematik",
-            });
+            const teacher = await giveTeacherProfile(user._id, { subject: "Matematik" });
 
             const res = await request(app)
                 .get("/api/analytics/filters")

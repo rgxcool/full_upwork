@@ -6,9 +6,6 @@ const { models } = vi.hoisted(() => ({
             findById: vi.fn(),
             findOne: vi.fn(),
         },
-        Teacher: {
-            findOne: vi.fn(),
-        },
     },
 }));
 
@@ -32,7 +29,6 @@ describe("documentAuthorization", () => {
     beforeEach(() => {
         models.Student.findById.mockReset();
         models.Student.findOne.mockReset();
-        models.Teacher.findOne.mockReset();
     });
 
     it("allows global staff without looking up the student", async () => {
@@ -62,15 +58,12 @@ describe("documentAuthorization", () => {
         ).resolves.toBe(true);
     });
 
-    it("allows only an assigned teacher", async () => {
+    it("allows only an assigned teacher (Student.teacherId is the User id, #102)", async () => {
         models.Student.findById.mockResolvedValue({
             _id: "student-1",
             municipality: "Malmö",
-            teacherId: "teacher-1",
+            teacherId: "user-1",
         });
-        models.Teacher.findOne.mockImplementation(({ userId }) =>
-            Promise.resolve(userId === "user-1" ? { _id: "teacher-1" } : null)
-        );
 
         await expect(
             canAccessStudentDocuments(

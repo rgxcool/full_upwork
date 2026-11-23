@@ -9,7 +9,7 @@ import Student from "../src/models/Student.js";
 import Course from "../src/models/Course.js";
 import CourseInstance from "../src/models/CourseInstance.js";
 import StudentEnrollment from "../src/models/StudentEnrollment.js";
-import Teacher from "../src/models/Teacher.js";
+import { HAS_TEACHER_PROFILE } from "../src/utils/teacherProfile.js";
 import User from "../src/models/User.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,11 +64,11 @@ async function importStudents() {
         if (c.courseCode) coursesByCode[c.courseCode.toUpperCase()] = c;
     }
 
-    // Index teachers by name (from userId.name or teacher name)
-    const teachers = await Teacher.find({}).populate("userId", "name").lean();
+    // Index teachers (users with a teacher profile, #102) by name
+    const teachers = await User.find(HAS_TEACHER_PROFILE).select("name username").lean();
     const teachersByName = {};
     for (const t of teachers) {
-        const name = (t.userId?.name || "").trim().toLowerCase();
+        const name = (t.name || t.username || "").trim().toLowerCase();
         if (name) teachersByName[name] = t;
     }
 

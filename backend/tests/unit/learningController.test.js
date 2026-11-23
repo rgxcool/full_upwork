@@ -15,10 +15,6 @@ vi.mock("../../src/models/Student.js", () => ({
     __esModule: true,
     default: { findOne: vi.fn(), findById: vi.fn() },
 }));
-vi.mock("../../src/models/Teacher.js", () => ({
-    __esModule: true,
-    default: { findOne: vi.fn(), find: vi.fn() },
-}));
 vi.mock("../../src/models/CourseInstance.js", () => ({
     __esModule: true,
     default: { find: vi.fn(), findById: vi.fn() },
@@ -38,11 +34,10 @@ vi.mock("../../src/models/AssignmentSubmission.js", () => ({
 }));
 vi.mock("../../src/models/User.js", () => ({
     __esModule: true,
-    default: { findById: vi.fn(), find: vi.fn() },
+    default: { findById: vi.fn(), find: vi.fn(), findOne: vi.fn() },
 }));
 
 import Student from "../../src/models/Student.js";
-import Teacher from "../../src/models/Teacher.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import AssignmentSubmission from "../../src/models/AssignmentSubmission.js";
@@ -82,6 +77,13 @@ const chainable = (data) => {
     };
     return chain;
 };
+
+// User.find({ _id: { $in: ids } }) returning only the listed users with those ids.
+const usersById = (users) =>
+    User.find.mockImplementation((filter) => {
+        const wanted = (filter?._id?.$in || []).map(String);
+        return chainable(users.filter((u) => wanted.includes(String(u._id))));
+    });
 
 const makeRes = () => {
     const res = { json: vi.fn(), status: vi.fn(() => res) };
@@ -206,12 +208,12 @@ describe("learningController", () => {
         });
 
         it("allows a teacher who owns the instance", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue(instance);
 
             const req = reqFor({
                 params: { instanceId: INSTANCE_ID },
-                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" },
             });
             const res = makeRes();
             await getInstanceModules(req, res);
@@ -223,12 +225,12 @@ describe("learningController", () => {
         });
 
         it("forbids a teacher who does not own the instance", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue({ ...instance, responsibleTeacher: "999999999999999999999999" });
 
             const req = reqFor({
                 params: { instanceId: INSTANCE_ID },
-                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" },
             });
             const res = makeRes();
             await getInstanceModules(req, res);
@@ -316,7 +318,7 @@ describe("learningController", () => {
         });
 
         it("forbids non-students", async () => {
-            const req = reqFor({ user: { userId: USER_ID, roles: ["teacher"], role: "teacher" }, params: { instanceId: INSTANCE_ID, moduleNumber: "1" } });
+            const req = reqFor({ user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" }, params: { instanceId: INSTANCE_ID, moduleNumber: "1" } });
             const res = makeRes();
             await submitAssignment(req, res);
 
@@ -327,12 +329,12 @@ describe("learningController", () => {
 
     describe("getInstanceSubmissions", () => {
         it("returns submissions for the owning teacher", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue(instance);
             const submissions = [{ _id: SUBMISSION_ID, moduleNumber: 1 }];
             AssignmentSubmission.find.mockReturnValue(chainable(submissions));
 
-            const req = reqFor({ user: { userId: USER_ID, roles: ["teacher"], role: "teacher" }, params: { instanceId: INSTANCE_ID } });
+            const req = reqFor({ user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" }, params: { instanceId: INSTANCE_ID } });
             const res = makeRes();
             await getInstanceSubmissions(req, res);
 
@@ -340,10 +342,10 @@ describe("learningController", () => {
         });
 
         it("forbids a teacher who does not own the instance", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue({ ...instance, responsibleTeacher: "999999999999999999999999" });
 
-            const req = reqFor({ user: { userId: USER_ID, roles: ["teacher"], role: "teacher" }, params: { instanceId: INSTANCE_ID } });
+            const req = reqFor({ user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" }, params: { instanceId: INSTANCE_ID } });
             const res = makeRes();
             await getInstanceSubmissions(req, res);
 
@@ -359,14 +361,14 @@ describe("learningController", () => {
             const res = makeRes();
             await getInstanceSubmissions(req, res);
 
-            expect(Teacher.findOne).not.toHaveBeenCalled();
+            expect(User.findOne).not.toHaveBeenCalled();
             expect(res.json).toHaveBeenCalledWith({ success: true, submissions });
         });
     });
 
     describe("setSubmissionFeedback", () => {
         it("sets godkänd feedback", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue(instance);
             const submission = {
                 _id: SUBMISSION_ID,
@@ -377,14 +379,14 @@ describe("learningController", () => {
             AssignmentSubmission.findById.mockResolvedValue(submission);
 
             const req = reqFor({
-                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" },
                 params: { submissionId: SUBMISSION_ID },
                 body: { comment: "Bra jobbat!", status: "godkänd" },
             });
             const res = makeRes();
             await setSubmissionFeedback(req, res);
 
-            expect(submission.feedback).toMatchObject({ comment: "Bra jobbat!", status: "godkänd", by: USER_ID });
+            expect(submission.feedback).toMatchObject({ comment: "Bra jobbat!", status: "godkänd", by: TEACHER_ID });
             expect(submission.save).toHaveBeenCalled();
             expect(res.json).toHaveBeenCalledWith({ success: true, submission });
         });
@@ -399,12 +401,12 @@ describe("learningController", () => {
         });
 
         it("forbids a teacher who does not own the submission's instance", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue({ ...instance, responsibleTeacher: "999999999999999999999999" });
             AssignmentSubmission.findById.mockResolvedValue({ _id: SUBMISSION_ID, courseInstanceId: INSTANCE_ID, feedback: {} });
 
             const req = reqFor({
-                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" },
                 params: { submissionId: SUBMISSION_ID },
                 body: { comment: "Komplettera", status: "komplettera" },
             });
@@ -417,13 +419,13 @@ describe("learningController", () => {
 
     describe("getPendingSubmissions", () => {
         it("scopes to the teacher's own instances", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             const owned = [{ _id: INSTANCE_ID }];
             CourseInstance.find.mockReturnValue(chainable(owned));
             const submissions = [{ _id: SUBMISSION_ID, moduleNumber: 1 }];
             AssignmentSubmission.find.mockReturnValue(chainable(submissions));
 
-            const req = reqFor({ user: { userId: USER_ID, roles: ["teacher"], role: "teacher" } });
+            const req = reqFor({ user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" } });
             const res = makeRes();
             await getPendingSubmissions(req, res);
 
@@ -441,7 +443,7 @@ describe("learningController", () => {
             const res = makeRes();
             await getPendingSubmissions(req, res);
 
-            expect(Teacher.findOne).not.toHaveBeenCalled();
+            expect(User.findOne).not.toHaveBeenCalled();
             expect(AssignmentSubmission.find.mock.calls[0][0]).toEqual({ "feedback.status": "" });
             expect(res.json).toHaveBeenCalledWith({ success: true, submissions });
         });
@@ -474,7 +476,7 @@ describe("learningController", () => {
         });
 
         it("marks a godkänd module complete on feedback", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue(instance);
             const completedComponents = { set: vi.fn(), get: vi.fn() };
             StudentEnrollment.findById.mockResolvedValue({
@@ -494,7 +496,7 @@ describe("learningController", () => {
             AssignmentSubmission.findById.mockResolvedValue(submission);
 
             const req = reqFor({
-                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" },
                 params: { submissionId: SUBMISSION_ID },
                 body: { comment: "Bra!", status: "godkänd" },
             });
@@ -507,7 +509,7 @@ describe("learningController", () => {
         });
 
         it("marks a komplettera module as needing revision", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue(instance);
             const completedComponents = { set: vi.fn() };
             StudentEnrollment.findById.mockResolvedValue({
@@ -716,11 +718,8 @@ describe("learningController", () => {
                     },
                 ])
             );
-            User.find.mockReturnValue(
-                chainable([{ _id: STUDENT_ID, lastLoginAt: new Date("2026-01-02") }])
-            );
+            usersById([{ _id: STUDENT_ID, lastLoginAt: new Date("2026-01-02") }]);
             AssignmentSubmission.find.mockReturnValue(chainable([]));
-            Teacher.find.mockReturnValue(chainable([]));
 
             const req = reqFor({ params: { instanceId: INSTANCE_ID } });
             const res = makeRes();
@@ -747,25 +746,18 @@ describe("learningController", () => {
                 assistantTeacher: ASSISTANT_TEACHER_ID,
             });
             StudentEnrollment.find.mockReturnValue(chainable([]));
-            User.find.mockReturnValueOnce(
-                chainable([])
-            ).mockReturnValueOnce(
-                chainable([
-                    {
-                        _id: USER_ID,
-                        name: "Läraren",
-                        email: "teach@x.se",
-                        lastLoginAt: new Date("2026-01-05"),
-                        active: true,
-                    },
-                ])
-            );
-            Teacher.find.mockReturnValue(
-                chainable([
-                    { _id: TEACHER_ID, userId: USER_ID, subject: "Matematik" },
-                    { _id: ASSISTANT_TEACHER_ID, userId: null, subject: null },
-                ])
-            );
+            // #102: responsible/assistantTeacher are User ids; the subject lives on teacherProfile.
+            usersById([
+                {
+                    _id: TEACHER_ID,
+                    name: "Läraren",
+                    email: "teach@x.se",
+                    lastLoginAt: new Date("2026-01-05"),
+                    active: true,
+                    teacherProfile: { subject: "Matematik" },
+                },
+                { _id: ASSISTANT_TEACHER_ID, teacherProfile: {} },
+            ]);
             AssignmentSubmission.find.mockReturnValue(chainable([]));
 
             const req = reqFor({ params: { instanceId: INSTANCE_ID } });
@@ -800,16 +792,13 @@ describe("learningController", () => {
                     },
                 ])
             );
-            User.find.mockReturnValue(
-                chainable([{ _id: STUDENT_ID, lastLoginAt: null }])
-            );
+            usersById([{ _id: STUDENT_ID, lastLoginAt: null }]);
             AssignmentSubmission.find.mockReturnValue(
                 chainable([
                     { studentId: STUDENT_ID, submittedAt: new Date("2026-02-10") },
                     { studentId: STUDENT_ID, submittedAt: new Date("2026-01-20") },
                 ])
             );
-            Teacher.find.mockReturnValue(chainable([]));
 
             const req = reqFor({ params: { instanceId: INSTANCE_ID } });
             const res = makeRes();
@@ -1103,7 +1092,7 @@ describe("learningController", () => {
 
         it("returns comments for a teacher", async () => {
             const req = reqFor({
-                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" },
                 params: { submissionId: SUBMISSION_ID },
             });
             const res = makeRes();
@@ -1181,10 +1170,10 @@ describe("learningController", () => {
         });
 
         it("adds a reply for the owning teacher", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue(instance);
             const req = reqFor({
-                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" },
                 params: { submissionId: SUBMISSION_ID },
                 body: { text: "Bra ", parentCommentId: "507f1f77bcf86cd799439011" },
             });
@@ -1241,13 +1230,13 @@ describe("learningController", () => {
         });
 
         it("forbids a teacher who does not own the instance", async () => {
-            Teacher.findOne.mockResolvedValue(teacher);
+            User.findOne.mockReturnValue(chainable(teacher));
             CourseInstance.findById.mockResolvedValue({
                 ...instance,
                 responsibleTeacher: "999999999999999999999999",
             });
             const req = reqFor({
-                user: { userId: USER_ID, roles: ["teacher"], role: "teacher" },
+                user: { userId: TEACHER_ID, roles: ["teacher"], role: "teacher" },
                 params: { submissionId: SUBMISSION_ID },
                 body: { text: "hej" },
             });

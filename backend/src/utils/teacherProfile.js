@@ -12,6 +12,7 @@
 import crypto from "crypto";
 import mongoose from "mongoose";
 import User from "../models/User.js";
+import logger from "./logger.js";
 
 /** Mongo filter matching users that have a teacher profile. */
 export const HAS_TEACHER_PROFILE = Object.freeze({ teacherProfile: { $type: "object" } });
@@ -36,10 +37,16 @@ export const TEACHER_COLORS = [
  * First colour from TEACHER_COLORS no teacher uses yet; cycles when all are taken.
  */
 export async function getNextAvailableColor() {
-    const existing = await User.find(HAS_TEACHER_PROFILE, "teacherProfile.colorCode").lean();
-    const used = new Set(existing.map((u) => u.teacherProfile?.colorCode).filter(Boolean));
-    const free = TEACHER_COLORS.find((c) => !used.has(c));
-    return free || TEACHER_COLORS[existing.length % TEACHER_COLORS.length];
+    try {
+        const existing = await User.find(HAS_TEACHER_PROFILE, "teacherProfile.colorCode").lean();
+        const used = new Set(existing.map((u) => u.teacherProfile?.colorCode).filter(Boolean));
+        const free = TEACHER_COLORS.find((c) => !used.has(c));
+        return free || TEACHER_COLORS[existing.length % TEACHER_COLORS.length];
+    } catch (err) {
+        // A colour is cosmetic: never block creating a teacher over it.
+        logger.error({ err }, "Error getting next available color");
+        return TEACHER_COLORS[0];
+    }
 }
 
 /** Strong random password with at least one char from each category. */
@@ -124,4 +131,18 @@ export async function listTeacherUsers(extraFilter = {}, { select = TEACHER_USER
         .select(select)
         .sort({ "teacherProfile.createdAt": -1 })
         .lean();
+}
+
+/**
+ * Fields to `.populate()` on a teacher reference (responsibleTeacher,
+ * teacherId, …). The populated value is the User; read its name with
+ * teacherDisplayName() (backend) or teacherDisplayName in the frontend.
+ */
+export const TEACHER_POPULATE_FIELDS =
+    "username name email teacherProfile.subject teacherProfile.colorCode";
+
+/** Calendar/course colour of a (populated or lean) teacher User. */
+export function teacherColor(user, fallback = null) {
+    if (!user || typeof user !== "object") return fallback;
+    return user.teacherProfile?.colorCode || fallback;
 }

@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
     studentModel: { findById: vi.fn() },
     courseModel: { findById: vi.fn() },
     packageModel: { findById: vi.fn() },
-    teacherModel: { findById: vi.fn() },
+    userModel: { findById: vi.fn() },
     enrollmentModel: { findById: vi.fn() },
     documentModel: { findById: vi.fn(), findOne: vi.fn() },
     calculateSlutprovDate: vi.fn(),
@@ -30,7 +30,7 @@ const h = vi.hoisted(() => ({
 vi.mock("../../src/models/Student.js", () => ({ default: h.studentModel }));
 vi.mock("../../src/models/Course.js", () => ({ default: h.courseModel }));
 vi.mock("../../src/models/CoursePackage.js", () => ({ default: h.packageModel }));
-vi.mock("../../src/models/Teacher.js", () => ({ default: h.teacherModel }));
+vi.mock("../../src/models/User.js", () => ({ default: h.userModel }));
 vi.mock("../../src/models/StudentEnrollment.js", () => ({ default: h.enrollmentModel }));
 vi.mock("../../src/models/Document.js", () => ({ default: h.documentModel }));
 vi.mock("../../src/utils/slutprovDateCalculator.js", () => ({
@@ -174,9 +174,10 @@ describe("placementRoutes", () => {
                 teacherId: "t1",
                 municipality: { type: "" },
             });
-            h.teacherModel.findById.mockReturnValue({
-                populate: vi.fn().mockResolvedValue({
-                    userId: { username: "karin.larsson" },
+            // Student.teacherId is the teacher's User id (#102).
+            h.userModel.findById.mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                    lean: vi.fn().mockResolvedValue({ username: "karin.larsson" }),
                 }),
             });
             h.calculateSlutprovDate.mockResolvedValue(new Date("2026-11-04"));

@@ -10,12 +10,12 @@ import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import User from "../../src/models/User.js";
-import Teacher from "../../src/models/Teacher.js";
 import AssignmentSubmission from "../../src/models/AssignmentSubmission.js";
 import Notification from "../../src/models/Notification.js";
 import Conversation from "../../src/models/Conversation.js";
 import Message from "../../src/models/Message.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const dayMs = 24 * 60 * 60 * 1000;
 const daysAgo = (days) => new Date(Date.now() - days * dayMs);
@@ -86,7 +86,6 @@ describe("Inactivity Report Routes Integration Tests", () => {
             CourseInstance.deleteMany({}),
             StudentEnrollment.deleteMany({}),
             User.deleteMany({}),
-            Teacher.deleteMany({}),
             AssignmentSubmission.deleteMany({}),
             Notification.deleteMany({}),
             Conversation.deleteMany({}),
@@ -262,10 +261,7 @@ describe("Inactivity Report Routes Integration Tests", () => {
                 password: "hashed-placeholder",
                 roles: ["teacher"],
             });
-            const teacher = await Teacher.create({
-                userId: teacherUser._id,
-                subject: "Matematik",
-            });
+            const teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
 
             const otherCourse = await Course.create({
                 courseName: "Svenska 1",
@@ -324,7 +320,7 @@ describe("Inactivity Report Routes Integration Tests", () => {
                 password: "hashed-placeholder",
                 roles: ["teacher"],
             });
-            await Teacher.create({ userId: teacherUser._id, subject: "Matematik" });
+            await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
 
             const res = await request(app)
                 .get("/api/inactivity/report")
@@ -399,10 +395,7 @@ describe("Inactivity Report Routes Integration Tests", () => {
                 password: "hashed-placeholder",
                 roles: ["teacher"],
             });
-            teacher = await Teacher.create({
-                userId: teacherUser._id,
-                subject: "Matematik",
-            });
+            teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
             adminUser = await User.create({
                 email: "loop-admin@mindful.se",
                 password: "hashed-placeholder",
@@ -550,10 +543,7 @@ describe("Inactivity Report Routes Integration Tests", () => {
                 password: "hashed-placeholder",
                 roles: ["teacher"],
             });
-            teacher = await Teacher.create({
-                userId: teacherUser._id,
-                subject: "Matematik",
-            });
+            teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
             adminUser = await User.create({
                 email: "action-admin@mindful.se",
                 password: "hashed-placeholder",

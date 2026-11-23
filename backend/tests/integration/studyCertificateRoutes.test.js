@@ -15,7 +15,6 @@ import studyCertificateRoutes from "../../src/router/studyCertificateRoutes.js";
 import Course from "../../src/models/Course.js";
 import Student from "../../src/models/Student.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
-import Teacher from "../../src/models/Teacher.js";
 import User from "../../src/models/User.js";
 import {
     connectTestDatabase,
@@ -49,6 +48,7 @@ import {
     CertificateRecord,
     CertificateSettings,
 } from "../../src/models/certificateModel.js";
+import { giveTeacherProfile } from "../helpers/teacherFixture.js";
 
 const settingsFor = (overrides = {}) =>
     CertificateSettings.create({
@@ -106,7 +106,6 @@ describe("Study Certificate Routes", () => {
             Course.deleteMany({}),
             Student.deleteMany({}),
             StudentEnrollment.deleteMany({}),
-            Teacher.deleteMany({}),
             User.deleteMany({}),
             CertificateSettings.deleteMany({}),
         ]);
@@ -129,10 +128,7 @@ describe("Study Certificate Routes", () => {
             password: "hashed-placeholder",
         });
 
-        teacher = await Teacher.create({
-            userId: teacherUser._id,
-            subject: "Svenska",
-        });
+        teacher = await giveTeacherProfile(teacherUser._id, { subject: "Svenska" });
 
         completedEnrollment = await StudentEnrollment.create({
             studentId: student._id,
@@ -162,7 +158,6 @@ describe("Study Certificate Routes", () => {
             Course.deleteMany({}),
             Student.deleteMany({}),
             StudentEnrollment.deleteMany({}),
-            Teacher.deleteMany({}),
             User.deleteMany({}),
             CertificateSettings.deleteMany({}),
         ]);
@@ -317,7 +312,6 @@ describe("Diploma email delivery (P7/P8)", () => {
             CoursePackage.deleteMany({}),
             Student.deleteMany({}),
             StudentEnrollment.deleteMany({}),
-            Teacher.deleteMany({}),
             User.deleteMany({}),
         ]);
         vi.mocked(sendDiplomaEmail).mockReset();
@@ -346,10 +340,7 @@ describe("Diploma email delivery (P7/P8)", () => {
             email: "malin@mindful.se",
             password: "hashed-placeholder",
         });
-        teacher = await Teacher.create({
-            userId: teacherUser._id,
-            subject: "Matematik",
-        });
+        teacher = await giveTeacherProfile(teacherUser._id, { subject: "Matematik" });
 
         diplomaEnrollment = await StudentEnrollment.create({
             studentId: student._id,
@@ -372,7 +363,6 @@ describe("Diploma email delivery (P7/P8)", () => {
             CoursePackage.deleteMany({}),
             Student.deleteMany({}),
             StudentEnrollment.deleteMany({}),
-            Teacher.deleteMany({}),
             User.deleteMany({}),
         ]);
         vi.restoreAllMocks();

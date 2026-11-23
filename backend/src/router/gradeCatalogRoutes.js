@@ -10,13 +10,14 @@ import multer from "multer";
 import path from "path";
 import GradeCatalog from "../models/GradeCatalog.js";
 import Student from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
+import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import NOTIFICATION_TYPES from "../controllers/notificationTypes.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
 import * as scriveClient from "../services/scriveClient.js";
 import logger from "../utils/logger.js";
+import { findTeacherUser } from "../utils/teacherProfile.js";
 
 const router = express.Router();
 
@@ -93,7 +94,7 @@ router.get("/grade-catalogs", authenticateUser, hasRole(ADMIN_ROLES), async (req
 // ─── Lärarens egna kataloger (utan PDF-bytes) ──────────────────────────────
 router.get("/grade-catalogs/my", authenticateUser, async (req, res) => {
   try {
-    const teacher = await Teacher.findOne({ userId: req.user.userId }).lean();
+    const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
     if (!teacher) {
       return res.status(404).json({ error: "Ingen lärarprofil hittades." });
     }
@@ -120,10 +121,10 @@ router.get("/grade-catalogs/:id", authenticateUser, async (req, res) => {
     const isAdminUser = userRoles.some((r) => ADMIN_ROLES.includes(r));
     let isOwner = false;
     if (!isAdminUser) {
-      const teacher = await Teacher.findOne({ userId: req.user.userId }).lean();
-      isOwner = Boolean(teacher && String(catalog.teacherId) === String(teacher._id));
+      // GradeCatalog.teacherId is the teacher's User id (#102).
+      isOwner = Boolean(req.user.userId && String(catalog.teacherId) === String(req.user.userId));
       if (!isOwner) {
-        return res.status(403).json({ error: "Åtkast nekad." });
+        return res.status(403).json({ error: "Åtkomst nekad." });
       }
     }
     const obj = catalog.toObject();
@@ -216,17 +217,18 @@ router.post("/grade-catalogs/:id/send", authenticateUser, hasRole(ADMIN_ROLES), 
   let teacherRecord = null;
 
   if (catalog.teacherId) {
-    teacherRecord = await Teacher.findById(catalog.teacherId).catch(() => null);
+    teacherRecord = await User.findById(catalog.teacherId).select("username name email").lean().catch(() => null);
   } else if (catalog.studentId) {
     const student = await Student.findById(catalog.studentId).select("teacherId name").catch(() => null);
     if (student?.teacherId) {
-      teacherRecord = await Teacher.findById(student.teacherId).catch(() => null);
+      // Student.teacherId is the teacher's User id (#102).
+      teacherRecord = await User.findById(student.teacherId).select("username name email").lean().catch(() => null);
     }
   }
 
   if (teacherRecord) {
     teacherEmail = teacherEmail || teacherRecord.email;
-    teacherName = teacherName || teacherRecord.name;
+    teacherName = teacherName || teacherRecord.name || teacherRecord.username;
     if (!catalog.teacherId) catalog.teacherId = teacherRecord._id;
   }
 
@@ -305,7 +307,7 @@ router.post("/grade-catalogs/:id/send", authenticateUser, hasRole(ADMIN_ROLES), 
 
   // Notis till läraren (och admins) – samma mönster som grade lock/unlock.
   try {
-    const teacherUserId = teacherRecord?.userId || undefined;
+    const teacherUserId = teacherRecord?._id || catalog.teacherId || undefined;
     await Notification.create({
       type: NOTIFICATION_TYPES.SIGNING_REQUIRED,
       message: `Betygskatalog för ${catalog.studentName || catalog.filename} har skickats för signering. Vänligen signera i Scrive.`,

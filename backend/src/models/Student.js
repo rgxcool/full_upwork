@@ -60,7 +60,7 @@ const StudentSchema = new mongoose.Schema(
                 },
                 teacherId: {
                     type: mongoose.Schema.Types.ObjectId,
-                    ref: "Teacher",
+                    ref: "User",
                 },
                 attended: { type: Boolean, default: false },
                 examTime: String,
@@ -104,7 +104,7 @@ const StudentSchema = new mongoose.Schema(
         teacher: String,
         teacherId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Teacher",
+            ref: "User",
         },
         dropout: { type: Boolean, default: false },
 

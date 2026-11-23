@@ -5,7 +5,6 @@ import Course from "../models/Course.js";
 import CourseInstance from "../models/CourseInstance.js";
 import Student from "../models/Student.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
-import Teacher from "../models/Teacher.js";
 import ExamAttendance from "../models/ExamAttendance.js";
 import { authenticateUser } from "../controllers/authController.js";
 import { hasRole } from "../middleware/auth.js";
@@ -15,6 +14,7 @@ import logger from "../utils/logger.js";
 import { escapeRegExp } from '../utils/escapeRegExp.js';
 import { studentScopeFilter } from "../utils/tenantScope.js";
 import { getDateOnlyRange, parseSearchDate } from "../utils/dateSearch.js";
+import { TEACHER_POPULATE_FIELDS, findTeacherUser } from "../utils/teacherProfile.js";
 
 const router = express.Router();
 
@@ -113,7 +113,7 @@ router.get("/course-enrollments", authenticateUser, canFeature(PERMISSION_FEATUR
 
         // If user is a teacher, filter students by their teacherId
         if (req.user.role === "teacher") {
-            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
 
             if (!teacher) {
                 return res
@@ -189,7 +189,7 @@ router.get("/search", authenticateUser, canFeature(PERMISSION_FEATURES.SEARCH_US
 
         // If user is a teacher, filter students by their teacherId
         if (req.user.role === "teacher") {
-            const teacher = await Teacher.findOne({ userId: req.user.userId });
+            const teacher = await findTeacherUser(req.user.userId, { select: "_id", lean: true });
 
             if (!teacher) {
                 return res
@@ -433,7 +433,8 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                     return res.status(404).json({ message: "User not found" });
                 }
 
-                const teacherProfile = await Teacher.findOne({ userId: id }).lean();
+                // The teacher is the User itself; teacher references hold its id (#102).
+                const teacherProfile = teacherUser.teacherProfile ? teacherUser : null;
                 if (!teacherProfile) {
                     return res.status(404).json({ message: "Teacher profile not found" });
                 }
@@ -536,7 +537,7 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                         mainCourseId: id,
                         isActive: true,
                     })
-                        .populate("responsibleTeacher", "userId")
+                        .populate("responsibleTeacher", TEACHER_POPULATE_FIELDS)
                         .sort({ startDate: -1 })
                         .lean();
 
@@ -545,7 +546,6 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                         courseInstanceId: { $in: instanceIds },
                     })
                         .populate("studentId", "name email")
-                        .populate("teacherId")
                         .lean();
 
                     const students = courseEnrollments
@@ -555,7 +555,7 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                     const teachersMap = new Map();
                     // Batch query users to avoid N+1 query
                     const teacherUserIds = courseEnrollments
-                        .map((e) => e.teacherId?.userId)
+                        .map((e) => e.teacherId) // the teacher's User id (#102)
                         .filter(Boolean);
                     
                     if (teacherUserIds.length > 0) {
@@ -610,11 +610,7 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                 try {
                     const courseInstance = await CourseInstance.findById(id)
                         .populate("mainCourseId")
-                        .populate({
-                            path: "responsibleTeacher",
-                            populate: { path: "userId", select: "username email" },
-                            select: "userId subject",
-                        })
+                        .populate({ path: "responsibleTeacher", select: TEACHER_POPULATE_FIELDS })
                         .lean();
 
                     if (!courseInstance) {
@@ -625,7 +621,6 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
                         courseInstanceId: id,
                     })
                         .populate("studentId", "name email personalNumber examTime examMunicipality examLocation examRoom municipality attendedExam")
-                        .populate("teacherId")
                         .lean();
 
                     const students = enrollments
@@ -688,11 +683,10 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
 
                     let teacher = null;
                     if (courseInstance.responsibleTeacher) {
-                        const responsibleTeacherUserId = courseInstance.responsibleTeacher.userId?._id || courseInstance.responsibleTeacher.userId;
                         teacher = {
-                            _id: responsibleTeacherUserId,
-                            username: courseInstance.responsibleTeacher.userId?.username || "Okänd",
-                            email: courseInstance.responsibleTeacher.userId?.email || "",
+                            _id: courseInstance.responsibleTeacher._id,
+                            username: courseInstance.responsibleTeacher.username || "Okänd",
+                            email: courseInstance.responsibleTeacher.email || "",
                         };
                     }
 
@@ -703,7 +697,7 @@ router.get("/details/:type/:id", authenticateUser, canFeature(PERMISSION_FEATURE
 
                     // Batch query users to avoid N+1 query
                     const enrollmentTeacherUserIds = enrollments
-                        .map((e) => e.teacherId?.userId)
+                        .map((e) => e.teacherId) // the teacher's User id (#102)
                         .filter(Boolean);
 
                     if (enrollmentTeacherUserIds.length > 0) {

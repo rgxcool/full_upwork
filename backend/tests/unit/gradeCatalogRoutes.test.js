@@ -27,7 +27,8 @@ vi.mock("../../src/models/Student.js", () => ({
   },
 }));
 
-vi.mock("../../src/models/Teacher.js", () => ({
+// #102: teachers are Users with teacherProfile; teacherId is a User id.
+vi.mock("../../src/models/User.js", () => ({
   __esModule: true,
   default: {
     findById: vi.fn(),
@@ -57,7 +58,9 @@ vi.mock("../../src/services/scriveClient.js", () => ({
 import gradeCatalogRoutes from "../../src/router/gradeCatalogRoutes.js";
 import GradeCatalog from "../../src/models/GradeCatalog.js";
 import Student from "../../src/models/Student.js";
-import Teacher from "../../src/models/Teacher.js";
+import User from "../../src/models/User.js";
+
+const userQuery = (value) => ({ select: vi.fn(() => ({ lean: vi.fn(() => Promise.resolve(value)) })) });
 import Notification from "../../src/models/Notification.js";
 import * as scriveClient from "../../src/services/scriveClient.js";
 
@@ -119,6 +122,8 @@ app.use("/api", gradeCatalogRoutes);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The caller ("user123") has no stored account: role refresh keeps the JWT roles.
+  User.findById.mockImplementation(() => userQuery(null));
   vi.stubEnv("SCRIVE_CALLBACK_URL", "https://example.com/api/grade-catalogs/scrive-callback");
   scriveClient.isScriveConfigured.mockReturnValue(true);
   scriveClient.createDocument.mockResolvedValue({ id: "42" });
@@ -233,7 +238,6 @@ describe("POST /api/grade-catalogs/:id/send", () => {
   it("returns 400 when no signatory email is available", async () => {
     GradeCatalog.findById.mockResolvedValue(createCatalogDoc({ studentId: "stu1", teacherEmail: null }));
     Student.findById.mockReturnValue({ select: vi.fn().mockResolvedValue({ teacherId: null }) });
-    Teacher.findById.mockResolvedValue(null);
     const res = await request(app).post("/api/grade-catalogs/c1/send").set("x-user-role", "admin");
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("e-post");
@@ -329,12 +333,14 @@ describe("POST /api/grade-catalogs/:id/send", () => {
     const doc = createCatalogDoc({ studentId: "stu1", teacherEmail: null, teacherName: null });
     GradeCatalog.findById.mockResolvedValue(doc);
     Student.findById.mockReturnValue({ select: vi.fn().mockResolvedValue({ teacherId: "tea1" }) });
-    Teacher.findById.mockResolvedValue({ _id: "tea1", email: "teacher@e.se", name: "Kalle Lärare" });
+    User.findById.mockImplementation((id) =>
+      userQuery(id === "tea1" ? { _id: "tea1", email: "teacher@e.se", name: "Kalle Lärare" } : null)
+    );
 
     const res = await request(app).post("/api/grade-catalogs/c1/send").set("x-user-role", "admin");
 
     expect(res.status).toBe(200);
-    expect(Teacher.findById).toHaveBeenCalledWith("tea1");
+    expect(User.findById).toHaveBeenCalledWith("tea1");
     expect(res.body.teacherEmail).toBe("teacher@e.se");
     expect(res.body.teacherName).toBe("Kalle Lärare");
     expect(doc.teacherId).toBe("tea1");

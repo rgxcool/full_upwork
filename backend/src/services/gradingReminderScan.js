@@ -1,7 +1,7 @@
 import logger from "../utils/logger.js";
 import StudentEnrollment from "../models/StudentEnrollment.js";
 import Student from "../models/Student.js";
-import Teacher from "../models/Teacher.js";
+import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import NOTIFICATION_TYPES from "../controllers/notificationTypes.js";
 
@@ -44,8 +44,9 @@ export async function runGradingReminderScan() {
                 continue;
             }
 
-            const teacherRecord = await Teacher.findById(student.teacherId)
-                .select("userId")
+            // student.teacherId is the teacher's User id (#102).
+            const teacherRecord = await User.findById(student.teacherId)
+                .select("_id")
                 .lean();
 
             if (!teacherRecord) {
@@ -76,7 +77,7 @@ export async function runGradingReminderScan() {
                     enrollmentId: enrollment._id,
                     studentId: enrollment.studentId,
                     courseId: enrollment.courseInstanceId,
-                    teacherId: teacherRecord.userId,
+                    teacherId: teacherRecord._id,
                 },
                 resolved: false,
             });

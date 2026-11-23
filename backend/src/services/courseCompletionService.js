@@ -4,7 +4,6 @@ import StudentEnrollment from "../models/StudentEnrollment.js";
 import CourseInstance from "../models/CourseInstance.js";
 import CoursePackage from "../models/CoursePackage.js";
 import AssignmentSubmission from "../models/AssignmentSubmission.js";
-import Teacher from "../models/Teacher.js";
 import User from "../models/User.js";
 import CompletionEvent from "../models/CompletionEvent.js";
 
@@ -355,23 +354,17 @@ export async function getResponsibleTeacher(enrollment, courseInstanceId) {
             return { teacherId: null, teacherName: "", teacherEmail: null, teacherUserId: null };
         }
 
-        const teacher = await Teacher.findById(teacherId).lean().catch(() => null);
-        if (!teacher) {
+        // teacherId is the teacher's User id (#102): teacherId === teacherUserId.
+        const user = await User.findById(teacherId).select("name username email").lean().catch(() => null);
+        if (!user) {
             return { teacherId: String(teacherId), teacherName: "", teacherEmail: null, teacherUserId: null };
         }
-
-        let teacherName = "";
-        let teacherEmail = null;
-        let teacherUserId = null;
-        if (teacher.userId) {
-            const user = await User.findById(teacher.userId).select("name username email").lean().catch(() => null);
-            if (user) {
-                teacherName = user.name || user.username || "";
-                teacherEmail = user.email || null;
-                teacherUserId = String(user._id);
-            }
-        }
-        return { teacherId: String(teacher._id), teacherName, teacherEmail, teacherUserId };
+        return {
+            teacherId: String(user._id),
+            teacherName: user.name || user.username || "",
+            teacherEmail: user.email || null,
+            teacherUserId: String(user._id),
+        };
     } catch (err) {
         logger.error({ err, enrollmentId: enrollment?._id }, "Responsible teacher lookup failed");
         return { teacherId: null, teacherName: "", teacherEmail: null, teacherUserId: null };
