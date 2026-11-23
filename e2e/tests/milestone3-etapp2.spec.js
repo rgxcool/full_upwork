@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
+import { EVIDENCE_DIR } from './evidenceDir.js';
 
 // exceljs ships in backend's node_modules; used to build the admission XLSX.
 const nodeRequire = createRequire(import.meta.url);
@@ -33,7 +34,8 @@ const ExcelJS = nodeRequire(
 //   API_RATE_LIMIT_MAX=1000 node index.js   (backend/src/middleware/security.js)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SHOT_DIR = path.join(__dirname, '..', 'verification-screenshots');
+// Evidence goes to test-results unless UPDATE_EVIDENCE=1 (see evidenceDir.js).
+const SHOT_DIR = EVIDENCE_DIR;
 const AUTH_DIR = path.join(__dirname, '..', '.auth');
 const studentState = path.join(AUTH_DIR, 'student.json');
 const student2State = path.join(AUTH_DIR, 'student2.json');
