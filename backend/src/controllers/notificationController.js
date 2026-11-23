@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { countStudentsAwaitingGrade } from "../utils/enrollmentEducation.js";
 import Notification from "../models/Notification.js";
 import Student from "../models/Student.js";
 import User from "../models/User.js";
@@ -18,20 +19,8 @@ export const checkPendingGradesAndNotify = async () => {
     
     
   
-    const unGradedStudents = await Student.countDocuments({
-      education: {
-        $elemMatch: {
-          removedAt: null,
-          $or: [
-            { grade: null },
-            { grade: "" },
-            { locked: false },
-            { grade: "F", locked: true }
-          ]
-        }
-      },
-      dropout: false
-    });
+    // Ended courses without a grade, from enrollments (#103).
+    const unGradedStudents = await countStudentsAwaitingGrade(today);
   
     const existing = await Notification.findOne({ type: "grades_pending", resolved: false });
   
@@ -178,14 +167,8 @@ export async function evaluateActionPlanStatusAndNotify() {
  */
   export async function evaluateGradingStatusAndNotify() {
     try {
-      const students = await Student.find().lean();
-  
-      const ungradedStudents = students.filter(student => {
-        const courses = (student.education || []).filter(edu => !edu.removedAt);
-        return courses.some(edu => (!edu.grade || edu.grade === "" || edu.locked === false));
-      });
-  
-      if (ungradedStudents.length > 0) {
+      // Ended courses without a grade, from enrollments (#103).
+      if ((await countStudentsAwaitingGrade()) > 0) {
         const message = "Det finns elever som inte har fått betyg ännu. Vänlig betygsätt dem snarast."
         await createGlobalNotification("grades_pending", message);
         logger.info({ message }, "Notification sent for incomplete grading");

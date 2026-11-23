@@ -13,6 +13,8 @@ import Notification from "../../src/models/Notification.js";
 import Student from "../../src/models/Student.js";
 import User from "../../src/models/User.js";
 import Course from "../../src/models/Course.js";
+import CourseInstance from "../../src/models/CourseInstance.js";
+import StudentEnrollment from "../../src/models/StudentEnrollment.js";
 import {
     checkPendingGradesAndNotify,
     createNotification,
@@ -57,6 +59,8 @@ describe("notificationController", () => {
         await Student.deleteMany({});
         await User.deleteMany({});
         await Course.deleteMany({});
+        await CourseInstance.deleteMany({});
+        await StudentEnrollment.deleteMany({});
     });
 
     afterEach(async () => {
@@ -65,11 +69,43 @@ describe("notificationController", () => {
         await Student.deleteMany({});
         await User.deleteMany({});
         await Course.deleteMany({});
+        await CourseInstance.deleteMany({});
+        await StudentEnrollment.deleteMany({});
     });
+
+    // #103: "grades pending" = an ended course enrollment without a grade.
+    let seedSeq = 0;
+    const seedEnrollment = async ({ grade = null, ended = true } = {}) => {
+        seedSeq++;
+        const student = await Student.create({
+            name: "Test Elev",
+            email: `grade.${seedSeq}@example.se`,
+            personalNumber: "19000101-0000",
+        });
+        const course = await Course.create({ courseName: "Svenska 1", courseCode: `SVE${seedSeq}` });
+        const endDate = ended ? new Date(Date.now() - 7 * 864e5) : new Date(Date.now() + 30 * 864e5);
+        const startDate = new Date(endDate.getTime() - 60 * 864e5);
+        const instance = await CourseInstance.create({
+            mainCourseId: course._id,
+            courseName: course.courseName,
+            courseCode: `SVE${seedSeq}-1`,
+            startDate,
+            endDate,
+        });
+        return StudentEnrollment.create({
+            studentId: student._id,
+            courseInstanceId: instance._id,
+            mainCourseId: course._id,
+            startDate,
+            endDate,
+            grade,
+        });
+    };
 
     describe("checkPendingGradesAndNotify", () => {
         it("creates a pending grades notification when ungraded students exist", async () => {
-            vi.spyOn(Student, "countDocuments").mockResolvedValueOnce(2);
+            await seedEnrollment();
+            await seedEnrollment({ ended: false }); // ongoing: not counted
 
             await checkPendingGradesAndNotify();
 
@@ -87,7 +123,7 @@ describe("notificationController", () => {
                 resolved: false,
             });
 
-            vi.spyOn(Student, "countDocuments").mockResolvedValueOnce(1);
+            await seedEnrollment();
 
             await checkPendingGradesAndNotify();
 
@@ -105,7 +141,7 @@ describe("notificationController", () => {
                 resolved: false,
             });
 
-            vi.spyOn(Student, "countDocuments").mockResolvedValueOnce(0);
+            await seedEnrollment({ grade: "C" }); // graded: nothing pending
 
             await checkPendingGradesAndNotify();
 
@@ -114,7 +150,7 @@ describe("notificationController", () => {
         });
 
         it("does nothing when no ungraded students and no notification exists", async () => {
-            vi.spyOn(Student, "countDocuments").mockResolvedValueOnce(0);
+            await seedEnrollment({ grade: "C" }); // graded: nothing pending
 
             await checkPendingGradesAndNotify();
 
@@ -303,20 +339,7 @@ describe("notificationController", () => {
 
     describe("evaluateGradingStatusAndNotify", () => {
         it("creates a grades pending notification when ungraded students exist", async () => {
-            vi.spyOn(Student, "find").mockReturnValue({
-                lean: () =>
-                    Promise.resolve([
-                        {
-                            education: [
-                                {
-                                    removedAt: null,
-                                    grade: null,
-                                    locked: false,
-                                },
-                            ],
-                        },
-                    ]),
-            });
+            await seedEnrollment();
 
             await evaluateGradingStatusAndNotify();
 
@@ -333,23 +356,8 @@ describe("notificationController", () => {
                 resolved: false,
             });
 
-            vi.spyOn(Student, "find").mockReturnValue({
-                lean: () =>
-                    Promise.resolve([
-                        {
-                            education: [
-                                {
-                                    removedAt: null,
-                                    grade: "A",
-                                    locked: true,
-                                },
-                            ],
-                        },
-                        {
-                            name: "No Education",
-                        },
-                    ]),
-            });
+            await seedEnrollment({ grade: "A" });
+            await seedEnrollment({ ended: false });
 
             await evaluateGradingStatusAndNotify();
 
@@ -358,9 +366,7 @@ describe("notificationController", () => {
         });
 
         it("logs errors when evaluation fails", async () => {
-            vi.spyOn(Student, "find").mockReturnValue({
-                lean: () => Promise.reject(new Error("Fail")),
-            });
+            vi.spyOn(StudentEnrollment, "distinct").mockRejectedValueOnce(new Error("Fail"));
 
             await evaluateGradingStatusAndNotify();
 

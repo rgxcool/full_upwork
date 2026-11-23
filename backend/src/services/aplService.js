@@ -3,12 +3,12 @@ import { AppError } from "../utils/errorHandler.js";
 import mongoose from "mongoose";
 import AplRecord from "../models/AplRecord.js";
 import Student from "../models/Student.js";
+import { aplPeriodFor, aplPeriodsFor } from "../utils/enrollmentEducation.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import NOTIFICATION_TYPES from "../controllers/notificationTypes.js";
 import { sendEmail, getEmailSignature } from "../services/emailService.js";
 import {
-    computeAplPeriod,
     computeAplEffectiveStatus,
     APL_AUTO_RED_WEEKS,
 } from "../utils/aplAutoStatus.js";
@@ -32,13 +32,12 @@ export async function findEligibleStudents() {
         .populate("teacherId", "name email")
         .lean();
 
+    // APL periods from the enrollments (#103), one query for all students.
+    const periods = await aplPeriodsFor(students.map((st) => st._id));
     const eligible = [];
     for (const student of students) {
-        const hasPackage = student.education?.some(
-            (e) => e.type === "CoursePackage" && !e.removedAt
-        );
-        if (hasPackage) {
-            const aplPeriod = computeAplPeriod(student.education || []);
+        const aplPeriod = periods.get(String(student._id));
+        if (aplPeriod?.hasPackage) {
             const effective = computeAplEffectiveStatus(
                 student.aplStatus,
                 aplPeriod.aplEndDate,
@@ -138,7 +137,7 @@ async function issueAplLearningKit(studentId, { now = new Date() } = {}) {
         return { kit: existing, created: false };
     }
 
-    const period = computeAplPeriod(student.education || []);
+    const period = await aplPeriodFor(student._id);
     if (
         !period.aplStartDate ||
         startOfDay(period.aplStartDate).getTime() > startOfDay(now).getTime()
@@ -254,7 +253,7 @@ export async function updateAplStatus({
     // Update or create AplRecord
     let record = await AplRecord.findOne({ studentId });
     if (!record) {
-        const aplPeriod = computeAplPeriod(student.education || []);
+        const aplPeriod = await aplPeriodFor(student._id);
         record = new AplRecord({
             studentId,
             status,
@@ -319,8 +318,9 @@ export async function autoTransitionStatuses() {
         status: { $in: ["GRAY", "BLUE", "YELLOW", "PURPLE"] },
     }).populate(
         "studentId",
-        "name email education aplStatus aplStatusManualOverride"
+        "name email aplStatus aplStatusManualOverride"
     );
+    const periods = await aplPeriodsFor(records.map((r) => r.studentId?._id).filter(Boolean));
 
     for (const record of records) {
         const student = record.studentId;
@@ -331,8 +331,8 @@ export async function autoTransitionStatuses() {
         await ensureAplLearningKit(student._id);
         if (student.aplStatusManualOverride) continue;
 
-        const aplPeriod = computeAplPeriod(student.education || []);
-        if (!aplPeriod.aplEndDate) continue;
+        const aplPeriod = periods.get(String(student._id));
+        if (!aplPeriod?.aplEndDate) continue;
 
         const endDate = new Date(aplPeriod.aplEndDate);
         const daysRemaining = Math.ceil(
@@ -392,7 +392,7 @@ export async function getAplRecords({ status, includeCompleted, search }) {
     }
 
     const records = await AplRecord.find(query)
-        .populate("studentId", "name email phone teacherId education aplStatus aplStatusManualOverride dropout")
+        .populate("studentId", "name email phone teacherId aplStatus aplStatusManualOverride dropout")
         .populate("coursePackageId", "coursePackageName coursePackageCode")
         .populate("cvDocId", "filename uploadDate")
         .populate("contractDocId", "filename uploadDate")
@@ -409,10 +409,11 @@ export async function getAplRecords({ status, includeCompleted, search }) {
         });
     }
 
-    // Enrich with computed fields
+    // Enrich with computed fields (APL period from enrollments, #103)
+    const periods = await aplPeriodsFor(filtered.map((r) => r.studentId._id));
     return filtered.map((record) => {
         const student = record.studentId;
-        const aplPeriod = computeAplPeriod(student?.education || []);
+        const aplPeriod = periods.get(String(student._id));
         const effective = computeAplEffectiveStatus(
             record.status,
             aplPeriod.aplEndDate,
@@ -434,7 +435,7 @@ export async function getAplRecords({ status, includeCompleted, search }) {
  */
 export async function getAplRecordByStudent(studentId) {
     const record = await AplRecord.findOne({ studentId })
-        .populate("studentId", "name email phone teacherId education aplStatus aplStatusManualOverride dropout")
+        .populate("studentId", "name email phone teacherId aplStatus aplStatusManualOverride dropout")
         .populate("coursePackageId", "coursePackageName coursePackageCode")
         .populate("cvDocId", "filename uploadDate")
         .populate("contractDocId", "filename uploadDate")
@@ -443,7 +444,7 @@ export async function getAplRecordByStudent(studentId) {
     if (!record?.studentId) return null;
 
     const student = record.studentId;
-    const aplPeriod = computeAplPeriod(student?.education || []);
+    const aplPeriod = await aplPeriodFor(student._id);
     const effective = computeAplEffectiveStatus(
         record.status,
         aplPeriod.aplEndDate,
@@ -469,7 +470,7 @@ export async function updateAplRecordDetails({ studentId, updates, userId: _user
         // Auto-create if not exists
         const student = await Student.findById(studentId);
         if (!student) throw new AppError("Student not found", 404);
-        const aplPeriod = computeAplPeriod(student.education || []);
+        const aplPeriod = await aplPeriodFor(student._id);
         record = new AplRecord({
             studentId,
             status: student.aplStatus || "GRAY",
@@ -511,7 +512,7 @@ export async function updateOwnAplRecord({ studentId, updates }) {
     if (!record) {
         const student = await Student.findById(studentId);
         if (!student) throw new AppError("Student not found", 404);
-        const aplPeriod = computeAplPeriod(student.education || []);
+        const aplPeriod = await aplPeriodFor(student._id);
         record = new AplRecord({
             studentId,
             status: student.aplStatus || "GRAY",

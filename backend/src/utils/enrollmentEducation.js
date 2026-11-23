@@ -8,6 +8,7 @@
  * `Student.education` array.
  */
 import StudentEnrollment from "../models/StudentEnrollment.js";
+import { computeAplPeriod } from "./aplAutoStatus.js";
 
 const idOf = (v) => (v && typeof v === "object" && v._id ? v._id : v);
 
@@ -129,4 +130,49 @@ export async function loadEducationByStudent(studentIds = [], { statuses } = {})
         byStudent.get(key).push(enr);
     }
     return new Map([...byStudent].map(([id, list]) => [id, educationFromEnrollments(list)]));
+}
+
+/**
+ * APL period per student, from the enrollment-based study plan.
+ * @param {Array} studentIds
+ * @returns {Promise<Map<string, { aplStartDate: Date|null, aplEndDate: Date|null, hasPackage: boolean }>>}
+ */
+export async function aplPeriodsFor(studentIds = []) {
+    const plans = await loadEducationByStudent(studentIds);
+    return new Map(
+        [...plans].map(([id, education]) => [
+            id,
+            {
+                ...computeAplPeriod(education),
+                hasPackage: education.some((e) => e.type === "CoursePackage"),
+            },
+        ])
+    );
+}
+
+/** APL period for one student (see aplPeriodsFor). */
+export async function aplPeriodFor(studentId) {
+    if (!studentId) return { aplStartDate: null, aplEndDate: null, hasPackage: false };
+    const id = idOf(studentId);
+    return (await aplPeriodsFor([id])).get(String(id));
+}
+
+/**
+ * Enrollments waiting for a grade: the course has ended and no grade is set.
+ * Same rule as GET /students-to-grade (Betyg) and the "grades pending" notice.
+ */
+export function needsGradeFilter(now = new Date()) {
+    return {
+        status: { $in: ["enrolled", "active", "completed"] },
+        endDate: { $lt: now },
+        $or: [{ grade: null }, { grade: "" }],
+    };
+}
+
+/** Number of non-dropout students with at least one enrollment waiting for a grade. */
+export async function countStudentsAwaitingGrade(now = new Date()) {
+    const { default: Student } = await import("../models/Student.js");
+    const studentIds = await StudentEnrollment.distinct("studentId", needsGradeFilter(now));
+    if (studentIds.length === 0) return 0;
+    return Student.countDocuments({ _id: { $in: studentIds }, dropout: { $ne: true } });
 }

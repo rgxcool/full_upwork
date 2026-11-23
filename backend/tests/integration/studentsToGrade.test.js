@@ -94,14 +94,14 @@ describe("GET /api/students-to-grade — enrollment vs legacy education rows", (
         expect(rows[0].source).toBe("enrollment");
     });
 
-    it("still lists a student who only has a legacy education entry", async () => {
+    it("does not list a legacy-only education entry (#103: enrollments are the only source)", async () => {
+        // scripts/backfillEnrollmentsFromEducation.js turns such entries into
+        // enrollments before this code is deployed.
         const student = await placedStudent("Test Legacy", { withEnrollment: false });
 
         const res = await request(app).get("/api/students-to-grade").set(authFor(teacherUser));
 
-        const rows = rowsFor(res.body, student);
-        expect(rows).toHaveLength(1);
-        expect(rows[0].source).toBe("student_education");
+        expect(rowsFor(res.body, student)).toHaveLength(0);
     });
 
     it("does not bring back a dropped enrollment through its education entry", async () => {
