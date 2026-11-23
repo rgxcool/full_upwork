@@ -300,6 +300,20 @@ if (process.env.NODE_ENV !== "test") {
         .then(async () => {
             logger.info("Connected to MongoDB");
 
+            // #126: warn when this database is behind (e.g. after a manual git pull).
+            try {
+                const { loadMigrations, pendingMigrations } = await import("./src/utils/migrations.js");
+                const pending = await pendingMigrations(mongoose.connection.db, await loadMigrations());
+                if (pending.length) {
+                    logger.warn(
+                        { pending: pending.map((m) => m.id) },
+                        "Pending database migrations: run `pnpm --dir backend run migrate`"
+                    );
+                }
+            } catch (error) {
+                logger.warn({ err: error }, "Could not check database migrations");
+            }
+
             // Create database indexes for performance
             try {
                 await dbOptimizer.createIndexes();

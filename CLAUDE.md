@@ -103,6 +103,8 @@ Columns (Status field), in order:
 - `CourseInstance.content` is a Map with **string** keys (`"1"`, `"2"`). Hydrated docs → MongooseMap,
   `.lean()` → plain object. Handle both.
 - Saving content must merge by `moduleNumber`, never drop `startDate`/`endDate` or progress.
+- **Every change to stored data is a numbered migration** in `backend/migrations/` (idempotent, safe on an
+  empty database, additive; see its README). `deploy.sh` runs them. No more one-off migration scripts.
 - Nightly jobs live in `backend/src/services/scheduler.js`; every job must be idempotent. Production runs
   pm2 in cluster mode, so jobs only start on worker 0 (`isSchedulerLeader()`) — never start timers elsewhere.
 - **Sentry is development-only.** Report errors through `src/utils/monitoring.js` (no-op in production);

@@ -84,6 +84,10 @@ test-changed:
 	cd backend && NODE_ENV=test npx vitest run --mode test --changed --coverage.enabled=false
 	cd frontend && npx vitest run --changed --coverage.enabled=false
 
+# Apply pending database migrations to the local database (backend/migrations, #126).
+migrate:
+	cd backend && node scripts/migrate.js
+
 test-backend:
 	cd backend && NODE_ENV=test npx vitest run --mode test --reporter=$(CITEST_REPORTER)
 

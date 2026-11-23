@@ -217,6 +217,24 @@ Results: `success`, `forced-success`, `noop`, `refused-ci-<status>`, `build-fail
 | 2 | Health checks failed → **automatic rollback succeeded** | Old version live and healthy |
 | 3 | Rollback itself failed or stayed unhealthy | **Needs a human now** — see the manual procedure |
 
+## Database migrations (#126)
+
+`deploy.sh` runs `pnpm --dir backend run migrate` after the frontend build and before going live.
+Pending migrations in `backend/migrations/` run in order, and each database records what has run on
+it in its `migrations` collection, so an environment that is several releases behind simply catches
+up. If a migration fails, the deploy stops: the live version keeps running, the code is reset to the
+previous commit, and `logs/deploy.log` records `migrate-failed`. Fix the migration and deploy again;
+the failed one was not recorded, so it is retried.
+
+Check a database by hand (from `backend/`, on the server with `NODE_ENV=production`):
+
+```bash
+NODE_ENV=production node scripts/migrate.js status
+```
+
+The backend also logs `Pending database migrations` at startup when it is behind (e.g. after a manual
+`git pull`). How to write a migration: `backend/migrations/README.md`.
+
 ## Rollback Procedure
 
 ### Automatic
