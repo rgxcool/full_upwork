@@ -2,7 +2,7 @@
    
  **Purpose:** single consolidated source of truth, merging:  
 - MILESTONE-3-SECURITY-COMMERCIAL-CHECKLIST.md (original task checklist, P1–P16/P18)  
-- AUDIT-MILESTONE3-COMMERCIAL-README_REPORT.md (Etapp 1 + Etapp 2 feature-by-feature audit, items 1–67a)  
+- AUDIT-MILESTONE3-COMMERCIAL-README.REPORT.md (Etapp 1 + Etapp 2 feature-by-feature audit, items 1–67a)  
 - MILESTONE-3-SECURITY-COMMERCIAL-FINAL-REPORT.md (final readiness pass, A–J)  
 - E2E_FEATURE_REPORT.md (Playwright 75/75 pass + real bugs found/fixed)  
 - ARCHITECTURE-NOTES.md (SMS feasibility note)  
