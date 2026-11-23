@@ -53,7 +53,7 @@
               <td>{{ exam.course || '–' }}</td>
               <td>{{ exam.municipality || '–' }}</td>
               <td>{{ exam.requestedMonthFormatted }}</td>
-              <td>{{ exam.teacherId?.userId?.username || '–' }}</td>
+              <td>{{ teacherDisplayName(exam.teacherId, '–') }}</td>
               <td>
                 <span :class="['badge', statusColor(exam.status)]">{{ exam.status || '–' }}</span>
               </td>
@@ -173,6 +173,7 @@
 <script setup>
   import { ref, onMounted, computed } from 'vue'
   import client from '@/api/client.js'
+  import { teacherDisplayName } from '@/utils/teacherName.js'
   import { useToast } from '@/composables/useToast.js'
 
   const toast = useToast()

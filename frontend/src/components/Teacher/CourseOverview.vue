@@ -140,6 +140,7 @@
 
 <script>
   import client from '@/api/client.js'
+  import { teacherDisplayName } from '@/utils/teacherName.js'
   import { useToast } from '@/composables/useToast.js'
 
   export default {
@@ -258,28 +259,8 @@
       },
       getResponsibleTeacher(item) {
         // Handle different possible data structures
-        const teacher = item.responsibleTeacher;
-        
-        if (!teacher) {
-          return 'Ej tilldelad';
-        }
-        
-        // If userId is populated with username
-        if (teacher.userId?.username) {
-          return teacher.userId.username;
-        }
-        
-        // If userId is an object but not populated, try to get it from the object
-        if (teacher.userId && typeof teacher.userId === 'object' && teacher.userId.username) {
-          return teacher.userId.username;
-        }
-        
-        // If there's a username directly on the teacher object (fallback)
-        if (teacher.username) {
-          return teacher.username;
-        }
-        
-        return 'Ej tilldelad';
+        // responsibleTeacher is the populated teacher User (#102).
+        return teacherDisplayName(item.responsibleTeacher, 'Ej tilldelad');
       },
       handleCourseCodeClick(item) {
         if (item && item._id) {
