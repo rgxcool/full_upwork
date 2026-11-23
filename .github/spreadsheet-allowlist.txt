@@ -1,6 +1,6 @@
 # Spreadsheets that may be committed (#105). Checked by
 # .github/scripts/check_spreadsheets.py — content must contain no real
-# personnummer (only born-1900 fakes or 01-01 placeholders).
+# personnummer (born-1900 fakes are fine; anything with a valid date and check digit fails).
 # Course catalogue (no personal data)
 data/Kurser och kurspaket*.xlsx
 backend/docs/Kurser och kurspaket*.xlsx
