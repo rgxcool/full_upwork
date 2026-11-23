@@ -19,8 +19,11 @@ import Student from "../../src/models/Student.js";
 import Course from "../../src/models/Course.js";
 import CourseInstance from "../../src/models/CourseInstance.js";
 import StudentEnrollment from "../../src/models/StudentEnrollment.js";
+import Deviation from "../../src/models/Deviation.js";
 import studentRoutes from "../../src/router/studentRoutes.js";
 import courseMatchingRoutes from "../../src/router/courseMatchingRoutes.js";
+import studentDetailsRoutes from "../../src/router/studentDetailsRoutes.js";
+import aplRoutes from "../../src/router/aplRoutes.js";
 import { connectTestDatabase, disconnectTestDatabase } from "../helpers/mongoTest.js";
 
 const SECRET = "test-secret";
@@ -66,6 +69,8 @@ describe("Teachers edit only their own students (#121)", () => {
         app.use(express.json());
         app.use("/api", studentRoutes);
         app.use("/api", courseMatchingRoutes);
+        app.use("/api", studentDetailsRoutes);
+        app.use("/api", aplRoutes);
     }, 60000);
 
     afterAll(async () => {
@@ -157,7 +162,7 @@ describe("Teachers edit only their own students (#121)", () => {
         expect(res.status).toBe(403);
     });
 
-    it("every student edit route refuses an unconnected teacher", async () => {
+    it("every student write route refuses an unconnected teacher", async () => {
         const id = String(student._id);
         const someId = String(new mongoose.Types.ObjectId());
         const calls = [
@@ -169,11 +174,21 @@ describe("Teachers edit only their own students (#121)", () => {
             ["DELETE course", () => request(app).delete(`/api/student/${id}/courses/${course._id}`)],
             ["DELETE enrollment", () => request(app).delete(`/api/students/${id}/enrollments/${someId}`)],
             ["PUT studyplan-tempo", () => request(app).put(`/api/students/${id}/studyplan-tempo`).send({ tempoWeeks: 10 })],
+            ["POST /students/:id/comment", () => request(app).post(`/api/students/${id}/comment`).send({ comment: "Testkommentar" })],
+            ["POST comment", () => request(app).post(`/api/student-details/${id}/comments`).send({ text: "Testkommentar" })],
+            ["PUT comment", () => request(app).put(`/api/student-details/${id}/comments/${someId}`).send({ text: "Ändrad" })],
+            ["DELETE comment", () => request(app).delete(`/api/student-details/${id}/comments/${someId}`)],
+            ["POST deviation", () => request(app).post(`/api/student-details/${id}/deviations`).send({ type: "frånvaro", description: "Test" })],
+            ["PATCH APL status", () => request(app).patch(`/api/apl/records/${id}/status`).send({ status: "GREEN" })],
+            ["PUT APL record", () => request(app).put(`/api/apl/records/${id}`).send({ notes: "Test" })],
         ];
         for (const [label, call] of calls) {
             const res = await call().set(auth(u.outsider));
             expect({ label, status: res.status, error: res.body.error }).toEqual({ label, status: 403, error: DENIED });
         }
         expect(await StudentEnrollment.countDocuments({ studentId: student._id })).toBe(1);
+        const after = await Student.findById(student._id).lean();
+        expect(after.commentHistory ?? []).toHaveLength(0);
+        expect(await Deviation.countDocuments({ studentId: student._id })).toBe(0);
     });
 });

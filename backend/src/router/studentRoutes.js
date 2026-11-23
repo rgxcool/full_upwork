@@ -956,7 +956,7 @@ router.patch("/students/:id", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), re
  * @desc    Adds a comment to a student's commentHistory.
  * @access  Protected (Staff only)
  */
-router.post("/students/:id/comment", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), async (req, res) => {
+router.post("/students/:id/comment", authenticateUser, hasRole(ALLOWED_STAFF_ROLES), requireOwnStudentForTeacher("id"), async (req, res) => {
     const { comment } = req.body;
     const { userId, role, name } = req.user;
 

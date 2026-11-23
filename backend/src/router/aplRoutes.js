@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
+import { requireOwnStudentForTeacher } from "../middleware/teacherStudentAccess.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import {
     listAplRecords,
@@ -40,8 +41,8 @@ router.get(
     },
     asyncHandler(getAplRecord)
 );
-router.patch("/apl/records/:studentId/status", isAuthenticated, hasRole(APL_ROLES), asyncHandler(patchAplStatus));
-router.put("/apl/records/:studentId", isAuthenticated, hasRole(APL_ROLES), asyncHandler(putAplRecord));
+router.patch("/apl/records/:studentId/status", isAuthenticated, hasRole(APL_ROLES), requireOwnStudentForTeacher("studentId"), asyncHandler(patchAplStatus));
+router.put("/apl/records/:studentId", isAuthenticated, hasRole(APL_ROLES), requireOwnStudentForTeacher("studentId"), asyncHandler(putAplRecord));
 router.post("/apl/auto-create", isAuthenticated, hasRole(["admin", "systemadmin"]), asyncHandler(postAutoCreate));
 router.post("/apl/auto-transition", isAuthenticated, hasRole(["admin", "systemadmin"]), asyncHandler(postAutoTransition));
 router.get("/apl/eligible", isAuthenticated, hasRole(APL_ROLES), asyncHandler(getEligibleStudents));
