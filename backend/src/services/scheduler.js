@@ -12,11 +12,13 @@
  *   - INACTIVITY_AUTO_WARNING_ENABLED === "false"
  */
 import logger from "../utils/logger.js";
+import { withJobMonitor } from "../utils/monitoring.js";
 import { runInactivityScan } from "./inactivityScanner.js";
 import { runDiplomaNotificationScan } from "./diplomaNotificationScan.js";
 import { runGradingReminderScan } from "./gradingReminderScan.js";
 import { runTaskReminderScan } from "./taskReminderScan.js";
-import { autoTransitionStatuses } from "./aplService.js";
+import { autoTransitionStatuses, ensureStartedAplLearningKits } from "./aplService.js";
+import { runAutomaticDiplomaScan } from "./automaticDiplomaService.js";
 
 const SCAN_HOUR_UTC = (() => {
     const raw = parseInt(process.env.INACTIVITY_SCAN_HOUR_UTC, 10);
@@ -24,6 +26,28 @@ const SCAN_HOUR_UTC = (() => {
 })();
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * pm2 runs the API in cluster mode (`instances: "max"` in ecosystem.config.cjs):
+ * every worker imports this module. Without a guard each worker runs every
+ * nightly job at the same second, and check-then-write idempotency races —
+ * duplicate warning e-mails, diplomas and reminders. pm2 numbers workers via
+ * NODE_APP_INSTANCE; only worker 0 (or a plain non-pm2 process) runs jobs.
+ * SCHEDULER_ENABLED=false turns jobs off on a node entirely.
+ */
+// Sentry cron monitor config (dev only, opt-in with SENTRY_CRONS=true).
+const NIGHTLY_MONITOR = () => ({
+    schedule: { type: "crontab", value: `0 ${SCAN_HOUR_UTC} * * *` },
+    timezone: "UTC",
+    checkinMargin: 30,
+    maxRuntime: 60,
+});
+
+export const isSchedulerLeader = () => {
+    if (process.env.SCHEDULER_ENABLED === "false") return false;
+    const instance = process.env.NODE_APP_INSTANCE;
+    return instance === undefined || instance === "" || instance === "0";
+};
 
 let timer = null;
 let running = false;
@@ -47,27 +71,39 @@ const executeScan = async () => {
     }
     running = true;
     try {
-        const summary = await runInactivityScan();
+        const summary = await withJobMonitor("nightly-inactivity-scan", runInactivityScan, NIGHTLY_MONITOR());
         logger.info(
             { summary },
             "Scheduled inactivity scan completed"
         );
         try {
-            const diplomaSummary = await runDiplomaNotificationScan();
+            const diplomaSummary = await withJobMonitor("nightly-diploma-notification-scan", runDiplomaNotificationScan, NIGHTLY_MONITOR());
             logger.info({ summary: diplomaSummary }, "Diploma notification scan completed");
         } catch (err) {
             logger.error({ err }, "Diploma notification scan failed");
         }
         try {
-            const gradingSummary = await runGradingReminderScan();
+            const automaticDiplomaSummary = await withJobMonitor("nightly-automatic-diploma-scan", runAutomaticDiplomaScan, NIGHTLY_MONITOR());
+            logger.info({ summary: automaticDiplomaSummary }, "Automatic diploma scan completed");
+        } catch (err) {
+            logger.error({ err }, "Automatic diploma scan failed");
+        }
+        try {
+            const gradingSummary = await withJobMonitor("nightly-grading-reminder-scan", runGradingReminderScan, NIGHTLY_MONITOR());
             logger.info({ summary: gradingSummary }, "Grading reminder scan completed");
         } catch (err) {
             logger.error({ err }, "Grading reminder scan failed");
         }
         try {
+            const aplKitsCreated = await withJobMonitor("nightly-apl-learning-kits", ensureStartedAplLearningKits, NIGHTLY_MONITOR());
+            logger.info({ count: aplKitsCreated }, "Started APL learning kits issued");
+        } catch (err) {
+            logger.error({ err }, "APL learning-kit issuance scan failed");
+        }
+        try {
             // Persisted APL status auto-transitions (RED near end / GREEN after
             // end). Idempotent — only transitions students that still need it.
-            const aplTransitions = await autoTransitionStatuses();
+            const aplTransitions = await withJobMonitor("nightly-apl-status-transitions", autoTransitionStatuses, NIGHTLY_MONITOR());
             logger.info(
                 { count: Array.isArray(aplTransitions) ? aplTransitions.length : 0 },
                 "APL status auto-transition scan completed"
@@ -111,7 +147,11 @@ const executeTaskScan = async () => {
     if (taskRunning) return;
     taskRunning = true;
     try {
-        await runTaskReminderScan();
+        await withJobMonitor("task-reminder-scan", runTaskReminderScan, {
+            schedule: { type: "interval", value: 5, unit: "minute" },
+            checkinMargin: 5,
+            maxRuntime: 5,
+        });
     } catch (err) {
         logger.error({ err }, "Task reminder scan failed");
     } finally {
@@ -131,6 +171,10 @@ export const startTaskReminderScheduler = () => {
     if (taskStarted) return;
     if (process.env.NODE_ENV === "test") {
         logger.info("Task reminder scheduler skipped (test mode)");
+        return;
+    }
+    if (!isSchedulerLeader()) {
+        logger.info({ instance: process.env.NODE_APP_INSTANCE }, "Task reminder scheduler skipped (not the pm2 leader)");
         return;
     }
     taskStarted = true;
@@ -161,6 +205,10 @@ export const startInactivityScheduler = () => {
     }
     if (process.env.INACTIVITY_AUTO_WARNING_ENABLED === "false") {
         logger.info("Inactivity scheduler skipped (INACTIVITY_AUTO_WARNING_ENABLED=false)");
+        return;
+    }
+    if (!isSchedulerLeader()) {
+        logger.info({ instance: process.env.NODE_APP_INSTANCE }, "Nightly scheduler skipped (not the pm2 leader)");
         return;
     }
     started = true;

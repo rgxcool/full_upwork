@@ -3,10 +3,16 @@ import multer from "multer";
 import { isAuthenticated, hasRole } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/errorHandler.js";
 import {
+    addModuleDiscussionMessage,
+    createModuleDiscussion,
+    getModuleDiscussions,
+} from "../controllers/courseCardDiscussionController.js";
+import {
     uploadStudentsForMatching,
     processStudentEducation,
     findCourseMatch,
     getCourseInstances,
+    getCourseInstanceById,
     getStudentEnrollments,
     getCourseInstanceEnrollments,
     updateEnrollmentStatus,
@@ -20,6 +26,7 @@ import {
     deleteAllCourseInstances,
     getMyCourseInstances,
     addStudentsToInstance,
+    getAllCourseCards,
     getMyCourseCards,
     getStudentCourseCards,
     getCourseInstanceContent,
@@ -67,6 +74,12 @@ router.get(
     asyncHandler(getMyCourseInstances)
 );
 router.get("/course-instances", isAuthenticated, hasRole(["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"]), asyncHandler(getCourseInstances));
+router.get(
+    "/course-instances/:instanceId",
+    isAuthenticated,
+    hasRole(["systemadmin", "admin", "teacher", "coordinator", "syv", "specped"]),
+    asyncHandler(getCourseInstanceById)
+);
 router.post(
     "/course-instances",
     isAuthenticated,
@@ -87,7 +100,8 @@ router.delete(
     hasRole(["admin", "systemadmin"]),
     asyncHandler(deleteAllCourseInstances)
 );
-// Delete a course instance
+// Delete ONE kurskort; refused with 409 while students are linked.
+// Must stay after DELETE /course-instances/all.
 router.delete(
     "/course-instances/:instanceId",
     isAuthenticated,
@@ -142,6 +156,30 @@ router.put(
 );
 
 // Course cards routes
+router.get(
+    "/course-cards/all",
+    isAuthenticated,
+    hasRole(["teacher", "admin", "systemadmin"]),
+    asyncHandler(getAllCourseCards)
+);
+router.get(
+    "/course-instances/:instanceId/module-discussions",
+    isAuthenticated,
+    hasRole(["teacher", "admin", "systemadmin", "student"]),
+    asyncHandler(getModuleDiscussions)
+);
+router.post(
+    "/course-instances/:instanceId/module-discussions",
+    isAuthenticated,
+    hasRole(["teacher", "admin", "systemadmin"]),
+    asyncHandler(createModuleDiscussion)
+);
+router.post(
+    "/course-instances/:instanceId/module-discussions/:discussionId/messages",
+    isAuthenticated,
+    hasRole(["teacher", "admin", "systemadmin", "student"]),
+    asyncHandler(addModuleDiscussionMessage)
+);
 router.get(
     "/course-cards/mine",
     isAuthenticated,

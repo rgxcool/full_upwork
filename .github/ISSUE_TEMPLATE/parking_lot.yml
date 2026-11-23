@@ -1,0 +1,80 @@
+name: 🅿️ Idé till parkeringsplatsen
+description: Fånga en idé eller ett önskemål som ännu inte är specificerat, offertat eller schemalagt.
+title: "[Idé] "
+labels: ["parking-lot"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Ärenden i parkeringsplatsen är **inte** åtagen leverans. De gås igenom vid sprintplanering och
+              omvandlas antingen till en *Specificerad funktion* (med offert) eller stängs. Inget estimat krävs ännu.
+    - type: textarea
+      id: problem
+      attributes:
+          label: Problem / mål
+          description: Vilket arbetsflöde krånglar idag, och för vem?
+          placeholder: "Praktiksamordnare skriver av APL-kontaktuppgifter manuellt från avtals-PDF:en…"
+      validations:
+          required: true
+    - type: textarea
+      id: idea
+      attributes:
+          label: Föreslagen lösning
+          description: Övergripande beskrivning av idén. Skärmdumpar eller exempel (t.ex. från Itslearning / Alvis) välkomnas.
+      validations:
+          required: false
+    - type: dropdown
+      id: roles
+      attributes:
+          label: Berörda roller
+          multiple: true
+          options:
+              - Elev
+              - Lärare
+              - Administratör
+              - Systemadministratör
+              - SYV
+              - Specialpedagog
+              - Praktiksamordnare
+      validations:
+          required: true
+    - type: dropdown
+      id: etapp
+      attributes:
+          label: Målsatt etapp
+          options:
+              - Etapp 1
+              - Etapp 2
+              - Senare / okänt
+      validations:
+          required: true
+    - type: dropdown
+      id: urgency
+      attributes:
+          label: Affärsprioritet
+          options:
+              - Bra att ha
+              - Viktigt inför nästa sprint
+              - Affärskritiskt
+      validations:
+          required: true
+    - type: dropdown
+      id: size
+      attributes:
+          label: Magkänsla kring storlek (T-shirt)
+          options:
+              - "S (< 1 dag)"
+              - "M (1–3 dagar)"
+              - "L (1–2 veckor)"
+              - "XL (kräver egen offert)"
+              - "Vet ej"
+      validations:
+          required: false
+    - type: textarea
+      id: blockers
+      attributes:
+          label: Beslut eller externa beroenden
+          description: Leverantörsval, API-nycklar, juridisk/GDPR-granskning, kommunregler…
+          placeholder: "Kräver SMS-leverantör + avsändar-ID; kräver Scrive API-nyckel…"
+      validations:
+          required: false

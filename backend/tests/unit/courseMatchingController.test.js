@@ -117,8 +117,8 @@ vi.mock("../../src/utils/slutprovDateCalculator.js", () => ({
 import {
     createCourseInstance,
     deleteAllCourseInstances,
-    deleteCourseInstance,
     findCourseMatch,
+    getAllCourseCards,
     getCourseInstanceContent,
     getCourseInstanceEnrollments,
     getCourseInstances,
@@ -1108,7 +1108,7 @@ describe("uploadStudentsForMatching", () => {
         const req = createReq();
         const res = createRes();
         let normalizeCall = 0;
-        normalizeCodeForMatching.mockImplementation((value) => {
+        normalizeCodeForMatching.mockImplementation(() => {
             normalizeCall += 1;
             if (normalizeCall <= 2) return "PKG01";
             return "PKG01_MISSING";
@@ -1886,7 +1886,7 @@ describe("updateEnrollmentStatus", () => {
         const req = {
             params: { enrollmentId: "enroll-1" },
             body: { status: "completed", reason: "done", notes: "ok" },
-            user: { userId: "user1" },
+            user: { userId: "user1", role: "admin", roles: ["admin"] },
         };
         const res = createRes();
 
@@ -2234,7 +2234,6 @@ describe("createCourseInstance", () => {
                 sections: [
                     { title: "S1", description: "d1", instructions: "" },
                 ],
-                assignment: undefined,
             },
         ]);
     });
@@ -2401,44 +2400,9 @@ describe("updateCourseInstance", () => {
     });
 });
 
-describe("deleteCourseInstance", () => {
-    it("returns 404 when instance not found", async () => {
-        CourseInstance.findByIdAndDelete.mockResolvedValue(null);
-        const req = { params: { instanceId: "missing" } };
-        const res = createRes();
+// deleteCourseInstance: covered against real models in
+// tests/integration/courseInstanceAccess.test.js ("DELETE /course-instances/:id").
 
-        await deleteCourseInstance(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(404);
-        expect(res.json).toHaveBeenCalledWith({ error: "Course instance not found" });
-    });
-
-    it("deletes instance and enrollments", async () => {
-        CourseInstance.findByIdAndDelete.mockResolvedValue({ _id: "inst-3" });
-        StudentEnrollment.deleteMany.mockResolvedValue({ deletedCount: 1 });
-        const req = { params: { instanceId: "inst-3" } };
-        const res = createRes();
-
-        await deleteCourseInstance(req, res);
-
-        expect(StudentEnrollment.deleteMany).toHaveBeenCalledWith({ courseInstanceId: "inst-3" });
-        expect(res.json).toHaveBeenCalledWith({
-            success: true,
-            message: "Course instance and related enrollments deleted",
-        });
-    });
-
-    it("returns 500 when deleting instance fails", async () => {
-        const req = { params: { instanceId: "inst-err" } };
-        const res = createRes();
-        CourseInstance.findByIdAndDelete.mockRejectedValue(new Error("boom"));
-
-        await deleteCourseInstance(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
-    });
-});
 
 describe("deleteAllCourseInstances", () => {
     it("clears all instances and enrollments", async () => {
@@ -2793,24 +2757,19 @@ describe("getStudentCourseCards", () => {
 
 // Mimics the Mongoose Map constraint (string keys only) so a numeric-key
 // regression fails here the same way it fails against a real CourseInstance.
-const createContentMap = (entries = {}) => {
-    const store = new Map(Object.entries(entries));
-    return {
-        has: (key) => store.has(key),
-        set: (key, value) => {
-            if (typeof key !== "string") {
-                throw new TypeError(`Mongoose maps only support string keys, got ${typeof key}`);
-            }
-            store.set(key, value);
-        },
-        clear: () => store.clear(),
-        entries: () => store.entries(),
-    };
-};
+class StringKeyMap extends Map {
+    set(key, value) {
+        if (typeof key !== "string") {
+            throw new TypeError(`Mongoose maps only support string keys, got ${typeof key}`);
+        }
+        return super.set(key, value);
+    }
+}
+const createContentMap = (entries = {}) => new StringKeyMap(Object.entries(entries));
 
 describe("course instance content endpoints", () => {
     const adminReq = (overrides = {}) => ({
-        params: { instanceId: "inst1" },
+        params: { instanceId: "507f1f77bcf86cd799439011" },
         user: { userId: "admin1", roles: ["admin"] },
         body: {},
         ...overrides,
@@ -2842,7 +2801,9 @@ describe("course instance content endpoints", () => {
         const content = createContentMap();
         const instance = {
             content,
+            modules: [],
             responsibleTeacher: null,
+            markModified: vi.fn(),
             save: vi.fn().mockResolvedValue(undefined),
         };
         CourseInstance.findById.mockResolvedValue(instance);
@@ -2879,5 +2840,27 @@ describe("course instance content endpoints", () => {
         await updateCourseInstanceContent(adminReq(), res);
 
         expect(res.status).toHaveBeenCalledWith(400);
+    });
+});
+
+describe("getAllCourseCards", () => {
+    it("returns all course cards ordered by end date", async () => {
+        const cards = [{ _id: "card-1", endDate: "2026-03-01" }];
+        const query = {
+            select: vi.fn(),
+            populate: vi.fn(),
+            sort: vi.fn().mockResolvedValue(cards),
+        };
+        query.select.mockReturnValue(query);
+        query.populate.mockReturnValue(query);
+        CourseInstance.find.mockReturnValue(query);
+        const res = createRes();
+
+        await getAllCourseCards(createReq(), res);
+
+        expect(CourseInstance.find).toHaveBeenCalledWith({});
+        expect(query.select).toHaveBeenCalledWith(expect.stringContaining("courseTemplateId"));
+        expect(query.sort).toHaveBeenCalledWith({ endDate: 1, _id: 1 });
+        expect(res.json).toHaveBeenCalledWith({ success: true, cards });
     });
 });

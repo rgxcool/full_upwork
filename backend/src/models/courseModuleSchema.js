@@ -7,6 +7,7 @@ export const sectionSchema = new mongoose.Schema(
         title: { type: String, default: "" },
         description: { type: String, default: "" },
         instructions: { type: String, default: "" },
+        blocks: { type: [mongoose.Schema.Types.Mixed], default: [] },
     },
     { _id: false }
 );
@@ -146,6 +147,9 @@ export const cloneModules = (modules) =>
                     title: s.title ?? "",
                     description: s.description ?? "",
                     instructions: s.instructions ?? "",
+                    ...(Array.isArray(s.blocks) && s.blocks.length > 0
+                        ? { blocks: s.blocks }
+                        : {}),
                 };
             }),
             // Preserve the hierarchy when cloning already-migrated templates.

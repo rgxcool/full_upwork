@@ -33,6 +33,7 @@
           <DocumentSection
             :student="student"
             type="COURSE_ARCHIVE"
+            :upload-types="archiveTypes"
             :enrollment-id="enrollment.enrollmentId"
           />
         </div>
@@ -47,6 +48,13 @@
 <script>
 import { computed } from 'vue';
 import DocumentSection from '../../Admin/SearchTabs/DocumentSection.vue';
+
+// Delprov/slutprov are staff-only exam files; the API hides them from students.
+const ARCHIVE_TYPES = [
+  { value: 'COURSE_ARCHIVE', label: 'Kursarkiv' },
+  { value: 'DELPROV', label: 'Delprov', staffOnly: true },
+  { value: 'SLUTPROV', label: 'Slutprov', staffOnly: true },
+];
 
 export default {
   name: 'CourseArchiveTab',
@@ -105,6 +113,7 @@ export default {
       getEducationName,
       getStatusLabel,
       formatDate,
+      archiveTypes: ARCHIVE_TYPES,
     };
   },
 };

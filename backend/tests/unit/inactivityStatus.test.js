@@ -104,7 +104,7 @@ describe("computeInactivitySignal — evaluation", () => {
     });
 });
 
-describe("computeInactivitySignal — withdraw flag (login-based)", () => {
+describe("computeInactivitySignal — withdraw flag (account-scope activity)", () => {
     it("does not flag a student who logged in today", () => {
         const signal = computeInactivitySignal({
             lastLoginAt: today,
@@ -151,6 +151,71 @@ describe("computeInactivitySignal — withdraw flag (login-based)", () => {
         expect(signal.daysSinceLastLogin).toBeNull();
         expect(signal.mustWithdraw).toBe(true);
         expect(signal.level).toBe("withdraw");
+    });
+
+    it("keeps the stale-login count as a diagnostic when recent activity clears withdrawal", () => {
+        const signal = computeInactivitySignal({
+            lastLoginAt: dateOffset(-INACTIVITY_WITHDRAW_DAYS),
+            lastSubmissionAt: today,
+            lastLearningActivityAt: today,
+            enrollments: [currentEnrollment()],
+            today,
+        });
+
+        expect(signal.mustWithdraw).toBe(false);
+        expect(signal.inactiveForWarning).toBe(false);
+        expect(signal.daysWithoutLoginInEnrollment).toBe(INACTIVITY_WITHDRAW_DAYS);
+        expect(signal.activityBasis).toBe(0);
+        expect(signal.daysUntilWithdraw).toBe(INACTIVITY_WITHDRAW_DAYS);
+    });
+
+    it("does not withdraw a recent submission with a stale login, but withdraws when nothing is recent", () => {
+        const enrollments = [currentEnrollment()];
+        const staleLogin = { lastLoginAt: dateOffset(-INACTIVITY_WITHDRAW_DAYS - 5) };
+
+        const withRecentSubmission = computeInactivitySignal({
+            ...staleLogin,
+            lastSubmissionAt: dateOffset(-1),
+            enrollments,
+            today,
+        });
+        const nothingRecent = computeInactivitySignal({
+            ...staleLogin,
+            enrollments,
+            today,
+        });
+
+        expect(withRecentSubmission.mustWithdraw).toBe(false);
+        expect(withRecentSubmission.activityBasis).toBe(1);
+        expect(nothingRecent.mustWithdraw).toBe(true);
+        expect(nothingRecent.activityBasis).toBe(INACTIVITY_WITHDRAW_DAYS + 5);
+    });
+
+    it("does not count a login from before enrollment against the 5-day rule", () => {
+        const signal = computeInactivitySignal({
+            lastLoginAt: dateOffset(-60),
+            enrollments: [currentEnrollment({ startDate: dateOffset(-2) })],
+            today,
+        });
+
+        expect(signal.mustWithdraw).toBe(false);
+        expect(signal.daysWithoutLoginInEnrollment).toBe(2);
+        expect(signal.daysUntilWithdraw).toBe(INACTIVITY_WITHDRAW_DAYS - 2);
+    });
+
+    it("does not consider the student inactive before their enrollment starts", () => {
+        const signal = computeInactivitySignal({
+            lastLoginAt: dateOffset(-60),
+            lastSubmissionAt: dateOffset(-60),
+            lastLearningActivityAt: dateOffset(-60),
+            enrollments: [currentEnrollment({ startDate: dateOffset(-2) })],
+            today,
+        });
+
+        expect(signal.mustWithdraw).toBe(false);
+        expect(signal.inactiveForWarning).toBe(false);
+        expect(signal.activityBasis).toBe(2);
+        expect(signal.lastActivityAt).toEqual(dateOffset(-2));
     });
 });
 

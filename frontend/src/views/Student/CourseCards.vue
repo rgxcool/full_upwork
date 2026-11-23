@@ -210,6 +210,32 @@
                     <span class="section-title">{{ section.title || 'Sektion ' + (i + 1) }}</span>
                     <span v-if="section.description" class="section-description">{{ section.description }}</span>
                     <span v-if="section.instructions" class="section-instructions">{{ section.instructions }}</span>
+                    <div
+                      v-for="(block, blockIndex) in section.blocks || []"
+                      :key="block.id || blockIndex"
+                      class="section-image-content"
+                    >
+                      <a
+                        v-if="block.type === 'image' && block.displayMode === 'new-window' && imageUrl(block)"
+                        :href="imageUrl(block)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="module-image-link"
+                      >
+                        {{ block.caption || block.title || block.fileName || 'Öppna bilden' }}
+                      </a>
+                      <figure
+                        v-else-if="block.type === 'image' && imageUrl(block)"
+                        class="module-image"
+                        :class="imageWidthClass(block)"
+                      >
+                        <img
+                          :src="imageUrl(block)"
+                          :alt="block.altText || block.caption || block.title || block.fileName || ''"
+                        />
+                        <figcaption v-if="block.caption">{{ block.caption }}</figcaption>
+                      </figure>
+                    </div>
                   </li>
                 </ul>
 
@@ -314,6 +340,11 @@
                     </span>
                   </div>
                 </div>
+                <CourseCardDiscussions
+                  :course-instance-id="card.courseInstanceId"
+                  :module-number="Number(module.moduleNumber)"
+                  :module="module"
+                />
               </details>
             </div>
           </article>
@@ -327,6 +358,7 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import client from '@/api/client.js'
+import CourseCardDiscussions from '@/components/CourseCardDiscussions.vue'
 import { currentModuleLabel, isCourseComplete, isCurrentModule } from '@/utils/currentModule.js'
 import {
   contentItemLabel,
@@ -356,6 +388,18 @@ const learningError = reactive({})
 const downloading = ref('')
 
 const activeCards = computed(() => cards.value.filter((c) => c.isCurrentlyActive).length)
+
+const safeMediaUrl = (value) => {
+  const url = String(value || '').trim()
+  return /^https?:\/\//i.test(url) || (url.startsWith('/') && !url.startsWith('//'))
+    ? url
+    : ''
+}
+const imageUrl = (block) => safeMediaUrl(block?.url)
+const imageWidthClass = (block) =>
+  ['small', 'medium'].includes(block?.imageWidth)
+    ? `module-image-${block.imageWidth}`
+    : 'module-image-full'
 
 const keyFor = (card, module) => `${card.courseInstanceId}:${module.moduleNumber}`
 
@@ -683,6 +727,8 @@ onMounted(loadCourseCards)
 .teacher-block {
   margin-left: auto;
   text-align: right;
+  display: flex;
+  flex-direction: column;
 }
 
 .scheduled-dates {
@@ -838,9 +884,50 @@ onMounted(loadCourseCards)
 
 .section-item {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   font-size: 0.85rem;
   padding: 0.2rem 0;
+}
+
+.section-image-content {
+  flex: 1 1 100%;
+  margin-left: 6.5rem;
+}
+
+.module-image {
+  max-width: 100%;
+  margin: 0.75rem 0;
+}
+
+.module-image-small {
+  width: min(100%, 240px);
+}
+
+.module-image-medium {
+  width: min(100%, 480px);
+}
+
+.module-image-full {
+  width: 100%;
+}
+
+.module-image img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: 600px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.module-image figcaption {
+  margin-top: 6px;
+}
+
+.module-image-link {
+  display: inline-block;
+  margin: 0.75rem 0;
 }
 
 .section-title {

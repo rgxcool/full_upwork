@@ -366,12 +366,15 @@ export default {
       }
     }
 
+    // Each keystroke fires a request; only the newest response may win.
+    let recipientSearchSeq = 0
     const searchRecipients = async () => {
+      const seq = ++recipientSearchSeq
       try {
         const { data } = await messagingApi.getRecipients({
           search: recipientSearch.value.trim(),
         })
-        recipients.value = data
+        if (seq === recipientSearchSeq) recipients.value = data
       } catch (error) {
         errorMessage.value = error.message || 'Kunde inte söka mottagare'
       }
@@ -466,6 +469,8 @@ export default {
       errorMessage,
       showNewConversationModal,
       recipients,
+      recipientSearch,
+      searchRecipients,
       selectedRecipientIds,
       newSubject,
       newBody,

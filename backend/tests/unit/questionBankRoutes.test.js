@@ -159,6 +159,29 @@ describe("questionBankRoutes", () => {
             expect(res.body.pages).toBe(1);
         });
 
+        it("strips answer keys from the question list for students", async () => {
+            currentUser = { role: "student", userId: "student-1", roles: ["student"] };
+            const chain = makeChain([{ questionText: "Q1" }]);
+            Question.find.mockReturnValue(chain);
+            Question.countDocuments.mockResolvedValue(1);
+
+            await request(app).get("/api/question-bank").expect(200);
+
+            expect(chain.select).toHaveBeenCalledWith("-correctAnswer -answerGuidelines");
+        });
+
+        it("keeps answer keys in the question list for teachers", async () => {
+            currentUser = { role: "teacher", userId: "teacher-1", roles: ["teacher"] };
+            const chain = makeChain([{ questionText: "Q1", correctAnswer: "A" }]);
+            Question.find.mockReturnValue(chain);
+            Question.countDocuments.mockResolvedValue(1);
+
+            const res = await request(app).get("/api/question-bank").expect(200);
+
+            expect(chain.select).toHaveBeenCalledWith("");
+            expect(res.body.questions[0].correctAnswer).toBe("A");
+        });
+
         it("returns 400 for an invalid course id", async () => {
             const res = await request(app)
                 .get("/api/question-bank?course=not-an-id")
@@ -287,6 +310,24 @@ describe("questionBankRoutes", () => {
         });
     });
 
+    describe("GET /exam-attempts as a student", () => {
+        it("never embeds question documents (so no answer keys can leak)", async () => {
+            currentUser = { role: "student", userId: "student-1", roles: ["student"] };
+            const chain = makeChain([
+                { _id: "attempt-1", title: "Exam", selectedQuestions: ["507f1f77bcf86cd799439011"] },
+            ]);
+            ExamAttempt.find.mockReturnValue(chain);
+
+            const res = await request(app).get("/api/question-bank/exam-attempts").expect(200);
+
+            expect(chain.populate).not.toHaveBeenCalled();
+            const body = JSON.stringify(res.body);
+            expect(body).not.toContain("correctAnswer");
+            expect(body).not.toContain("answerGuidelines");
+            expect(res.body.examAttempts[0].selectedQuestions).toEqual(["507f1f77bcf86cd799439011"]);
+        });
+    });
+
     describe("PUT /exam-attempts/:id/questions", () => {
         it("returns 400 for an invalid id", async () => {
             const res = await request(app)
@@ -328,7 +369,7 @@ describe("questionBankRoutes", () => {
                     selectedQuestions: [validObjectId],
                     selectedCount: 1,
                 },
-                { new: true }
+                { returnDocument: 'after' }
             );
             expect(res.body.success).toBe(true);
         });
@@ -777,9 +818,7 @@ describe("questionBankRoutes", () => {
         });
 
         it("returns 404 when the question does not exist", async () => {
-            Question.findById.mockReturnValue({
-                populate: vi.fn().mockResolvedValue(null),
-            });
+            Question.findById.mockReturnValue(makeChain(null));
 
             const res = await request(app)
                 .get(`/api/question-bank/${validObjectId}`)
@@ -788,14 +827,25 @@ describe("questionBankRoutes", () => {
         });
 
         it("returns the question", async () => {
-            Question.findById.mockReturnValue({
-                populate: vi.fn().mockResolvedValue({ _id: validObjectId, questionText: "Vad?" }),
-            });
+            const chain = makeChain({ _id: validObjectId, questionText: "Vad?" });
+            Question.findById.mockReturnValue(chain);
 
             const res = await request(app)
                 .get(`/api/question-bank/${validObjectId}`)
                 .expect(200);
             expect(res.body.question.questionText).toBe("Vad?");
+            // Staff (admin) get the full document including answer keys.
+            expect(chain.select).toHaveBeenCalledWith("");
+        });
+
+        it("strips answer keys from a single question for students", async () => {
+            currentUser = { role: "student", userId: "student-1", roles: ["student"] };
+            const chain = makeChain({ _id: validObjectId, questionText: "Vad?" });
+            Question.findById.mockReturnValue(chain);
+
+            await request(app).get(`/api/question-bank/${validObjectId}`).expect(200);
+
+            expect(chain.select).toHaveBeenCalledWith("-correctAnswer -answerGuidelines");
         });
     });
 
@@ -847,7 +897,7 @@ describe("questionBankRoutes", () => {
                     moduleNumber: 3,
                     active: true,
                 }),
-                expect.objectContaining({ new: true, runValidators: true })
+                expect.objectContaining({ returnDocument: 'after', runValidators: true })
             );
         });
     });
@@ -879,7 +929,7 @@ describe("questionBankRoutes", () => {
             expect(Question.findByIdAndUpdate).toHaveBeenCalledWith(
                 validObjectId,
                 { active: false },
-                { new: true }
+                { returnDocument: 'after' }
             );
             expect(res.body.message).toMatch(/tagits bort/);
         });

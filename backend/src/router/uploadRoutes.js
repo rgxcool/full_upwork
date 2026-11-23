@@ -87,6 +87,14 @@ async function checkStudentAccess(req, res, next) {
       return res.status(403).json({ error: "Forbidden: Access denied." });
     }
 
+    // Tenant check (same rule as checkFileAccess): scoped staff must not list
+    // or upload files for a student in another kommun. Global accounts pass.
+    const TenantStudent = mongoose.model("Student");
+    const tenantStudent = await TenantStudent.findById(studentId).select("municipality").lean();
+    if (!municipalityInScope(user, tenantStudent?.municipality?.type)) {
+      return res.status(403).json({ error: "Forbidden: You do not have access to files for this student." });
+    }
+
     if (isTeacher && !isStaff) {
       const Teacher = mongoose.model("Teacher");
       const teacher = await Teacher.findOne({ userId: user.userId });
@@ -314,8 +322,25 @@ router.get('/file-counts', authenticateUser, async (req, res) => {
     const ids = studentIds.split(',').filter(Boolean);
     const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'fs' });
 
+    // Scoped staff only get real counts for students inside their kommun;
+    // other ids report 0 so the response shape stays the same.
+    const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const scopedStudents = await mongoose.model("Student")
+      .find({ _id: { $in: validIds } })
+      .select("municipality")
+      .lean();
+    const visible = new Set(
+      scopedStudents
+        .filter((st) => municipalityInScope(req.user, st?.municipality?.type))
+        .map((st) => String(st._id))
+    );
+
     const counts = {};
     for (const id of ids) {
+      if (!visible.has(id)) {
+        counts[id] = 0;
+        continue;
+      }
       try {
         const files = await bucket.find({ 'metadata.studentId': id }).toArray();
         counts[id] = files.length;

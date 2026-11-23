@@ -10,7 +10,7 @@
         "test:integration": "vitest run tests/integration",
         "test:coverage": "vitest run --coverage",
         "test:watch": "vitest",
-        "dev": "nodemon index.js",
+        "dev": "nodemon --exec \"node --import ./instrument.js\" index.js",
         "start": "node index.js",
         "lint": "eslint src/",
         "lint:fix": "eslint src/ --fix",
@@ -61,6 +61,7 @@
         "tests/**/*.js"
     ],
     "devDependencies": {
+        "@sentry/node": "^11.16.0",
         "@vitest/coverage-v8": "4.1.10",
         "eslint": "^8.57.1",
         "mongodb-memory-server": "^11.2.0",

@@ -15,6 +15,7 @@ import Course from "../../src/models/Course.js";
 import CourseTemplate from "../../src/models/CourseTemplate.js";
 import User from "../../src/models/User.js";
 import courseTemplateRoutes from "../../src/router/courseTemplateRoutes.js";
+import CourseMatchingService from "../../src/utils/courseMatchingService.js";
 import {
     connectTestDatabase,
     disconnectTestDatabase,
@@ -285,6 +286,83 @@ describe("Course Template Routes", () => {
                 .expect(404);
 
             expect(response.body.error).toBe("Course template not found");
+        });
+    });
+    // #31: templates saved from the builder (course code, no courseId) must be
+    // linked so admission auto-applies them, and editing must not duplicate.
+    describe("builder templates link to the course and update in place (#31)", () => {
+        const builderPayload = (overrides = {}) => ({
+            templateName: "Svenska 1 – Kursmall",
+            title: "Svenska 1 – Kursmall",
+            courseCode: "svesve01",
+            modules: [{ moduleNumber: 1, title: "Modul 1", sections: [] }],
+            content: { 1: { title: "Modul 1", isHiddenFromStudent: false } },
+            isTemplate: true,
+            ...overrides,
+        });
+
+        it("links a new template to the course with the same code (case-insensitive)", async () => {
+            const course = await createCourse({ courseName: "Svenska 1", courseCode: "SVESVE01" });
+
+            const res = await request(app).post("/api/course-templates").send(builderPayload()).expect(201);
+            expect(String(res.body.template.courseId)).toBe(String(course._id));
+
+            // Admission uses this lookup when it creates a kurskort.
+            const resolved = await CourseMatchingService.resolveCourseTemplate(course._id);
+            expect(String(resolved._id)).toBe(String(res.body.template._id));
+        });
+
+        it("leaves the template unlinked for an unknown or ambiguous code", async () => {
+            await createCourse({ courseName: "A", courseCode: "DUP01" });
+            await createCourse({ courseName: "B", courseCode: "dup01" });
+
+            const unknown = await request(app)
+                .post("/api/course-templates")
+                .send(builderPayload({ courseCode: "FINNSINTE" }))
+                .expect(201);
+            expect(unknown.body.template.courseId).toBeUndefined();
+
+            const ambiguous = await request(app)
+                .post("/api/course-templates")
+                .send(builderPayload({ courseCode: "DUP01" }))
+                .expect(201);
+            expect(ambiguous.body.template.courseId).toBeUndefined();
+        });
+
+        it("updating a loaded template keeps one template and links it if it was unlinked", async () => {
+            const created = await request(app)
+                .post("/api/course-templates")
+                .send(builderPayload({ courseCode: "SVESVE01" }))
+                .expect(201);
+            expect(created.body.template.courseId).toBeUndefined();
+
+            const course = await createCourse({ courseName: "Svenska 1", courseCode: "SVESVE01" });
+            const id = created.body.template._id;
+            await request(app)
+                .put(`/api/course-templates/${id}`)
+                .send(builderPayload({ modules: [{ moduleNumber: 1, title: "Modul 1 (ändrad)" }] }))
+                .expect(200);
+
+            expect(await CourseTemplate.countDocuments({})).toBe(1);
+            const saved = await CourseTemplate.findById(id).lean();
+            expect(saved.modules[0].title).toBe("Modul 1 (ändrad)");
+            expect(String(saved.courseId)).toBe(String(course._id));
+        });
+
+        it("never overrides an existing explicit course link on update", async () => {
+            const explicit = await createCourse({ courseName: "Explicit", courseCode: "EXP01" });
+            await createCourse({ courseName: "Svenska 1", courseCode: "SVESVE01" });
+            const created = await request(app)
+                .post("/api/course-templates")
+                .send(builderPayload({ courseId: String(explicit._id) }))
+                .expect(201);
+
+            await request(app)
+                .put(`/api/course-templates/${created.body.template._id}`)
+                .send(builderPayload())
+                .expect(200);
+            const saved = await CourseTemplate.findById(created.body.template._id).lean();
+            expect(String(saved.courseId)).toBe(String(explicit._id));
         });
     });
 });

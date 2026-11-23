@@ -725,7 +725,7 @@ export default {
       try {
         saving.value = true;
         const { data: updated } = await client.put(
-          `/meetings/students/${route.params.id}/exam-accommodations`,
+          `/students/${route.params.id}/exam-accommodations`,
           {
             extraTime: Number(editData.value.examAccommodations.extraTime) || 0,
             computer: Boolean(editData.value.examAccommodations.computer),

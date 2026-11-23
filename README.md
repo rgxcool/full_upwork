@@ -109,15 +109,30 @@ Seed or refresh the education catalog from an Excel workbook. The scripts read
 cd backend
 set -a; source .env.development; set +a
 cd scripts
-node dropData.js          # wipe Programs, Courses, CoursePackages
+node dropEducation.js     # wipe Programs, Courses, CoursePackages
 node updateEducation.js   # import them from the Excel workbook
 ```
 
 `updateEducation.js` imports from the workbook path hardcoded at the bottom of
 the script (`backend/scripts/updateEducation.js:118`, default `./test.xlsx`), so
 run it from `backend/scripts/` — or change that path to point at e.g.
-`backend/scripts/EducationData.xlsx`. Run `dropData.js` first to start from a
+`backend/scripts/EducationData.xlsx`. Run `dropEducation.js` first to start from a
 clean catalog.
+
+### Resetting the local database
+
+Both scripts refuse non-local databases (`ALLOW_REMOTE_DB=1` overrides), need
+`--yes` to run, and print what they would delete with `DRY_RUN=1`:
+
+```sh
+cd backend
+DRY_RUN=1 node scripts/flushAllButAdmins.js   # preview
+node scripts/flushAllButAdmins.js --yes       # keep admins + education catalog, clear the rest
+node scripts/dropData.js --yes                # wipe EVERYTHING (admins too), then e.g. createSystemAdmin.js
+```
+
+Collections are discovered at runtime. To keep a new catalog-like collection
+during a flush, add it to `KEEP_COLLECTIONS` in `backend/scripts/lib/dbReset.js`.
 
 ## Health checks
 

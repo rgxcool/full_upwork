@@ -65,6 +65,7 @@ import {
     findEligibleStudents,
     autoCreateRecords,
     ensureAplLearningKit,
+    ensureStartedAplLearningKits,
     getAplRecords,
     getAplRecordByStudent,
     updateAplRecordDetails,
@@ -344,6 +345,7 @@ describe("APL Status Transitions", () => {
                 dropout: false,
                 aplStatus: "RED",
                 education: [],
+                logbook: [{ title: "APL-lärkit" }],
                 aplStatusHistory: [],
                 save: vi.fn(),
             };
@@ -357,7 +359,7 @@ describe("APL Status Transitions", () => {
             AplRecord.find.mockReturnValue({
                 populate: vi.fn().mockResolvedValue([record]),
             });
-            computeAplPeriod.mockReturnValueOnce({
+            computeAplPeriod.mockReturnValue({
                 aplStartDate: null,
                 aplEndDate: new Date(Date.now() + 10 * 86400000),
             });
@@ -461,7 +463,13 @@ describe("APL Status Transitions", () => {
         const baseStudent = () => ({
             _id: "s1",
             name: "Anna Andersson",
-            education: [],
+            education: [
+                {
+                    type: "CoursePackage",
+                    startDate: new Date("2026-03-01"),
+                    endDate: new Date("2026-06-30"),
+                },
+            ],
             teacherId: { _id: "teacher-1" },
             logbook: [],
             save: vi.fn().mockResolvedValue({}),
@@ -471,6 +479,39 @@ describe("APL Status Transitions", () => {
             Student.findById.mockResolvedValue(null);
             const kit = await ensureAplLearningKit("s1");
             expect(kit).toBeNull();
+        });
+
+        it("does not create the kit before the APL start date", async () => {
+            const student = baseStudent();
+            student.education[0].startDate = new Date("2026-07-01");
+            Student.findById.mockResolvedValue(student);
+
+            const kit = await ensureAplLearningKit("s1", {
+                now: new Date("2026-06-30T12:00:00"),
+            });
+
+            expect(kit).toBeNull();
+            expect(student.logbook).toHaveLength(0);
+            expect(student.save).not.toHaveBeenCalled();
+            expect(AplRecord.findOne).not.toHaveBeenCalled();
+        });
+
+        it("creates the kit on the start date even if the scan runs later that day", async () => {
+            const student = baseStudent();
+            student.education[0].startDate = new Date("2026-06-15T18:00:00");
+            Student.findById.mockResolvedValue(student);
+            AplRecord.findOne.mockResolvedValue(null);
+            computeAplPeriod.mockReturnValue({
+                aplStartDate: new Date("2026-06-15T18:00:00"),
+                aplEndDate: new Date("2026-08-15"),
+            });
+
+            const kit = await ensureAplLearningKit("s1", {
+                now: new Date("2026-06-15T12:00:00"),
+            });
+
+            expect(kit.title).toBe("APL-lärkit");
+            expect(kit.startDate).toEqual(new Date("2026-06-15T18:00:00"));
         });
 
         it("creates a personalized APL-lärkit entry once per student", async () => {
@@ -485,6 +526,7 @@ describe("APL Status Transitions", () => {
             const first = await ensureAplLearningKit("s1");
             expect(first.title).toBe("APL-lärkit");
             expect(first.status).toBe("active");
+            expect(first.startDate).toEqual(new Date("2026-03-01"));
             expect(first.placementId).toBe("p1");
             expect(first.description).toContain("Anna Andersson");
             expect(first.description).toContain("2026-03-01");
@@ -508,7 +550,15 @@ describe("APL Status Transitions", () => {
             const kit = await ensureAplLearningKit("s1");
             expect(kit.title).toBe("APL-lärkit");
             expect(kit.id).toBe("existing-kit");
-            expect(student.save).not.toHaveBeenCalled();
+            expect(student.logbook).toHaveLength(1);
+            // Legacy title-only kit is backfilled with the stable marker (#35).
+            expect(kit.kind).toBe("apl-learning-kit");
+            expect(student.save).toHaveBeenCalledTimes(1);
+
+            // Already tagged: nothing more to write.
+            await ensureAplLearningKit("s1");
+            expect(student.logbook).toHaveLength(1);
+            expect(student.save).toHaveBeenCalledTimes(1);
         });
 
         it("is triggered from autoCreateRecords for a newly eligible student", async () => {
@@ -526,6 +576,31 @@ describe("APL Status Transitions", () => {
             expect(result).toHaveLength(1);
             expect(student.logbook).toHaveLength(1);
             expect(student.logbook[0].title).toBe("APL-lärkit");
+        });
+
+        it("issues kits for eligible students starting today without a manual APL record", async () => {
+            const startDate = new Date("2026-06-15T00:00:00");
+            const student = baseStudent();
+            student.education[0].startDate = startDate;
+            student.education[0].endDate = new Date("2026-08-15");
+            Student.find.mockReturnValue({
+                populate: vi.fn().mockReturnThis(),
+                lean: vi.fn().mockResolvedValue([student]),
+            });
+            Student.findById.mockResolvedValue(student);
+            AplRecord.findOne.mockResolvedValue(null);
+            computeAplPeriod.mockReturnValue({
+                aplStartDate: startDate,
+                aplEndDate: new Date("2026-08-15"),
+            });
+
+            const created = await ensureStartedAplLearningKits(
+                new Date("2026-06-15T12:00:00")
+            );
+
+            expect(created).toBe(1);
+            expect(student.logbook).toHaveLength(1);
+            expect(student.logbook[0].startDate).toEqual(startDate);
         });
     });
 

@@ -1,456 +1,167 @@
 <template>
   <div class="scrollable-view">
     <v-container class="py-5">
-      <v-card class="pa-5">
-        <div class="d-flex align-center justify-space-between">
-          <v-card-title class="text-h4 font-weight-bold pa-0">Kursmallar</v-card-title>
-          <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Ny kursmall</v-btn>
-        </div>
+      <v-card class="pa-5 mb-5">
+        <div class="d-flex flex-wrap align-center justify-space-between ga-3">
+          <div>
+            <v-card-title class="text-h4 font-weight-bold pa-0">
+              Mall-bank (Kursmallar)
+            </v-card-title>
+            <p class="text-body-2 text-grey mt-1 mb-0">
+              Återanvändbara kursstrukturer, moduler och delmoment – fristående från enskilda
+              kursinstanser.
+            </p>
+          </div>
 
-        <v-progress-linear
-          v-if="loading"
-          indeterminate
-          color="primary"
-          class="my-5"
-        ></v-progress-linear>
-
-        <v-alert v-else-if="error" type="error" class="my-3">{{ error }}</v-alert>
-
-        <v-table v-else dense class="mt-4">
-          <thead>
-            <tr>
-              <th class="text-left">Mallnamn</th>
-              <th class="text-left">Kurs</th>
-              <th class="text-left">Moduler</th>
-              <th class="text-left">Skapad av</th>
-              <th class="text-left">Status</th>
-              <th class="text-left">Åtgärder</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="template in templates" :key="template._id">
-              <td>
-                <strong>{{ template.templateName }}</strong>
-              </td>
-              <td>
-                {{ template.courseId?.courseName || '–' }}
-                <span v-if="template.courseId" class="text-caption text-grey">
-                  ({{ template.courseId.courseCode }})
-                </span>
-              </td>
-              <td>{{ template.modules?.length || 0 }}</td>
-              <td>{{ template.createdBy?.username || template.createdBy?.email || '–' }}</td>
-              <td>
-                <v-chip :color="template.isActive ? 'success' : 'grey'" size="small">
-                  {{ template.isActive ? 'Aktiv' : 'Inaktiv' }}
-                </v-chip>
-              </td>
-              <td>
-                <v-btn size="small" variant="text" @click="openEdit(template)">Redigera</v-btn>
-                <v-btn size="small" variant="text" color="error" @click="confirmDelete(template)">
-                  Ta bort
-                </v-btn>
-              </td>
-            </tr>
-            <tr v-if="templates.length === 0">
-              <td colspan="6" class="text-center text-grey">Inga kursmallar ännu.</td>
-            </tr>
-          </tbody>
-        </v-table>
-      </v-card>
-    </v-container>
-
-    <!-- Create / Edit Modal -->
-    <v-dialog v-model="showModal" max-width="900">
-      <v-card>
-        <v-card-title>{{ editing ? 'Redigera kursmall' : 'Ny kursmall' }}</v-card-title>
-        <v-card-text>
-          <v-form @submit.prevent="save">
-            <v-text-field
-              v-model="form.templateName"
-              label="Mallnamn *"
-              required
-              :error-messages="validationErrors.templateName"
-            />
-
-            <v-select
-              ref="courseSelect"
-              v-model="form.courseId"
-              :items="courseOptions"
-              label="Kurs (valfritt)"
-              item-title="title"
-              item-value="value"
-              :menu-props="{
-                location: 'bottom',
-                origin: 'top',
-                locationStrategy: 'connected',
-                contentClass: 'course-template-menu',
-                zIndex: 10000,
-                maxHeight: 300,
-              }"
-              clearable
-              @update:menu="(open) => positionDropdown(open, courseSelect)"
-            />
-
-            <v-divider class="my-4"></v-divider>
-
-            <div class="d-flex align-center justify-space-between mb-2">
-              <h4 class="text-subtitle-1 font-weight-bold">Moduler (5 × 2 sektioner)</h4>
-              <div class="text-caption text-grey">Modul 3 = delprov, Modul 5 = case study</div>
-            </div>
-
-            <div
-              v-for="(module, moduleIndex) in form.modules"
-              :key="moduleIndex"
-              class="module-block pa-3 mb-3"
-              :class="{
-                'module-partial-exam': module.isPartialExam,
-                'module-case-study': module.isCaseStudy,
-              }"
+          <div class="d-flex ga-2">
+            <v-btn
+              variant="tonal"
+              prepend-icon="mdi-refresh"
+              :loading="loading"
+              @click="fetchTemplates"
             >
-              <div class="d-flex align-center justify-space-between">
-                <div class="d-flex align-center ga-3">
-                  <v-chip size="small" color="primary" variant="tonal">
-                    Modul {{ module.moduleNumber }}
-                  </v-chip>
-                  <v-text-field
-                    v-model="module.title"
-                    label="Modultitel"
-                    density="compact"
-                    hide-details
-                    class="module-title-input"
-                  />
-                </div>
-                <div class="d-flex ga-2">
-                  <v-chip v-if="module.isPartialExam" size="small" color="warning">Delprov</v-chip>
-                  <v-chip v-if="module.isCaseStudy" size="small" color="info">Case study</v-chip>
-                </div>
+              Uppdatera
+            </v-btn>
+            <v-btn color="primary" prepend-icon="mdi-plus" @click="openBuilderWithTemplate(null)">
+              Ny kursmall i byggaren
+            </v-btn>
+          </div>
+        </div>
+      </v-card>
+
+      <v-alert v-if="errorMessage" type="error" class="mb-4">{{ errorMessage }}</v-alert>
+
+      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
+
+      <v-card v-else-if="!templates.length" class="pa-6 text-center">
+        <p class="text-body-1 mb-3">Inga kursmallar sparade i mall-banken ännu.</p>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openBuilderWithTemplate(null)">
+          Skapa första mallen
+        </v-btn>
+      </v-card>
+
+      <v-row v-else>
+        <v-col v-for="tpl in templates" :key="tpl._id || tpl.id" cols="12" md="6" lg="4">
+          <v-card variant="outlined" class="pa-4 h-100 d-flex flex-column justify-space-between">
+            <div>
+              <div class="d-flex align-start justify-space-between ga-2 mb-2">
+                <h3 class="text-h6 font-weight-bold mb-0">
+                  {{ tpl.title || tpl.name || 'Namnlös mall' }}
+                </h3>
+                <v-chip v-if="tpl.courseCode" size="small" variant="tonal" color="primary">
+                  {{ tpl.courseCode }}
+                </v-chip>
               </div>
 
-              <div class="mt-3">
-                <div class="d-flex align-center mb-2">
-                  <span class="text-caption font-weight-bold mr-3">Sektioner</span>
-                </div>
-                <div
-                  v-for="(section, sectionIndex) in module.sections"
-                  :key="sectionIndex"
-                  class="section-block mb-2 pa-2"
-                >
-                  <div class="d-flex align-center ga-2">
-                    <v-text-field
-                      v-model="section.title"
-                      :label="`Sektion ${sectionIndex + 1} – Titel`"
-                      density="compact"
-                      hide-details
-                    />
-                  </div>
-                  <v-text-field
-                    v-model="section.description"
-                    :label="`Sektion ${sectionIndex + 1} – Beskrivning`"
-                    density="compact"
-                    class="mt-2"
-                    hide-details
-                  />
-                  <v-textarea
-                    v-model="section.instructions"
-                    :label="`Sektion ${sectionIndex + 1} – Lektionsinnehåll (instruktioner)`"
-                    density="compact"
-                    class="mt-2"
-                    auto-grow
-                    rows="2"
-                    hide-details
-                  />
-                </div>
-              </div>
+              <p class="text-body-2 text-grey mb-3">
+                {{ tpl.description || 'Fristående kursmall utan kopplad kursinstans.' }}
+              </p>
 
-              <div class="mt-3 assignment-block pa-2">
-                <v-checkbox
-                  v-model="module.assignmentEnabled"
-                  :label="`Inlämningsuppgift (modul ${module.moduleNumber})`"
-                  density="compact"
-                  hide-details
-                  class="assignment-toggle"
-                />
-                <template v-if="module.assignmentEnabled">
-                  <v-text-field
-                    v-model="module.assignment.title"
-                    label="Uppgiftens rubrik"
-                    density="compact"
-                    class="mt-2"
-                    hide-details
-                  />
-                  <v-textarea
-                    v-model="module.assignment.description"
-                    label="Uppgiftsbeskrivning"
-                    density="compact"
-                    class="mt-2"
-                    auto-grow
-                    rows="2"
-                    hide-details
-                  />
-                </template>
+              <div class="text-caption text-grey-darken-1 mb-4">
+                Moduler:
+                <strong>{{ Array.isArray(tpl.modules) ? tpl.modules.length : 0 }}</strong>
               </div>
             </div>
 
-            <v-checkbox v-model="form.isActive" label="Aktiv" hide-details class="mt-2" />
-          </v-form>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showModal = false">Avbryt</v-btn>
-          <v-btn color="primary" :loading="saving" @click="save">
-            {{ editing ? 'Uppdatera' : 'Skapa' }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+            <div class="d-flex flex-wrap ga-2 pt-2">
+              <v-btn
+                size="small"
+                color="primary"
+                prepend-icon="mdi-pencil-box-outline"
+                @click="openBuilderWithTemplate(tpl._id || tpl.id)"
+              >
+                Öppna i byggare
+              </v-btn>
 
-    <!-- Delete Confirmation -->
-    <v-dialog v-model="showDeleteModal" max-width="400">
-      <v-card>
-        <v-card-title>Ta bort kursmall</v-card-title>
-        <v-card-text>
-          Är du säker på att du vill ta bort "{{ pendingDelete?.templateName }}"? Detta kan inte
-          ångras.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showDeleteModal = false">Avbryt</v-btn>
-          <v-btn color="error" :loading="deleting" @click="remove">Ta bort</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+              <v-btn
+                v-if="canDeleteTemplates"
+                size="small"
+                color="error"
+                variant="text"
+                prepend-icon="mdi-delete-outline"
+                :loading="deletingId === (tpl._id || tpl.id)"
+                @click="deleteTemplate(tpl)"
+              >
+                Ta bort
+              </v-btn>
+            </div>
+          </v-card>
+        </v-col>
+      </v-row>
+    </v-container>
   </div>
 </template>
 
 <script setup>
-  import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-  import client from '@/api/client.js'
+  import { ref, onMounted } from 'vue'
+  import { useRouter } from 'vue-router'
+  import api from '@/api/client'
   import { useToast } from '@/composables/useToast.js'
+  import store from '@/store/store.js'
 
+  const router = useRouter()
   const toast = useToast()
 
   const templates = ref([])
-  const courses = ref([])
-  const loading = ref(true)
-  const error = ref(null)
-  const showModal = ref(false)
-  const courseSelect = ref(null)
-  let courseMenuOpen = false
+  const loading = ref(false)
+  const errorMessage = ref('')
+  const deletingId = ref(null)
 
-  const updateCourseMenuPosition = () => {
-    if (!courseMenuOpen) return
-    const anchor = courseSelect.value?.$el?.querySelector('.v-field')
-    const menu = document.querySelector('.course-template-menu')
-    if (!anchor || !menu) return
-
-    const rect = anchor.getBoundingClientRect()
-    menu.style.setProperty('position', 'fixed', 'important')
-    menu.style.setProperty('top', `${rect.bottom}px`, 'important')
-    menu.style.setProperty('left', `${rect.left}px`, 'important')
-    menu.style.setProperty('width', `${rect.width}px`, 'important')
-    menu.style.setProperty('margin', '0', 'important')
-    menu.style.setProperty('transform', 'none', 'important')
-    menu.style.setProperty('pointer-events', 'auto', 'important')
-    menu.style.setProperty('z-index', '10000', 'important')
+  function extractTemplates(data) {
+    if (Array.isArray(data)) return data
+    if (Array.isArray(data?.templates)) return data.templates
+    if (Array.isArray(data?.courseTemplates)) return data.courseTemplates
+    if (Array.isArray(data?.data)) return data.data
+    return []
   }
 
-  const positionDropdown = async (open) => {
-    courseMenuOpen = open
-    if (!open) {
-      window.removeEventListener('scroll', updateCourseMenuPosition, true)
-      window.removeEventListener('resize', updateCourseMenuPosition)
-      return
-    }
-    await nextTick()
-    requestAnimationFrame(updateCourseMenuPosition)
-    window.addEventListener('scroll', updateCourseMenuPosition, true)
-    window.addEventListener('resize', updateCourseMenuPosition)
-  }
-
-  onBeforeUnmount(() => {
-    window.removeEventListener('scroll', updateCourseMenuPosition, true)
-    window.removeEventListener('resize', updateCourseMenuPosition)
-  })
-  const showDeleteModal = ref(false)
-  const editing = ref(null)
-  const pendingDelete = ref(null)
-  const saving = ref(false)
-  const deleting = ref(false)
-  const validationErrors = ref({})
-
-  const courseOptions = computed(() =>
-    courses.value.map((course) => ({
-      title: `${course.courseName} (${course.courseCode})`,
-      value: course._id,
-    }))
-  )
-
-  const defaultModules = () =>
-    Array.from({ length: 5 }, (_, i) => ({
-      moduleNumber: i + 1,
-      title: `Modul ${i + 1}`,
-      isPartialExam: i === 2,
-      isCaseStudy: i === 4,
-      sections: [
-        { title: 'Sektion 1', description: '', instructions: '' },
-        { title: 'Sektion 2', description: '', instructions: '' },
-      ],
-      assignment: { title: '', description: '' },
-      assignmentEnabled: false,
-    }))
-
-  const form = ref({
-    templateName: '',
-    courseId: null,
-    modules: defaultModules(),
-    isActive: true,
-  })
-
-  const fetchTemplates = async () => {
+  async function fetchTemplates() {
+    loading.value = true
+    errorMessage.value = ''
     try {
-      const response = await client.get('/course-templates')
-      templates.value = response.data.templates || []
+      const { data } = await api.get('/course-templates')
+      templates.value = extractTemplates(data)
     } catch (err) {
-      console.error('Error fetching course templates:', err)
-      error.value = 'Kunde inte hämta kursmallar.'
+      errorMessage.value =
+        err?.response?.data?.message || err?.response?.data?.error || 'Kunde inte hämta kursmallar.'
+      toast.error(errorMessage.value)
     } finally {
       loading.value = false
     }
   }
 
-  const fetchCourses = async () => {
-    try {
-      const response = await client.get('/courses')
-      courses.value = response.data
-    } catch (err) {
-      console.error('Error fetching courses:', err)
-    }
+  function openBuilderWithTemplate(templateId) {
+    const query = templateId ? { templateId: String(templateId) } : {}
+    router.push({ path: '/admin/course-card-builder', query }).catch(() => {
+      router.push({ name: 'CourseCardBuilder', query }).catch(() => {})
+    })
   }
 
-  const openCreate = () => {
-    editing.value = null
-    validationErrors.value = {}
-    form.value = {
-      templateName: '',
-      courseId: null,
-      modules: defaultModules(),
-      isActive: true,
-    }
-    showModal.value = true
-  }
+  // Only admin/systemadmin hold courseTemplates:delete (config/roles.js).
+  const canDeleteTemplates = ['admin', 'systemadmin'].includes(store.getters.userRole)
 
-  const openEdit = (template) => {
-    editing.value = template
-    validationErrors.value = {}
-    form.value = {
-      templateName: template.templateName,
-      courseId: template.courseId?._id || null,
-      modules: (template.modules || defaultModules()).map((module) => ({
-        moduleNumber: module.moduleNumber,
-        title: module.title,
-        isPartialExam: !!module.isPartialExam,
-        isCaseStudy: !!module.isCaseStudy,
-        sections: (module.sections || []).map((section) => ({
-          title: section.title,
-          description: section.description,
-          instructions: section.instructions || '',
-        })),
-        assignment: {
-          title: module.assignment?.title || '',
-          description: module.assignment?.description || '',
-        },
-        assignmentEnabled: !!(module.assignment?.title || module.assignment?.description),
-      })),
-      isActive: template.isActive,
-    }
-    showModal.value = true
-  }
-
-  const save = async () => {
-    validationErrors.value = {}
-    if (!form.value.templateName || !form.value.templateName.trim()) {
-      validationErrors.value.templateName = 'Mallnamn är obligatoriskt.'
+  async function deleteTemplate(tpl) {
+    const id = tpl?._id || tpl?.id
+    if (!id) return
+    const name = tpl.templateName || tpl.title || 'mallen'
+    if (!window.confirm(`Ta bort "${name}" från mall-banken? Befintliga kurskort påverkas inte.`)) {
       return
     }
-
-    saving.value = true
+    deletingId.value = id
     try {
-      const payload = {
-        templateName: form.value.templateName.trim(),
-        courseId: form.value.courseId || undefined,
-        modules: form.value.modules.map(({ assignmentEnabled, ...module }) => ({
-          ...module,
-          assignment: assignmentEnabled ? module.assignment : { title: '', description: '' },
-        })),
-        isActive: form.value.isActive,
-      }
-      if (editing.value) {
-        await client.put(`/course-templates/${editing.value._id}`, payload)
-        toast.success('Kursmallen uppdaterades.')
-      } else {
-        await client.post('/course-templates', payload)
-        toast.success('Kursmallen skapades.')
-      }
-      showModal.value = false
-      await fetchTemplates()
+      await api.delete(`/course-templates/${encodeURIComponent(id)}`)
+      templates.value = templates.value.filter((item) => (item._id || item.id) !== id)
+      toast.success('Mallen togs bort från mall-banken.')
     } catch (err) {
-      console.error('Error saving course template:', err)
-      toast.error('Ett fel uppstod när kursmallen skulle sparas.')
-    } finally {
-      saving.value = false
-    }
-  }
-
-  const confirmDelete = (template) => {
-    pendingDelete.value = template
-    showDeleteModal.value = true
-  }
-
-  const remove = async () => {
-    deleting.value = true
-    try {
-      await client.delete(`/course-templates/${pendingDelete.value._id}`)
-      templates.value = templates.value.filter(
-        (template) => template._id !== pendingDelete.value._id
+      toast.error(
+        err?.response?.data?.message || err?.response?.data?.error || 'Kunde inte ta bort mallen.'
       )
-      showDeleteModal.value = false
-      toast.success('Kursmallen togs bort.')
-    } catch (err) {
-      console.error('Error deleting course template:', err)
-      toast.error('Ett fel uppstod när kursmallen skulle tas bort.')
     } finally {
-      deleting.value = false
+      deletingId.value = null
     }
   }
 
-  onMounted(async () => {
-    await Promise.all([fetchTemplates(), fetchCourses()])
+  onMounted(() => {
+    fetchTemplates()
   })
 </script>
-
-<style scoped>
-  .module-block {
-    border: 1px solid #ddd;
-    border-radius: 8px;
-  }
-  .module-partial-exam {
-    border-left: 4px solid #fb8c00;
-  }
-  .module-case-study {
-    border-left: 4px solid #1e88e5;
-  }
-  .section-block {
-    background: #fafafa;
-    border: 1px solid #eee;
-    border-radius: 6px;
-  }
-  .assignment-block {
-    background: #f3f6ff;
-    border: 1px solid #e0e7ff;
-    border-radius: 6px;
-  }
-  .module-title-input {
-    min-width: 240px;
-  }
-</style>

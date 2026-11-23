@@ -52,7 +52,7 @@ export async function buildSnapshotData(enrollmentId) {
             path: "teacherId",
             populate: { path: "userId", select: "username name" },
         })
-        .populate("studentId", "name personalNumber")
+        .populate("studentId", "name personalNumber email")
         .lean();
 
     if (!enrollment) return null;
@@ -70,6 +70,7 @@ export async function buildSnapshotData(enrollmentId) {
         courseId: enrollment.mainCourseId?._id || null,
         coursePackageId: enrollment.coursePackageId?._id || null,
         studentName,
+        email: enrollment.studentId?.email || "",
         personalNumber: enrollment.studentId?.personalNumber || "",
         courseName: enrollment.mainCourseId?.courseName || "",
         courseCode: enrollment.mainCourseId?.courseCode || "",
@@ -327,7 +328,7 @@ export async function nextCertificateNumber(prefix = "ML") {
     const counter = await Counters.findByIdAndUpdate(
         `certificate-${year}`,
         { $inc: { seq: 1 } },
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
     );
     const seq = String(counter.seq).padStart(5, "0");
     return `${prefix}-${year}-${seq}`;

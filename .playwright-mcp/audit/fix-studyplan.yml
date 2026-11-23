@@ -1,0 +1,90 @@
+- generic [ref=f15e3]:
+  - navigation [ref=f15e4]:
+    - generic [ref=f15e5]:
+      - link [ref=f15e7] [cursor=pointer]:
+        - /url: /
+        - img "Mindful logo" [ref=f15e8]
+      - generic [ref=f15e10]:
+        - generic [ref=f15e11] [cursor=pointer]: Alla
+        - textbox "Sök efter alla..." [ref=f15e14]
+      - generic [ref=f15e15]:
+        - button "Min profil" [ref=f15e17] [cursor=pointer]
+        - generic [ref=f15e23]: "8"
+        - link "Meddelanden" [ref=f15e29] [cursor=pointer]:
+          - /url: /messages
+        - button "Öppna meny" [ref=f15e32] [cursor=pointer]
+  - generic [ref=f15e38]:
+    - heading "Berta Berg" [level=1] [ref=f15e40]
+    - generic [ref=f15e41]:
+      - list [ref=f15e42]:
+        - listitem [ref=f15e43]:
+          - link "Allmänt" [ref=f15e44] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e45]:
+          - link "Studieplan" [ref=f15e46] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e47]:
+          - link "Kursarkiv" [ref=f15e48] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e49]:
+          - link "Dokument" [ref=f15e50] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e51]:
+          - link "APL" [ref=f15e52] [cursor=pointer]:
+            - /url: "#"
+        - listitem [ref=f15e53]:
+          - link "Loggbok" [ref=f15e54] [cursor=pointer]:
+            - /url: "#"
+      - generic [ref=f15e56]:
+        - generic [ref=f15e57]:
+          - heading "Grundläggande Information" [level=3] [ref=f15e59]
+          - generic [ref=f15e61]:
+            - generic [ref=f15e62]:
+              - generic [ref=f15e63] [cursor=pointer]: "APL-status:"
+              - generic [ref=f15e64]: Röd - Snart slut
+            - generic [ref=f15e65]:
+              - generic [ref=f15e66]: "Namn:"
+              - generic [ref=f15e67]: Berta Berg
+            - generic [ref=f15e68]:
+              - generic [ref=f15e69]: "Personnummer:"
+              - generic [ref=f15e70]: 19920202-2345
+            - generic [ref=f15e71]:
+              - generic [ref=f15e72]: "Telefon:"
+              - generic [ref=f15e73]: Ej angivet
+            - generic [ref=f15e74]:
+              - generic [ref=f15e75]: "E-post:"
+              - generic [ref=f15e76]: student2@mindful.se
+            - generic [ref=f15e77]:
+              - generic [ref=f15e78]: "Kommun:"
+              - generic [ref=f15e79]: Stockholm
+        - generic [ref=f15e80]:
+          - heading "Status" [level=3] [ref=f15e82]
+          - generic [ref=f15e84]:
+            - generic [ref=f15e85]:
+              - generic [ref=f15e86]: "Startdatum:"
+              - generic [ref=f15e87]: Ej angivet
+            - generic [ref=f15e88]:
+              - generic [ref=f15e89]: "Slutdatum:"
+              - generic [ref=f15e90]: Ej angivet
+            - generic [ref=f15e91]:
+              - generic [ref=f15e92]: "Provstatus:"
+              - generic [ref=f15e93]: Ej angivet
+            - generic [ref=f15e94]:
+              - generic [ref=f15e95]: "Övrigt:"
+              - generic [ref=f15e96]: Ej angivet
+            - generic [ref=f15e97]:
+              - generic [ref=f15e98]: "Specialbehov:"
+              - generic [ref=f15e99]: Ej angivet
+            - generic [ref=f15e100]:
+              - generic [ref=f15e101]: "Provlokal-anpassningar:"
+              - generic [ref=f15e102]: Inga anpassningar
+        - generic [ref=f15e103]:
+          - generic [ref=f15e104]:
+            - heading "Avvikelser & Undantag" [level=3] [ref=f15e105]
+            - button "+ Ny avvikelse" [ref=f15e106] [cursor=pointer]
+          - generic [ref=f15e107]: Du kan rapportera en avvikelse, men inte se tidigare avvikelser.
+        - generic [ref=f15e109]:
+          - generic [ref=f15e110]:
+            - heading "Kommentarer" [level=3] [ref=f15e111]
+            - button "Lägg till kommentar" [ref=f15e112] [cursor=pointer]
+          - generic [ref=f15e113]: Inga kommentarer än

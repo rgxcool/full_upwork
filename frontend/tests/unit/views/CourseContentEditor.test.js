@@ -184,6 +184,7 @@ describe('CourseContentEditor', () => {
         '1': { title: 'Startmodul', instructions: 'Läs.', isHiddenFromStudent: true },
         '2': { title: 'Modul 2', instructions: '', isHiddenFromStudent: false },
       },
+      syncModules: true,
     })
   })
 

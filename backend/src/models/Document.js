@@ -34,7 +34,8 @@ const DocumentSchema = new mongoose.Schema({
   type: {
     type: String,
     default: 'GENERAL',
-    enum: ['GENERAL', 'ACTION_PLAN', 'REPORT', 'COURSE_ARCHIVE', 'TEACHER_DOCUMENT', 'APL_CONTRACT', 'APL_CV', 'CV']
+    // DELPROV/SLUTPROV are staff-only exam files (see utils/documentAuthorization.js).
+    enum: ['GENERAL', 'ACTION_PLAN', 'REPORT', 'COURSE_ARCHIVE', 'DELPROV', 'SLUTPROV', 'TEACHER_DOCUMENT', 'APL_CONTRACT', 'APL_CV', 'CV']
   },
   enrollmentId: {
     type: mongoose.Schema.Types.ObjectId,

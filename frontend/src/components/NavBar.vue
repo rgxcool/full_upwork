@@ -28,13 +28,51 @@
             @focus="handleInputFocus"
           />
 
-          <DatePicker
-            v-if="selectedSearchType === 'Datum'"
-            v-model="selectedDate"
-            :formats="{ input: 'yyyy-MM-dd' }"
-            :enable-time-picker="false"
-            placeholder="Välj datum"
-          />
+          <div v-else class="custom-date-search">
+            <button
+              type="button"
+              class="date-icon-btn"
+              aria-label="Öppna eller stäng kalender"
+              title="Öppna eller stäng kalender"
+              @mousedown.prevent
+              @click.stop="toggleDatePicker"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+
+            <DatePicker
+              ref="datePickerRef"
+              v-model="selectedDate"
+              class="search-date-picker"
+              model-type="yyyy-MM-dd"
+              format="yyyy-MM-dd"
+              preview-format="yyyy-MM-dd"
+              :formats="{ input: 'yyyy-MM-dd', preview: 'yyyy-MM-dd' }"
+              placeholder="yyyy-mm-dd"
+              :enable-time-picker="false"
+              :time-config="{ enableTimePicker: false }"
+              :auto-apply="true"
+              :clearable="false"
+              :hide-input-icon="true"
+              :text-input="{ format: 'yyyy-MM-dd', openMenu: false, enterSubmit: false }"
+              @open="isDateMenuOpen = true"
+              @closed="isDateMenuOpen = false"
+              @keydown.esc.stop="handleEscapeKey"
+            />
+          </div>
 
           <div v-if="searchQuery || selectedDate" class="clear-icon" @click="clearSearch">✕</div>
         </div>
@@ -62,18 +100,14 @@
 
         <!-- Search results -->
         <div v-if="showResults" class="search-results">
-          <div v-if="searchLoading" class="search-status">
-            Söker...
-          </div>
+          <div v-if="searchLoading" class="search-status">Söker...</div>
           <div v-else-if="searchError" class="search-status search-error">
             {{ searchError }}
           </div>
-          <div v-else-if="filteredResults.length === 0" class="search-status">
-            Inga träffar
-          </div>
+          <div v-else-if="navigableResults.length === 0" class="search-status">Inga träffar</div>
           <ul v-else class="result-list">
             <li
-              v-for="result in filteredResults"
+              v-for="result in navigableResults"
               :key="result.id"
               class="result-item"
               @click="navigateToDetails(result)"
@@ -155,14 +189,8 @@
         </div>
 
         <!-- Notification icon + panel wrapper -->
-        <div
-          v-if="isLoggedIn && canSeeNotifications"
-          class="notification-wrapper"
-        >
-          <div
-            class="notification-icon"
-            @click="toggleNotificationPanel"
-          >
+        <div v-if="isLoggedIn && canSeeNotifications" class="notification-wrapper">
+          <div class="notification-icon" @click="toggleNotificationPanel">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
@@ -185,7 +213,7 @@
           to="/messages"
           class="notification-icon"
           title="Meddelanden"
-          style="color: inherit; text-decoration: none;"
+          style="color: inherit; text-decoration: none"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -200,7 +228,6 @@
           </svg>
           <span v-if="unreadMessageCount > 0" class="notis-badge">{{ unreadMessageCount }}</span>
         </router-link>
-
 
         <!-- Burger menu button -->
         <button
@@ -406,7 +433,11 @@
 
           <div class="notis-list">
             <div v-for="notification in notifications" :key="notification._id" class="notis-item">
-              <div class="notis-content" :class="{ 'is-clickable': notification.meta?.url }" @click="openNotification(notification)">
+              <div
+                class="notis-content"
+                :class="{ 'is-clickable': notification.meta?.url }"
+                @click="openNotification(notification)"
+              >
                 <span class="notis-type">{{ notificationTypeLabel(notification.type) }}</span>
                 <span class="notis-message">{{ notification.message }}</span>
               </div>
@@ -417,7 +448,9 @@
                   class="task-reminder-row"
                 >
                   <span class="task-reminder-desc">{{ task.description }}</span>
-                  <span class="task-reminder-time">{{ remainingLabel(task.dueDate, task.dueTime) }}</span>
+                  <span class="task-reminder-time">
+                    {{ remainingLabel(task.dueDate, task.dueTime) }}
+                  </span>
                 </div>
               </div>
               <div class="notis-actions">
@@ -437,7 +470,15 @@
                     Avsluta
                   </button>
                 </template>
-                <button class="resolve-btn" @click="resolveNote(notification._id)">
+                <!-- F-grade reminders stay until the action plan is saved; only admins may override. -->
+                <a
+                  v-if="notification.type === 'action_plan_required' && !isAdmin"
+                  class="resolve-btn"
+                  :href="notification.meta?.url || '#'"
+                >
+                  Fyll i handlingsplan
+                </a>
+                <button v-else class="resolve-btn" @click="resolveNote(notification._id)">
                   Markera som löst
                 </button>
               </div>
@@ -471,7 +512,7 @@
       const router = useRouter()
       const toast = useToast()
 
-      const userRole = computed(() => store.getters.userRole || 'guest') // Default to 'guest' if undefined
+      const userRole = computed(() => store.getters.userRole || 'guest')
       const canSeeNotifications = computed(() =>
         ['teacher', 'admin', 'systemadmin', 'student'].includes(userRole.value)
       )
@@ -483,30 +524,29 @@
       )
       const unreadMessageCount = ref(0)
 
-      // Dölja navbar på login-sidan
       const isLoginPage = computed(() => {
         return router.currentRoute.value.path === '/login'
       })
 
       const notifications = ref([])
-
       const showNotisPanel = ref(false)
       const notisPanel = ref(null)
       const notificationIcon = ref(null)
 
-      // Notification polling configuration
-      const NOTIFICATION_POLL_INTERVAL = 60000 // 60 seconds (increased to avoid rate limiting)
+      const NOTIFICATION_POLL_INTERVAL = 60000
       let notificationPollInterval = null
       let isPollingPaused = false
-      // Fix missing properties
+
       const buildVersion = ref(import.meta.env.VITE_BUILD_VERSION || 'Dev')
       const searchQuery = ref('')
       const searchResults = ref([])
       const showResults = ref(false)
       const showFilters = ref(false)
-      const filter = ref('all') // Aktivt filter
+      const filter = ref('all')
       const selectedCourse = ref('')
       const selectedDate = ref(null)
+      const datePickerRef = ref(null)
+      const isDateMenuOpen = ref(false)
       const allCourses = ref([])
       const showNotification = ref(false)
       const showProfileMenu = ref(false)
@@ -514,13 +554,30 @@
 
       const endDateNotifications = ref([])
       const missingGradeNotifications = ref([])
-
       const isMobileMenuOpen = ref(false)
 
       const selectedSearchType = ref('Alla')
       const showSearchTypeDropdown = ref(false)
       const searchLoading = ref(false)
       const searchError = ref('')
+      const busyNotificationId = ref(null)
+
+      const closeDatePicker = () => {
+        datePickerRef.value?.closeMenu?.()
+        isDateMenuOpen.value = false
+      }
+
+      const toggleDatePicker = () => {
+        const dp = datePickerRef.value
+        if (!dp) return
+
+        if (isDateMenuOpen.value) {
+          closeDatePicker()
+        } else {
+          dp.openMenu?.()
+          isDateMenuOpen.value = true
+        }
+      }
 
       const toggleMobileMenu = (event) => {
         event?.preventDefault()
@@ -542,7 +599,6 @@
       const totalNotifications = computed(() => notifications.value.length)
 
       const fetchNotifications = async () => {
-        // Skip if polling is paused (tab hidden)
         if (isPollingPaused) {
           return
         }
@@ -551,14 +607,9 @@
           const res = await client.get('/notifications')
           notifications.value = res.data
         } catch (error) {
-          // Handle rate limiting gracefully
           if (error.response?.status === 429) {
-            // Keep the previous notification list during rate limiting.
-            // Don't clear notifications on rate limit, just skip this fetch
             return
           }
-          // Notification polling failures should not interrupt navigation.
-          // Only clear notifications on non-rate-limit errors
           if (error.response?.status !== 429) {
             notifications.value = []
           }
@@ -575,9 +626,8 @@
         }
       }
 
-      // Start polling for notifications
+      // Start polling for notifications and the messaging unread badge
       const startNotificationPolling = () => {
-        // Clear any existing interval
         stopNotificationPolling()
 
         // Poll notifications and the messaging unread badge together. Some
@@ -596,7 +646,6 @@
         }
       }
 
-      // Stop polling for notifications
       const stopNotificationPolling = () => {
         if (notificationPollInterval) {
           clearInterval(notificationPollInterval)
@@ -604,7 +653,6 @@
         }
       }
 
-      // Handle page visibility changes (pause polling when tab is hidden)
       const handleVisibilityChange = () => {
         if (document.hidden) {
           isPollingPaused = true
@@ -624,8 +672,8 @@
             userId: store.getters.userId,
           })
           await fetchNotifications()
-        } catch {
-          toast.error('Kunde inte avsluta notisen.')
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Kunde inte avsluta notisen.')
         }
       }
 
@@ -638,8 +686,6 @@
           toast.error('Kunde inte återställa notifikationer.')
         }
       }
-
-      const busyNotificationId = ref(null)
 
       const performInactivityAction = async (notification, action) => {
         busyNotificationId.value = notification._id
@@ -707,63 +753,72 @@
           router.push(`/student/${notification.meta.studentId}?showActionPlan=true`)
         } else if (notification.type === 'signing_required') {
           const roles = store.getters.userRoles || []
-          const isTeacherOnly = roles.includes('teacher') && !roles.includes('admin') && !roles.includes('systemadmin')
+          const isTeacherOnly =
+            roles.includes('teacher') && !roles.includes('admin') && !roles.includes('systemadmin')
           router.push(isTeacherOnly ? '/signering' : '/admin/betygsrapporter')
         }
       }
 
-      const toggleNotificationPanel = (event) => {
+      const toggleNotificationPanel = () => {
         const wasOpen = showNotisPanel.value
         showNotisPanel.value = !showNotisPanel.value
 
-        // Fetch immediately when opening the panel
         if (!wasOpen && showNotisPanel.value && isLoggedIn.value && canSeeNotifications.value) {
           fetchNotifications()
         }
       }
 
+      // Keep the target in one place so the search list can hide results that
+      // would land on a route the current role cannot open (no dead links).
+      const navigationTargetFor = (result) => {
+        const courseTypes = [
+          'Kurs',
+          'Course',
+          'Program',
+          'CoursePackage',
+          'Kursinstans',
+          'CourseInstance',
+        ]
+
+        if (courseTypes.includes(result.type)) {
+          if (['Kurs', 'Course'].includes(result.type)) {
+            return { path: `/education/${result.id}`, query: { type: 'course' } }
+          }
+          if (['Kursinstans', 'CourseInstance'].includes(result.type)) {
+            return { path: `/education/${result.id}`, query: { type: 'instance' } }
+          }
+          return { path: `/education/${result.id}` }
+        }
+        if (['Elev', 'Student'].includes(result.type)) {
+          return { path: `/student/${result.id}` }
+        }
+        if (['Lärare', 'Teacher'].includes(result.type)) {
+          return { path: `/teacher/${result.id}` }
+        }
+        return { path: `/detaljer/${result.type}/${result.id}` }
+      }
+
+      const canNavigateToResult = (result) => {
+        const target = navigationTargetFor(result)
+        const resolved = router.resolve(target)
+        return store.getters.canAccess({
+          role: resolved.meta.role,
+          feature: resolved.meta.feature,
+        })
+      }
+
+      const navigableResults = computed(() =>
+        filteredResults.value.filter(canNavigateToResult)
+      )
+
       const navigateToDetails = (result) => {
         showResults.value = false
         searchQuery.value = ''
-
-        // Gå till special vy om det är kurs eller program eller kurspaket
-        const courseTypes = ['Kurs', 'Course', 'Program', 'CoursePackage', 'Kursinstans', 'CourseInstance']
-
-        if (courseTypes.includes(result.type)) {
-          // Generella kurser (mallar) ska visa alla aktiva kursinstanser
-          if (['Kurs', 'Course'].includes(result.type)) {
-            router.push({
-              path: `/education/${result.id}`,
-              query: { type: 'course' },
-            })
-            return
-          }
-
-          // Kursinstanser ska visa instansvyn med elever
-          if (['Kursinstans', 'CourseInstance'].includes(result.type)) {
-            router.push({
-              path: `/education/${result.id}`,
-              query: { type: 'instance' },
-            })
-            return
-          }
-
-          // Övriga kursrelaterade typer (t.ex. Program, CoursePackage) använder befintlig vy
-          router.push(`/education/${result.id}`)
-        } else if (['Elev', 'Student'].includes(result.type)) {
-          router.push(`/student/${result.id}`)
-        } else if (['Lärare', 'Teacher'].includes(result.type)) {
-          router.push(`/teacher/${result.id}`)
-        } else {
-          router.push(`/detaljer/${result.type}/${result.id}`) // Vanlig vy
-        }
+        router.push(navigationTargetFor(result))
       }
-
-      const hasPermission = (role) => store.getters.hasPermission(role)
 
       const isLoggedIn = computed(() => store.getters.isLoggedIn)
 
-      // Check if user role is "teacher" or higher
       const canSeeSearch = computed(() => {
         const allowedRoles = ['teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin']
         return isLoggedIn.value && allowedRoles.includes(userRole.value)
@@ -777,6 +832,9 @@
       const selectSearchType = (type) => {
         selectedSearchType.value = type
         showSearchTypeDropdown.value = false
+        if (type !== 'Datum') {
+          closeDatePicker()
+        }
         handleSearch()
       }
 
@@ -797,8 +855,6 @@
               showResults.value = false
               return
             }
-            // Use the local calendar date, not toISOString(): the latter
-            // shifts the day backwards in timezones ahead of UTC.
             const formattedDate = toDateOnly(selectedDate.value)
             if (!formattedDate) {
               searchResults.value = []
@@ -808,10 +864,7 @@
             }
             params.append('type', 'Datum')
             params.append('date', formattedDate)
-          } else if (
-            selectedSearchType.value === 'Alla' &&
-            isDateOnly(searchQuery.value.trim())
-          ) {
+          } else if (selectedSearchType.value === 'Alla' && isDateOnly(searchQuery.value.trim())) {
             const formattedDate = toDateOnly(searchQuery.value)
             if (!formattedDate) {
               searchResults.value = []
@@ -839,14 +892,11 @@
             params.append('q', searchQuery.value)
           }
 
-          const res = await client.get(
-            `/search?${params.toString()}`
-          )
+          const res = await client.get(`/search?${params.toString()}`)
           searchResults.value = res.data
           showResults.value = true
         } catch (err) {
-          searchError.value =
-            err.response?.data?.message || err.message || 'Sökningen misslyckades'
+          searchError.value = err.response?.data?.message || err.message || 'Sökningen misslyckades'
           searchResults.value = []
           showResults.value = true
         } finally {
@@ -860,7 +910,6 @@
         }
       }
 
-      // Reagera på datumändring om "Datum" är aktivt
       watch(selectedDate, (val) => {
         if (selectedSearchType.value === 'Datum' && val) {
           handleSearch()
@@ -893,6 +942,7 @@
       const clearSearch = () => {
         searchQuery.value = ''
         selectedDate.value = null
+        closeDatePicker()
         searchResults.value = []
         showResults.value = false
         searchLoading.value = false
@@ -914,7 +964,31 @@
         fetchCourses()
       }
 
-      // Remove these from main nav bar and add to secret menu
+      const handleEscapeKey = (event) => {
+        if (event?.key && event.key !== 'Escape') return
+
+        let handled = false
+
+        if (isDateMenuOpen.value) {
+          closeDatePicker()
+          handled = true
+        }
+
+        if (showSearchTypeDropdown.value) {
+          showSearchTypeDropdown.value = false
+          handled = true
+        }
+
+        if (showResults.value) {
+          showResults.value = false
+          handled = true
+        }
+
+        if (handled && event?.preventDefault) {
+          event.preventDefault()
+        }
+      }
+
       const secretMenuNames = [
         'Utbildning',
         'Student Inskrivningar',
@@ -923,24 +997,50 @@
         'Earnings',
         'Stats',
       ]
+
+      const PINNED_MENU_LINK = '/dashboard'
+
       const menuItems = [
-        { name: 'Översikt', link: '/dashboard', role: ['student', 'teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin'] },
+        {
+          name: 'Översikt',
+          link: '/dashboard',
+          role: ['student', 'teacher', 'syv', 'specped', 'coordinator', 'admin', 'systemadmin'],
+        },
         { name: 'Betygsrapporter', link: '/admin/betygsrapporter', role: ['admin', 'systemadmin'] },
         { name: 'Betygssignering', link: '/signering', role: ['teacher', 'admin', 'systemadmin'] },
         { name: 'Betygsskalor', link: '/admin/betygsskala', role: ['admin', 'systemadmin'] },
         { name: 'Intyg & Diplom', link: '/admin/certificates', role: ['admin', 'systemadmin'] },
-        { name: 'Rapporter & Analys', link: '/admin/analytics', role: ['admin', 'systemadmin'] },
+        {
+          name: 'Rapporter & Analys',
+          link: '/admin/analytics',
+          role: ['admin', 'systemadmin', 'teacher', 'syv', 'specped'],
+          feature: 'statistics',
+        },
         { name: 'APL', link: '/apl', role: ['admin', 'teacher', 'coordinator'] },
+        {
+          name: 'Kurskortsbyggare',
+          link: '/admin/course-card-builder',
+          role: ['teacher', 'admin', 'systemadmin'],
+        },
         {
           name: 'Kalender',
           link: '/kalender',
           role: ['teacher', 'syv', 'specped', 'admin', 'systemadmin'],
+          feature: 'calendar_final_exam',
         },
         { name: 'SYV Samtal', link: '/syv/appointments', role: ['syv', 'admin', 'systemadmin'] },
-        { name: 'Specped Samtal', link: '/specped/appointments', role: ['specped', 'admin', 'systemadmin'] },
+        {
+          name: 'Specped Samtal',
+          link: '/specped/appointments',
+          role: ['specped', 'admin', 'systemadmin'],
+        },
         { name: 'Kurspaket', link: '/programsandpackages', role: 'admin' },
         { name: 'Kurser', link: '/programsandcourses', role: 'admin' },
-        { name: 'Schemaparametrar', link: '/schedule-parameters', role: ['admin', 'systemadmin', 'teacher'] },
+        {
+          name: 'Schemaparametrar',
+          link: '/schedule-parameters',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
         { name: 'Datumplanering', link: '/date-planning', role: ['admin', 'systemadmin'] },
         { name: 'Kursmallar', link: '/course-templates', role: ['admin', 'teacher'] },
         { name: 'Kursinstanser', link: '/course-instances', role: 'admin' },
@@ -949,74 +1049,97 @@
         { name: 'Lärarhantering', link: '/teacher-management', role: 'admin' },
         { name: 'Elever', link: '/students', role: ['admin', 'teacher'] },
         { name: 'Inaktiva elever', link: '/inaktiva-elever', role: ['admin', 'systemadmin'] },
-        { name: 'Inaktivitetsrapport', link: '/admin/inactivity', role: ['admin', 'systemadmin', 'teacher'] },
+        {
+          name: 'Inaktivitetsrapport',
+          link: '/admin/inactivity',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
         { name: 'Resursbesök', link: '/admin/resource-visits', role: ['admin', 'systemadmin', 'teacher', 'coordinator', 'syv', 'specped'] },
-        { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: 'teacher' },
+        { name: 'Kurser (Lärarvy)', link: '/larare/kurser', role: ['teacher', 'admin', 'systemadmin'] },
+        {
+          name: 'Kurskort',
+          link: '/course-cards/overview',
+          role: ['teacher', 'admin', 'systemadmin'],
+        },
         { name: 'Lägg till elev manuellt', link: '/manual-add-student', role: 'admin' },
-        { name: 'Betyg', link: '/betyg', role: 'teacher' },
+        { name: 'Betyg', link: '/betyg', role: ['teacher', 'admin', 'systemadmin'] },
         { name: 'Betygsuppföljning', link: '/grade-lookups', role: 'admin' },
         { name: 'Hantera Prövningar', link: '/provningar', role: 'admin' },
-        { name: 'Frågebank (Redigera)', link: '/larare/fragebank', role: ['admin', 'systemadmin', 'teacher'] },
-        { name: 'Generera exam', link: '/larare/generera-exam', role: ['admin', 'systemadmin', 'teacher'] },
+        {
+          name: 'Frågebank (Redigera)',
+          link: '/larare/fragebank',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
+        {
+          name: 'Generera exam',
+          link: '/larare/generera-exam',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
         { name: 'Frågebank', link: '/student/fragebank', role: 'student' },
         { name: 'Prövningar', link: '/examform', role: 'student' },
-  { name: 'Mina kurser', link: '/course-cards', role: 'student' },
-  { name: 'Studieassistent', link: '/chatbot', role: 'student' },
-  { name: 'Inlämningar', link: '/submissions', role: ['teacher', 'admin', 'systemadmin'] },
-        { name: 'Vanliga frågor (Chatbot)', link: '/admin/chatbot-faq', role: ['admin', 'systemadmin'] },
+        { name: 'Mina kurser', link: '/course-cards', role: 'student' },
+        { name: 'Studieassistent', link: '/chatbot', role: 'student' },
+        { name: 'Inlämningar', link: '/submissions', role: ['teacher', 'admin', 'systemadmin'] },
+        {
+          name: 'Vanliga frågor (Chatbot)',
+          link: '/admin/chatbot-faq',
+          role: ['admin', 'systemadmin'],
+        },
         { name: 'Vanliga frågor (Lärare)', link: '/larare/chatbot-faq', role: ['teacher'] },
-        { name: 'Meddelanden', link: '/messages', role: ['student', 'teacher', 'syv', 'specped', 'admin', 'systemadmin', 'coordinator'] },
+        {
+          name: 'Meddelanden',
+          link: '/messages',
+          role: ['student', 'teacher', 'syv', 'specped', 'admin', 'systemadmin', 'coordinator'],
+        },
         { name: 'Aktivitetsflöde', link: '/admin/activity-feed', role: 'admin' },
-        { name: 'Kursinnehåll', link: '/admin/course-content', role: ['admin', 'systemadmin', 'teacher'] },
+        {
+          name: 'Kursinnehåll',
+          link: '/admin/course-content',
+          role: ['admin', 'systemadmin', 'teacher'],
+        },
         { name: 'Kursstatistik (detalj)', link: '/admin/course-statistics', role: 'admin' },
         { name: 'Elevens kurskort', link: '/admin/student-course-cards', role: 'admin' },
         { name: 'Handlingsplaner', link: '/admin/action-plans', role: 'admin' },
         { name: 'Inlämningar & Deltagare', link: '/admin/learning-management', role: 'admin' },
         { name: 'Notifikationer', link: '/admin/notifications', role: 'admin' },
-        { name: 'Kalender & Prövning Underhåll', link: '/admin/calendar-housekeeping', role: 'admin' },
+        {
+          name: 'Kalender & Prövning Underhåll',
+          link: '/admin/calendar-housekeeping',
+          role: 'admin',
+        },
       ]
+
+      // Same rule as the router guard: explicit role lists plus per-user
+      // feature overrides. Admins no longer see every item (e.g. the
+      // student-only pages), and SYV/Specped pages follow their role lists.
+      const canSeeItem = (item) =>
+        !item.role && !item.feature
+          ? true
+          : store.getters.canAccess({ role: item.role, feature: item.feature })
 
       const filteredMenuItems = computed(() => {
         if (!isLoggedIn.value) return []
-        const userRole = store.getters.userRole
-        const isAdmin = store.getters.isAdmin
-        const filtered = menuItems.filter((item) => {
-          if (secretMenuNames.includes(item.name)) return false
-          if (!item.role) return true
-          
-          // Admins and systemadmins can see all menus
-          if (isAdmin) return true
-          
-          // Special handling for SYV Samtal and Specped Samtal - only show to exact role
-          if (item.name === 'SYV Samtal') {
-            return userRole === 'syv'
-          }
-          if (item.name === 'Specped Samtal') {
-            return userRole === 'specped'
-          }
-          
-          // For all other items, use the standard permission check
-          const hasPerm = hasPermission(item.role)
-          return hasPerm
-        })
-        return filtered
+        return menuItems
+          .filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
+          .sort((a, b) => {
+            // The dashboard stays on top; everything else is alphabetical.
+            if (a.link === PINNED_MENU_LINK) return -1
+            if (b.link === PINNED_MENU_LINK) return 1
+            return a.name.localeCompare(b.name, 'sv')
+          })
       })
+
       const secretMenuItems = computed(() => {
-        return menuItems.filter((item) => {
-          if (!secretMenuNames.includes(item.name)) return false
-          if (!item.role) return true
-          return hasPermission(item.role)
-        })
+        return menuItems.filter((item) => secretMenuNames.includes(item.name) && canSeeItem(item))
       })
+
       const toggleProfileMenu = (event) => {
         event?.preventDefault()
         event?.stopPropagation()
         showProfileMenu.value = !showProfileMenu.value
       }
 
-      // Close profile menu and notis panel when clicking outside
       const handleClickOutside = (event) => {
-        // Profile dropdown
         if (showProfileMenu.value) {
           if (
             profileDropdown.value &&
@@ -1026,7 +1149,6 @@
             showProfileMenu.value = false
           }
         }
-        // Notis panel
         if (showNotisPanel.value) {
           if (
             notisPanel.value &&
@@ -1037,7 +1159,7 @@
           }
         }
       }
-      // Watch for user login to start/stop polling
+
       watch(
         canPoll,
         (shouldPoll) => {
@@ -1055,6 +1177,7 @@
       onMounted(() => {
         document.addEventListener('mousedown', handleClickOutside)
         document.addEventListener('visibilitychange', handleVisibilityChange)
+        document.addEventListener('keydown', handleEscapeKey)
 
         // Start polling if user is already logged in
         if (canPoll.value) {
@@ -1065,6 +1188,7 @@
       onBeforeUnmount(() => {
         document.removeEventListener('mousedown', handleClickOutside)
         document.removeEventListener('visibilitychange', handleVisibilityChange)
+        document.removeEventListener('keydown', handleEscapeKey)
         stopNotificationPolling()
       })
 
@@ -1072,7 +1196,6 @@
       const versionRef = ref(null)
       const secretMenuStyle = computed(() => {
         if (!showSecretMenu.value || !versionRef.value) return {}
-        // Position dropdown below the version number, relative to nav
         const navRect = versionRef.value.closest('nav').getBoundingClientRect()
         const rect = versionRef.value.getBoundingClientRect()
         return {
@@ -1082,6 +1205,7 @@
           zIndex: 3000,
         }
       })
+
       const toggleSecretMenu = () => {
         showSecretMenu.value = !showSecretMenu.value
       }
@@ -1096,6 +1220,7 @@
         buildVersion,
         filter,
         filteredResults,
+        navigableResults,
         handleSearch,
         handleInputFocus,
         searchQuery,
@@ -1113,10 +1238,15 @@
         toggleSecretMenu,
         navigateToDetails,
         setFilter,
+        openSearchPanel,
         selectedCourse,
         allCourses,
         fetchCourses,
         selectedDate,
+        datePickerRef,
+        isDateMenuOpen,
+        toggleDatePicker,
+        handleEscapeKey,
         showNotification,
         totalNotifications,
         resolveNote,
@@ -1144,14 +1274,13 @@
         toggleMobileMenu,
         closeMobileMenu,
         toggleSidebar,
+        busyNotificationId,
       }
     },
   }
 </script>
 
 <style scoped>
-  /* Navbar */
-
   .logo-version-group {
     display: flex;
     align-items: center;
@@ -1173,9 +1302,15 @@
     gap: 12px;
     margin: 0;
   }
+
   .navbar {
     background: white;
-    font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family:
+      'Inter',
+      'SF Pro Display',
+      -apple-system,
+      BlinkMacSystemFont,
+      sans-serif;
     position: fixed;
     top: 0;
     left: 0;
@@ -1196,7 +1331,6 @@
     gap: 2rem;
   }
 
-  /* Logo */
   .nav-brand {
     display: flex;
     align-items: center;
@@ -1233,7 +1367,6 @@
     color: var(--color-primary);
   }
 
-  /* Sökruta exakt till vänster */
   .search-container {
     display: flex;
     justify-content: center;
@@ -1341,11 +1474,6 @@
     color: gray;
   }
 
-  .logo {
-    height: 50px;
-  }
-
-  /* Actions */
   .nav-actions {
     display: flex;
     align-items: center;
@@ -1354,7 +1482,6 @@
     justify-self: end;
   }
 
-  /* Burger button */
   .burger-btn {
     display: flex;
     align-items: center;
@@ -1367,7 +1494,7 @@
     color: #374151;
     cursor: pointer;
     transition: all 0.2s ease;
-    order: 2; /* Ensure it appears after profile button */
+    order: 2;
     position: relative;
     z-index: 100;
     pointer-events: auto;
@@ -1384,7 +1511,6 @@
     transform: scale(0.95);
   }
 
-  /* Notification icon */
   .notification-icon {
     position: relative;
     display: flex;
@@ -1432,7 +1558,6 @@
     position: relative;
   }
 
-  /* Notification panel */
   .notification-panel {
     position: absolute;
     top: calc(100% + 0.5rem);
@@ -1633,10 +1758,9 @@
     font-style: italic;
   }
 
-  /* Profile button för inloggade */
   .profile-dropdown-wrapper {
     position: relative;
-    order: 1; /* Ensure it appears before burger button */
+    order: 1;
   }
 
   .profile-btn {
@@ -1705,8 +1829,6 @@
     text-align: center;
   }
 
-  /* Ej använd längre - enkel navbar */
-
   .nav-link {
     display: block;
     text-decoration: none;
@@ -1724,26 +1846,24 @@
     background: var(--color-primary-light);
   }
 
-  /* Logout Button - Styled to Match Links */
   .logout-btn {
     appearance: none;
     border: none;
     background: none;
     font-size: 1rem;
-
     color: blue;
     padding: 4px 8px;
     border-radius: 4px;
     cursor: pointer;
-    transition: color 0.3s, background 0.3s;
+    transition:
+      color 0.3s,
+      background 0.3s;
   }
 
   .logout-btn:hover {
     background: blue;
     color: white;
   }
-
-
 
   /* Sök */
   .search-wrapper {
@@ -1784,6 +1904,7 @@
     user-select: none;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    flex-shrink: 0;
   }
 
   .search-type:hover {
@@ -1800,10 +1921,64 @@
     font-size: 15px;
   }
 
+  .custom-date-search {
+    display: inline-flex;
+    align-items: center;
+    flex: 1 1 auto;
+    gap: 8px;
+    min-width: 0;
+    width: auto;
+  }
+
+  .date-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .date-icon-btn:hover {
+    background: #667eea;
+    border-color: #667eea;
+    color: #ffffff;
+  }
+
+  .search-date-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+  }
+
+  .search-date-picker :deep(.dp__input_icon),
+  .search-date-picker :deep(.dp__clear_icon),
+  .search-date-picker :deep([class*='calendar-icon']) {
+    display: none !important;
+  }
+
+  .search-date-picker :deep(.dp__input) {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 15px;
+    padding: 4px 8px !important;
+    color: #111827;
+    width: 100%;
+  }
+
   .clear-icon {
     cursor: pointer;
     font-size: 18px;
     color: #aaa;
+    flex-shrink: 0;
   }
 
   .search-type-dropdown {
@@ -1824,7 +1999,9 @@
   .search-type-dropdown li {
     padding: 10px 18px;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s;
+    transition:
+      background 0.2s,
+      color 0.2s;
     border-radius: 8px;
     margin: 4px 8px;
     font-size: 15px;
@@ -1840,17 +2017,6 @@
   .search-type-dropdown li.active {
     background: #6c63ff;
     color: #fff;
-  }
-
-  .search-bar {
-    background: #fff;
-    border: 1px solid #ddd;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
-    border-radius: 30px;
-    padding: 8px 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
 
   .search-type-toggle button {
@@ -1890,10 +2056,6 @@
     accent-color: #6c63ff;
   }
 
-  .icon-container {
-    position: relative; /* viktigt! */
-  }
-
   .mobile-menu-btn {
     display: none;
     border: none;
@@ -1930,7 +2092,6 @@
     }
   }
 
-  /* Responsiv design */
   @media (max-width: 768px) {
     .nav-container {
       padding: 0.75rem 1rem;
@@ -1993,7 +2154,7 @@
   }
 
   .mobile-menu.open {
-    transform: translateX(0); /* Detta visar menyn */
+    transform: translateX(0);
     visibility: visible;
     opacity: 1;
   }
@@ -2077,7 +2238,6 @@
     color: red;
   }
 
-  /* Mobile menu */
   .mobile-overlay {
     position: fixed !important;
     top: 0 !important;
@@ -2112,7 +2272,6 @@
     }
   }
 
-  /* Hover effects for mobile menu links */
   .mobile-nav-link:hover {
     background: #667eea !important;
     color: white !important;
@@ -2228,6 +2387,7 @@
     width: 24px;
     height: 24px;
   }
+
   .burger-menu:hover svg {
     stroke: #6c63ff;
   }
@@ -2290,6 +2450,7 @@
     gap: 10px;
     margin-left: 16px;
   }
+
   .login-btn {
     display: flex;
     align-items: center;
@@ -2318,6 +2479,7 @@
     transform: translateY(0);
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   }
+
   .register-btn {
     background: #ece6f0;
     color: #6c63ff;
@@ -2327,38 +2489,29 @@
     font-weight: 600;
     transition: background 0.2s;
   }
+
   .register-btn:hover {
     background: #dcd4e6;
   }
+
   .navbar-auth-buttons {
-    /* position: absolute; top: 20px; right: 40px; z-index: 2000; */
     position: static !important;
     display: flex;
     align-items: center;
     gap: 10px;
     margin-left: 16px;
   }
-  .top-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    margin-bottom: 0;
-    gap: 24px;
-  }
-  .logo-version-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+
   .logo-version-group .logo {
     height: 44px;
   }
+
   .logo-version-group .build-counter {
     font-size: 1.1rem;
     color: #6c63ff;
     font-weight: 600;
   }
+
   .secret-menu-dropdown {
     background: #ffffff;
     border: 1.5px solid #6c63ff;
@@ -2368,16 +2521,18 @@
     min-width: 200px;
     z-index: 3000;
   }
+
   .secret-menu-dropdown ul {
     list-style: none;
     padding: 0;
     margin: 0;
   }
+
   .secret-menu-dropdown li {
     margin-bottom: 8px;
   }
+
   .secret-menu-dropdown li:last-child {
     margin-bottom: 0;
   }
-  /* Navbar styling moved to main styles above */
 </style>

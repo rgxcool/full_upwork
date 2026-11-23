@@ -17,9 +17,20 @@ const examSchema = new mongoose.Schema(
         },
         requestedMonth: String,
         originalRequestedMonth: String,
+        // Picked-up course material, tracked separately for SVE/SVA 1 and
+        // SVE/SVA 3. `status`/`receivedDate` are kept as the legacy
+        // "any material picked up" summary (status = level1 || level3).
         materialReceived: {
             status: { type: Boolean, default: false },
             receivedDate: Date,
+            level1: {
+                status: { type: Boolean, default: false },
+                receivedDate: Date,
+            },
+            level3: {
+                status: { type: Boolean, default: false },
+                receivedDate: Date,
+            },
         },
         paymentDate: Date,
         decision: {

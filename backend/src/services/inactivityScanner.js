@@ -283,7 +283,7 @@ async function warnStudent({ studentId, student, signal, teacherId, teacherUserI
                 },
             },
         },
-        { new: true }
+        { returnDocument: 'after' }
     );
 
     if (!updated) {
@@ -409,8 +409,8 @@ export async function runInactivityScan(options = {}) {
         const rows = await evaluateActiveStudents(today, thresholds);
         summary.evaluated = rows.length;
 
-        // First-five-days pass: a student flagged for withdrawal (no login in
-        // INACTIVITY_WITHDRAW_DAYS days, or never logged in within that window)
+        // First pass: a student flagged for withdrawal (no login, submission or
+        // learning activity within withdrawDays, or no activity since enrollment)
         // who has not been warned yet surfaces an ADMIN REVIEW notification so
         // the authorized administrator decides (warning email / immediate
         // withdrawal) — the scan never auto-withdraws this group.
@@ -424,7 +424,7 @@ export async function runInactivityScan(options = {}) {
                     student,
                     signal,
                     enrollmentMeta,
-                    lastActivityAt: student.lastLearningActivityAt || row.user?.lastLoginAt || null,
+                    lastActivityAt: signal.lastActivityAt,
                 });
                 if (result === "created") summary.reviewNotifications += 1;
             } catch (error) {

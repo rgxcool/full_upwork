@@ -75,6 +75,50 @@ const vuetify = createVuetify({
   },
 })
 
+/**
+ * Sentry for local development (org mindful-9h, EU region, project mindful-frontend).
+ * No request bodies, cookies, query strings, IPs or replays; every event passes
+ * through utils/sentryScrub.js. Never loaded in production builds.
+ */
+async function initDevSentry(app) {
+  try {
+    const [Sentry, { scrubEvent, scrubBreadcrumb }] = await Promise.all([
+      import('@sentry/vue'),
+      import('@/utils/sentryScrub.js'),
+    ])
+    Sentry.init({
+      app,
+      dsn: import.meta.env.VITE_SENTRY_DSN,
+      environment: 'development',
+      sendDefaultPii: false,
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        urlQueryParams: false,
+      },
+      integrations: [Sentry.browserTracingIntegration({ router })],
+      tracesSampleRate: 1.0,
+      tracePropagationTargets: [/^\/api\//],
+      beforeSend: (event) => scrubEvent(event),
+      beforeSendTransaction: (event) => scrubEvent(event),
+      beforeBreadcrumb: (crumb) => scrubBreadcrumb(crumb),
+    })
+    router.afterEach(() => {
+      const user = store.state.user
+      Sentry.setUser(
+        user
+          ? { id: String(user._id ?? user.id ?? user.userId ?? ''), segment: store.getters.userRole || '' }
+          : null
+      )
+    })
+    console.info('[sentry] development error monitoring enabled (mindful-frontend)')
+  } catch (e) {
+    console.warn('[sentry] not started:', e?.message)
+  }
+}
+
 async function bootstrap() {
   const user = store.state.user
   if (user && user.token) {
@@ -91,6 +135,13 @@ async function bootstrap() {
 
   app.config.errorHandler = (err, instance, info) => {
     console.error('Unhandled Vue error:', { err, info })
+  }
+
+  // DEVELOPMENT ONLY. `import.meta.env.DEV` is false in `vite build`, so this
+  // branch — and the @sentry/vue import — is removed from the production bundle.
+  // Must run after the errorHandler above so Sentry wraps it.
+  if (import.meta.env.DEV && import.meta.env.VITE_SENTRY_DSN) {
+    await initDevSentry(app)
   }
 
   app.use(router)

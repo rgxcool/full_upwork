@@ -9,19 +9,19 @@
  * (status enrolled/active/reviderad, not yet ended, and already started), i.e.
  * they are expected to be studying right now.
  *
- * Two independent, env-configurable thresholds are reported separately:
- *  - mustWithdraw:        last LOGIN >= INACTIVITY_WITHDRAW_DAYS (default 5)
- *                         days ago -> the student must be withdrawn (municipal
- *                         compliance rule). Login-only per product decision;
- *                         never-logged-in students use their earliest current
+ * Two thresholds are reported separately (runtime values come from admin
+ * settings via `thresholds`, with these env values as fallbacks):
+ *  - mustWithdraw:        no ACCOUNT-SCOPE ACTIVITY for withdrawDays
+ *                         (default 5) while enrolled -> the student must be
+ *                         reviewed for withdrawal. Account-scope activity is
+ *                         the newest of login, submission and learning
+ *                         activity; login alone is not enough to clear it.
+ *                         Never-active students use their earliest current
  *                         enrollment start date as a proxy.
- *  - inactiveForWarning:  last ACTIVITY (login, assignment submission, or
- *                         course-card/lesson learning activity) >=
- *                         INACTIVITY_WARNING_DAYS (default 14) days ago ->
- *                         candidate for an automatic warning email. Activity
- *                         based per product decision so it is not automatically
- *                         a superset of mustWithdraw. Login is never used alone
- *                         when meaningful learning activity exists.
+ *  - inactiveForWarning:  the same newest-activity timestamp is also compared
+ *                         with warningDays (default 14) for a warning email.
+ *                         `daysWithoutLoginInEnrollment` and `lastActivityAt`
+ *                         are diagnostics only and never drive mustWithdraw.
  *
  * Schedule adherence is surfaced separately (daysSinceLastSubmission and
  * openSubmissions) rather than folded into the withdraw flag.
@@ -81,6 +81,7 @@ function daysBetween(later, earlier) {
  *   windowStart: (Date|null), windowEnd: (Date|null),
  *   daysSinceLastLogin: (number|null), daysSinceLastSubmission: (number|null),
  *   daysSinceLastLearningActivity: (number|null), daysSinceWindowStart: (number|null),
+ *   daysWithoutLoginInEnrollment: (number|null), lastActivityAt: (Date|null),
  *   openSubmissions: number,
  *   mustWithdraw: boolean, inactiveForWarning: boolean,
  *   daysUntilWithdraw: (number|null), level: "ok"|"warning"|"withdraw"
@@ -141,22 +142,27 @@ export function computeInactivitySignal({
     let daysUntilWithdraw = null;
     let level = "ok";
     let activityBasis = null;
+    let daysWithoutLoginInEnrollment = null;
+    let lastActivityAt = null;
 
     if (evaluated) {
-        const loginBasis =
-            daysSinceLastLogin !== null ? daysSinceLastLogin : daysSinceWindowStart;
-        const activityDays = [
-            daysSinceLastLogin,
-            daysSinceLastSubmission,
-            daysSinceLastLearningActivity,
-        ].filter((v) => v !== null);
-        activityBasis = activityDays.length > 0 ? Math.min(...activityDays) : daysSinceWindowStart;
+        const enrollmentStart = windowStart.getTime();
+        const relevantActivity = [login, submission, learning]
+            .filter(Boolean)
+            .map((date) => Math.max(date.getTime(), enrollmentStart));
+        const mostRecentActivity =
+            relevantActivity.length > 0 ? Math.max(...relevantActivity) : enrollmentStart;
+        lastActivityAt = new Date(mostRecentActivity);
+        activityBasis = daysBetween(now, new Date(mostRecentActivity));
 
-        // Requirement (Part 6 / 1): activity is the UNION of login, course-card
-        // and lesson access, assignment submissions and completions. A student
-        // with recently meaningful activity must never be flagged purely because
-        // their last *login* timestamp is stale — login alone is only used as a
-        // fallback when no other activity signal exists (i.e. the window start).
+        // Withdrawal uses account-scope activity (newest of login, submission and
+        // learning activity), never login alone. This rule was deliberately
+        // merged from two versions: the teammate's login-only diagnostic is kept
+        // as extra output, but it must not drive mustWithdraw.
+        const relevantLogin = login
+            ? Math.max(login.getTime(), enrollmentStart)
+            : enrollmentStart;
+        daysWithoutLoginInEnrollment = daysBetween(now, new Date(relevantLogin));
         mustWithdraw = activityBasis !== null && activityBasis >= withdrawDays;
         inactiveForWarning = activityBasis !== null && activityBasis >= warningDays;
         daysUntilWithdraw =
@@ -174,6 +180,8 @@ export function computeInactivitySignal({
         windowEnd,
         activityBasis:
             evaluated ? activityBasis : null,
+        daysWithoutLoginInEnrollment,
+        lastActivityAt,
         daysSinceLastLogin,
         daysSinceLastSubmission,
         daysSinceLastLearningActivity,

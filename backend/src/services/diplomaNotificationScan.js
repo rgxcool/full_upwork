@@ -449,7 +449,7 @@ export async function runCompletionScan() {
 
             if (!(await hasUnresolvedNotification(NOTIFICATION_TYPES.DIPLOMA_READY, scope))) {
                 const note = await createAdminNotification(NOTIFICATION_TYPES.DIPLOMA_READY, {
-                    message: `Diplom kan genereras för ${student.name} — alla kurser och APL är godkända.`,
+                    message: `Alla kurser och APL är godkända för ${student.name}. När skolsignatur finns skapas diplomet automatiskt och skickas till eleven.`,
                     studentId,
                     studentUserId: account.userId,
                     coursePackageId,
@@ -472,7 +472,7 @@ export async function runCompletionScan() {
                     const note = await createTeacherNotification(
                         NOTIFICATION_TYPES.DIPLOMA_READY,
                         {
-                            message: `Kurspaketet ${completion.packageName} är klart för ${student.name} — diplom kan genereras.`,
+                            message: `Kurspaketet ${completion.packageName} är klart för ${student.name}. När skolsignatur finns skapas diplomet automatiskt och skickas till eleven.`,
                             studentId,
                             teacherId: teacher.teacherId,
                             teacherUserId: teacher.teacherUserId,
@@ -491,10 +491,9 @@ export async function runCompletionScan() {
                 studentId,
                 studentUserId: account.userId,
                 studentName: student.name || "",
-                message: `Ditt kurspaket ${completion.packageName} är klart — ditt diplom kan genereras.`,
+                message: `Ditt kurspaket ${completion.packageName} är klart. När skolsignatur finns skapas ditt signerade diplom automatiskt och skickas till din e-post.`,
                 coursePackageId,
                 enrollmentId: primaryEnrollment?._id || null,
-                email: student.email,
                 url,
                 completionType: "course_package",
             });

@@ -1,0 +1,111 @@
+name: 📐 Scoped feature (quoted)
+description: Agreed or quoted feature with acceptance criteria, hidden-work checklist and a 2.2× buffered estimate.
+title: "[Feature] "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this only for work the client has agreed to, or that you are about to quote.
+        **Estimate rule:** buffered estimate = base estimate × **2.2**. The buffer covers the hidden work below;
+        do not tick a box off as "free".
+  - type: dropdown
+    id: etapp
+    attributes:
+      label: Etapp
+      options:
+        - Etapp 1
+        - Etapp 2
+        - Outside etapp list (quote separately)
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One paragraph. Link the spec section (Etapp_1.docx / Etapp_2.docx).
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable statements. The client signs off against these.
+      value: |
+        - [ ] 
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Explicitly out of scope
+      description: What this issue does NOT include (prevents scope creep in review).
+    validations:
+      required: true
+  - type: checkboxes
+    id: hidden_work
+    attributes:
+      label: Hidden-work checklist (all included in the estimate)
+      description: Tick what applies when scoping; untick nothing later without re-estimating.
+      options:
+        - label: Role/permission checks (elev / lärare / admin / systemadmin / SYV / specped / praktiksamordnare)
+        - label: Tenant (kommun) scoping for scoped staff
+        - label: Empty, loading and error states (Swedish copy)
+        - label: Form validation and edge cases (null dates, package vs single course, missing teacher)
+        - label: Data migration / backfill for existing records
+        - label: Notifications, emails and audit-log side effects
+        - label: Unit + integration tests against real Mongoose documents
+        - label: Playwright E2E happy path
+        - label: Responsive / mobile check
+        - label: Staging deploy + smoke test in the production Docker image
+        - label: Documentation / admin help text
+        - label: Client demo + 1 revision round
+  - type: input
+    id: base_estimate
+    attributes:
+      label: Base estimate (hours)
+      description: Pure build time, before buffer.
+      placeholder: "10"
+    validations:
+      required: true
+  - type: input
+    id: buffer
+    attributes:
+      label: Buffer multiplier
+      value: "2.2"
+    validations:
+      required: true
+  - type: input
+    id: buffered_estimate
+    attributes:
+      label: Buffered estimate (hours) = base × buffer
+      description: This is the number you quote and put in the project's "Estimate (h)" field.
+      placeholder: "22"
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Delivery risk
+      options:
+        - Low – known patterns, no external parties
+        - Medium – touches several modules or needs migration
+        - High – external vendor, AI, legal/GDPR or payments
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies / blocked by
+      placeholder: "Blocked by #12 (tenant isolation). Needs client decision on …"
+    validations:
+      required: false
+  - type: input
+    id: quote_ref
+    attributes:
+      label: Quote / sprint reference
+      placeholder: "Offert 2026-12 / Etapp 2 Sprint 3"
+    validations:
+      required: false

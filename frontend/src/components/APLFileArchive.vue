@@ -3,18 +3,6 @@
     <v-card-title>
       APL Kontrakt Arkiv
       <v-spacer></v-spacer>
-      <v-btn 
-        v-if="isAdmin" 
-        color="error" 
-        small 
-        :loading="cleaningUp" 
-        title="Ta bort filer för borttagna elever (Admin endast)"
-        class="mr-2"
-        @click="cleanupOrphanedFiles"
-      >
-        <v-icon left>mdi-delete-sweep</v-icon>
-        Rensa borttagna
-      </v-btn>
       <v-btn icon title="Uppdatera lista" @click="fetchAllFiles">
         <v-icon>mdi-refresh</v-icon>
       </v-btn>
@@ -34,12 +22,12 @@
           <v-list-item v-bind="props" :title="student.studentName"></v-list-item>
         </template>
         <v-list-item v-for="file in student.files" :key="file._id">
-            <v-list-item-title>{{ file.filename }}</v-list-item-title>
+            <v-list-item-title>{{ file.originalName }}</v-list-item-title>
             <v-list-item-subtitle>
-              Uppladdad: {{ formatDate(file.uploadDate) }}
+              Uppladdad: {{ formatDate(file.createdAt) }}
             </v-list-item-subtitle>
             <template #append>
-                <v-btn icon flat @click="downloadFile(file._id, file.filename)">
+                <v-btn icon flat :title="`Ladda ner ${file.originalName}`" @click="downloadFile(file._id, file.originalName)">
                     <v-icon>mdi-download</v-icon>
                 </v-btn>
             </template>
@@ -48,7 +36,7 @@
     </v-list>
     <div v-if="loading" class="text-center pa-4">Laddar filer...</div>
     <div v-if="!loading && !filteredStudents.length && !search" class="text-center pa-4">
-      Inga filer hittades. Ladda upp filer via studentens profil.
+      Inga APL-avtal hittades. Avtal laddas upp under fliken Avslutad.
     </div>
     <div v-if="!loading && !filteredStudents.length && search" class="text-center pa-4">
       Inga studenter matchade sökningen "{{ search }}".
@@ -58,35 +46,34 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { useStore } from 'vuex';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
 
 const toast = useToast();
-const store = useStore();
 const studentsWithFiles = ref([]);
 const loading = ref(true);
-const cleaningUp = ref(false);
 const search = ref('');
 
-const isAdmin = computed(() => {
-  const role = store.getters.userRole || store.state.user?.role;
-  return role === 'admin' || role === 'systemadmin';
-});
-
-const handleSearchInput = () => {
-  // Force reactivity update
-  // The computed property will automatically update, but this ensures the UI refreshes
-};
-
+// APL contracts are stored as Document records (type APL_CONTRACT) by
+// AplCompletedTab; GET /documents lists the ones this user may open.
 const fetchAllFiles = async () => {
   loading.value = true;
   try {
-    const { data } = await client.get('/uploads/all/apl');
-    studentsWithFiles.value = data || [];
+    const { data } = await client.get('/documents', { params: { type: 'APL_CONTRACT' } });
+    const byStudent = new Map();
+    for (const doc of Array.isArray(data) ? data : []) {
+      const key = String(doc.student);
+      if (!byStudent.has(key)) {
+        byStudent.set(key, { studentId: key, studentName: doc.studentName || 'Okänd elev', files: [] });
+      }
+      byStudent.get(key).files.push(doc);
+    }
+    studentsWithFiles.value = [...byStudent.values()].sort((a, b) =>
+      a.studentName.localeCompare(b.studentName, 'sv')
+    );
   } catch (err) {
-    console.error('❌ Failed to fetch all APL files:', err);
-    toast.error('Kunde inte ladda filer. Kontrollera konsolen för mer information.');
+    console.error('Failed to fetch APL contracts:', err);
+    toast.error('Kunde inte ladda APL-avtal.');
     studentsWithFiles.value = [];
   } finally {
     loading.value = false;
@@ -126,7 +113,7 @@ const filteredStudents = computed(() => {
 
 const downloadFile = async (fileId, filename) => {
     try {
-        const res = await client.get(`/uploads/download/${fileId}`, {
+        const res = await client.get(`/documents/download/${fileId}`, {
             responseType: 'blob',
         });
         const blobUrl = window.URL.createObjectURL(res.data);
@@ -139,41 +126,13 @@ const downloadFile = async (fileId, filename) => {
         window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
         console.error('Download failed:', error);
-        toast.error('Failed to download file.');
+        toast.error('Kunde inte ladda ner filen.');
     }
 };
 
 const formatDate = (dateStr) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
-};
-
-const cleanupOrphanedFiles = async () => {
-  if (!confirm('Är du säker på att du vill ta bort alla filer för borttagna elever? Detta går inte att ångra.')) {
-    return;
-  }
-  
-  cleaningUp.value = true;
-  try {
-    const { data } = await client.delete('/uploads/cleanup/orphaned');
-    console.log('✅ Cleanup result:', data);
-    
-    const message = `Rensning klar!\n` +
-      `Totalt kontrollerade filer: ${data.totalFilesChecked}\n` +
-      `Hittade föräldralösa filer: ${data.orphanedFilesFound}\n` +
-      `Raderade filer: ${data.filesDeleted}`;
-    
-    toast.success(message);
-    
-    // Refresh the file list
-    await fetchAllFiles();
-  } catch (err) {
-    console.error('❌ Failed to cleanup orphaned files:', err);
-    const errorMsg = err.message || 'Okänt fel';
-    toast.error(`Kunde inte rensa filer: ${errorMsg}`);
-  } finally {
-    cleaningUp.value = false;
-  }
 };
 
 onMounted(fetchAllFiles);

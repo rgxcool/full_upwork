@@ -269,7 +269,7 @@ describe("learningController", () => {
                 expect.objectContaining({
                     $set: expect.objectContaining({ courseInstanceId: INSTANCE_ID, submittedText: "svar" }),
                 }),
-                expect.objectContaining({ upsert: true, new: true })
+                expect.objectContaining({ upsert: true, returnDocument: 'after' })
             );
             expect(res.status).toHaveBeenCalledWith(201);
             expect(res.json).toHaveBeenCalledWith({ success: true, submission: saved });

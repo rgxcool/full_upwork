@@ -1,0 +1,40 @@
+name: Teams daily digest
+
+# Client channel: Tuesday–Saturday 09:00 Europe/Stockholm, covering the previous day. Monday is
+# covered by the weekly report. Scheduled at 07:00 and 08:00 UTC; the script proceeds only in the
+# run that lands on 09:00 Stockholm. Scheduled runs can start late. See .github/scripts/teams/README.md
+
+on:
+  schedule:
+    - cron: "0 7,8 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run = only print in the log · test-post = post a TEST card, change nothing · full = post (once per day), save state"
+        type: choice
+        options: [dry-run, test-post, full]
+        default: dry-run
+
+permissions:
+  contents: write # the reports-state branch (dedup)
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: teams-reports
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Daily digest
+        env:
+          MODE: ${{ github.event_name == 'schedule' && 'full' || inputs.mode }}
+          GH_TOKEN: ${{ github.token }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+        run: bash .github/scripts/teams/daily-digest.sh
