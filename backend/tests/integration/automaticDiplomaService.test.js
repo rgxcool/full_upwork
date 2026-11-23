@@ -40,6 +40,8 @@ const { runAutomaticDiplomaScan } = await import(
     "../../src/services/automaticDiplomaService.js"
 );
 const { sendDiplomaEmail } = await import("../../src/services/emailService.js");
+const { htmlToPdfBuffer } = await import("../../src/services/certificatePdf.js");
+const { registerMonitoring } = await import("../../src/utils/monitoring.js");
 
 describe("Automatic diploma scan", () => {
     let student;
@@ -76,9 +78,9 @@ describe("Automatic diploma scan", () => {
         ]);
 
         student = await Student.create({
-            name: "Ebba Lindgren",
+            name: "Test Elev",
             personalNumber: "20000101-1234",
-            email: "ebba@elev.se",
+            email: "test.elev@example.se",
             municipality: { type: "Sollentuna" },
             aplStatus: "GREEN",
         });
@@ -145,8 +147,8 @@ describe("Automatic diploma scan", () => {
         });
         expect(sendDiplomaEmail).toHaveBeenCalledWith(
             expect.objectContaining({
-                studentName: "Ebba Lindgren",
-                email: "ebba@elev.se",
+                studentName: "Test Elev",
+                email: "test.elev@example.se",
                 pdf: Buffer.from("signed diploma pdf"),
             })
         );
@@ -161,6 +163,35 @@ describe("Automatic diploma scan", () => {
             configSnapshot: { signatureFileId },
         });
         expect(record.pdfFileId.toString()).toBe("507f1f77bcf86cd799439011");
+    });
+
+    it("reports a failed PDF to monitoring and in the job summary (#83)", async () => {
+        // Puppeteer (the PDF renderer) is external: make Chrome fail to start.
+        htmlToPdfBuffer.mockRejectedValueOnce(Object.assign(new Error("Failed to launch the browser process"), { name: "TimeoutError" }));
+        // A stand-in for the Sentry client that monitoring.js forwards to.
+        const sentry = { captureException: vi.fn() };
+        registerMonitoring(sentry);
+        try {
+            const summary = await runAutomaticDiplomaScan({ now });
+
+            expect(summary).toMatchObject({ checked: 1, generated: 0, emailed: 0, failed: 1 });
+            expect(summary.failures).toEqual([
+                {
+                    studentId: String(enrollment.studentId),
+                    coursePackageId: String(enrollment.coursePackageId),
+                    error: "TimeoutError",
+                },
+            ]);
+            expect(sentry.captureException).toHaveBeenCalledWith(
+                expect.objectContaining({ message: "Failed to launch the browser process" }),
+                expect.objectContaining({ tags: { job: "nightly-automatic-diploma-scan" } })
+            );
+            // Ids only: no student name or e-mail reaches the summary.
+            expect(JSON.stringify(summary)).not.toContain("Test Elev");
+            expect(sendDiplomaEmail).not.toHaveBeenCalled();
+        } finally {
+            registerMonitoring(null);
+        }
     });
 
     it("does not generate a diploma for an incomplete package", async () => {

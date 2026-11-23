@@ -84,7 +84,11 @@ const executeScan = async () => {
         }
         try {
             const automaticDiplomaSummary = await withJobMonitor("nightly-automatic-diploma-scan", runAutomaticDiplomaScan, NIGHTLY_MONITOR());
-            logger.info({ summary: automaticDiplomaSummary }, "Automatic diploma scan completed");
+            if (automaticDiplomaSummary?.failed > 0) {
+                logger.warn({ summary: automaticDiplomaSummary }, "Automatic diploma scan completed with failures");
+            } else {
+                logger.info({ summary: automaticDiplomaSummary }, "Automatic diploma scan completed");
+            }
         } catch (err) {
             logger.error({ err }, "Automatic diploma scan failed");
         }
