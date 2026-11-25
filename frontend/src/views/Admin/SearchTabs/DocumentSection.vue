@@ -276,7 +276,7 @@ export default {
     };
 
     const deleteFile = async (id) => {
-      const { confirm } = useConfirm(); if (!confirm({ title: 'Ta bort dokument', message: 'Är du säker på att du vill radera detta dokument?', danger: true })) return;
+      if (!confirm('Är du säker på att du vill radera detta dokument?')) return;
       try {
         await client.delete(`/documents/${id}`);
         await fetchDocuments();

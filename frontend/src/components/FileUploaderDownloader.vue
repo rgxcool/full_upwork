@@ -57,9 +57,8 @@
 
 <script setup>
   import { ref, watchEffect } from 'vue'
-import client from '@/api/client.js'
-import { useConfirm } from '@/composables/useConfirm.js'
-import { useToast } from '@/composables/useToast.js'
+  import client from '@/api/client.js'
+  import { useToast } from '@/composables/useToast.js'
 
   const toast = useToast()
   const props = defineProps({

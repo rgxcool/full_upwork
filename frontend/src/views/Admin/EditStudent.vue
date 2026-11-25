@@ -302,7 +302,7 @@
 
       async function changeStudyPace() {
         if (!form.value?._id) return
-        const confirmed = toast.warning(.Är du säker på att du vill ändra studietakten? Endast framtida kurser ändras.)
+        const confirmed = window.confirm('Är du säker på att du vill ändra studietakten? Endast framtida kurser ändras.')
         if (!confirmed) return
         updatingPace.value = true
         errorMessage.value = ''

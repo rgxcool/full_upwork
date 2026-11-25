@@ -640,7 +640,7 @@ export default {
     const handleRemoveEnrollment = async (element) => {
       if (!element?.enrollmentId || !props.student?._id) return;
 
-const confirmed = (await confirm({ title: 'Ta bort kursen', message: 'Är du säker på att du vill ta bort kursen .getEducationName(element)?', danger: true }));
+      const confirmed = window.confirm(
         `Är du säker på att du vill ta bort kursen "${getEducationName(element)}"?`
       );
       if (!confirmed) return;
@@ -675,7 +675,7 @@ const confirmed = (await confirm({ title: 'Ta bort kursen', message: 'Är du sä
         return;
       }
 
-const confirmed = (await confirm({ title: 'Ändra studietakt', message: 'Är du säker på att du vill ändra studietakten? Kursernas längd och slutprovsdatum räknas om automatiskt.', danger: true }));
+      const confirmed = window.confirm(
         'Är du säker på att du vill ändra studietakten? Kursernas längd och slutprovsdatum räknas om automatiskt.'
       );
       if (!confirmed) {
@@ -807,7 +807,7 @@ const confirmed = (await confirm({ title: 'Ändra studietakt', message: 'Är du 
       if (!course || !props.student?._id) return;
 
       const courseName = getEducationName(course);
-const confirmed = (await confirm({ title: 'Anmäl till kursen', message: 'Är du säker på att du vill anmäla eleven till kursen .courseName? igen?', danger: true }));
+      const confirmed = window.confirm(
         `Är du säker på att du vill anmäla eleven till kursen "${courseName}" igen?`
       );
       if (!confirmed) return;

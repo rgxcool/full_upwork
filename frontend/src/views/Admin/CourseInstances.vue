@@ -1098,7 +1098,7 @@
       }
 
       const deleteInstance = async (instanceId) => {
-        const { confirm } = useConfirm(); if (!(await confirm({ title: 'Ta bort kursinstans', message: 'Är du säker på att du vill ta bort denna kursinstans?', danger: true }))) return
+        if (!confirm('Är du säker på att du vill ta bort denna kursinstans?')) return
 
         try {
           await client.delete(`/course-instances/${instanceId}`)
@@ -1278,8 +1278,12 @@
       }
 
       const deleteAllCourseInstances = async () => {
-        const { confirm } = useConfirm()
-        if (!(await confirm({ title: 'Ta bort alla kursinstanser', message: 'Är du säker på att du vill ta bort ALLA kursinstanser och tillhörande data? Detta går inte att ångra.', danger: true }))) return
+        if (
+          !confirm(
+            'Är du säker på att du vill ta bort ALLA kursinstanser och tillhörande data? Detta går inte att ångra.'
+          )
+        )
+          return
         try {
           await client.delete('/course-instances/all', {
             data: { confirmation: 'DELETE_ALL_COURSE_INSTANCES' },
@@ -1293,8 +1297,7 @@
       }
 
       const deleteEnrollment = async (enrollmentId) => {
-        const { confirm } = useConfirm()
-        if (!(await confirm({ title: 'Ta bort inskrivning', message: 'Är du säker på att du vill ta bort denna inskrivning?', danger: true }))) return
+        if (!confirm('Är du säker på att du vill ta bort denna inskrivning?')) return
         try {
           await client.delete(`/enrollments/${enrollmentId}`)
           await viewEnrollments(selectedInstance.value._id)
@@ -1305,8 +1308,7 @@
       }
 
       const deleteUnknownEnrollments = async () => {
-        const { confirm } = useConfirm()
-        if (!(await confirm({ title: 'Ta bort okända elever', message: 'Ta bort ALLA okända elever från denna kursinstans?', danger: true }))) return
+        if (!confirm('Ta bort ALLA okända elever från denna kursinstans?')) return
         try {
           const unknowns = enrollments.value.filter((e) => !e.studentId || !e.studentId._id)
           for (const e of unknowns) {

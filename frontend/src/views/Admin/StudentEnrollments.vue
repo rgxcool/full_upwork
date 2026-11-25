@@ -364,7 +364,6 @@
 <script>
   import { ref, computed, onMounted } from 'vue'
   import client from '@/api/client.js'
-  import { useConfirm } from '@/composables/useConfirm.js'
   import { useToast } from '@/composables/useToast.js'
 
   export default {
@@ -477,7 +476,7 @@
       }
 
       const deleteEnrollment = async (enrollment) => {
-        const { confirm } = useConfirm(); if (!(await confirm({ title: 'Ta bort inskrivning', message: 'Är du säker på att du vill ta bort denna inskrivning?', danger: true }))) return
+        if (!confirm('Är du säker på att du vill ta bort denna inskrivning?')) return
         try {
           await client.delete(
             `/students/${selectedStudent.value._id}/enrollments/${enrollment._id}`

@@ -139,7 +139,6 @@
 <script setup>
   import { ref, computed, onMounted, onScopeDispose, watch } from 'vue'
   import client from '@/api/client.js'
-  import { useConfirm } from '@/composables/useConfirm.js'
   import { useToast } from '@/composables/useToast.js'
 
   const toast = useToast()
@@ -270,8 +269,13 @@
   }
 
   const confirmDelete = async (scale) => {
-    const { confirm } = useConfirm()
-    if (!(await confirm({ title: 'Ta bort betygsskala', message: `Är du säker på att du vill ta bort betygsskalan för ${scale.term} ${scale.subject}?`, danger: true }))) return
+    if (
+      !confirm(
+        `Är du säker på att du vill ta bort betygsskalan för ${scale.term} ${scale.subject}?`
+      )
+    ) {
+      return
+    }
     try {
       await client.delete(`/grading-scale/${scale._id}`)
       toast.success('Betygsskala borttagen!')

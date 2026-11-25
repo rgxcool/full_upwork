@@ -3,7 +3,6 @@
     <NavBar v-if="!isLoginPage" @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed" />
     <ToastNotification />
 
-    <ConfirmHost />
     <v-alert
       v-if="!isOnline"
       type="warning"

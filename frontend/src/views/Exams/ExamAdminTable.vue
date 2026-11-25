@@ -174,7 +174,6 @@
   import { ref, onMounted, computed } from 'vue'
   import client from '@/api/client.js'
   import { teacherDisplayName } from '@/utils/teacherName.js'
-  import { useConfirm } from '@/composables/useConfirm.js'
   import { useToast } from '@/composables/useToast.js'
 
   const toast = useToast()

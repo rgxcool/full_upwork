@@ -144,7 +144,7 @@
     const id = tpl?._id || tpl?.id
     if (!id) return
     const name = tpl.templateName || tpl.title || 'mallen'
-    toast.warning(.Ta bort .name. från mall-banken? Befintliga kurskort påverkas inte.)
+    if (!window.confirm(`Ta bort "${name}" från mall-banken? Befintliga kurskort påverkas inte.`)) {
       return
     }
     deletingId.value = id

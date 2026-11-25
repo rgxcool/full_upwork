@@ -169,7 +169,6 @@
 <script>
 import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
-import { useConfirm } from '@/composables/useConfirm.js'
 import AddMeetingModal from '@/views/Modals/AddMeetingModal.vue';
 
 let toast;
@@ -349,14 +348,14 @@ export default {
       }
     },
     async deleteMeeting(id) {
-      const { confirm } = useConfirm()
-      if (!(await confirm({ title: 'Ta bort möte', message: 'Är du säker på att du vill radera detta möte?', danger: }))) return
-      try {
-        await client.delete(`/meetings/${id}`);
-        this.fetchMeetings();
-      } catch (error) {
-        console.error("Kunde inte radera mötet:", error);
-        toast.error('Kunde inte radera mötet.');
+      if (confirm('Är du säker på att du vill radera detta möte?')) {
+        try {
+          await client.delete(`/meetings/${id}`);
+          this.fetchMeetings();
+        } catch (error) {
+          console.error("Kunde inte radera mötet:", error);
+          toast.error('Kunde inte radera mötet.');
+        }
       }
     },
     async saveProfile() {

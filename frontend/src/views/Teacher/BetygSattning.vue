@@ -1106,9 +1106,7 @@
   function onBatchChange() {
     const previous = previousBatchId.value || selectedBatchId.value
     if (hasUnsavedChanges.value) {
-      import { useToast } from '@/composables/useToast.js'
-const toast = useToast()
-const ok = toast.warning(.Du har osparade ändringar. Vill du byta batch ändå?.
+      const ok = window.confirm('Du har osparade ändringar. Vill du byta batch ändå?')
       if (!ok) {
         // Restore the previous selection after the v-model already updated.
         if (previous) selectedBatchId.value = previous
@@ -1719,7 +1717,7 @@ const ok = toast.warning(.Du har osparade ändringar. Vill du byta batch ändå?
     if (typeof routeLeaveGuard === 'function') {
       routeLeaveGuard((to, from, next) => {
         if (hasUnsavedChanges.value) {
-          toast.warning(.Du har osparade ändringar. Vill du lämna sidan ändå?.
+          const confirmLeave = window.confirm('Du har osparade ändringar. Vill du lämna sidan ändå?')
           if (confirmLeave) {
             next()
           } else {
