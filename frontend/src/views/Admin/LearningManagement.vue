@@ -235,6 +235,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import client from '@/api/client.js'
+import { useConfirm } from '@/composables/useConfirm.js'
 import { useToast } from '@/composables/useToast.js'
 import {
   activityStatusLabel,
@@ -449,7 +450,7 @@ const addParticipant = async () => {
 
 const removeParticipant = async (p) => {
   const id = participantIdOf(p)
-  if (!id || !confirm('Ta bort deltagare från kursen?')) return
+  const { confirm } = useConfirm(); if (!id || !(await confirm({ title: 'Ta bort deltagare', message: 'Ta bort deltagare från kursen?', danger: true }))) return
   removingId.value = id
   try {
     await client.delete(`/learning/instances/${selectedInstanceId.value}/participants/${id}`)

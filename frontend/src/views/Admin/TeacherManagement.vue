@@ -815,7 +815,7 @@
       },
 
       async deleteTeacher(teacher) {
-        if (!confirm(`Är du säker på att du vill ta bort läraren "${teacher.userId?.username}"?`)) {
+        const { confirm } = useConfirm(); if (!((await confirm({ title: "Ta bort läraren", message: "Är du säker på att du vill ta bort läraren \${teacher.userId?.username}", danger: true }))) {
           return
         }
 
@@ -833,11 +833,8 @@
       },
 
       async unassignAllStudents(teacher) {
-        if (
-          !confirm(
-            `Vill du ta bort alla kopplingar mellan läraren \"${teacher.userId?.username}\" och elever?`
-          )
-        ) {
+        const { confirm } = useConfirm()
+        if (!(await confirm({ title: 'Ta bort elevkopplingar', message: `Vill du ta bort alla kopplingar mellan läraren "${teacher.userId?.username}" och elever?`, danger: true }))) return
           return
         }
         try {

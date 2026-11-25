@@ -358,26 +358,59 @@
             "
           >
             <ul style="list-style: none; padding: 0; margin: 0">
-              <li
-                v-for="item in filteredMenuItems"
-                :key="item.link"
-                style="border-bottom: 1px solid #f3f4f6"
-              >
-                <router-link
-                  :to="item.link"
-                  style="
-                    display: block;
-                    padding: 1rem 1.5rem;
-                    color: #374151;
-                    text-decoration: none;
-                    font-weight: 500;
-                    transition: all 0.2s ease;
-                  "
-                  @click="closeMobileMenu"
-                >
-                  {{ item.name }}
-                </router-link>
-              </li>
+              <template v-for="section in groupedMenu" :key="section.type + '-' + (section.groupName || section.link)">
+                <template v-if="section.type === 'overview'">
+      <!-- Översikt pinning: always first, simple router-link -->
+      <li
+        style="border-bottom: 1px solid #f3f4f6"
+      >
+        <router-link
+          :to="section.link"
+          style="
+            display: block;
+            padding: 1rem 1.5rem;
+            color: #374151;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s ease;
+          "
+          >
+          {{ section.name }}
+        </router-link>
+      </li>
+                </template>
+
+                <template v-if="section.type === 'group'">
+                  <!-- Group heading -->
+                  <v-list-subheader
+                    v-if="!isStudent"
+                    style="background: #f1f8ff; color: #1976d2; font-weight: 500;"
+                  >
+                    {{ section.groupName }}
+                  </v-list-subheader>
+
+                  <!-- Group collapsible items -->
+                  <v-list-group
+                    :expanded="getActiveGroup.value === section.groupName"
+                  >
+                    <template v-slot:subheader>
+                      <v-list-item-title>
+                        {{ section.groupName }}
+                      </v-list-item-title>
+                    </template>
+                    <v-list-item
+                      v-for="item in section.items"
+                      :key="item.link"
+                      router-link
+                      :to="item.link"
+                      tag="router-link"
+                      class="cursor-pointer"
+                    >
+                      <v-list-item-title>{{ item.name }}</v-list-item-title>
+                    </v-list-item>
+                  </v-list-group>
+                </template>
+              </template>
             </ul>
 
             <div style="padding: 1.5rem; border-top: 1px solid #e5e7eb; background: #f8fafc">
@@ -494,15 +527,16 @@
 
 <script>
   import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
-  import { useStore } from 'vuex'
-  import { useRouter } from 'vue-router'
-  import client from '@/api/client.js'
-  import { messagingApi } from '@/api/messaging.js'
-  import { useToast } from '@/composables/useToast.js'
-  import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
-  import '@vuepic/vue-datepicker/dist/main.css'
-  import { remainingLabel } from '@/utils/taskTime.js'
-  import { isDateOnly, isPartialDate, toDateOnly } from '@/utils/dateOnly.js'
+import { useStore } from 'vuex'
+import { useRouter } from 'vue-router'
+import client from '@/api/client.js'
+import { messagingApi } from '@/api/messaging.js'
+import { useToast } from '@/composables/useToast.js'
+import { VueDatePicker as DatePicker } from '@vuepic/vue-datepicker'
+import '@vuepic/vue-datepicker/dist/main.css'
+import { remainingLabel } from '@/utils/taskTime.js'
+import { isDateOnly, isPartialDate, toDateOnly } from '@/utils/dateOnly.js'
+import { menuItems } from '@/config/menuItems.js'
 
   export default {
     components: { DatePicker },
@@ -1119,14 +1153,134 @@
 
       const filteredMenuItems = computed(() => {
         if (!isLoggedIn.value) return []
+        // Always return flat alphabetical list (Översikt on top, rest sorted in sv)
+        // Kept for backward compatibility - same logic as original implementation
+        const visible = menuItems
+          .filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
+        return visible.sort((a, b) => {
+          if (a.link === PINNED_MENU_LINK) return -1
+          if (b.link === PINNED_MENU_LINK) return 1
+          return a.name.localeCompare(b.name, 'sv')
+        })
+      })
+
+// Groups display order (Översikt has no group and stays pinned on top)
+      const GROUPS = [
+        'Elever & personal',
+        'Kurser',
+        'Betyg & intyg',
+        'APL',
+        'Prövning & slutprov',
+        'Rapporter',
+        'Kommunikation',
+      ]
+
+      // Count visible items (after filtering)
+      const visibleCount = computed(() => {
+        if (!isLoggedIn.value) return 0
         return menuItems
           .filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
-          .sort((a, b) => {
-            // The dashboard stays on top; everything else is alphabetical.
+          .length
+      })
+
+      // Determine if the menu should be grouped or flat
+      const shouldGroupMenu = computed(() => {
+        // Students always get a flat list
+        if (userRole.value === 'student') {
+          return false
+        }
+
+        // Get the user's roles (for multi-role users)
+        const roles = userRole.value ? [userRole.value] : []
+
+        // Flat list if: fewer than 8 visible items
+        // (for non-student roles, we group only when there are enough items)
+        const isFlatByCount = visibleCount.value < 8
+
+        return isFlatByCount
+      })
+
+      // Build a grouped menu: filter first, then group, sort in-group alphabetically,
+      // and hide groups with zero visible items.
+      const groupedMenu = computed(() => {
+        if (!isLoggedIn.value) return []
+
+        const visible = menuItems
+          .filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
+
+        // If shouldGroupMenu is false, return flat alphabetical list (Översikt on top)
+        if (!shouldGroupMenu.value) {
+          return visible.sort((a, b) => {
             if (a.link === PINNED_MENU_LINK) return -1
             if (b.link === PINNED_MENU_LINK) return 1
             return a.name.localeCompare(b.name, 'sv')
           })
+        }
+
+        // If the user is a student, return flat list (no group headings)
+        if (userRole.value === 'student') {
+          return visible.sort((a, b) =>
+            a.name.localeCompare(b.name, 'sv')
+          )
+        }
+
+        // Group items - include items with no group in "Övrigt"
+        const grouped = {}
+        // Add all defined groups plus "Övrigt" for items without a group
+        const allGroups = [...GROUPS, 'Övrigt']
+        allGroups.forEach((g) => (grouped[g] = []))
+
+        visible.forEach((item) => {
+          const group = item.group
+          // Items with a defined group go into that group
+          if (group && grouped.hasOwnProperty(group)) {
+            grouped[group].push(item)
+          }
+          // Items without a group (except Översikt which is handled separately)
+          // go into "Övrigt"
+          else if (group === undefined && item.link !== PINNED_MENU_LINK) {
+            grouped['Övrigt'].push(item)
+          }
+          // Översikt is handled separately in the result builder
+        })
+
+        // Sort items inside each group alphabetically (Swedish)
+        allGroups.forEach((g) => {
+          grouped[g].sort((a, b) => a.name.localeCompare(b.name, 'sv'))
+        })
+
+        // Build result: array of sections
+        // Each section is either: { type: 'overview', link, name }
+        // or: { type: 'group', groupName, items }
+        const result = []
+
+        // Add Översikt if visible first
+        const overview = visible.find((item) => item.link === PINNED_MENU_LINK)
+        if (overview) {
+          result.push({ type: 'overview', link: overview.link, name: overview.name })
+        }
+
+        // Add "Övrigt" group if it has items
+        if (grouped['Övrigt'] && grouped['Övrigt'].length > 0) {
+          result.push({
+            type: 'group',
+            groupName: 'Övrigt',
+            items: grouped['Övrigt'],
+          })
+        }
+
+        // Add defined groups that have items (in fixed order)
+        GROUPS.forEach((groupName) => {
+          if (grouped[groupName] && grouped[groupName].length > 0) {
+            result.push({
+              type: 'group',
+              groupName,
+              items: grouped[groupName],
+            })
+          }
+        })
+
+        return result
       })
 
       const secretMenuItems = computed(() => {
@@ -1210,6 +1364,22 @@
         showSecretMenu.value = !showSecretMenu.value
       }
 
+      // Check if a group is the currently active one based on the route
+      const getActiveGroup = computed(() => {
+        const currentPath = router.currentRoute.value.path
+        // Check each visible item to find which group the current route belongs to
+        const visible = menuItems
+          .filter((item) => !secretMenuNames.includes(item.name) && canSeeItem(item))
+        for (const item of visible) {
+          if (item.group && currentPath === item.link) {
+            return item.group
+          }
+        }
+        // Also check if on dashboard (Översikt)
+        if (currentPath === '/dashboard') return null
+        return null
+      })
+
       return {
         toggleSearchTypeDropdown,
         endDateNotifications,
@@ -1232,7 +1402,6 @@
         unreadMessageCount,
         isLoggedIn,
         logout,
-        filteredMenuItems,
         secretMenuItems,
         showSecretMenu,
         toggleSecretMenu,
@@ -1275,6 +1444,9 @@
         closeMobileMenu,
         toggleSidebar,
         busyNotificationId,
+        groupedMenu,
+        getActiveGroup,
+        filteredMenuItems,
       }
     },
   }

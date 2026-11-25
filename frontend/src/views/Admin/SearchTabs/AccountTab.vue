@@ -907,7 +907,7 @@
       }
 
       const deleteComment = async (commentId) => {
-        if (!confirm('Är du säker på att du vill radera denna kommentar?')) return
+        const { confirm } = useConfirm(); if (!confirm({ title: 'Ta bort kommentar', message: 'Är du säker på att du vill radera denna kommentar?', danger: true })) return
 
         try {
           await client.delete(`/student-details/${props.userData._id}/comments/${commentId}`)

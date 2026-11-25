@@ -150,7 +150,7 @@ export default {
       return `${startTime} - ${endTime}`;
     },
     async deleteMeeting() {
-      if (!confirm('Är du säker på att du vill radera detta möte?')) {
+      const { confirm } = useConfirm(); if (!((await confirm({ title: 'Ta bort möte', message: 'Är du säker på att du vill radera detta möte?', danger: true }))) {
         return;
       }
       

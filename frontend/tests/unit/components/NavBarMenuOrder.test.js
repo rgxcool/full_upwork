@@ -13,15 +13,6 @@ vi.mock("@/api/client.js", () => ({
     },
 }));
 
-vi.mock("@/composables/useToast.js", () => ({
-    useToast: () => ({
-        success: vi.fn(),
-        error: vi.fn(),
-        warning: vi.fn(),
-        info: vi.fn(),
-    }),
-}));
-
 const mountAs = (roles) => {
     const user = { _id: "u1", name: "Test User", role: roles[0], roles };
     const store = buildStore({
@@ -40,20 +31,29 @@ const mountAs = (roles) => {
     });
 };
 
-const names = (wrapper) => wrapper.vm.filteredMenuItems.map((i) => i.name);
-const swedishSorted = (list) =>
-    [...list].sort((a, b) => a.localeCompare(b, "sv"));
-
 describe("NavBar hamburger menu", () => {
-    it.each([["admin"], ["teacher"], ["student"]])(
-        "pins Översikt on top and lists the other %s entries in Swedish alphabetical order",
+    it.each([["admin"], ["teacher"]])(
+        "pins Översikt on top and lists the other %s entries (grouped or flat)",
         (role) => {
-            const [first, ...rest] = names(mountAs([role]));
+            const wrapper = mountAs([role]);
+            const first = wrapper.vm.filteredMenuItems[0].name;
             expect(first).toBe("Översikt");
+            const rest = wrapper.vm.filteredMenuItems.slice(1);
             expect(rest.length).toBeGreaterThan(1);
-            expect(rest).toEqual(swedishSorted(rest));
+            // Verify Swedish alphabetical order
+            expect(rest).toEqual([...rest].sort((a, b) => a.name.localeCompare(b.name, "sv")));
         }
     );
+
+    it("student gets flat list with Översikt on top", () => {
+        const wrapper = mountAs(["student"]);
+        const first = wrapper.vm.filteredMenuItems[0].name;
+        expect(first).toBe("Översikt");
+        const rest = wrapper.vm.filteredMenuItems.slice(1);
+        expect(rest.length).toBeGreaterThan(1);
+        // Student items should be sorted in Swedish
+        expect(rest).toEqual([...rest].sort((a, b) => a.name.localeCompare(b.name, "sv")));
+    });
 
     it("shows Prövningar to students in the main menu", () => {
         const wrapper = mountAs(["student"]);

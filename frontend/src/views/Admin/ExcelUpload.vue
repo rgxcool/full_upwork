@@ -743,7 +743,7 @@
 
       confirmRemoveEducation(education) {
         const confirmText = 'Är du säker på att du vill ta bort denna utbildning från eleven?'
-        if (confirm(confirmText)) {
+        const { confirm } = useConfirm(); if (!(await confirm({ title: 'Bekräfta', message: confirmText, danger: true }))) {
           const courseName = education?.name || 'kursen'
           this.removeEducation(education)
           this.showInfo(
@@ -945,7 +945,7 @@
         try {
           if (checked) {
             // Setting to dropout (checked = true) - use dedicated endpoint
-            const confirmed = confirm(
+            const confirmed = (await confirm({ title: 'Bekräfta', message: '', danger: false }))
               `Är du säker på att du vill markera ${this.editingStudent.name} som avbrott (inaktiv)?\n\n` +
                 `Detta kommer att:\n` +
                 `- Ta bort eleven från APL-listor\n` +
@@ -974,7 +974,7 @@
             toast.success('Eleven har markerats som avbrott (inaktiv).')
           } else {
             // Unchecking (setting to false) - use update endpoint
-            const confirmed = confirm(
+            const confirmed = (await confirm({ title: 'Bekräfta', message: '', danger: false }))
               `Är du säker på att du vill ta bort avbrott-status för ${this.editingStudent.name}?\n\n` +
                 `Eleven kommer att:\n` +
                 `- Återfås i APL-listor (om relevant)\n` +
@@ -1176,7 +1176,7 @@
       },
 
       async deleteStudent(studentId) {
-        if (!confirm('Are you sure you want to delete this student?')) return
+        if (!(await confirm({ title: 'Ta bort student', message: 'Är du säker på att du vill ta bort denna student?', danger: true }))) return
 
         try {
           await client.delete(`/student/${studentId}`)
@@ -1189,7 +1189,7 @@
       },
 
       async deleteAllStudents() {
-        if (!confirm('⚠️ Are you sure you want to delete ALL students? This cannot be undone.'))
+        if (!(await confirm({ title: 'Radera alla studenter', message: '⚠️ Är du säker på att du vill radera Alla studenter? Detta går inte att ångra.', danger: true })))
           return
 
         try {
