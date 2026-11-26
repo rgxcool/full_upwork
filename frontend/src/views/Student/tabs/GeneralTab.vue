@@ -573,6 +573,7 @@ import { useStore } from 'vuex';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
 import ConfirmDialog from '@/components/base/ConfirmDialog.vue';
+import { useConfirm } from '@/composables/useConfirm.js';
 
 export default {
   name: 'GeneralTab',
@@ -783,7 +784,8 @@ export default {
     };
 
     const deleteComment = async (commentId) => {
-      if (!confirm('Är du säker på att du vill radera denna kommentar?')) return;
+      const confirmed = await useConfirm().confirm('Är du säker på att du vill radera denna kommentar?');
+      if (!confirmed) return;
       try {
         await client.delete(`/student-details/${route.params.id}/comments/${commentId}`);
         const comment = localStudent.value.commentHistory.find((c) => c._id === commentId);

@@ -44,6 +44,9 @@
   import AddMeetingModal from '../Modals/AddMeetingModal.vue'
   import MeetingModal from '../Modals/MeetingModal.vue'
   import client from '@/api/client.js'
+  import { useToast } from '@/composables/useToast.js'
+
+  const toast = useToast()
 
   export default {
     components: { FullCalendar, EventModal, AddMeetingModal, MeetingModal },

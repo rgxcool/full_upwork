@@ -64,6 +64,7 @@ import { ref, watch, onMounted, computed } from 'vue';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
 import { useStore } from 'vuex';
+import { useConfirm } from '@/composables/useConfirm.js';
 
 export default {
   props: {
@@ -276,7 +277,8 @@ export default {
     };
 
     const deleteFile = async (id) => {
-      if (!confirm('Är du säker på att du vill radera detta dokument?')) return;
+      const confirmed = await useConfirm().confirm('Är du säker på att du vill radera detta dokument?');
+      if (!confirmed) return;
       try {
         await client.delete(`/documents/${id}`);
         await fetchDocuments();

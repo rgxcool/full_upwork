@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import CourseTemplates from '@/views/Admin/CourseTemplates.vue'
 import api from '@/api/client'
+import { useConfirm } from '@/composables/useConfirm.js'
 
 const pushMock = vi.fn(() => Promise.resolve())
 const toastSuccessMock = vi.fn()
@@ -118,7 +119,7 @@ describe('CourseTemplates.vue', () => {
   })
 
   it('deletes a template after confirmation and removes it from the list', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { state, settle } = useConfirm()
     const wrapper = mountView()
     await flushPromises()
     const deleteBtn = wrapper
@@ -126,26 +127,27 @@ describe('CourseTemplates.vue', () => {
       .find((b) => b.text().includes('Ta bort'))
     expect(deleteBtn).toBeDefined()
     await deleteBtn.trigger('click')
+    expect(state.open).toBe(true)
+    settle(true)
     await flushPromises()
-    expect(confirmSpy).toHaveBeenCalled()
     expect(api.delete).toHaveBeenCalledWith('/course-templates/tpl-1')
     expect(wrapper.text()).not.toContain('Engelska 5')
-    confirmSpy.mockRestore()
     wrapper.unmount()
   })
 
   it('does not delete when the confirmation is cancelled', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { state, settle } = useConfirm()
     const wrapper = mountView()
     await flushPromises()
     await wrapper
       .findAll('button')
       .find((b) => b.text().includes('Ta bort'))
       .trigger('click')
+    expect(state.open).toBe(true)
+    settle(false)
     await flushPromises()
     expect(api.delete).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Engelska 5')
-    confirmSpy.mockRestore()
     wrapper.unmount()
   })
 

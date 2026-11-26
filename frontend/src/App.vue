@@ -16,6 +16,7 @@
     <div class="app-shell" :class="{ 'no-navbar': isLoginPage, 'with-sidebar': showSidebar }">
       <div class="content" :class="{ 'no-navbar': isLoginPage, 'with-sidebar': showSidebar }">
         <v-app>
+          <ConfirmHost />
           <ErrorBoundary>
             <router-view />
           </ErrorBoundary>
@@ -32,12 +33,13 @@
   import { useStore } from 'vuex'
   import NavBar from './components/NavBar.vue'
   import ToastNotification from './components/ToastNotification.vue'
+  import ConfirmHost from './components/base/ConfirmHost.vue'
   import ErrorBoundary from './components/ErrorBoundary.vue'
   import Sidebar from './components/Sidebar.vue'
   import { useNetworkStatus } from '@/composables/useNetworkStatus.js'
 
   export default {
-    components: { NavBar, ToastNotification, ErrorBoundary, Sidebar },
+    components: { NavBar, ToastNotification, ConfirmHost, ErrorBoundary, Sidebar },
     setup() {
       const route = useRoute()
       const store = useStore()

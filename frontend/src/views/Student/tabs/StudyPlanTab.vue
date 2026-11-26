@@ -269,6 +269,7 @@ import { ref, watch, computed, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import client from '@/api/client.js';
 import { useToast } from '@/composables/useToast.js';
+import { useConfirm } from '@/composables/useConfirm.js';
 import { addDays, addWeeks, toDateOnly } from '@/utils/dateOnly.js';
 import draggable from 'vuedraggable';
 import CoursePlacementWizard from '../CoursePlacementWizard.vue';
@@ -640,7 +641,7 @@ export default {
     const handleRemoveEnrollment = async (element) => {
       if (!element?.enrollmentId || !props.student?._id) return;
 
-      const confirmed = window.confirm(
+      const confirmed = await useConfirm().confirm(
         `Är du säker på att du vill ta bort kursen "${getEducationName(element)}"?`
       );
       if (!confirmed) return;
@@ -675,7 +676,7 @@ export default {
         return;
       }
 
-      const confirmed = window.confirm(
+      const confirmed = await useConfirm().confirm(
         'Är du säker på att du vill ändra studietakten? Kursernas längd och slutprovsdatum räknas om automatiskt.'
       );
       if (!confirmed) {
@@ -807,7 +808,7 @@ export default {
       if (!course || !props.student?._id) return;
 
       const courseName = getEducationName(course);
-      const confirmed = window.confirm(
+      const confirmed = await useConfirm().confirm(
         `Är du säker på att du vill anmäla eleven till kursen "${courseName}" igen?`
       );
       if (!confirmed) return;

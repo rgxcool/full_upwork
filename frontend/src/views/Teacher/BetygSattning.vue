@@ -837,6 +837,7 @@
   import { useStore } from 'vuex'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
+import { useConfirm } from '@/composables/useConfirm.js'
 
   const toast = useToast()
   const store = useStore()
@@ -1103,10 +1104,10 @@
   const batchReadOnly = computed(() => batchIsCompleted.value)
 
   // 22.5 Batch switch: reset re-scoped state (search/filter/sort/result type).
-  function onBatchChange() {
+  async function onBatchChange() {
     const previous = previousBatchId.value || selectedBatchId.value
     if (hasUnsavedChanges.value) {
-      const ok = window.confirm('Du har osparade ändringar. Vill du byta batch ändå?')
+      const ok = await useConfirm().confirm('Du har osparade ändringar. Vill du byta batch ändå?')
       if (!ok) {
         // Restore the previous selection after the v-model already updated.
         if (previous) selectedBatchId.value = previous
@@ -1717,12 +1718,13 @@
     if (typeof routeLeaveGuard === 'function') {
       routeLeaveGuard((to, from, next) => {
         if (hasUnsavedChanges.value) {
-          const confirmLeave = window.confirm('Du har osparade ändringar. Vill du lämna sidan ändå?')
-          if (confirmLeave) {
-            next()
-          } else {
-            next(false)
-          }
+          useConfirm().confirm('Du har osparade ändringar. Vill du lämna sidan ändå?').then(confirmLeave => {
+            if (confirmLeave) {
+              next()
+            } else {
+              next(false)
+            }
+          })
         } else {
           next()
         }

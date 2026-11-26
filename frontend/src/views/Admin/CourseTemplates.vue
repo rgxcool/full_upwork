@@ -96,10 +96,12 @@
   import { ref, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import api from '@/api/client'
+  import { useConfirm } from '@/composables/useConfirm.js'
   import { useToast } from '@/composables/useToast.js'
   import store from '@/store/store.js'
 
   const router = useRouter()
+  const { confirm } = useConfirm()
   const toast = useToast()
 
   const templates = ref([])
@@ -144,7 +146,13 @@
     const id = tpl?._id || tpl?.id
     if (!id) return
     const name = tpl.templateName || tpl.title || 'mallen'
-    if (!window.confirm(`Ta bort "${name}" från mall-banken? Befintliga kurskort påverkas inte.`)) {
+    if (
+      !(await confirm({
+        title: 'Ta bort kursmall',
+        message: `Ta bort "${name}" från mall-banken? Befintliga kurskort påverkas inte.`,
+        danger: true,
+      }))
+    ) {
       return
     }
     deletingId.value = id

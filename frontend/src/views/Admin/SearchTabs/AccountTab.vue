@@ -500,6 +500,7 @@
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
   import MeetingModal from '../MeetingModal.vue'
+  import { useConfirm } from '@/composables/useConfirm.js'
 
   export default {
     components: {
@@ -907,7 +908,8 @@
       }
 
       const deleteComment = async (commentId) => {
-        if (!confirm('Är du säker på att du vill radera denna kommentar?')) return
+        const confirmed = await useConfirm().confirm('Är du säker på att du vill radera denna kommentar?');
+        if (!confirmed) return
 
         try {
           await client.delete(`/student-details/${props.userData._id}/comments/${commentId}`)

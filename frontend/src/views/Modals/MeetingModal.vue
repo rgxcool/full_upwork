@@ -41,6 +41,7 @@
 <script>
 import client from '@/api/client.js'
 import { useToast } from '@/composables/useToast.js'
+import { useConfirm } from '@/composables/useConfirm.js'
 
 let toast;
 export default {
@@ -150,9 +151,8 @@ export default {
       return `${startTime} - ${endTime}`;
     },
     async deleteMeeting() {
-      if (!confirm('Är du säker på att du vill radera detta möte?')) {
-        return;
-      }
+      const confirmed = await useConfirm().confirm('Är du säker på att du vill radera detta möte?');
+      if (!confirmed) return
       
       try {
         await client.delete(`/meetings/${this.event.id}`);

@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import GradingScaleAdmin from '../../src/views/Admin/GradingScaleAdmin.vue'
+import { useConfirm } from '@/composables/useConfirm.js'
 
 vi.mock('@/api/client.js', () => ({
     default: {
@@ -126,10 +127,14 @@ describe('GradingScaleAdmin.vue - Betygsskalor', () => {
     })
 
     it('deletes a scale after confirmation', async () => {
+        const { state, settle } = useConfirm()
         await mountPage({ scales: [scaleFixture()], terms: ['HT24'] })
         client.delete.mockResolvedValue({ data: { success: true } })
 
-        await wrapper.vm.confirmDelete(scaleFixture())
+        const p = wrapper.vm.confirmDelete(scaleFixture())
+        expect(state.open).toBe(true)
+        settle(true)
+        await p
 
         expect(client.delete).toHaveBeenCalledWith('/grading-scale/scale-1')
     })

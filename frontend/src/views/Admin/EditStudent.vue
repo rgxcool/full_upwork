@@ -179,11 +179,13 @@
 <script>
   import client from '@/api/client.js'
   import { ref, reactive, watch, computed, onMounted } from 'vue'
+  import { useConfirm } from '@/composables/useConfirm.js'
   import { useToast } from '@/composables/useToast.js'
 
   export default {
     name: 'EditStudent',
     setup() {
+      const { confirm } = useConfirm()
       const toast = useToast()
       const students = ref([])
       const teachers = ref([])
@@ -302,7 +304,10 @@
 
       async function changeStudyPace() {
         if (!form.value?._id) return
-        const confirmed = window.confirm('Är du säker på att du vill ändra studietakten? Endast framtida kurser ändras.')
+        const confirmed = await confirm({
+          title: 'Ändra studietakt',
+          message: 'Är du säker på att du vill ändra studietakten? Endast framtida kurser ändras.',
+        })
         if (!confirmed) return
         updatingPace.value = true
         errorMessage.value = ''

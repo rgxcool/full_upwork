@@ -175,6 +175,7 @@
   import client from '@/api/client.js'
   import { teacherDisplayName } from '@/utils/teacherName.js'
   import { useToast } from '@/composables/useToast.js'
+import { useConfirm } from '@/composables/useConfirm.js'
 
   const toast = useToast()
 
@@ -259,7 +260,8 @@
   }
 
   const deleteExam = async (id) => {
-    if (!confirm('Är du säker på att du vill ta bort denna prövning?')) return
+    const confirmed = await useConfirm().confirm('Är du säker på att du vill ta bort denna prövning?');
+    if (!confirmed) return
     try {
       await client.delete(`/exams/${id}`)
       toast.success('Prövning borttagen')

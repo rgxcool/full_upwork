@@ -527,6 +527,7 @@
 <script>
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
+  import { useConfirm } from '@/composables/useConfirm.js'
 
   export default {
     name: 'TeacherManagement',
@@ -815,9 +816,8 @@
       },
 
       async deleteTeacher(teacher) {
-        if (!confirm(`Är du säker på att du vill ta bort läraren "${teacher.userId?.username}"?`)) {
-          return
-        }
+        const confirmed = await useConfirm().confirm(`Är du säker på att du vill ta bort läraren "${teacher.userId?.username}"?`);
+        if (!confirmed) return
 
         try {
           await client.delete(`/teachers/${teacher._id}`)
@@ -833,13 +833,8 @@
       },
 
       async unassignAllStudents(teacher) {
-        if (
-          !confirm(
-            `Vill du ta bort alla kopplingar mellan läraren \"${teacher.userId?.username}\" och elever?`
-          )
-        ) {
-          return
-        }
+        const confirmed = await useConfirm().confirm(`Vill du ta bort alla kopplingar mellan läraren "${teacher.userId?.username}" och elever?`);
+        if (!confirmed) return
         try {
           await client.put(`/teachers/${teacher._id}/unassign-all-students`)
           this.toast.success('Alla kopplingar till elever har tagits bort!')

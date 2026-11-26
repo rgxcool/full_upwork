@@ -655,6 +655,7 @@
   import { teacherDisplayName } from '@/utils/teacherName.js'
   import client from '@/api/client.js'
   import { useToast } from '@/composables/useToast.js'
+import { useConfirm } from '@/composables/useConfirm.js'
 
   export default {
     name: 'CourseInstances',
@@ -1098,7 +1099,8 @@
       }
 
       const deleteInstance = async (instanceId) => {
-        if (!confirm('Är du säker på att du vill ta bort denna kursinstans?')) return
+        const confirmed = await useConfirm().confirm('Är du säker på att du vill ta bort denna kursinstans?');
+        if (!confirmed) return
 
         try {
           await client.delete(`/course-instances/${instanceId}`)
@@ -1278,12 +1280,8 @@
       }
 
       const deleteAllCourseInstances = async () => {
-        if (
-          !confirm(
-            'Är du säker på att du vill ta bort ALLA kursinstanser och tillhörande data? Detta går inte att ångra.'
-          )
-        )
-          return
+        const confirmed = await useConfirm().confirm('Är du säker på att du vill ta bort ALLA kursinstanser och tillhörande data? Detta går inte att ångra.');
+        if (!confirmed) return
         try {
           await client.delete('/course-instances/all', {
             data: { confirmation: 'DELETE_ALL_COURSE_INSTANCES' },
@@ -1297,7 +1295,8 @@
       }
 
       const deleteEnrollment = async (enrollmentId) => {
-        if (!confirm('Är du säker på att du vill ta bort denna inskrivning?')) return
+        const confirmed = await useConfirm().confirm('Är du säker på att du vill ta bort denna inskrivning?');
+        if (!confirmed) return
         try {
           await client.delete(`/enrollments/${enrollmentId}`)
           await viewEnrollments(selectedInstance.value._id)
@@ -1308,7 +1307,8 @@
       }
 
       const deleteUnknownEnrollments = async () => {
-        if (!confirm('Ta bort ALLA okända elever från denna kursinstans?')) return
+        const confirmed = await useConfirm().confirm('Ta bort ALLA okända elever från denna kursinstans?');
+        if (!confirmed) return
         try {
           const unknowns = enrollments.value.filter((e) => !e.studentId || !e.studentId._id)
           for (const e of unknowns) {

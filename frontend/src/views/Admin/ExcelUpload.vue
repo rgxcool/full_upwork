@@ -638,6 +638,7 @@
   import client from '@/api/client.js'
   import { mapGetters } from 'vuex'
   import { useToast } from '@/composables/useToast.js'
+import { useConfirm } from '@/composables/useConfirm.js'
 
   let toast;
   export default {
@@ -741,16 +742,15 @@
         this.showFlashMessage('info', message, duration)
       },
 
-      confirmRemoveEducation(education) {
-        const confirmText = 'Är du säker på att du vill ta bort denna utbildning från eleven?'
-        if (confirm(confirmText)) {
-          const courseName = education?.name || 'kursen'
-          this.removeEducation(education)
-          this.showInfo(
-            `📝 ${courseName} markerad för borttagning. Klicka "Spara ändringar" för att bekräfta.`
-          )
-          // Don't auto-save - let user save manually
-        }
+      async confirmRemoveEducation(education) {
+        const confirmed = await useConfirm().confirm('Är du säker på att du vill ta bort denna utbildning från eleven?');
+        if (!confirmed) return;
+        const courseName = education?.name || 'kursen'
+        this.removeEducation(education)
+        this.showInfo(
+          `📝 ${courseName} markerad för borttagning. Klicka "Spara ändringar" för att bekräfta.`
+        )
+        // Don't auto-save - let user save manually
       },
 
       // Sort education: CoursePackages first, then courses chronologically
@@ -945,7 +945,7 @@
         try {
           if (checked) {
             // Setting to dropout (checked = true) - use dedicated endpoint
-            const confirmed = confirm(
+            const confirmed = await useConfirm().confirm(
               `Är du säker på att du vill markera ${this.editingStudent.name} som avbrott (inaktiv)?\n\n` +
                 `Detta kommer att:\n` +
                 `- Ta bort eleven från APL-listor\n` +
@@ -974,7 +974,7 @@
             toast.success('Eleven har markerats som avbrott (inaktiv).')
           } else {
             // Unchecking (setting to false) - use update endpoint
-            const confirmed = confirm(
+            const confirmed = await useConfirm().confirm(
               `Är du säker på att du vill ta bort avbrott-status för ${this.editingStudent.name}?\n\n` +
                 `Eleven kommer att:\n` +
                 `- Återfås i APL-listor (om relevant)\n` +
@@ -1176,7 +1176,8 @@
       },
 
       async deleteStudent(studentId) {
-        if (!confirm('Are you sure you want to delete this student?')) return
+        const confirmed = await useConfirm().confirm('Are you sure you want to delete this student?');
+        if (!confirmed) return
 
         try {
           await client.delete(`/student/${studentId}`)
@@ -1189,8 +1190,8 @@
       },
 
       async deleteAllStudents() {
-        if (!confirm('⚠️ Are you sure you want to delete ALL students? This cannot be undone.'))
-          return
+        const confirmed = await useConfirm().confirm('⚠️ Are you sure you want to delete ALL students? This cannot be undone.');
+        if (!confirmed) return
 
         try {
           await client.delete('/students')

@@ -1,6 +1,7 @@
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FileUploaderDownloader from '../../../src/components/FileUploaderDownloader.vue'
+import { useConfirm } from '@/composables/useConfirm.js'
 
 vi.mock('@/api/client.js', () => ({
     default: {
@@ -190,41 +191,41 @@ describe('FileUploaderDownloader.vue', () => {
     })
 
     it('deletes a file after confirmation and refreshes the list', async () => {
-        global.confirm = vi.fn(() => true)
+        const { state, settle } = useConfirm()
         client.get.mockResolvedValue({ data: uploadedFiles })
         await mountComponent()
 
         await wrapper.find('button[title="Delete rapport.pdf"]').trigger('click')
-        await wrapper.vm.$nextTick()
-        await wrapper.vm.$nextTick()
-        await wrapper.vm.$nextTick()
+        expect(state.open).toBe(true)
+        settle(true)
+        await flushPromises()
 
-        expect(global.confirm).toHaveBeenCalled()
         expect(client.delete).toHaveBeenCalledWith('/uploads/f1')
         expect(client.get).toHaveBeenCalledWith('/uploads/stu-1')
     })
 
     it('skips deletion when the confirm dialog is dismissed', async () => {
-        global.confirm = vi.fn(() => false)
+        const { state, settle } = useConfirm()
         client.get.mockResolvedValue({ data: uploadedFiles })
         await mountComponent()
 
         await wrapper.find('button[title="Delete kvitto.txt"]').trigger('click')
-        await wrapper.vm.$nextTick()
+        expect(state.open).toBe(true)
+        settle(false)
+        await flushPromises()
 
-        expect(global.confirm).toHaveBeenCalled()
         expect(client.delete).not.toHaveBeenCalled()
     })
 
     it('shows an error toast when deletion fails', async () => {
-        global.confirm = vi.fn(() => true)
+        const { settle } = useConfirm()
         client.get.mockResolvedValue({ data: uploadedFiles })
         client.delete.mockRejectedValue(new Error('nope'))
         await mountComponent()
 
         await wrapper.find('button[title="Delete kvitto.txt"]').trigger('click')
-        await wrapper.vm.$nextTick()
-        await wrapper.vm.$nextTick()
+        settle(true)
+        await flushPromises()
 
         expect(mockToast.error).toHaveBeenCalledWith('Failed to delete file.')
     })

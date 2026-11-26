@@ -58,8 +58,10 @@
 <script setup>
   import { ref, watchEffect } from 'vue'
   import client from '@/api/client.js'
+  import { useConfirm } from '@/composables/useConfirm.js'
   import { useToast } from '@/composables/useToast.js'
 
+  const { confirm } = useConfirm()
   const toast = useToast()
   const props = defineProps({
     studentId: {
@@ -161,7 +163,14 @@
   }
 
   async function deleteFile(fileId) {
-    if (!confirm('Are you sure you want to delete this file?')) return
+    if (
+      !(await confirm({
+        title: 'Ta bort fil',
+        message: 'Are you sure you want to delete this file?',
+        danger: true,
+      }))
+    )
+      return
     try {
       await client.delete(`/uploads/${fileId}`)
       await fetchFiles()
